@@ -29,6 +29,18 @@ final class Visit {
     @Attribute(.externalStorage) var beforePhotoData: Data? { didSet { updatedAt = Date() } }
     @Attribute(.externalStorage) var afterPhotoData: Data? { didSet { updatedAt = Date() } }
 
+    /// Backwards‑compat alias used by older ViewModels
+    var photoBefore: Data? {
+        get { beforePhotoData }
+        set { beforePhotoData = newValue }
+    }
+
+    /// Backwards‑compat alias used by older ViewModels
+    var photoAfter: Data? {
+        get { afterPhotoData }
+        set { afterPhotoData = newValue }
+    }
+
     // MARK: - Relations
     @Relationship var pet: Pet
     @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit) var items: [VisitItem] = [] { didSet { updatedAt = Date() } }
@@ -108,25 +120,40 @@ final class Visit {
 
     /// Names of line items for quick display/search
     var itemNames: [String] { items.map { $0.name } }
+    
+    /// Live view into the underlying services referenced by items (if still present)
+    var services: [Service] { items.compactMap { $0.service } }
 
-    /// Whether either photo is present
-    var hasBeforeAfterPhotos: Bool { beforePhotoData != nil || afterPhotoData != nil }
+    /// Append a VisitItem built from a Service snapshot and keep totals updated.
+    @discardableResult
+    func addItem(from service: Service, priceOverride: Decimal? = nil, quantity: Int = 1) -> VisitItem {
+        let item = VisitItem(visit: self, service: service, name: service.name)
+        item.unitPrice = priceOverride ?? service.defaultPrice
+        item.quantity = max(1, quantity)
+        items.append(item)
+        recalcTotal()
+        return item
+    }
 
     /// Replace current items with snapshots from a Service catalog (name + price only)
     func snapshotItems(from services: [Service]) {
         items.removeAll()
-        for svc in services {
-            // ✅ FIXED: Removed the redundant Decimal() wrapper that caused the build error.
-            let item = VisitItem(name: svc.name, price: svc.defaultPrice ?? 0, visit: self)
-            items.append(item)
-        }
-        touch()
+        for svc in services { _ = addItem(from: svc) }
     }
 
     /// Set before/after photos in one call
     func applyPhotos(before: Data?, after: Data?) {
         beforePhotoData = before
         afterPhotoData = after
+        touch()
+    }
+
+    /// Recalculate and persist the visit's total from its items.
+    func recalcTotal() {
+        let sum = items.reduce(Decimal.zero) { partial, item in
+            partial + (item.price ?? .zero)
+        }
+        total = sum
         touch()
     }
 

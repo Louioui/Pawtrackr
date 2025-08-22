@@ -277,7 +277,4 @@ private struct VisitRow: View {
 }
 
 
-// MARK: - Small helpers
 
-// Removed: These extensions were duplicates and caused build errors.
-// The correct versions are in Formatters.swift and Payment.swift.

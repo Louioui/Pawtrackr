@@ -299,6 +299,3 @@ private struct VisitTimelineCard: View {
 }
 
 
-// MARK: - Removed Display helpers
-// These extensions were duplicates and caused build errors.
-// The correct versions are in Formatters.swift and Payment.swift.

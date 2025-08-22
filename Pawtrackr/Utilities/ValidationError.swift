@@ -13,6 +13,7 @@ public enum ValidationError: LocalizedError, Identifiable {
     case emptyField(fieldName: String)
     case invalidPhoneNumber
     case invalidPIN
+    case invalidAmount
     case invalidDateRange
     case custom(message: String)
 
@@ -26,6 +27,8 @@ public enum ValidationError: LocalizedError, Identifiable {
             return "Please enter a valid phone number."
         case .invalidPIN:
             return "The PIN you entered is not valid."
+        case .invalidAmount:
+            return "Please enter a valid amount."
         case .invalidDateRange:
             return "The selected date range is invalid."
         case .custom(let message):

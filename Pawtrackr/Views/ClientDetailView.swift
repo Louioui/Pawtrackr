@@ -182,7 +182,9 @@ private extension ClientDetailView {
     var ownerHeader: some View {
         Card {
             HStack(alignment: .top, spacing: 12) {
-                IconCircle(systemImage: "person.fill", size: 48, style: .tinted(Color.accentColor.opacity(0.15)))
+                IconCircle(systemImage: "person.fill",
+                           size: .px(48),
+                           style: .tinted(Color.accentColor.opacity(0.15)))
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("\(client.firstName) \(client.lastName)")

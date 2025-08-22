@@ -170,9 +170,14 @@ struct CheckoutView: View {
                 Text("Services Performed").font(.subheadline.weight(.semibold))
                 FlowLayout(spacing: 8) {
                     ForEach(allServices, id: \.persistentModelID) { s in
-                        SelectablePill(text: s.name, selected: selectedServiceIDs.contains(s.persistentModelID)) {
-                            toggleService(s)
-                        }
+                        let isSelected = Binding<Bool>(
+                            get: { selectedServiceIDs.contains(s.persistentModelID) },
+                            set: { newValue in
+                                if newValue { selectedServiceIDs.insert(s.persistentModelID) }
+                                else { selectedServiceIDs.remove(s.persistentModelID) }
+                            }
+                        )
+                        Pill.selectable(s.name, isSelected: isSelected, tint: .accentColor) { _ in }
                     }
                 }
             }
@@ -194,9 +199,13 @@ struct CheckoutView: View {
                     .foregroundStyle(.secondary)
                 FlowLayout(spacing: 6) {
                     ForEach(tagOptions, id: \.self) { tag in
-                        SelectablePill(text: tag, selected: tags.contains(tag)) {
-                            if tags.contains(tag) { tags.remove(tag) } else { tags.insert(tag) }
-                        }
+                        let isOn = Binding<Bool>(
+                            get: { tags.contains(tag) },
+                            set: { newValue in
+                                if newValue { tags.insert(tag) } else { tags.remove(tag) }
+                            }
+                        )
+                        Pill.selectable(tag, isSelected: isOn, tint: .accentColor) { _ in }
                     }
                 }
             }
@@ -386,35 +395,3 @@ struct CheckoutView: View {
     }
 }
 
-private struct SelectablePill: View {
-    let text: String
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(text)
-                .font(.footnote.weight(.semibold))
-                .padding(.vertical, 6)
-                .padding(.horizontal, 10)
-                .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(
-                    Group {
-                        if selected {
-                            LinearGradient(colors: [Color.accentColor.opacity(0.8), Color.accentColor],
-                                           startPoint: .leading, endPoint: .trailing)
-                        } else {
-                            Color.gray.opacity(0.12)
-                        }
-                    }
-                )
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().strokeBorder(selected ? .clear : .gray.opacity(0.25))
-                )
-        }
-        .buttonStyle(.plain)
-        .contentShape(Capsule())
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
-    }
-}
