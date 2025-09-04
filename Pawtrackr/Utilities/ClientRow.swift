@@ -35,61 +35,99 @@ struct ClientRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            if let pet = client.pets.sorted(by: { $0.name < $1.name }).first {
-                Rectangle()
-                    .fill(pet.gender == .male ? Color.blue : Color.pink)
-                    .frame(width: 4)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(client.fullName)
-                    .font(.headline)
-                    .lineLimit(1)
-
-                if let pet = client.pets.sorted(by: { $0.name < $1.name }).first {
-                    Text("\(pet.name) • \(pet.breed ?? pet.species.rawValue.capitalized)")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+        let primaryPet = client.pets.sorted(by: { $0.name < $1.name }).first
+        Card(accentTopLine: primaryPet.map { DS.ColorToken.gender($0.gender) }) {
+            HStack(spacing: 12) {
+                // Avatars (up to 3 pets)
+                HStack(spacing: -8) {
+                    ForEach(Array(client.pets.sorted(by: { $0.name < $1.name }).prefix(3)), id: \.persistentModelID) { pet in
+                        IconCircle(style: .auto(species: pet.species, gender: pet.gender), size: .sm, lineWidth: 1)
+                    }
                 }
 
-                if client.pets.contains(where: { $0.visits.contains(where: { $0.endedAt == nil }) }) {
-                    Label("In Session", systemImage: "scissors")
-                        .font(.caption2)
-                        .foregroundColor(.green)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(client.fullName)
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    if let pet = primaryPet {
+                        Text("\(pet.name) • \(pet.breed ?? pet.species.rawValue.capitalized)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 8) {
+                        // Phone actions (Call + SMS) with graceful fallback to plain text
+                        if let phone = formattedPhone {
+                            if let tel = PhoneUtils.telURLString(phone), let sms = PhoneUtils.smsURLString(phone) {
+                                HStack(spacing: 10) {
+                                    Link(destination: URL(string: tel)!) {
+                                        Label(phone, systemImage: "phone")
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("Call \(phone)")
+
+                                    Link(destination: URL(string: sms)!) {
+                                        Image(systemName: "message")
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("Text \(phone)")
+                                }
+                            } else {
+                                Label(phone, systemImage: "phone")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if inProgress {
+                            Text("In Session")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(DS.ColorToken.success.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                                .foregroundStyle(DS.ColorToken.success)
+                                .accessibilityLabel("In session")
+                        }
+                    }
                 }
+                Spacer()
             }
-            Spacer()
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-            #if os(macOS)
-                .fill(Color(nsColor: .windowBackgroundColor))
-            #else
-                .fill(Color(.systemBackground))
-            #endif
-                .shadow(radius: 2)
-        )
-        .onTapGesture {
-            onTap?()
+        .overlay(alignment: .leading) {
+            if inProgress {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(DS.ColorToken.success.opacity(0.001))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(
+                        Rectangle()
+                            .fill(DS.ColorToken.success.opacity(0.6))
+                            .frame(width: 3)
+                            .padding(.vertical, 6),
+                        alignment: .leading
+                    )
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
+        .onTapGesture { onTap?() }
+        .accessibilityAddTraits(.isButton)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(accessibilityLabel))
     }
 
     private var accessibilityLabel: String {
         if let phone = formattedPhone {
-            return "\(client.fullName), phone \(phone)" + (inProgress ? ", in progress" : "")
+            return "\(client.fullName), phone \(phone)" + (inProgress ? ", in session" : "")
         } else {
-            return client.fullName + (inProgress ? ", in progress" : "")
+            return client.fullName + (inProgress ? ", in session" : "")
         }
     }
 
     private var formattedPhone: String? {
-        if let phoneRaw = client.phone, !phoneRaw.isEmpty {
-            return formatPhoneFallback(phoneRaw)
-        }
-        return nil
+        guard let phoneRaw = client.phone, !phoneRaw.isEmpty else { return nil }
+        return PhoneUtils.display(phoneRaw)
     }
 
     // Naive inference: any pet with a Visit that has no endedAt means "in progress"
@@ -98,17 +136,6 @@ struct ClientRow: View {
             if pet.visits.contains(where: { $0.endedAt == nil }) { return true }
         }
         return false
-    }
-
-    private func formatPhoneFallback(_ raw: String) -> String {
-        let digits = raw.filter(\.isNumber)
-        if digits.count == 10 {
-            let a = digits.prefix(3)
-            let b = digits.dropFirst(3).prefix(3)
-            let c = digits.suffix(4)
-            return "(\(a)) \(b)-\(c)"
-        }
-        return raw
     }
 }
 

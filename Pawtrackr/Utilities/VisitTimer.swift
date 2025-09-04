@@ -5,16 +5,7 @@
 //  Created by mac on 8/17/25.
 //
 
-
-//
-//  VisitTimer.swift
-//  Pawtrackr
-//
-//  Created by mac on 8/17/25.
-//
-
 import Foundation
-import Combine
 
 /// A lightweight, UI-friendly stopwatch for active visits.
 /// - Does **not** reference app model types to avoid access-control cycles.
@@ -36,39 +27,69 @@ final class VisitTimer: ObservableObject {
 
     /// Whole seconds elapsed for the *current* run (derived from `startedAt`).
     @Published private(set) var elapsedSeconds: Int = 0 {
-        didSet { formattedElapsed = Self.format(seconds: elapsedSeconds) }
+        didSet {
+            formattedElapsed = Self.format(seconds: elapsedSeconds)
+            accessibilityElapsedLabel = Self.spelledOut(seconds: elapsedSeconds)
+        }
     }
 
     /// Human-friendly clock string like "1h 12m" (USD app uses English).
     @Published private(set) var formattedElapsed: String = "0m"
+
+    /// Accessibility-friendly, fully spelled-out duration (e.g., "1 hour 2 minutes", "45 seconds").
+    @Published private(set) var accessibilityElapsedLabel: String = "0 seconds"
 
     // MARK: - Internal state
 
     /// Accumulated seconds from previous runs (if the timer was paused/resumed).
     private var accumulatedSeconds: Int = 0
 
-    /// The ticking subscription.
-    private var tickCancellable: AnyCancellable?
+    /// The underlying RunLoop timer (allows tolerance to save battery).
+    private var runloopTimer: Timer?
 
     // MARK: - Lifecycle
 
     deinit {
-        tickCancellable?.cancel()
+        runloopTimer?.invalidate()
+        runloopTimer = nil
     }
 
     // MARK: - Public API
 
+    /// Call when the scene becomes active/foreground. Safely restarts ticking if needed and snaps the UI to now.
+    func sceneBecameActive(now: Date = .now) {
+        if isRunning {
+            if runloopTimer == nil { beginTicking() }
+            updateElapsed(now: now)
+        }
+    }
+
+    /// Call when the scene resigns active/backgrounds. Stops ticking to save battery and freezes the current elapsed.
+    func sceneWillResignActive(now: Date = .now) {
+        if isRunning { updateElapsed(now: now) }
+        endTicking()
+    }
+
+    /// Manually force an elapsed recompute (does not alter running/paused state).
+    func refresh(now: Date = .now) {
+        updateElapsed(now: now)
+        if isRunning && runloopTimer == nil { beginTicking() }
+    }
+
     /// Start (or resume) the timer at a specific wall-clock time.
     /// - Parameter date: If omitted, uses `Date.now`.
     func start(at date: Date = .now) {
-        // If already running, ignore.
         guard !isRunning else { return }
 
-        // If there was a previous run that ended, *resume* by keeping accumulatedSeconds.
+        // If resuming with prior accumulation, shift startedAt back by that amount.
         if startedAt == nil {
-            startedAt = date
+            if accumulatedSeconds > 0 {
+                startedAt = date.addingTimeInterval(TimeInterval(-accumulatedSeconds))
+            } else {
+                startedAt = date
+            }
         } else {
-            // On resume, shift startedAt so (now - startedAt) + accumulated == total so far.
+            // Defensive: ensure accumulation is respected if a prior start exists
             startedAt = date.addingTimeInterval(TimeInterval(-accumulatedSeconds))
         }
 
@@ -95,6 +116,19 @@ final class VisitTimer: ObservableObject {
         updateElapsed(now: date)
     }
 
+    /// Pause the timer without marking an end date (can be resumed).
+    func pause(at date: Date = .now) {
+        guard isRunning else { return }
+        if let started = startedAt {
+            accumulatedSeconds = Self.seconds(between: started, and: date)
+        }
+        isRunning = false
+        startedAt = nil
+        // Keep `endedAt` as nil to indicate a paused (not finished) session.
+        endTicking()
+        updateElapsed(now: date)
+    }
+
     /// Reset to initial state (not running, zeroed time).
     func reset() {
         endTicking()
@@ -103,6 +137,28 @@ final class VisitTimer: ObservableObject {
         endedAt = nil
         accumulatedSeconds = 0
         elapsedSeconds = 0
+    }
+
+    /// Initialize the timer from persisted visit dates (e.g., when opening a screen).
+    /// If `end` is nil, the timer will begin (or continue) ticking from `start`.
+    func load(startedAt start: Date, endedAt end: Date?) {
+        if let end {
+            // Completed visit — freeze at the final elapsed value.
+            isRunning = false
+            startedAt = nil
+            endedAt = end
+            accumulatedSeconds = max(0, Self.seconds(between: start, and: end))
+            elapsedSeconds = accumulatedSeconds
+            endTicking()
+        } else {
+            // Active visit — compute from absolute start and keep ticking.
+            accumulatedSeconds = 0
+            startedAt = min(start, .now) // defensive: avoid future starts
+            endedAt = nil
+            isRunning = true
+            beginTicking()
+            updateElapsed(now: .now)
+        }
     }
 
     /// Manually set the elapsed total (e.g., when restoring from a visit).
@@ -129,53 +185,55 @@ final class VisitTimer: ObservableObject {
 
     /// Short human format like `1h 05m`, `12m`, or `45s` for sub-minute.
     static func format(seconds: Int) -> String {
-        let s = max(0, seconds)
-        let hours = s / 3600
-        let minutes = (s % 3600) / 60
-        let secs = s % 60
+        return Formatters.durationString(seconds: max(0, seconds))
+    }
 
-        if hours > 0 {
-            // e.g., 1h 02m
-            return String(format: "%dh %02dm", hours, minutes)
-        } else if minutes > 0 {
-            // e.g., 12m
-            return "\(minutes)m"
-        } else {
-            // e.g., 45s
-            return "\(secs)s"
-        }
+    /// Fully spelled-out duration for VoiceOver (e.g., "1 hour 2 minutes", "12 minutes", "45 seconds").
+    static func spelledOut(seconds: Int) -> String {
+        let s = max(0, seconds)
+        let f = DateComponentsFormatter()
+        f.unitsStyle = .full
+        // Prefer hours+minutes when applicable, else minutes, else seconds.
+        f.allowedUnits = s >= 3600 ? [.hour, .minute] : (s >= 60 ? [.minute] : [.second])
+        f.zeroFormattingBehavior = [.dropAll]
+        return f.string(from: TimeInterval(s)) ?? "\(s) seconds"
     }
 
     // MARK: - Private helpers
 
     private func beginTicking() {
-        // Cancel any previous ticking.
-        tickCancellable?.cancel()
+        // Invalidate any existing timer first.
+        runloopTimer?.invalidate()
 
-        // Publisher fires roughly every second on the main run loop.
-        tickCancellable = Timer.publish(every: 1, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] now in
-                guard let self else { return }
-                self.updateElapsed(now: now)
-            }
+        // Schedule a 1s timer with a small tolerance to reduce power usage.
+        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.updateElapsed(now: Date())
+        }
+        t.tolerance = 0.2
+        RunLoop.main.add(t, forMode: .common)
+        runloopTimer = t
     }
 
     private func endTicking() {
-        tickCancellable?.cancel()
-        tickCancellable = nil
+        runloopTimer?.invalidate()
+        runloopTimer = nil
     }
 
     private func updateElapsed(now: Date) {
+        let newValue: Int
         if let started = startedAt {
-            elapsedSeconds = Self.seconds(between: started, and: now)
+            newValue = Self.seconds(between: started, and: now)
         } else {
-            elapsedSeconds = accumulatedSeconds
+            newValue = accumulatedSeconds
+        }
+        if newValue != elapsedSeconds {
+            elapsedSeconds = newValue
         }
     }
 
     private static func seconds(between from: Date, and to: Date) -> Int {
-        max(0, Int(to.timeIntervalSince(from).rounded()))
+        max(0, Int(to.timeIntervalSince(from)))
     }
 }
 

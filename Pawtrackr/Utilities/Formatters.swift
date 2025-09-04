@@ -2,176 +2,143 @@
 //  Formatters.swift
 //  Pawtrackr
 //
-//  Created by mac on 8/14/25.
+//  Centralized, @MainActor-isolated formatters and helpers used across the app.
+//  IMPORTANT: There is NO `moneyString` here to avoid redeclaration conflicts.
+//  Use `Decimal.moneyString` from `Decimal+Money.swift` for ergonomic UI.
 //
 
 import Foundation
 
-/// Central place for commonly used formatters in Pawtrackr
+@MainActor
 enum Formatters {
-    // MARK: - Numbers / Currency
 
-    /// Locale-aware currency for display (e.g., "$65" / "€65").
+    // MARK: - Currency
+
+    /// Shared currency formatter (thread-unsafe → isolated on the main actor).
     static let currency: NumberFormatter = {
         let f = NumberFormatter()
+        f.locale = .current
         f.numberStyle = .currency
-        f.locale = .current
+        f.minimumFractionDigits = 2
         f.maximumFractionDigits = 2
-        f.minimumFractionDigits = 0
-        f.usesGroupingSeparator = true
+        // Banker's rounding is applied when *computing* values; formatting just displays.
         return f
     }()
 
-    /// A plain decimal formatter suitable for editing text fields (no currency symbol).
-    /// Keeps grouping separators for readability and clamps to 2 fraction digits.
-    static let currencyEditing: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.locale = .current
-        f.usesGroupingSeparator = true
-        f.groupingSize = 3
-        f.maximumFractionDigits = 2
-        f.minimumFractionDigits = 0
-        return f
-    }()
-
-    /// Convenience to format a Decimal as currency using the current locale.
-    static func currencyString(_ value: Decimal, nilPlaceholder: String = "—") -> String {
-        let n = NSDecimalNumber(decimal: value)
-        return currency.string(from: n) ?? nilPlaceholder
+    /// Convenience: build a currency string without exposing a `moneyString` redeclaration.
+    static func currencyString(_ value: Decimal) -> String {
+        currency.string(from: value as NSDecimalNumber) ?? "$0.00"
     }
 
-    /// Formats a Decimal for an editing text field (no currency symbol).
-    /// Falls back to a culture-agnostic numeric string if formatting fails.
-    static func currencyEditingString(for value: Decimal) -> String {
-        let n = NSDecimalNumber(decimal: value)
-        return currencyEditing.string(from: n) ?? n.stringValue
-    }
-
-    /// Parses a user-entered currency / decimal string into Decimal.
-    /// - Handles localized decimal separators, ignores all non-digit/sep chars.
-    /// - Accepts inputs like "$65", "65,00", "1 234,50", "1,234.5", etc.
+    /// Parse a user-entered currency string into Decimal.
+    /// Accepts plain numbers ("12.34"), localized currency ("$12.34"), or sloppy input ("$ 12, 34").
     static func parseCurrency(_ raw: String) -> Decimal? {
-        // Normalize to the current locale's decimal separator
-        let locale = Locale.current
-        let decimalSep = locale.decimalSeparator ?? "."
-        let altDecimalSep = decimalSep == "." ? "," : "."
-        // Strip everything except digits and separators, then unify to current sep
-        let filtered = raw
-            .filter { $0.isNumber || $0 == Character(".") || $0 == Character(",") || $0 == Character("\u{00A0}") || $0 == " " }
-            .replacingOccurrences(of: "\u{00A0}", with: "") // non‑breaking space
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: altDecimalSep, with: decimalSep)
-
-        // Try NumberFormatter first (respects locale grouping)
-        if let number = currencyEditing.number(from: filtered) {
-            return number.decimalValue
+        // Try strict parse with current locale first
+        if let n = currency.number(from: raw) {
+            return n.decimalValue.roundedMoney()
         }
 
-        // Fallback: naive Decimal init after forcing '.' as separator
-        let canonical = filtered.replacingOccurrences(of: decimalSep, with: ".")
-        return Decimal(string: canonical)
+        // Fallback: strip everything except digits and locale decimal separator
+        let decSep = Locale.current.decimalSeparator ?? "."
+        let allowed = CharacterSet(charactersIn: "0123456789\(decSep)")
+        let compact = raw.unicodeScalars.filter { allowed.contains($0) }
+        let cleaned = String(String.UnicodeScalarView(compact))
+
+        // If there's more than one decimal separator, keep the first and drop the rest.
+        var normalized = cleaned
+        if decSep != "." {
+            normalized = normalized.replacingOccurrences(of: decSep, with: ".")
+        }
+        let parts = normalized.split(separator: ".", omittingEmptySubsequences: false)
+        let sanitized: String = {
+            switch parts.count {
+            case 0:
+                return "0"
+            case 1:
+                return String(parts[0])
+            default:
+                // Join only first two segments -> "12" + "." + "34xxxx" (we keep all fractional digits, rounding happens later)
+                return String(parts[0]) + "." + parts[1...].joined()
+            }
+        }()
+
+        guard let dec = Decimal(string: sanitized) else { return nil }
+        return dec.roundedMoney()
     }
 
-    /// Parse a generic decimal (locale-aware). Alias to `parseCurrency` for clarity.
-    static func parseDecimal(_ raw: String) -> Decimal? {
-        parseCurrency(raw)
-    }
+    // MARK: - ISO 8601
 
-    // MARK: - Dates
-
-    static let dateTimeShort: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .short
-        f.timeStyle = .short
-        return f
-    }()
-
-    static let dateOnlyMedium: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f
-    }()
-
-    static let timeOnlyShort: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
-        return f
-    }()
-
-    /// ISO8601 formatter for persistence / diagnostics.
+    /// ISO 8601 formatter for exporting/importing timestamps.
     static let iso8601: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
-    // MARK: - Relative time
+    // MARK: - Human Date/Time
 
-    static let relativeAbbreviated: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .abbreviated // e.g., "2h ago"
+    /// Medium date + short time for a single timestamp.
+    static let dateTime: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = .current
+        f.doesRelativeDateFormatting = false
+        f.dateStyle = .medium
+        f.timeStyle = .short
         return f
     }()
 
-    static let relativeSpelledOut: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .spellOut // e.g., "two hours ago"
+    /// Medium date, no time.
+    static let dateOnly: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = .current
+        f.doesRelativeDateFormatting = false
+        f.dateStyle = .medium
+        f.timeStyle = .none
         return f
     }()
 
-    // MARK: - Duration / TimeInterval
+    /// Short time only.
+    static let timeOnly: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = .current
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
 
-    /// Formats a duration between two dates as "2h 15m" or "8m".
-    static func durationString(from start: Date, to end: Date = Date()) -> String {
-        durationString(seconds: max(0, Int(end.timeIntervalSince(start))))
+    // MARK: - Helpers
+
+    /// "Jan 2, 2025 · 10:00 AM – 11:15 AM" (same day)
+    /// "Jan 2, 2025 10:00 AM – Jan 3, 2025 9:40 AM" (spans days)
+    static func dateRangeString(from start: Date, to end: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDate(start, inSameDayAs: end) {
+            return "\(dateOnly.string(from: start)) · \(timeOnly.string(from: start)) – \(timeOnly.string(from: end))"
+        } else {
+            return "\(dateTime.string(from: start)) – \(dateTime.string(from: end))"
+        }
     }
 
-    /// Formats seconds as "1h 03m" or "5m" / "37s".
-    static func durationString(seconds: Int) -> String {
+    /// Human duration like "1h 32m" or abbreviated "1h32m".
+    static func durationString(from start: Date, to end: Date, abbreviated: Bool = false) -> String {
+        let seconds = max(0, Int(end.timeIntervalSince(start)))
         let h = seconds / 3600
         let m = (seconds % 3600) / 60
         let s = seconds % 60
 
-        if h > 0 { return String(format: "%dh %02dm", h, m) }
-        if m > 0 { return String(format: "%dm", m) }
-        return String(format: "%ds", s)
+        func part(_ value: Int, _ unit: String) -> String? {
+            guard value > 0 else { return nil }
+            return abbreviated ? "\(value)\(unit.first!)" : "\(value)\(unit)"
+        }
+
+        // Prioritize hours/minutes; show seconds only if < 1m total.
+        if h > 0 {
+            return [part(h, "h"), part(m, "m")].compactMap { $0 }.joined(separator: abbreviated ? "" : " ")
+        } else if m > 0 {
+            return [part(m, "m")].compactMap { $0 }.joined()
+        } else {
+            // Under a minute
+            return abbreviated ? "\(s)s" : "\(s)s"
+        }
     }
-
-    // MARK: - Phone (display helpers)
-
-    /// Lightweight US phone display helper for 10-digit inputs (e.g., "(555) 123-4567").
-    /// Returns nil if it cannot confidently format.
-    static func displayPhoneUS(_ raw: String) -> String? {
-        let digits = raw.filter(\.isNumber)
-        guard digits.count == 10 else { return nil }
-        let a = digits.prefix(3)
-        let b = digits.dropFirst(3).prefix(3)
-        let c = digits.suffix(4)
-        return "(\(a)) \(b)-\(c)"
-    }
-}
-
-// MARK: - Convenience extensions
-extension Decimal {
-    /// Formats the decimal using the app currency formatter.
-    var asCurrency: String { Formatters.currencyString(self) }
-}
-
-extension Decimal {
-    /// Formats the decimal for an editing field (no currency symbol).
-    var asCurrencyEditing: String { Formatters.currencyEditingString(for: self) }
-}
-
-extension Date {
-    /// Returns a short date+time string (locale-aware).
-    var shortDateTime: String { Formatters.dateTimeShort.string(from: self) }
-
-    /// Returns a medium date string (no time).
-    var mediumDate: String { Formatters.dateOnlyMedium.string(from: self) }
-
-    /// Returns a short time string (no date).
-    var shortTime: String { Formatters.timeOnlyShort.string(from: self) }
 }

@@ -2,29 +2,28 @@
 //  IconCircle.swift
 //  Pawtrackr
 //
-//  Reusable circular icon with configurable size, sources (SF Symbol, initials, photo),
-//  gender-aware tinting, optional badge, and strong accessibility defaults.
-//  Updated to fix conditional-compilation init issues, return-path issues in @ViewBuilder,
-//  and to support cross‑platform image decoding.
+//  Reusable circular icon with configurable content, styles, and badges.
+//  - Logic is simplified using a GlyphContent enum for clear rendering paths.
+//  - Uses shared helpers for cross-platform image decoding.
+//
+//  Updated by Assistant on 2025-08-28.
 //
 
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
-#endif
-#if canImport(AppKit)
+#elseif canImport(AppKit)
 import AppKit
 #endif
 
 struct IconCircle: View {
     // MARK: - Types
-
-    enum SizeToken {
-        case xs, sm, md, lg
+    enum SizeToken: Equatable {
+        case xs
+        case sm
+        case md
+        case lg
         case custom(CGFloat)
-
-        /// Convenience to create a size token from an explicit pixel dimension.
-        static func px(_ value: CGFloat) -> SizeToken { .custom(value) }
 
         var dimension: CGFloat {
             switch self {
@@ -32,298 +31,308 @@ struct IconCircle: View {
             case .sm: return 32
             case .md: return 40
             case .lg: return 56
-            case .custom(let px): return px
+            case .custom(let v): return max(16, v)
             }
         }
-        /// Fraction of the circle dimension used for the inner glyph (symbol/initials).
+
+        /// Relative glyph scale inside the circle. Tuned so small sizes look legible.
         var iconScale: CGFloat {
             switch self {
             case .xs: return 0.46
             case .sm: return 0.44
             case .md: return 0.42
             case .lg: return 0.40
-            case .custom(let px):
-                // Interpolate between 24pt→0.46 and 56pt→0.40 for sensible scaling at arbitrary sizes.
-                let minD: CGFloat = 24
-                let maxD: CGFloat = 56
-                let t = max(0, min(1, (px - minD) / (maxD - minD)))
-                return 0.46 - (0.06 * t)
+            case .custom(let v):
+                // Interpolate between 24→0.46 and 56→0.40
+                let clamped = max(16, min(v, 80))
+                let t = (clamped - 24) / (56 - 24)
+                return max(0.36, min(0.50, 0.46 - t * 0.06))
             }
         }
+
         var fontWeight: Font.Weight {
-            switch self {
-            case .lg: return .semibold
-            case .xs, .sm, .md: return .medium
-            case .custom(let px): return px >= 56 ? .semibold : .medium
-            }
+            dimension >= 56 ? .semibold : .medium
         }
     }
-
     enum Style: Equatable {
-        case solid(Color, Color)                          // bg, foreground
-        case tinted(Color)                                // bg with white fg
-        case auto(species: Species?, gender: PetGender?)  // DS-driven tint
+        case solid(bg: Color, fg: Color)
+        case tinted(Color) // bg; fg will default to white
+        case auto(species: Species?, gender: PetGender?) // gender/species-aware tinting
     }
 
-    // MARK: - Inputs
-
-    private let systemImage: String?
-    private let initials: String?
-    private let imageData: Data?
-    private let imageURL: URL? // Always present to avoid conditional-init mismatches
+    /// Defines the content to be rendered, determined by priority in the initializer.
+    private indirect enum GlyphContent {
+        case remote(url: URL, fallback: GlyphContent)
+        case local(data: Data)
+        case initials(String)
+        case symbol(String)
+        case fallback
+    }
+    
+    // MARK: - Properties
     private let sizeToken: SizeToken
     private let style: Style
     private let lineWidth: CGFloat
     private let badgeSystemImage: String?
     private let badgeColor: Color?
     private let accessibilityLabel: String?
+    private let isDecorative: Bool
+    private let glyphContent: GlyphContent
 
-    // MARK: - Init
-
-    init(systemImage: String? = nil,
-         initials: String? = nil,
-         imageData: Data? = nil,
-         imageURL: URL? = nil,
-         size: SizeToken = .md,
-         style: Style = .tinted(Color.blue.opacity(0.15)),
-         lineWidth: CGFloat = 0,
-         badgeSystemImage: String? = nil,
-         badgeColor: Color? = nil,
-         accessibilityLabel: String? = nil) {
-        self.systemImage = systemImage
-        self.initials = IconCircle.makeInitials(from: initials)
-        self.imageData = imageData
-        self.imageURL = imageURL
+    // MARK: - Initializer
+    
+    /// Creates a versatile circular icon.
+    ///
+    /// The content is determined by priority: `imageURL` > `imageData` > `initials` > `systemImage`.
+    ///
+    /// - Parameters:
+    ///   - systemImage: The name of an SF Symbol to display.
+    ///   - initials: A name or string to be converted into initials.
+    ///   - imageData: Raw `Data` for a local image.
+    ///   - imageURL: A `URL` for a remote image to be loaded asynchronously.
+    ///   - size: A predefined or custom size token.
+    ///   - style: The color and fill style of the circle.
+    ///   - lineWidth: The width of an optional stroke around the circle.
+    ///   - badgeSystemImage: An optional SF Symbol to display in a bottom-trailing badge.
+    ///   - badgeColor: An optional `Color` for a simple dot badge.
+    ///   - accessibilityLabel: A custom label for VoiceOver.
+    ///   - isDecorative: If `true`, the icon is ignored by accessibility services.
+    public init(systemImage: String? = nil,
+                initials: String? = nil,
+                imageData: Data? = nil,
+                imageURL: URL? = nil,
+                size: SizeToken = .md,
+                style: Style = .tinted(Color.accentColor.opacity(0.15)),
+                lineWidth: CGFloat = 0,
+                badgeSystemImage: String? = nil,
+                badgeColor: Color? = nil,
+                accessibilityLabel: String? = nil,
+                isDecorative: Bool = false) {
         self.sizeToken = size
         self.style = style
         self.lineWidth = lineWidth
         self.badgeSystemImage = badgeSystemImage
         self.badgeColor = badgeColor
         self.accessibilityLabel = accessibilityLabel
+        self.isDecorative = isDecorative
+        
+        // Determine the glyph content based on priority
+        let initialsGlyph = Self.makeInitials(from: initials).map { GlyphContent.initials($0) }
+        let symbolGlyph = systemImage.map { GlyphContent.symbol($0) }
+        let fallback = initialsGlyph ?? symbolGlyph ?? .fallback
+
+        if let url = imageURL {
+            self.glyphContent = .remote(url: url, fallback: fallback)
+        } else if let data = imageData {
+            self.glyphContent = .local(data: data)
+        } else {
+            self.glyphContent = fallback
+        }
     }
 
     // MARK: - Body
-
     var body: some View {
         let dim = sizeToken.dimension
-        let (bg, fg) = colors(for: style)
+        let tints = self.tints(for: style)
 
         ZStack(alignment: .bottomTrailing) {
             Circle()
-                .fill(bg)
-                .overlay(
-                    Circle().strokeBorder(fg.opacity(lineWidth > 0 ? 0.25 : 0), lineWidth: lineWidth)
-                )
+                .fill(tints.bg)
+                .overlay(Circle().strokeBorder(tints.ring, lineWidth: lineWidth > 0 ? lineWidth : 0))
                 .frame(width: dim, height: dim)
-                .overlay(glyph(foreground: fg, dimension: dim))
-                .contentShape(Circle())
 
-            if let badgeSystemImage {
-                badge(fg: fg, dim: dim, systemImage: badgeSystemImage)
-            } else if let badgeColor {
-                badgeDot(color: badgeColor, dim: dim)
-            }
+            glyphView(content: glyphContent, tints: tints)
+            
+            badgeView(tints: tints)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(accessibilityLabel ?? defaultAXLabel))
-        .accessibilityAddTraits(.isImage)
+        .contentShape(Circle())
+        .modifier(AccessibilityModifier(
+            label: accessibilityLabel,
+            defaultLabel: defaultAccessibilityLabel,
+            isDecorative: isDecorative
+        ))
     }
 
-    // MARK: - Glyph Content
-
+    // MARK: - Subviews
+    
     @ViewBuilder
-    private func glyph(foreground fg: Color, dimension dim: CGFloat) -> some View {
-        // 1) Remote image via URL (AsyncImage)
-        if let url = imageURL {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .clipShape(Circle())
-                        .frame(width: dim, height: dim)
-                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 0.5))
-                case .empty:
-                    ProgressView().scaleEffect(0.6)
-                case .failure:
-                    fallbackGlyph(fg: fg, dim: dim)
-                @unknown default:
-                    fallbackGlyph(fg: fg, dim: dim)
+    private func glyphView(content: GlyphContent, tints: (bg: Color, fg: Color, ring: Color)) -> AnyView {
+        let dim = sizeToken.dimension
+        
+        switch content {
+        case .remote(let url, _):
+            return AnyView(
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else if phase.error != nil {
+                        // On failure, render a neutral fallback symbol (avoid recursive opaque returns)
+                        Image(systemName: "pawprint.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundStyle(tints.fg)
+                    } else {
+                        // Placeholder while loading
+                        ProgressView()
+                    }
                 }
-            }
-        }
-        // 2) Image from raw Data (platform-aware decode)
-        else if let image = imageFromData(imageData) {
-            image
-                .resizable()
-                .scaledToFill()
-                .clipShape(Circle())
                 .frame(width: dim, height: dim)
-                .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 0.5))
-        }
-        // 3) Initials
-        else if let initials = initials, !initials.isEmpty {
-            Text(initials)
-                .font(.system(size: dim * sizeToken.iconScale, weight: sizeToken.fontWeight, design: .rounded))
-                .minimumScaleFactor(0.5)
-                .foregroundStyle(fg)
-        }
-        // 4) SF Symbol
-        else if let systemImage = systemImage {
-            Image(systemName: systemImage)
-                .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
-                .foregroundStyle(fg)
-        }
-        // 5) Fallback
-        else {
-            Image(systemName: "pawprint.fill")
-                .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
-                .foregroundStyle(fg)
+                .clipShape(Circle())
+            )
+
+        case .local(let data):
+            if let image = Image(platformImage: data) {
+                return AnyView(
+                    image.resizable().scaledToFill()
+                        .frame(width: dim, height: dim)
+                        .clipShape(Circle())
+                )
+            } else {
+                return AnyView(
+                    Image(systemName: "pawprint.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: dim * sizeToken.iconScale, height: dim * sizeToken.iconScale)
+                        .foregroundStyle(tints.fg)
+                )
+            }
+
+        case .initials(let text):
+            return AnyView(
+                Text(text)
+                    .font(.system(size: dim * sizeToken.iconScale, weight: sizeToken.fontWeight, design: .rounded))
+                    .foregroundStyle(tints.fg)
+            )
+
+        case .symbol(let name):
+            return AnyView(
+                Image(systemName: name)
+                    .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
+                    .foregroundStyle(tints.fg)
+            )
+
+        case .fallback:
+            return AnyView(
+                Image(systemName: "pawprint.fill")
+                    .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
+                    .foregroundStyle(tints.fg)
+            )
         }
     }
-
+    
     @ViewBuilder
-    private func fallbackGlyph(fg: Color, dim: CGFloat) -> some View {
-        if let initials = initials, !initials.isEmpty {
-            Text(initials)
-                .font(.system(size: dim * sizeToken.iconScale, weight: sizeToken.fontWeight, design: .rounded))
-                .foregroundStyle(fg)
-        } else if let systemImage = systemImage {
-            Image(systemName: systemImage)
-                .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
-                .foregroundStyle(fg)
-        } else {
-            Image(systemName: "pawprint.fill")
-                .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
-                .foregroundStyle(fg)
-        }
-    }
-
-    // MARK: - Badges
-
-    @ViewBuilder
-    private func badge(fg: Color, dim: CGFloat, systemImage: String) -> some View {
-        let badgeDim = max(14, dim * 0.36)
-        ZStack {
-            Circle().fill(Color.white.opacity(0.95)).shadow(radius: 0.5, x: 0, y: 0)
-            Circle().stroke(Color.black.opacity(0.05), lineWidth: 0.5)
-            Image(systemName: systemImage)
+    private func badgeView(tints: (bg: Color, fg: Color, ring: Color)) -> some View {
+        let dim = sizeToken.dimension
+        let badgeOffset = dim * 0.08
+        
+        if let badgeSystemImage {
+            let badgeDim = max(14, dim * 0.36)
+            Image(systemName: badgeSystemImage)
                 .font(.system(size: badgeDim * 0.55, weight: .bold))
-                .foregroundStyle(fg)
+                .foregroundStyle(tints.fg)
+                .frame(width: badgeDim, height: badgeDim)
+                .background(Circle().fill(.thickMaterial))
+                .overlay(Circle().stroke(.separator, lineWidth: 0.5))
+                .offset(x: badgeOffset, y: badgeOffset)
+                .accessibilityHidden(true)
+        } else if let badgeColor {
+            let badgeDim = max(10, dim * 0.22)
+            Circle()
+                .fill(badgeColor)
+                .frame(width: badgeDim, height: badgeDim)
+                .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                .offset(x: badgeOffset, y: badgeOffset)
+                .accessibilityHidden(true)
         }
-        .frame(width: badgeDim, height: badgeDim)
-        .offset(x: dim * 0.08, y: dim * 0.08)
     }
 
-    @ViewBuilder
-    private func badgeDot(color: Color, dim: CGFloat) -> some View {
-        let badgeDim = max(10, dim * 0.22)
-        Circle()
-            .fill(color)
-            .frame(width: badgeDim, height: badgeDim)
-            .overlay(Circle().stroke(Color.white, lineWidth: 1))
-            .offset(x: dim * 0.08, y: dim * 0.08)
-    }
-
-    // MARK: - Colors
-
-    private func colors(for style: Style) -> (Color, Color) {
+    // MARK: - Private Helpers
+    
+    private func tints(for style: Style) -> (bg: Color, fg: Color, ring: Color) {
         switch style {
-        case let .solid(bg, fg):
-            return (bg, fg)
-        case let .tinted(bg):
-            return (bg, .white)
-        case let .auto(species: _, gender: gender):
-            // Pull from DS; fall back to system colors if DS is unavailable
-            #if canImport(SwiftUI)
-            let tint = DS.ColorToken.gender(gender ?? .unknown)
-            #else
-            let tint = Color.blue
-            #endif
-            return (tint.opacity(0.15), tint)
+        case .solid(let bg, let fg):
+            return (bg, fg, fg.opacity(0.85))
+
+        case .tinted(let bg):
+            return (bg, .white, .white.opacity(0.9))
+
+        case .auto(_, let gender):
+            let base: Color
+            switch gender {
+            case .some(.male):
+                base = Color(red: 0.23, green: 0.51, blue: 0.96) // ~#3B82F6
+            case .some(.female):
+                base = Color(red: 0.92, green: 0.28, blue: 0.60) // ~#EC4899
+            default:
+                base = Color.secondary.opacity(0.55)
+            }
+            return (base.opacity(0.15), .white, .white.opacity(0.9))
         }
     }
 
-    // MARK: - AX
-
-    private var defaultAXLabel: String {
-        if let accessibilityLabel { return accessibilityLabel }
-        if let initials, !initials.isEmpty { return initials }
-        if let systemImage { return systemImage.replacingOccurrences(of: ".", with: " ") }
-        return "avatar"
-    }
-
-    // MARK: - Image decode helper
-
-    private func imageFromData(_ data: Data?) -> Image? {
-        guard let data = data else { return nil }
-        #if canImport(UIKit)
-        if let ui = UIImage(data: data) { return Image(uiImage: ui) }
-        #endif
-        #if canImport(AppKit)
-        if let ns = NSImage(data: data) { return Image(nsImage: ns) }
-        #endif
-        return nil
+    private var defaultAccessibilityLabel: String {
+        switch glyphContent {
+        case .initials(let str): return "Avatar with initials \(str)"
+        case .symbol(let name): return name.replacingOccurrences(of: ".", with: " ") + " icon"
+        default: return "Avatar"
+        }
     }
 }
 
-// MARK: - Pet Convenience
-
+// MARK: - Convenience Initializers & Utilities
 extension IconCircle {
-    /// Pet-specific convenience (gender-tinted; symbol varies by species)
-    init(species: Species, gender: PetGender, size: SizeToken = .md, badge: String? = nil) {
-        let sys = (species == .cat) ? "pawprint.circle.fill" : "pawprint.fill"
-        self.init(systemImage: sys,
-                  initials: nil,
-                  imageData: nil,
-                  imageURL: nil,
-                  size: size,
-                  style: .auto(species: species, gender: gender),
-                  lineWidth: 0,
-                  badgeSystemImage: badge,
-                  badgeColor: nil,
-                  accessibilityLabel: "Pet avatar")
+    /// Creates a pet-specific avatar using the `.auto` style for gender-aware tinting.
+    init(pet: Pet, size: SizeToken = .md, badge: String? = nil) {
+        self.init(
+            systemImage: (pet.species == .cat) ? "cat.fill" : "dog.fill", // More specific icons
+            initials: pet.name,
+            imageData: pet.photoData,
+            size: size,
+            style: .auto(species: pet.species, gender: pet.gender),
+            badgeSystemImage: badge
+        )
     }
-}
-
-// MARK: - Utilities
-
-extension IconCircle {
-    /// Build safe initials from any name (multilingual & whitespace aware)
+    
+    /// A robust utility to generate initials from a name string.
     static func makeInitials(from name: String?) -> String? {
-        guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return nil }
-        let parts = name.split(separator: " ").prefix(2)
-        let scalars = parts.compactMap { $0.unicodeScalars.first }.map(Character.init)
-        let letters = scalars.map { String($0) }.joined()
-        return letters.uppercased()
+        guard let raw = name?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        let parts = raw.split(whereSeparator: { $0.isWhitespace }).prefix(2)
+        let initials = parts.compactMap { $0.first }.map { String($0).uppercased() }.joined()
+        return initials.isEmpty ? nil : initials
     }
 }
 
-// MARK: - Preview
-
-struct IconCircle_Previews: PreviewProvider {
-    static var previews: some View {
-        VStack(spacing: 20) {
-            HStack(spacing: 16) {
-                IconCircle(systemImage: "plus")
-                IconCircle(systemImage: "scissors", style: .tinted(Color.purple.opacity(0.15)))
-                IconCircle(systemImage: "pawprint.fill", style: .solid(.white, .blue))
-                IconCircle(species: .dog, gender: .male)
-                IconCircle(species: .cat, gender: .female)
-            }
-            HStack(spacing: 16) {
-                IconCircle(initials: "Bella Luna", size: .lg, style: .tinted(Color.pink.opacity(0.2)), badgeSystemImage: "checkmark.seal.fill")
-                IconCircle(systemImage: "camera.fill", size: .sm, badgeColor: .green)
-                IconCircle(systemImage: "pawprint.fill", size: .xs)
-            }
+// MARK: - Private Modifier
+private struct AccessibilityModifier: ViewModifier {
+    let label: String?
+    let defaultLabel: String
+    let isDecorative: Bool
+    
+    func body(content: Content) -> some View {
+        if isDecorative {
+            content.accessibilityHidden(true)
+        } else {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(label ?? defaultLabel))
+                .accessibilityAddTraits(.isImage)
         }
-        .padding()
-        #if os(macOS)
-        .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+// MARK: - Data → SwiftUI Image helper
+private extension Image {
+    init?(platformImage data: Data) {
+        #if canImport(UIKit)
+        if let ui = UIImage(data: data) {
+            self = Image(uiImage: ui)
+        } else { return nil }
+        #elseif canImport(AppKit)
+        if let ns = NSImage(data: data) {
+            self = Image(nsImage: ns)
+        } else { return nil }
         #else
-        .background(Color(.systemGroupedBackground))
+        return nil
         #endif
-        .previewLayout(.sizeThatFits)
     }
 }

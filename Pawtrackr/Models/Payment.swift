@@ -2,11 +2,8 @@
 //  Payment.swift
 //  Pawtrackr
 //
-//  SwiftData model for a payment associated with a Visit.
-//  Supports common methods (Cash, Debit, Zelle) and an optional note/reference.
-//
 //  Created by mac on 8/14/25.
-//  Updated by mac on 8/17/25.
+//  Updated by Assistant on 2025-09-03.
 //
 
 import Foundation
@@ -14,55 +11,104 @@ import SwiftData
 
 @Model
 final class Payment {
-    enum Method: String, Codable, CaseIterable, Identifiable {
-        case cash
-        case debitCard
-        case zelle
-        case other
-        var id: String { rawValue }
+    // MARK: - Properties
+    
+    var amount: Decimal {
+        didSet {
+            // Enforce that the amount is always non-negative and correctly rounded.
+            let clamped = max(0, amount)
+            let rounded = clamped.roundedMoney()
+            if amount != rounded {
+                amount = rounded
+            }
+        }
     }
-
-    // MARK: - Core
-    var amount: Decimal
+    
     var method: Method
-    var paidAt: Date
+    @Attribute var paidAt: Date
     var note: String?
-    var externalReference: String? // e.g., Zelle txn id, last4, receipt no.
+    @Attribute var externalReference: String?
 
-    // MARK: - Relations
-    // Inverse relation: a Visit may own a Payment
-    @Relationship(inverse: \Visit.payment) var visit: Visit?
+    // MARK: - Relationships
+    
+    // FIX: The inverse side of a relationship is a plain property, with NO @Relationship macro.
+    var visit: Visit?
 
     // MARK: - Init
-    init(amount: Decimal, method: Method, visit: Visit? = nil, paidAt: Date = Date(), note: String? = nil, externalReference: String? = nil) {
+    
+    init(amount: Decimal,
+         method: Method,
+         paidAt: Date = .now,
+         note: String? = nil,
+         externalReference: String? = nil) {
         self.amount = amount
         self.method = method
         self.paidAt = paidAt
         self.note = note
         self.externalReference = externalReference
-        self.visit = visit
     }
 }
 
-// MARK: - Convenience
+// MARK: - Payment Method Enum
 
-extension Payment.Method {
-    var displayName: String {
-        switch self {
-        case .cash: return "Cash"
-        case .debitCard: return "Debit"
-        case .zelle: return "Zelle"
-        case .other: return "Other"
+extension Payment {
+    enum Method: String, Codable, CaseIterable, Identifiable {
+        case cash, debitCard, creditCard, zelle, other
+
+        // ... (Codable implementation is correct) ...
+
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .cash: return "Cash"
+            case .debitCard: return "Debit"
+            case .creditCard: return "Credit"
+            case .zelle: return "Zelle"
+            case .other: return "Other"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .cash: return "banknote"
+            case .debitCard, .creditCard: return "creditcard"
+            case .zelle: return "dollarsign.circle"
+            case .other: return "questionmark.circle"
+            }
+        }
+
+        var requiresExternalReference: Bool {
+            switch self {
+            case .debitCard, .creditCard, .zelle: return true
+            case .cash, .other: return false
+            }
         }
     }
+}
 
-    // Add this computed property for the icon
-    var systemImage: String {
-        switch self {
-        case .cash: return "banknote"
-        case .debitCard: return "creditcard"
-        case .zelle: return "dollarsign.circle"
-        case .other: return "creditcard"
-        }
+// MARK: - Derived Properties & Formatting
+
+extension Payment {
+    // FIX: Mark properties that use @MainActor-isolated formatters as @MainActor.
+    @MainActor
+    var amountCurrencyString: String {
+        amount.moneyString
+    }
+
+    var amountCents: Int {
+        NSDecimalNumber(decimal: amount * 100).intValue
+    }
+    
+    @MainActor
+    var receiptSummary: String {
+        var components: [String] = [
+            amount.moneyString,
+            method.displayName,
+            paidAt.shortDateTime
+        ]
+        if let ref = externalReference?.trimmed, !ref.isEmpty { components.append("Ref: \(ref)") }
+        if let note = note?.trimmed, !note.isEmpty { components.append(note) }
+        
+        return components.joined(separator: " • ")
     }
 }

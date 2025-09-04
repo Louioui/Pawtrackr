@@ -42,40 +42,34 @@ public struct TimelineItem<Content: View>: View {
     // MARK: Content
     @ViewBuilder public var content: () -> Content
 
-    // MARK: Init
-    /// - Parameters:
-    ///   - dotSize: Diameter of the dot.
-    ///   - railWidth: Width of the vertical rail segments.
-    ///   - dotColor: Fill color of the dot.
-    ///   - railColor: Color of the rail segments.
-    ///   - showTopLine: Draw the rail segment above the dot.
-    ///   - showBottomLine: Draw the rail segment below the dot.
-    ///   - content: Your row body (cards, labels, etc.).
-    public init(
-        dotSize: CGFloat = 12,
-        railWidth: CGFloat = 2,
-        dotColor: Color = .accentColor,
-        railColor: Color = .secondary.opacity(0.35),
-        showTopLine: Bool = true,
-        showBottomLine: Bool = true,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.dotSize = dotSize
-        self.railWidth = railWidth
-        self.dotColor = dotColor
-        self.railColor = railColor
-        self.showTopLine = showTopLine
-        self.showBottomLine = showBottomLine
-        self.content = content
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private func scaled(_ base: CGFloat) -> CGFloat {
+        switch dynamicTypeSize {
+        case .accessibility3, .accessibility4, .accessibility5:
+            return base * 1.45
+        case .accessibility1, .accessibility2:
+            return base * 1.25
+        case .xxxLarge:
+            return base * 1.15
+        case .xxLarge:
+            return base * 1.10
+        case .xLarge:
+            return base * 1.05
+        default:
+            return base
+        }
     }
 
     // MARK: Body
     public var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            // Left rail + dot
+            // Left rail + dot (scaled for Dynamic Type)
+            let sDot = scaled(dotSize)
+            let sRail = max(1, scaled(railWidth))
             RailColumn(
-                dotSize: dotSize,
-                railWidth: railWidth,
+                dotSize: sDot,
+                railWidth: sRail,
                 dotColor: dotColor,
                 railColor: railColor,
                 showTop: showTopLine,
@@ -148,6 +142,7 @@ public struct TimelineTextRow: View {
     public var railColor: Color
     public var showTopLine: Bool
     public var showBottomLine: Bool
+    public var amountTint: Color
 
     public init(
         title: String,
@@ -157,7 +152,8 @@ public struct TimelineTextRow: View {
         dotColor: Color = .accentColor,
         railColor: Color = .secondary.opacity(0.35),
         showTopLine: Bool = true,
-        showBottomLine: Bool = true
+        showBottomLine: Bool = true,
+        amountTint: Color = .green
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -167,6 +163,7 @@ public struct TimelineTextRow: View {
         self.railColor = railColor
         self.showTopLine = showTopLine
         self.showBottomLine = showBottomLine
+        self.amountTint = amountTint
     }
 
     public var body: some View {
@@ -190,12 +187,12 @@ public struct TimelineTextRow: View {
                     if let amount {
                         Text(amount)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(amountTint)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(
                                 Capsule()
-                                    .fill(Color.green.opacity(0.12))
+                                    .fill(amountTint.opacity(0.12))
                             )
                             .accessibilityLabel(Text("Amount"))
                             .accessibilityValue(Text(amount))

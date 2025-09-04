@@ -2,396 +2,288 @@
 //  CheckoutView.swift
 //  Pawtrackr
 //
-//  Full-screen checkout that matches the mock:
-//  - Pet header with live duration
-//  - Service chips (toggle)
-//  - Session notes + behavior tags (simple chips)
-//  - Optional before/after photos (uses ImagePicker component)
-//  - Amount + payment method
-//  - Confirm & Check Out finalizes the active Visit and creates a Payment
-//
 //  Created by mac on 8/15/25.
+//  Refactored by Assistant on 2025-09-03
 //
 
 import SwiftUI
 import SwiftData
-import Foundation  // for Locale/autoupdatingCurrent if not already present
-
-extension Notification.Name {
-    static let visitDidComplete = Notification.Name("VisitDidComplete")
-}
 
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var ctx
+    @State private var viewModel: CheckoutViewModel
 
-    @Bindable var pet: Pet
-
-    // Active visit must exist (startedAt set, endedAt nil). If not, we create one on appear.
-    @State private var activeVisit: Visit?
-
-    // Services selection + data
-    @Query(sort: [SortDescriptor(\Service.name)])
-    private var allServices: [Service]
-
-    @State private var selectedServiceIDs: Set<PersistentIdentifier> = []
-
-    // Notes & tags
-    @State private var notes: String = ""
-    @State private var tagOptions: [String] = ["Calm", "Cooperative", "Anxious", "Muzzle"]
-    @State private var tags: Set<String> = []
-
-    // Photos (optional)
-    @State private var beforePhotoData: Data?
-    @State private var afterPhotoData: Data?
-
-    // Charge & payment
-    @State private var amountString: String = ""
-    @State private var paymentMethod: Payment.Method = .cash
-    @State private var checkoutNotes: String = ""
-
-    // Timer for live duration
-    @State private var tick = Date()
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
+    init(pet: Pet) {
+        // The modelContext can be accessed via the pet itself
+        _viewModel = State(initialValue: CheckoutViewModel(pet: pet, modelContext: pet.modelContext!))
+    }
+    
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(DS.ColorToken.gender(pet.gender))
-                    .frame(height: 3)
-                    .accessibilityHidden(true)
-
-                ScrollView {
-                    VStack(spacing: 16) {
-                        header
-
-                        servicesSection
-                        notesSection
-                        photosSection
-                        chargeSection
-
-                        Spacer(minLength: 60)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+            ScrollView {
+                VStack(spacing: 16) {
+                    headerSection
+                    servicesSection
+                    notesSection
+                    photosSection
+                    chargeSection
+                    Spacer(minLength: 80) // Space for bottom CTA
                 }
+                .padding(.horizontal)
+                .padding(.top, 8)
             }
-            .overlay(
-                Rectangle()
-                    .fill(pet.gender == .male ? Color.blue : Color.pink)
-                    .frame(height: 4)
-                    .frame(maxHeight: .infinity, alignment: .top),
-                alignment: .top
-            )
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Check Out")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Confirm") { confirmCheckout() }
-                        .disabled(totalDecimal <= 0 || selectedServiceIDs.isEmpty)
-                }
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar { toolbarContent }
+            .safeAreaInset(edge: .bottom, content: bottomCta)
+            .alert("Checkout Error", isPresented: $viewModel.showAlert) {
+                Button("OK") {}
+            } message: {
+                Text(viewModel.alertMessage)
             }
-            .safeAreaInset(edge: .bottom) {
-                Button(action: confirmCheckout) {
-                    Label("Confirm & Check Out", systemImage: "checkmark.circle.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .padding()
-                .background(.ultraThinMaterial)
-            }
-            .onAppear(perform: hydrate)
-            .onReceive(timer) { tick = $0 }
         }
     }
-
+    
+    private func confirmAndDismiss() {
+        Task {
+            if await viewModel.confirmCheckout() {
+                dismiss()
+            }
+        }
+    }
+    
     // MARK: - Sections
-
-    private var header: some View {
+    @ViewBuilder
+    private var headerSection: some View {
         Card {
             HStack(spacing: 12) {
-                // Photo or icon
-                #if canImport(UIKit)
-                if let data = pet.photoData, let ui = UIImage(data: data) {
-                    Image(uiImage: ui).resizable().scaledToFill()
-                        .frame(width: 56, height: 56)
-                        .clipShape(Circle())
-                } else {
-                    SpeciesAndGenderIcons.badge(for: pet.species, gender: pet.gender, size: 56)
-                }
-                #else
-                SpeciesAndGenderIcons.badge(for: pet.species, gender: pet.gender, size: 56)
-                #endif
-
+                // FIX: Use the correct AvatarView initializer
+                AvatarView(.pet(species: viewModel.pet.species, gender: viewModel.pet.gender, name: viewModel.pet.name, imageData: viewModel.pet.photoData), size: .lg)
+                
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(pet.name).font(.headline)
-                    Text(pet.breed ?? pet.species.displayName)
-                        .font(.subheadline).foregroundStyle(.secondary)
-
-                    // Duration with dynamic timer if active
-                    if let v = activeVisit {
-                        if v.endedAt == nil {
-                            HStack(spacing: 6) {
-                                Image(systemName: "clock")
-                                    .foregroundStyle(.green)
-                                TimelineView(.periodic(from: Date(), by: 1)) { context in
-                                    Text(durationString(from: v, now: context.date))
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.green)
-                                }
-                            }
-                            .padding(.top, 2)
-                        } else {
-                            HStack(spacing: 6) {
-                                Image(systemName: "clock")
-                                    .foregroundStyle(.green)
-                                Text(durationString(from: v))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.green)
-                            }
-                            .padding(.top, 2)
-                        }
-                    }
+                    Text(viewModel.pet.name).font(.headline)
+                    Text(viewModel.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
+                    
+                    Label(viewModel.visitTimer.formattedElapsed, systemImage: "clock")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.accent)
+                        .monospacedDigit()
+                        .padding(.top, 2)
                 }
                 Spacer()
             }
         }
     }
-
+    
     private var servicesSection: some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Services Performed").font(.subheadline.weight(.semibold))
+                // FIX: Use the correct 'Chip' component and binding syntax
                 FlowLayout(spacing: 8) {
-                    ForEach(allServices, id: \.persistentModelID) { s in
-                        let isSelected = Binding<Bool>(
-                            get: { selectedServiceIDs.contains(s.persistentModelID) },
-                            set: { newValue in
-                                if newValue { selectedServiceIDs.insert(s.persistentModelID) }
-                                else { selectedServiceIDs.remove(s.persistentModelID) }
-                            }
+                    ForEach(viewModel.allServices) { service in
+                        Chip.selectable(
+                            service.name,
+                            isSelected: Binding(
+                                get: { viewModel.isServiceSelected(service) },
+                                set: { _, _  in viewModel.toggleService(service) }
+                            )
                         )
-                        Pill.selectable(s.name, isSelected: isSelected, tint: .accentColor) { _ in }
                     }
                 }
             }
         }
     }
-
+    
     private var notesSection: some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Session Notes").font(.subheadline.weight(.semibold))
-                TextEditor(text: $notes)
+                TextEditor(text: $viewModel.notes)
                     .frame(minHeight: 100)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(.gray.opacity(0.15))
-                    )
-
-                Text("Behavior Tags").font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(.separator, lineWidth: 1))
+                
+                Text("Behavior Tags").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                 FlowLayout(spacing: 6) {
-                    ForEach(tagOptions, id: \.self) { tag in
-                        let isOn = Binding<Bool>(
-                            get: { tags.contains(tag) },
-                            set: { newValue in
-                                if newValue { tags.insert(tag) } else { tags.remove(tag) }
-                            }
+                    // FIX: Use the correct 'Chip' component and binding syntax for the tags Set
+                    ForEach(CheckoutViewModel.tagOptions, id: \.self) { tag in
+                        Chip.selectable(
+                            tag,
+                            isSelected: Binding(
+                                get: { viewModel.tags.contains(tag) },
+                                set: { isSelected, _ in
+                                    if isSelected {
+                                        viewModel.tags.insert(tag)
+                                    } else {
+                                        viewModel.tags.remove(tag)
+                                    }
+                                }
+                            )
                         )
-                        Pill.selectable(tag, isSelected: isOn, tint: .accentColor) { _ in }
                     }
                 }
             }
         }
     }
-
+    
     private var photosSection: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Before & After Photos").font(.subheadline.weight(.semibold))
                 HStack(spacing: 12) {
-                    ImagePicker(imageData: $beforePhotoData, allowsEditing: true, maxDimension: 2048, jpegQuality: 0.8) {
-                        photoBox(title: "Before", imageData: beforePhotoData)
+                    ImagePicker(imageData: $viewModel.beforePhotoData, source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
+                        // FIX: Use the correct 'AddPhotoPlaceholder' view.
+                        // We also create a small helper to display the image once chosen.
+                        PhotoWell(imageData: viewModel.beforePhotoData, title: "Before")
+                            .contextMenu {
+                                if viewModel.beforePhotoData != nil {
+                                    Button(role: .destructive) { viewModel.beforePhotoData = nil } label: {
+                                        Label("Remove Photo", systemImage: "trash")
+                                    }
+                                }
+                            }
                     }
-                    ImagePicker(imageData: $afterPhotoData, allowsEditing: true, maxDimension: 2048, jpegQuality: 0.8) {
-                        photoBox(title: "After", imageData: afterPhotoData)
+                    ImagePicker(imageData: $viewModel.afterPhotoData, source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
+                        PhotoWell(imageData: viewModel.afterPhotoData, title: "After")
+                            .contextMenu {
+                                if viewModel.afterPhotoData != nil {
+                                    Button(role: .destructive) { viewModel.afterPhotoData = nil } label: {
+                                        Label("Remove Photo", systemImage: "trash")
+                                    }
+                                }
+                            }
                     }
                 }
             }
         }
     }
-
+    
     private var chargeSection: some View {
         Card {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Service Charge").font(.subheadline.weight(.semibold))
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Amount").font(.footnote).foregroundStyle(.secondary)
-                    HStack {
-                        Text("$").foregroundStyle(.secondary)
-                        TextField("0.00", text: $amountString)
-                        #if os(iOS)
-                            .keyboardType(.decimalPad)
-                            .textContentType(.oneTimeCode) // improves decimal keypad behavior on iOS
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                        #endif
-                    }
-                    .padding(10)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(.gray.opacity(0.08)))
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Payment Method").font(.footnote).foregroundStyle(.secondary)
-                    Picker("", selection: $paymentMethod) {
-                        ForEach(Payment.Method.allCases, id: \.self) { m in
-                            Text(m.displayName).tag(m)
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Payment Details").font(.subheadline.weight(.semibold))
+                
+                labeledContent("Amount") {
+                    TextField("$0.00", text: $viewModel.amountString)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.trailing)
+                        .onChange(of: viewModel.amountString) { newValue in
+                            viewModel.setAmountDirectly(newValue)
                         }
+                        .onSubmit {
+                            viewModel.formatAmountInput()
+                        }
+                }
+                
+                labeledContent("Method") {
+                    Picker("Payment Method", selection: $viewModel.selectedPaymentMethod) {
+                        ForEach(Payment.Method.allCases) { m in Text(m.displayName).tag(m) }
                     }
-                    .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
+                
+                if viewModel.requiresExternalReference {
+                    labeledContent("Reference") {
+                        TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
+                }
+                
+                Divider()
+                
+                VStack(spacing: 8) {
+                    // FIX: Access the final total from the ViewModel
+                    HStack { Text("Total").fontWeight(.semibold); Spacer(); Text(viewModel.finalTotalString).fontWeight(.semibold) }
+                }
+                .monospacedDigit()
+            }
+            .animation(.default, value: viewModel.requiresExternalReference)
+        }
+    }
+    
+    private func labeledContent<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack {
+            Text(title).foregroundStyle(.secondary)
+            Spacer()
+            content()
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Additional Notes").font(.footnote).foregroundStyle(.secondary)
-                    TextField("Extra charge for matting removal", text: $checkoutNotes)
-                }
+    // FIX: Use @ToolbarContentBuilder for correct type inference.
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel", role: .cancel) { dismiss() }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Confirm", action: confirmAndDismiss)
+                .disabled(!viewModel.isConfirmEnabled)
+        }
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("Done") {
+                viewModel.formatAmountInput()
+                hideKeyboard()
             }
         }
     }
 
-    // MARK: - Actions
-
-    @MainActor private func hydrate() {
-        // Ensure an active visit exists
-        if let current = pet.visits.first(where: { $0.endedAt == nil }) {
-            activeVisit = current
-        } else {
-            let v = Visit(pet: pet)
-            v.startedAt = Date()
-            ctx.insert(v)
-            activeVisit = v
-            try? ctx.save()
-        }
-
-        // Prefill from visit if any fields are present
-        if let v = activeVisit {
-            notes = v.notes ?? notes
-            // Prefill selections from VisitItems by matching names back to Service catalog
-            selectedServiceIDs = Set(
-                allServices.filter { svc in
-                    v.items.contains { $0.name == svc.name }
+    private func bottomCta() -> some View {
+        Button(action: confirmAndDismiss) {
+            HStack {
+                if viewModel.isSaving {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text("Complete Checkout")
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text(viewModel.finalTotalString)
+                        .monospacedDigit()
                 }
-                .map(\.persistentModelID)
-            )
-            if v.total > 0, amountString.isEmpty {
-                amountString = v.total.formatted(.currency(code: "USD"))
             }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
         }
-    }
-
-    @MainActor private func confirmCheckout() {
-        guard let v = activeVisit else { return }
-        // Apply selections using VisitItem snapshots
-        let selected = allServices.filter { selectedServiceIDs.contains($0.persistentModelID) }
-        // Clear any existing items (edit-safe)
-        v.items.forEach { ctx.delete($0) }
-        v.items.removeAll()
-        // Snapshot each selected Service into a VisitItem
-        for svc in selected {
-            // ✅ FIXED: Added the required 'visit' and 'service' parameters.
-            let item = VisitItem(name: svc.name, price: svc.defaultPrice, visit: v, service: svc)
-            v.items.append(item)
-        }
-
-        v.notes = notes
-        v.beforePhotoData = beforePhotoData
-        v.afterPhotoData = afterPhotoData
-        v.endedAt = Date()
-        // If a manual amount was entered, honor it; otherwise compute from items
-        let autoTotal = v.items.reduce(Decimal(0)) { $0 + ($1.price ?? 0) }
-        v.total = (totalDecimal > 0) ? totalDecimal : autoTotal
-        v.updatedAt = Date()
-
-        // Attach payment (initializer does NOT take visit:; assign relationship after)
-        let pmt = Payment(amount: v.total, method: paymentMethod)
-        pmt.paidAt = Date()
-        pmt.note = checkoutNotes
-        pmt.visit = v
-        ctx.insert(pmt)
-
-        do {
-            try ctx.save()
-            NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: ["petID": pet.persistentModelID])
-            dismiss()
-        } catch {
-            print("Checkout save failed:", error)
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func toggleService(_ s: Service) {
-        let id = s.persistentModelID
-        if selectedServiceIDs.contains(id) { selectedServiceIDs.remove(id) } else { selectedServiceIDs.insert(id) }
-    }
-
-    private var totalDecimal: Decimal {
-        // USD-only business rule
-        if let d = amountString.asDecimal(locale: .autoupdatingCurrent) {
-            return d.rounded(scale: 2) // ensure 2dp for money
-        }
-        return 0
-    }
-
-    private func durationString(from v: Visit, now: Date = Date()) -> String {
-        let sec = Int(now.timeIntervalSince(v.startedAt))
-        let h = sec / 3600
-        let m = (sec % 3600) / 60
-        return h > 0 ? "\(h) hr \(m) mins" : "\(m) mins"
-    }
-
-    @ViewBuilder
-    private func photoBox(title: String, imageData: Data?) -> some View {
-        ZStack {
-            #if canImport(UIKit)
-            if let data = imageData, let ui = UIImage(data: data) {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 140, height: 140)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                placeholderBox(title: title)
-            }
-            #else
-            placeholderBox(title: title)
-            #endif
-        }
-    }
-
-    @ViewBuilder
-    private func placeholderBox(title: String) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: "camera.fill").font(.title3).foregroundStyle(.secondary)
-            Text("\(title) Photo")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(width: 140, height: 140)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(.gray.opacity(0.25), style: StrokeStyle(lineWidth: 2, dash: [6,6]))
-                .background(RoundedRectangle(cornerRadius: 12).fill(.gray.opacity(0.08)))
-        )
+        .disabled(!viewModel.isConfirmEnabled || viewModel.isSaving)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .padding()
+        .background(.ultraThinMaterial)
     }
 }
 
+// MARK: - Private Helpers
+
+fileprivate func hideKeyboard() {
+    #if canImport(UIKit)
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    #endif
+}
+
+// Helper to avoid duplicating the image/placeholder logic
+fileprivate struct PhotoWell: View {
+    let imageData: Data?
+    let title: String
+    
+    var body: some View {
+        ZStack {
+            if let data = imageData, let image = Image(platformImage: data) {
+                image
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                AddPhotoPlaceholder(title: title, subtitle: "Tap to add")
+            }
+        }
+        .frame(maxWidth: .infinity, idealHeight: 160)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}

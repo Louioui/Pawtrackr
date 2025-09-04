@@ -2,118 +2,73 @@
 //  Card.swift
 //  Pawtrackr
 //
-//  Lightweight container with rounded corners and subtle shadow,
-//  used across the app (history rows, visit details, etc.).
+//  Lightweight, flexible container with rounded corners, shadows, and accents.
 //
 //  Created by mac on 8/14/25.
-//  Updated by mac on 8/16/25.
+//  Updated by Assistant on 8/28/25.
 //
 
 import SwiftUI
 
 #if os(iOS)
 import UIKit
-#endif
-
-/// Elevation presets for Card shadows (moved out of the generic `Card` type to avoid generic-nested-type lookup issues).
-public enum CardElevation: Equatable {
-    case flat
-    case regular
-    case raised
-}
-
-// Hairline width and platform separator color
-fileprivate var _hairline: CGFloat {
-#if os(iOS)
-    return 1 / UIScreen.main.scale
-#else
-    return 1
-#endif
-}
-
-fileprivate var _separatorColor: Color {
-#if os(iOS)
-    return Color(UIColor.separator).opacity(0.18)
 #elseif os(macOS)
-    return Color(nsColor: .separatorColor).opacity(0.18)
-#else
-    return Color.black.opacity(0.12)
+import AppKit
 #endif
-}
 
-// Press feedback for tappable cards
-fileprivate struct _ScaleOnPress: ButtonStyle {
-    var scale: CGFloat = 0.98
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? scale : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: configuration.isPressed)
-    }
-}
+// MARK: - Core Card View
 
+/// A highly configurable container view that provides a consistent background, border, and shadow.
 public struct Card<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
-
     #if os(macOS)
-    @State private var _isHovered: Bool = false
+    @State private var isHovered: Bool = false
     #endif
 
-    // Stored styling properties (avoid name clashes with SwiftUI modifiers)
-    private let _cornerRadius: CGFloat
-    private let _contentPadding: EdgeInsets
-    private let _backgroundColor: Color
-
-    private let elevation: CardElevation
+    // MARK: Configuration
+    private let cornerRadius: CGFloat
+    private let padding: EdgeInsets
+    private let background: Color
+    private let elevation: CardElevationLevel
     private let showBorder: Bool
     private let hoverRaises: Bool
+    private let accent: Accent?
     private let onTap: (() -> Void)?
-    private let accentTopLine: Color?
-    private let accessibilityLabel: String?
+    private let accessibilityLabelText: String?
     @ViewBuilder private var content: () -> Content
 
-    // Default background per platform
-    private static var _defaultBackground: Color {
-        #if os(iOS)
-        return Color(.systemBackground)
-        #elseif os(macOS)
-        return Color(nsColor: .windowBackgroundColor)
-        #else
-        return Color.white
-        #endif
-    }
-
-    /// Create a standard card.
+    /// Creates a new card view.
     /// - Parameters:
-    ///   - cornerRadius: corner radius (default 16)
-    ///   - padding: content padding (default 12 on all sides)
-    ///   - background: background color (default .white)
-    ///   - elevation: elevation preset (default .regular)
-    ///   - showBorder: whether to show border (default true)
-    ///   - hoverRaises: whether hover raises shadow on macOS (default true)
-    ///   - accentTopLine: optional accent color for top line (default nil)
-    ///   - accessibilityLabel: optional accessibility label (default nil)
-    ///   - onTap: optional tap handler
-    ///   - content: content builder
+    ///   - cornerRadius: The corner radius for the card's shape.
+    ///   - padding: The padding applied inside the card, around the content.
+    ///   - background: The background color. Defaults to the platform's system background.
+    ///   - elevation: The shadow style to apply.
+    ///   - showBorder: If `true`, a thin separator border is drawn.
+    ///   - hoverRaises: If `true`, the card's shadow elevates on hover (macOS only).
+    ///   - accent: An optional accent line to apply to one of the card's edges.
+    ///   - accessibilityLabel: A specific label for VoiceOver.
+    ///   - onTap: An optional closure to execute on tap, making the card behave like a button.
+    ///   - content: The view content to display inside the card.
     public init(
         cornerRadius: CGFloat = 16,
         padding: EdgeInsets = EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12),
         background: Color? = nil,
-        elevation: CardElevation = .regular,
+        elevation: CardElevationLevel = .regular,
         showBorder: Bool = true,
         hoverRaises: Bool = true,
-        accentTopLine: Color? = nil,
+        accent: Accent? = nil,
         accessibilityLabel: String? = nil,
         onTap: (() -> Void)? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self._cornerRadius = cornerRadius
-        self._contentPadding = padding
-        self._backgroundColor = (background ?? Self._defaultBackground)
+        self.cornerRadius = cornerRadius
+        self.padding = padding
+        self.background = (background ?? Self.defaultBackground)
         self.elevation = elevation
         self.showBorder = showBorder
         self.hoverRaises = hoverRaises
-        self.accentTopLine = accentTopLine
-        self.accessibilityLabel = accessibilityLabel
+        self.accent = accent
+        self.accessibilityLabelText = accessibilityLabel
         self.onTap = onTap
         self.content = content
     }
@@ -121,169 +76,170 @@ public struct Card<Content: View>: View {
     public var body: some View {
         Group {
             if let onTap {
-                Button(action: onTap) { inner }
-                    .buttonStyle(_ScaleOnPress())
+                Button(action: onTap) { cardBody }
+                    .buttonStyle(ScaleOnPressStyle())
                     .accessibilityAddTraits(.isButton)
             } else {
-                inner
+                cardBody
             }
         }
-        .accessibilityLabel(accessibilityLabel ?? "")
+        .withAccessibilityLabel(accessibilityLabelText)
         .accessibilityElement(children: .contain)
     }
 
-    private var inner: some View {
-        // Card body
-        let shape = RoundedRectangle(cornerRadius: _cornerRadius, style: .continuous)
-        return VStack(alignment: .leading, spacing: 0) {
-            content()
-                .padding(_contentPadding)
-        }
-        .background(_backgroundColor)
-        .clipShape(shape)
-        .contentShape(shape)
-        .modifier(_ShadowModifier(colorScheme: colorScheme,
-                                  elevation: elevation,
-                                  hovered: hoveredIfEnabled))
-        .overlay(
-            ZStack(alignment: .top) {
-                if showBorder {
-                    shape.strokeBorder(_separatorColor, lineWidth: _hairline)
-                }
-                if let accentTopLine {
-                    Rectangle()
-                        .fill(accentTopLine)
-                        .frame(height: max(2, _hairline * 3))
-                        .clipShape(RoundedRectangle(cornerRadius: max(0, _cornerRadius - 1), style: .continuous))
-                        .frame(maxHeight: .infinity, alignment: .top)
-                }
+    private var cardBody: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        
+        return content()
+            .padding(padding)
+            .background(background)
+            .clipShape(shape)
+            .contentShape(shape)
+            // Apply standardized elevation; on macOS optionally raise on hover
+            .cardElevation(isHoveredIfEnabled ? .raised : elevation)
+            .overlay(borderAndAccentOverlay(for: shape))
+            #if os(macOS)
+            .onHover { hovering in
+                if hoverRaises { isHovered = hovering }
             }
-        )
-        #if os(macOS)
-        .onHover { hovering in
-            if hoverRaises { _isHovered = hovering }
+            #endif
+    }
+}
+
+// MARK: - Accent Configuration
+extension Card {
+    public enum AccentEdge {
+        case top, leading, bottom, trailing
+        
+        fileprivate var alignment: Alignment {
+            switch self {
+            case .top: .top
+            case .leading: .leading
+            case .bottom: .bottom
+            case .trailing: .trailing
+            }
         }
+        
+        fileprivate var frameAxis: Axis.Set {
+            switch self {
+            case .top, .bottom: .horizontal
+            case .leading, .trailing: .vertical
+            }
+        }
+    }
+
+    public enum AccentStyle {
+        case color(Color)
+        case gradient(LinearGradient)
+    }
+
+    public struct Accent {
+        let edge: AccentEdge
+        let style: AccentStyle
+        let thickness: CGFloat
+        
+        public static func top(_ style: AccentStyle, thickness: CGFloat = 3) -> Accent {
+            Accent(edge: .top, style: style, thickness: thickness)
+        }
+        public static func leading(_ style: AccentStyle, thickness: CGFloat = 4) -> Accent {
+            Accent(edge: .leading, style: style, thickness: thickness)
+        }
+    }
+}
+
+
+// MARK: - Private Helpers
+private extension Card {
+    static var defaultBackground: Color {
+        #if os(iOS)
+        Color(.systemBackground)
+        #elseif os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+        #else
+        Color.white
         #endif
     }
 
-    private var hoveredIfEnabled: Bool {
+    var isHoveredIfEnabled: Bool {
         #if os(macOS)
-        return hoverRaises && _isHovered
+        return hoverRaises && isHovered
         #else
         return false
         #endif
     }
-}
 
-fileprivate extension CardElevation {
-    func shadow(for colorScheme: ColorScheme, hovered: Bool) -> (color: Color, radius: CGFloat, x: CGFloat, y: CGFloat) {
-        let isDark = (colorScheme == .dark)
-        let base: (opacity: Double, radius: CGFloat, y: CGFloat) = {
-            switch self {
-            case .flat:    return (isDark ? 0.25 : 0.0, 0, 0)
-            case .regular: return (isDark ? 0.35 : 0.06, isDark ? 6 : 10, isDark ? 2 : 6)
-            case .raised:  return (isDark ? 0.45 : 0.12, isDark ? 10 : 16, isDark ? 4 : 10)
+    @ViewBuilder
+    func borderAndAccentOverlay(for shape: RoundedRectangle) -> some View {
+        if showBorder || accent != nil {
+            ZStack(alignment: accent?.edge.alignment ?? .top) {
+                if showBorder {
+                    shape.strokeBorder(separatorColor, lineWidth: hairline)
+                }
+                if let accent {
+                    accentView(for: accent, in: shape)
+                }
             }
-        }()
-        let hoverBoost: CGFloat = hovered ? 2 : 0
-        let radius = max(0, base.radius + hoverBoost)
-        let y = base.y + (hovered ? 1 : 0)
-        return (Color.black.opacity(base.opacity), radius, 0, y)
-    }
-}
-
-fileprivate struct _ShadowModifier: ViewModifier {
-    var colorScheme: ColorScheme
-    var elevation: CardElevation
-    var hovered: Bool
-    func body(content: Content) -> some View {
-        let s = elevation.shadow(for: colorScheme, hovered: hovered)
-        return content.shadow(color: s.color, radius: s.radius, x: s.x, y: s.y)
-    }
-}
-
-// MARK: - Convenience
-
-public extension Card where Content == AnyView {
-    /// A card that conditionally shows content.
-    init?<T: View>(if condition: Bool,
-                   cornerRadius: CGFloat = 16,
-                   padding: EdgeInsets = EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12),
-                   background: Color? = nil,
-                   onTap: (() -> Void)? = nil,
-                   @ViewBuilder content: @escaping () -> T) {
-        guard condition else { return nil }
-        self.init(cornerRadius: cornerRadius,
-                  padding: padding,
-                  background: background,
-                  elevation: .regular,
-                  showBorder: true,
-                  hoverRaises: true,
-                  onTap: onTap) {
-            AnyView(content())
         }
     }
-}
-
-// MARK: - Style helpers
-
-public extension View {
-    /// Adds a 1‑px separator line to this view, aligned as specified (default: bottom).
-    /// - Parameters:
-    ///   - alignment: Where to place the separator (e.g., .bottom, .top).
-    ///   - color: Optional custom color; defaults to the platform separator color.
-    func cardSeparator(alignment: Alignment = .bottom, color: Color? = nil) -> some View {
-        overlay(
-            Rectangle()
-                .fill(color ?? _separatorColor)
-                .frame(height: _hairline),
-            alignment: alignment
+    
+    @ViewBuilder
+    func accentView(for accent: Accent, in shape: RoundedRectangle) -> some View {
+        let accentShape = Rectangle()
+        
+        Group {
+            switch accent.style {
+            case .color(let color):
+                accentShape.fill(color)
+            case .gradient(let gradient):
+                accentShape.fill(gradient)
+            }
+        }
+        .frame(
+            width: accent.edge.frameAxis == .vertical ? accent.thickness : nil,
+            height: accent.edge.frameAxis == .horizontal ? accent.thickness : nil
         )
+        .clipShape(shape) // Clip the accent to the card's rounded corners
+    }
+
+    var hairline: CGFloat {
+        #if os(iOS)
+        1 / UIScreen.main.scale
+        #elseif os(macOS)
+        1 / (NSScreen.main?.backingScaleFactor ?? 2.0)
+        #else
+        1.0
+        #endif
+    }
+
+    var separatorColor: Color {
+        #if os(iOS)
+        return Color(UIColor.separator).opacity(0.18)
+        #elseif os(macOS)
+        return Color(nsColor: .separatorColor).opacity(0.18)
+        #else
+        return Color.gray.opacity(0.18)
+        #endif
     }
 }
 
-// MARK: - Preview
+// MARK: - Modifiers & Styles
+private struct ScaleOnPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(reduceMotion ? .none : .spring(response: 0.25, dampingFraction: 0.75), value: configuration.isPressed)
+    }
+}
 
-struct Card_Previews: PreviewProvider {
-    static var previews: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                Card(accentTopLine: .blue) {
-                    Text("Simple Card")
-                        .font(.headline)
-                    Text("Secondary text")
-                        .foregroundStyle(.secondary)
-                }
-
-                Card(elevation: .raised, accentTopLine: .pink, accessibilityLabel: "Tappable Card", onTap: { print("tapped") }) {
-                    HStack {
-                        Image(systemName: "pawprint.fill")
-                        Text("Tappable Card")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-            .padding()
-            // Use a macOS-compatible background color for the preview
-#if os(macOS)
-            .background(Color(nsColor: .windowBackgroundColor))
-#else
-            .background(Color(.systemGroupedBackground))
-#endif
+fileprivate extension View {
+    @ViewBuilder
+    func withAccessibilityLabel(_ text: String?) -> some View {
+        if let text, !text.isEmpty {
+            self.accessibilityLabel(text)
+        } else {
+            self
         }
     }
 }
-
-#if DEBUG
-extension CardElevation: CustomStringConvertible {
-    public var description: String {
-        switch self {
-        case .flat: return "flat"
-        case .regular: return "regular"
-        case .raised: return "raised"
-        }
-    }
-}
-#endif

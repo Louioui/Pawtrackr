@@ -1,0 +1,274 @@
+//
+//  InsightsView.swift
+//  Pawtrackr
+//
+//  Business KPIs & Trends dashboard.
+//  - Now powered by a performant ViewModel that handles all data fetching and processing.
+//  - Uses debounced search and predicate-based filtering for a fast user experience.
+//
+//  Created by mac on 8/26/25.
+//  Updated by Assistant on 2025-09-03
+//
+
+import SwiftUI
+import SwiftData
+#if canImport(Charts)
+import Charts
+#endif
+import UniformTypeIdentifiers
+
+// FIX: Create a Transferable struct to correctly handle CSV data for ShareLink.
+struct CSVDoc: Transferable {
+    let data: Data
+    let filename: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(contentType: .commaSeparatedText) { doc in
+            doc.data
+        } importing: { data in
+            CSVDoc(data: data, filename: "data.csv")
+        }
+        .suggestedFileName { doc in
+            doc.filename
+        }
+    }
+}
+
+struct InsightsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var viewModel: InsightsViewModel?
+
+    var body: some View {
+        Group {
+            // Safely unwrap the optional viewModel
+            if let vm = viewModel {
+                @Bindable var bvm = vm
+                NavigationStack {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            filtersSection(bvm)
+                            kpiGrid(bvm)
+                            revenueChart(bvm)
+                            topServices(bvm)
+                            topClients(bvm)
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
+                    }
+                    .navigationTitle("Insights")
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            // Disable export if there's nothing to share yet.
+                            let csv = bvm.exportCSV
+                            ShareLink(
+                                item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Insights.csv"),
+                                preview: SharePreview("Pawtrackr Insights", icon: Image(systemName: "doc.text.fill"))
+                            ) {
+                                Label("Export CSV", systemImage: "square.and.arrow.up")
+                            }
+                            .disabled(csv.isEmpty)
+                            .accessibilityHint(csv.isEmpty ? "No data to export for the current filters" : "Shares a CSV of the current Insights")
+                        }
+                    }
+                    .animation(.default, value: bvm.scope)
+                    .overlay {
+                        // Add a loading indicator for better UX
+                        if bvm.isLoading {
+                            ProgressView()
+                                .padding()
+                                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
+                }
+            } else {
+                ProgressView("Loading Insights...")
+                    .task {
+                        // Initialize the ViewModel on first appearance
+                        viewModel = InsightsViewModel(modelContext: modelContext)
+                    }
+            }
+        }
+    }
+
+    // MARK: - Sections
+    
+    private func filtersSection(@Bindable _ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Filters").font(.subheadline.weight(.semibold))
+
+                // FIX: Use the bindable `vm` to avoid force unwrapping optionals.
+                Picker("Scope", selection: $vm.scope) {
+                    ForEach(InsightsViewModel.Scope.allCases) { s in Text(s.title).tag(s) }
+                }
+                .pickerStyle(.segmented)
+
+                if vm.scope == .custom {
+                    DatePicker("Start Date", selection: $vm.customStartDate, in: ...Date(), displayedComponents: .date)
+                    DatePicker("End Date", selection: $vm.customEndDate, in: vm.customStartDate..., displayedComponents: .date)
+                }
+                
+                // IMPROVEMENT: Use a dedicated SearchField component for better UI.
+                SearchField(text: $vm.searchText, placeholder: "Search clients, pets, or services…")
+            }
+        }
+    }
+
+    private func kpiGrid(_ vm: InsightsViewModel) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
+            GridRow {
+                KPI(title: "Revenue", value: vm.kpis.revenueString)
+                KPI(title: "Total Visits", value: "\(vm.kpis.count)")
+            }
+            GridRow {
+                KPI(title: "Avg. Sale (AOV)", value: vm.kpis.aovString)
+                KPI(title: "Avg. Duration", value: vm.kpis.avgDurationString)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func revenueChart(_ vm: InsightsViewModel) -> some View {
+        #if canImport(Charts)
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Revenue Trend").font(.subheadline.weight(.semibold))
+                if vm.revenueSeries.isEmpty {
+                    ContentUnavailableView("No Revenue Data", systemImage: "chart.bar.xaxis")
+                        .frame(height: 180)
+                } else {
+                    Chart(vm.revenueSeries) { point in
+                        BarMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Revenue", point.amount)
+                        )
+                        .foregroundStyle(DS.ColorToken.primary.gradient)
+                    }
+                    .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) }
+                    .frame(height: 180)
+                }
+            }
+        }
+        #endif
+    }
+    
+    private func topServices(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Top Services").font(.subheadline.weight(.semibold))
+                if vm.serviceLeaders.isEmpty {
+                    Text("No service data in this range.").font(.subheadline).foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(Array(vm.serviceLeaders.enumerated()), id: \.element.id) { index, row in
+                            LeaderRow(title: row.name, trailing: row.countString, rank: index + 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func topClients(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Top Clients").font(.subheadline.weight(.semibold))
+                if vm.clientLeaders.isEmpty {
+                    Text("No client data in this range.").font(.subheadline).foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(Array(vm.clientLeaders.enumerated()), id: \.element.id) { index, row in
+                            LeaderRow(title: row.name, trailing: row.amountString, rank: index + 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Small Components (can be moved to a shared file)
+
+// FIX: Implemented the KPI view to conform to View.
+private struct KPI: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title2)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(DS.ColorToken.surface)
+        )
+        .animation(.default, value: value)
+    }
+}
+
+// FIX: Implemented the LeaderRow view to conform to View.
+private struct LeaderRow: View {
+    let title: String
+    let trailing: String
+    var rank: Int? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let rank {
+                Text("\(rank).")
+                    .frame(width: 24, alignment: .leading)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            Text(title).lineLimit(1)
+            Spacer()
+            Text(trailing)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+    }
+}
+
+// IMPROVEMENT: A dedicated search field component.
+private struct SearchField: View {
+    @Binding var text: String
+    let placeholder: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            
+            TextField(placeholder, text: $text)
+                .disableAutocorrection(true)
+            
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            Capsule(style: .circular)
+                .fill(DS.ColorToken.surface)
+        )
+    }
+}

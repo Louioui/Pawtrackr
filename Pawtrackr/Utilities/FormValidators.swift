@@ -7,6 +7,54 @@
 
 import Foundation
 
+// MARK: - Lightweight text utilities used by validators
+private extension String {
+    var trimmedAll: String { self.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Collapse runs of whitespace to a single space
+    var collapsingWhitespace: String {
+        self.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    /// Title‑cases a name while preserving inner punctuation (e.g., O'Neil, McDonald)
+    func canonicalPersonName() -> String {
+        let base = self.collapsingWhitespace.trimmedAll
+        guard !base.isEmpty else { return base }
+        return base
+            .lowercased()
+            .split(separator: " ")
+            .map { word in
+                var s = String(word).lowercased()
+                // Handle common prefixes like Mc/Mac
+                if s.hasPrefix("mc"), s.count > 2 {
+                    let third = s.index(s.startIndex, offsetBy: 2)
+                    // Capitalize 'M'
+                    s.replaceSubrange(s.startIndex...s.startIndex, with: "M")
+                    // Keep lowercase 'c'
+                    s.replaceSubrange(s.index(after: s.startIndex)..<third, with: "c")
+                    // Capitalize the next character
+                    s.replaceSubrange(third...third, with: String(s[third]).uppercased())
+                    return s
+                }
+                // Handle O' prefixes
+                if s.hasPrefix("o'"), s.count > 2 {
+                    let next = s.index(s.startIndex, offsetBy: 2)
+                    // Capitalize 'O'
+                    s.replaceSubrange(s.startIndex...s.startIndex, with: "O")
+                    // Preserve the apostrophe
+                    s.replaceSubrange(s.index(after: s.startIndex)..<next, with: "'")
+                    // Capitalize the next character
+                    s.replaceSubrange(next...next, with: String(s[next]).uppercased())
+                    return s
+                }
+                // Default: title‑case first letter
+                s.replaceSubrange(s.startIndex...s.startIndex, with: String(s[s.startIndex]).uppercased())
+                return s
+            }
+            .joined(separator: " ")
+    }
+}
+
 /// Reusable validators for Pawtrackr forms.
 /// - Phone: US-only (all 50 states), normalized to E.164 (+1XXXXXXXXXX) via PhoneUtils (with strict local fallback).
 /// - Money: USD-only parsing (en_US_POSIX).
@@ -78,8 +126,8 @@ enum FormValidators {
     /// Validates a new client form. Returns a normalized copy (e.g., phone digits-only).
     static func validate(client input: ClientFormInput) throws -> ClientFormInput {
         var out = input
-        out.firstName = try nonEmpty(input.firstName, fieldName: "First Name")
-        out.lastName  = try nonEmpty(input.lastName,  fieldName: "Last Name")
+        out.firstName = try nonEmpty(input.firstName, fieldName: "First Name").canonicalPersonName()
+        out.lastName  = try nonEmpty(input.lastName,  fieldName: "Last Name").canonicalPersonName()
         out.phone     = try phone(input.phone)
         out.email     = try optionalEmail(input.email)
         return out
@@ -106,6 +154,24 @@ enum FormValidators {
         return out
     }
 
+    // MARK: - Behavior Tags
+    /// Parses a comma-separated list of tags into a normalized, deduplicated array.
+    static func parseBehaviorTagsCSV(_ value: String?) -> [String] {
+        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        let parts = value
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }
+        var seen = Set<String>()
+        var out: [String] = []
+        for p in parts {
+            let key = p.lowercased()
+            if !seen.contains(key) { seen.insert(key); out.append(p) }
+        }
+        return out
+    }
+
     // MARK: - Money (USD)
 
     /// Parses a user-entered USD amount and returns a Decimal.
@@ -114,42 +180,57 @@ enum FormValidators {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ValidationError.custom(message: "Enter an amount.") }
 
-        // 1) Try currency parser
+        // 1) Prefer centralized app parser for consistency
+        if let dec = Formatters.parseCurrency(trimmed) {
+            return dec.rounded(scale: 2)
+        }
+
+        // 2) Fallbacks (strict en_US_POSIX)
         let currency = NumberFormatter()
         currency.numberStyle = .currency
         currency.locale = Locale(identifier: "en_US_POSIX")
         currency.currencyCode = "USD"
         currency.isLenient = true
-        if let n = currency.number(from: trimmed) {
-            return n.decimalValue
-        }
+        if let n = currency.number(from: trimmed) { return n.decimalValue.rounded(scale: 2) }
 
-        // 2) Try plain decimal (US)
         let decimal = NumberFormatter()
         decimal.numberStyle = .decimal
         decimal.locale = Locale(identifier: "en_US_POSIX")
         decimal.isLenient = true
-        if let n = decimal.number(from: trimmed) {
-            return n.decimalValue
-        }
+        if let n = decimal.number(from: trimmed) { return n.decimalValue.rounded(scale: 2) }
 
-        // 3) Manual cleanup: strip currency, group separators, handle parentheses negatives
+        // 3) Manual cleanup as a last resort
         var s = trimmed.replacingOccurrences(of: "\u{00A0}", with: " ")
         var negative = false
-        if s.first == "(", s.last == ")" {
-            negative = true
-            s.removeFirst(); s.removeLast()
-        }
-        // Keep digits, dot, comma, dash
+        if s.first == "(", s.last == ")" { negative = true; s.removeFirst(); s.removeLast() }
         let allowed = CharacterSet(charactersIn: "0123456789.,-")
         s = s.components(separatedBy: allowed.inverted).joined()
-        // US: remove commas, use dot as decimal separator
         s = s.replacingOccurrences(of: ",", with: "")
         if negative { s = "-" + s }
         guard let dec = Decimal(string: s) else {
             throw ValidationError.custom(message: "Enter a valid USD amount.")
         }
-        return dec
+        return dec.rounded(scale: 2)
+    }
+
+    /// Parses a tip string. Empty/whitespace returns 0. Uses same rules as `usdAmount`.
+    static func tipAmount(_ value: String?) throws -> Decimal {
+        guard let raw = value, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return 0 }
+        return try usdAmount(raw)
+    }
+
+    // MARK: - Checkout validation
+    struct CheckoutInput {
+        var amountString: String
+        var tipString: String?
+    }
+    struct CheckoutOutput { let amount: Decimal; let tip: Decimal }
+
+    /// Validates checkout fields and returns normalized decimals (banker’s rounding to 2dp).
+    static func validate(checkout input: CheckoutInput) throws -> CheckoutOutput {
+        let amount = try usdAmount(input.amountString)
+        let tip = try tipAmount(input.tipString)
+        return CheckoutOutput(amount: amount, tip: tip)
     }
 
     // MARK: - Private helpers
@@ -181,5 +262,14 @@ enum FormValidators {
             throw ValidationError.invalidPIN
         }
         return trimmed
+    }
+}
+
+private extension Decimal {
+    func rounded(scale: Int) -> Decimal {
+        var result = Decimal()
+        var value = self
+        NSDecimalRound(&result, &value, scale, .bankers)
+        return result
     }
 }

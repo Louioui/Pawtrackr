@@ -23,6 +23,10 @@ public struct FAB: View {
     public var accessibilityLabel: String = "Add New"
     public var enableHaptics: Bool = true
     public var isLoading: Bool = false
+    public var badgeCount: Int? = nil
+    public var badgeBackground: Color = .red
+    public var badgeTint: Color = .white
+    public var isDisabled: Bool = false
     public var action: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -67,6 +71,10 @@ public struct FAB: View {
         size: Size = .regular,
         style: Style = .primary,
         tint: Color = .accentColor,
+        badgeCount: Int? = nil,
+        badgeBackground: Color = .red,
+        badgeTint: Color = .white,
+        isDisabled: Bool = false,
         action: @escaping () -> Void
     ) {
         self.diameter = diameter
@@ -77,6 +85,10 @@ public struct FAB: View {
         self.size = size
         self.style = style
         self.tint = tint
+        self.badgeCount = badgeCount
+        self.badgeBackground = badgeBackground
+        self.badgeTint = badgeTint
+        self.isDisabled = isDisabled
         self.action = action
     }
 
@@ -99,12 +111,28 @@ public struct FAB: View {
             .foregroundColor(.white)
             .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 4)
             .contentShape(Circle())
+            .overlay(alignment: .topTrailing) {
+                if let count = badgeCount, count > 0 {
+                    Text(count > 99 ? "99+" : "\(count)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(badgeTint)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(badgeBackground))
+                        .offset(x: 8, y: -8)
+                        .accessibilityHidden(true)
+                }
+            }
             .accessibilityLabel(Text(accessibilityLabel))
+            .accessibilityValue(Text(accessibilityValueText))
             .accessibilityAddTraits(.isButton)
             .accessibilityHint(Text("Primary action"))
             .keyboardShortcut(.defaultAction)
+            .opacity(isDisabled ? 0.6 : 1.0)
         }
         .buttonStyle(PressedScaleStyle())
+        .disabled(isDisabled || isLoading)
+        .accessibilityRespondsToUserInteraction(!(isDisabled || isLoading))
         .onHover { hovering in
             if reduceMotion {
                 isHovering = hovering
@@ -120,8 +148,14 @@ public struct FAB: View {
         #endif
     }
 
+    private var accessibilityValueText: String {
+        if isLoading { return "Loading" }
+        if let count = badgeCount, count > 0 { return "\(min(count, 99)) notifications" }
+        return ""
+    }
+
     private func tap() {
-        guard !isLoading else { return }
+        guard !isLoading, !isDisabled else { return }
         #if os(iOS)
         if enableHaptics {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -234,6 +268,21 @@ struct FAB_Previews: PreviewProvider {
                 }
             }
             .previewDisplayName("Loading")
+
+            ZStack {
+                #if os(macOS)
+                Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
+                #else
+                Color(UIColor.systemBackground).ignoresSafeArea()
+                #endif
+                Text("With Badge")
+            }
+            .fabOverlay {
+                FAB(size: .regular, style: .primary, tint: .accentColor, badgeCount: 7) {
+                    print("FAB tapped with badge")
+                }
+            }
+            .previewDisplayName("Badge")
         }
     }
 }

@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+// Design tokens for colors/spacing/typography
+import Observation
 
 #if canImport(AppKit)
 import AppKit
@@ -34,6 +36,11 @@ struct AddPetSheet: View {
     // Image picking - Corrected to use Data?
     @State private var avatarImageData: Data? = nil
 
+    // Alerts
+    @State private var showAlert: Bool = false
+    @State private var alertTitle: String = "Unable to Save"
+    @State private var alertMessage: String = ""
+
     var body: some View {
         NavigationStack {
             Form {
@@ -57,7 +64,7 @@ struct AddPetSheet: View {
                                             .frame(width: 84, height: 84)
                                             .clipShape(Circle())
                                             .overlay(Circle().stroke(.white, lineWidth: 2))
-                                            .overlay(Circle().stroke(selectedGender == .male ? Color.blue.opacity(0.9) : Color.pink.opacity(0.9), lineWidth: 2))
+                                            .overlay(Circle().stroke(DS.ColorToken.gender(selectedGender), lineWidth: 2))
                                     }
                                     #elseif canImport(AppKit)
                                     if let image = NSImage(data: data) {
@@ -67,7 +74,7 @@ struct AddPetSheet: View {
                                             .frame(width: 84, height: 84)
                                             .clipShape(Circle())
                                             .overlay(Circle().stroke(.white, lineWidth: 2))
-                                            .overlay(Circle().stroke(selectedGender == .male ? Color.blue.opacity(0.9) : Color.pink.opacity(0.9), lineWidth: 2))
+                                            .overlay(Circle().stroke(DS.ColorToken.gender(selectedGender), lineWidth: 2))
                                     }
                                     #endif
                                 } else {
@@ -86,6 +93,8 @@ struct AddPetSheet: View {
 
                 Section("Pet Info") {
                     TextField("Name", text: $petName)
+                        .textInputAutocapitalization(.words)
+                        .disableAutocorrection(true)
                         .submitLabel(.done)
 
                     Picker("Species", selection: Binding($selectedSpecies, replacingNilWith: .dog)) {
@@ -103,7 +112,11 @@ struct AddPetSheet: View {
                     .pickerStyle(.segmented)
 
                     TextField("Breed (optional)", text: $breed)
+                        .textInputAutocapitalization(.words)
+                        .disableAutocorrection(true)
                     TextField("Color (optional)", text: $color)
+                        .textInputAutocapitalization(.words)
+                        .disableAutocorrection(true)
                 }
 
                 Section("Notes") {
@@ -113,7 +126,7 @@ struct AddPetSheet: View {
             }
             .overlay(
                 Rectangle()
-                    .fill(selectedGender == .male ? Color.blue : Color.pink)
+                    .fill(DS.ColorToken.gender(selectedGender))
                     .frame(height: 4)
                     .frame(maxHeight: .infinity, alignment: .top),
                 alignment: .top
@@ -128,8 +141,14 @@ struct AddPetSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { savePet() }
-                        .disabled(petName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedSpecies == nil)
+                        .disabled(petName.trimmed.isEmpty || selectedSpecies == nil)
+                        .accessibilityHint(petName.trimmed.isEmpty ? "Enter a pet name to enable save" : "Saves this pet to the client")
                 }
+            }
+            .alert(alertTitle, isPresented: $showAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(alertMessage)
             }
         }
 #if os(iOS)
@@ -140,26 +159,71 @@ struct AddPetSheet: View {
     }
 
     private func savePet() {
-        guard let species = selectedSpecies else { return }
+        guard let species = selectedSpecies else {
+            alertMessage = "Select a species."
+            showAlert = true
+            return
+        }
+        let trimmedName = canonicalPetName(petName)
+        guard !trimmedName.isEmpty else {
+            alertMessage = "Pet name can't be empty."
+            showAlert = true
+            return
+        }
 
-        let trimmedName = petName.trimmingCharacters(in: .whitespacesAndNewlines)
-        // ✅ FIXED: Changed 'var' to 'let' to resolve the compiler warning.
         let newPet = Pet(name: trimmedName, species: species, gender: selectedGender)
-        let trimmedBreed = breed.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedColor = color.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let trimmedBreed = canonicalOptionalWord(breed)
+        let trimmedColor = canonicalOptionalWord(color)
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedBreed.isEmpty { newPet.breed = trimmedBreed }
-        if !trimmedColor.isEmpty { newPet.color = trimmedColor }
+
+        if let trimmedBreed { newPet.breed = trimmedBreed }
+        if let trimmedColor { newPet.color = trimmedColor }
         if !trimmedNotes.isEmpty { newPet.notes = trimmedNotes }
+
         newPet.photoData = avatarImageData
         newPet.owner = client
 
         client.pets.append(newPet)
-
         modelContext.insert(newPet)
-        try? modelContext.save()
-        dismiss()
+
+        do {
+            try modelContext.save()
+            #if os(iOS)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            #endif
+            dismiss()
+        } catch {
+            alertMessage = "We couldn't save this pet. Please try again.\n\(error.localizedDescription)"
+            showAlert = true
+        }
     }
+}
+
+// MARK: - Normalization
+
+/// Title-cases common pet name patterns and trims whitespace.
+private func canonicalPetName(_ raw: String) -> String {
+    let base = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !base.isEmpty else { return "" }
+    // Handle simple possessives / prefixes as needed later.
+    return base.split(separator: " ").map { part in
+        part.split(separator: "-").map { seg in
+            var s = String(seg)
+            if s.count >= 2 {
+                let first = s.removeFirst()
+                return String(first).uppercased() + s
+            }
+            return s.uppercased()
+        }.joined(separator: "-")
+    }.joined(separator: " ")
+}
+
+/// Returns a capitalized word/string or nil if the trimmed input is empty.
+private func canonicalOptionalWord(_ raw: String) -> String? {
+    let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !t.isEmpty else { return nil }
+    return t.split(separator: " ").map { String($0).capitalized }.joined(separator: " ")
 }
 
 extension Binding {
@@ -181,4 +245,8 @@ extension Binding {
 
     return AddPetSheet(client: c)
         .modelContainer(container)
+}
+
+private extension String {
+    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }

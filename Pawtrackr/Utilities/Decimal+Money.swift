@@ -2,155 +2,53 @@
 //  Decimal+Money.swift
 //  Pawtrackr
 //
-//  Updated by assistant on 8/19/25.
-//
-//  Notes:
-//  - USD-only formatting for display
-//  - Robust parsing for inputs like "$1,234.56", "1 234,56", "(1,234.56)", "123-"
-//  - Bankers rounding to 2 fraction digits for money math
+//  Money-safe arithmetic helpers and ergonomic formatting for Decimal.
 //
 
 import Foundation
 
-// MARK: - Money operators with arithmetic-like precedence
-
-precedencegroup AdditionLike {
-    associativity: left
-    higherThan: AssignmentPrecedence
-}
-
-precedencegroup MultiplicationLike {
-    associativity: left
-    higherThan: AdditionLike
-}
-
-infix operator +~ : AdditionLike
-infix operator -~ : AdditionLike
-infix operator *~ : MultiplicationLike
-
-// MARK: - Decimal (money helpers)
+// MARK: - Banker's Rounding (financial-safe)
 
 public extension Decimal {
-    /// Formats the decimal using USD currency (always shows 2 fraction digits for USD).
-    var moneyString: String {
-        Decimal.usdFormatter.string(from: NSDecimalNumber(decimal: self.rounded())) ?? self.formatted(.currency(code: "USD"))
-    }
-
-    /// Returns a copy rounded to `scale` fraction digits (bankers rounding by default).
-    func rounded(scale: Int = 2, mode: NSDecimalNumber.RoundingMode = .bankers) -> Decimal {
+    /// Returns a copy rounded to 2 fractional digits using banker's rounding (.bankers).
+    func roundedMoney(scale: Int = 2) -> Decimal {
         var value = self
         var result = Decimal()
-        NSDecimalRound(&result, &value, scale, mode)
+        NSDecimalRound(&result, &value, scale, .bankers)
         return result
     }
 
-    /// Adds two Decimals with 2-decimal rounding (useful for totals).
-    static func +~ (lhs: Decimal, rhs: Decimal) -> Decimal { (lhs + rhs).rounded() }
-
-    /// Subtracts two Decimals with 2-decimal rounding.
-    static func -~ (lhs: Decimal, rhs: Decimal) -> Decimal { (lhs - rhs).rounded() }
-
-    /// Multiplies two Decimals with 2-decimal rounding.
-    static func *~ (lhs: Decimal, rhs: Decimal) -> Decimal { (lhs * rhs).rounded() }
-
-    /// Overloads for common integer math (avoids Double).
-    static func +~ (lhs: Decimal, rhs: Int) -> Decimal { lhs +~ Decimal(rhs) }
-    static func -~ (lhs: Decimal, rhs: Int) -> Decimal { lhs -~ Decimal(rhs) }
-    static func *~ (lhs: Decimal, rhs: Int) -> Decimal { lhs *~ Decimal(rhs) }
-
-    /// Convert to whole cents (rounded).
-    var cents: Int {
-        let rounded = self.rounded(scale: 2)
-        return NSDecimalNumber(decimal: rounded * 100).intValue
+    /// Human-friendly currency string using the shared currency formatter.
+    /// NOTE: The actual formatter lives in `Formatters.currency`.
+    var moneyString: String {
+        Formatters.currency.string(from: self as NSDecimalNumber) ?? "$0.00"
     }
-
-    /// Construct from whole cents.
-    static func fromCents(_ cents: Int) -> Decimal {
-        Decimal(cents) / 100
-    }
-
-    /// Sum and round an array of money values.
-    static func sum(_ values: [Decimal]) -> Decimal {
-        values.reduce(0 as Decimal, +~)
-    }
-
-    // MARK: Private
-
-    /// USD-only NumberFormatter (autoupdating locale for separators, USD for code; 2 fraction digits).
-    private static let usdFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.locale = .autoupdatingCurrent
-        f.currencyCode = "USD"
-        f.minimumFractionDigits = 2
-        f.maximumFractionDigits = 2
-        f.generatesDecimalNumbers = true
-        return f
-    }()
 }
 
-// MARK: - String → Decimal parsing (robust)
+// MARK: - Money-safe operators
 
-public extension String {
-    /// Attempts to parse a currency/number string into Decimal.
-    /// - Important: Interprets currency as **USD**. Respects user's separators via `locale`.
-    /// - Handles: localized formats, NBSP, grouping, parentheses negatives like "(1 234,56)", and trailing negative "123-".
-    func asDecimal(locale: Locale = .autoupdatingCurrent) -> Decimal? {
-        // 1) Direct Decimal initializer (fast path)
-        if let d = Decimal(string: self, locale: locale) { return d }
+infix operator +~ : AdditionPrecedence
+infix operator *~ : MultiplicationPrecedence
 
-        // 2) Lenient currency formatter (USD)
-        let currency = NumberFormatter()
-        currency.numberStyle = .currency
-        currency.locale = locale
-        currency.isLenient = true     // FIX: renamed property
-        currency.currencyCode = "USD"
-        if let n = currency.number(from: self) { return n.decimalValue }
+/// Money-safe addition that rounds to 2 decimals using banker's rounding.
+public func +~ (lhs: Decimal, rhs: Decimal) -> Decimal {
+    (lhs + rhs).roundedMoney()
+}
 
-        // 3) Lenient decimal formatter
-        let decimal = NumberFormatter()
-        decimal.numberStyle = .decimal
-        decimal.locale = locale
-        decimal.isLenient = true      // FIX: renamed property
-        if let n = decimal.number(from: self) { return n.decimalValue }
+/// Money-safe multiplication that rounds to 2 decimals using banker's rounding.
+public func *~ (lhs: Decimal, rhs: Decimal) -> Decimal {
+    (lhs * rhs).roundedMoney()
+}
 
-        // 4) Manual cleanup fallback
-        let decSep = decimal.decimalSeparator ?? "."
-        let grpSep = decimal.groupingSeparator ?? ","
+// MARK: - Convenience initializers
 
-        var s = self.replacingOccurrences(of: "\u{00A0}", with: " ")
-                     .trimmingCharacters(in: .whitespacesAndNewlines)
+public extension Decimal {
+    /// Initialize from any numeric type safely.
+    init<T: BinaryInteger>(_ value: T) {
+        self = Decimal(string: String(value)) ?? Decimal(Double(value))
+    }
 
-        var isNegative = false
-        // Parentheses negative: "(1,234.56)"
-        if s.first == "(", s.last == ")" {
-            isNegative = true
-            s.removeFirst()
-            s.removeLast()
-        }
-        // Trailing negative: "123-"
-        if s.hasSuffix("-") {
-            isNegative = true
-            s.removeLast()
-        }
-
-        // Keep digits, decimal/grouping separators, and minus sign
-        let keep = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: decSep + grpSep + "-"))
-        s = s.components(separatedBy: keep.inverted).joined()
-
-        // Remove grouping separators and normalize decimal separator to '.'
-        if !grpSep.isEmpty {
-            s = s.replacingOccurrences(of: grpSep, with: "")
-        }
-        if decSep != "." {
-            s = s.replacingOccurrences(of: decSep, with: ".")
-        }
-
-        if isNegative, !s.hasPrefix("-") {
-            s = "-" + s
-        }
-
-        // Final parse
-        return Decimal(string: s)
+    init<T: BinaryFloatingPoint>(_ value: T) {
+        self = Decimal(string: String(describing: value)) ?? Decimal(Double(value))
     }
 }

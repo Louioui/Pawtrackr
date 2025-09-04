@@ -3,135 +3,141 @@
 //  Pawtrackr
 //
 //  Created by mac on 8/17/25.
-//  Join model for per-visit line items (snapshot of Service + optional overrides)
+//  Updated by Assistant on 2025-09-03.
+//
 
-import SwiftUI
 import Foundation
 import SwiftData
 
-/// A single line item on a Visit (e.g., "Bath", "Haircut").
-///
-/// Notes
-/// - This model intentionally avoids public access modifiers and model-specific
-///   types in any public API to prevent visibility errors ("public uses internal type").
-/// - Deletion cascade should be declared on the owning side (Visit.items with
-///   `@Relationship(deleteRule: .cascade)`), to ensure deleting a Visit removes its items.
+/// A single line item on a Visit, representing a snapshot of a service at the time of the visit.
+/// This ensures historical accuracy even if the original Service in the catalog is changed or deleted.
 @Model
-final class VisitItem: Identifiable, ObservableObject {
-    // MARK: Identity & Timestamps
+final class VisitItem {
+    // MARK: - Properties
     @Attribute(.unique) var uuid: UUID
     var createdAt: Date
     var updatedAt: Date
 
-    // MARK: Relationships
-    /// Owning visit. The inverse should be declared on Visit:
-    /// `@Relationship(deleteRule: .cascade, inverse: \VisitItem.visit) var items: [VisitItem] = []`
-    @Relationship var visit: Visit
-
-    /// The source service for this item (optional so we can keep a snapshot even if Service is deleted/renamed).
-    @Relationship var service: Service?
-
-    // MARK: Snapshot & Overrides
-    /// Snapshot of the service display name at the time of checkout.
-    var name: String { didSet { updatedAt = Date() } }
-
-    /// Unit price for this line item (override). If nil, falls back to the service default price.
-    var unitPrice: Decimal? { didSet { updatedAt = Date() } }
-
-    /// Quantity for this line item (defaults to 1).
-    var quantity: Int { didSet { updatedAt = Date() } }
-
-    /// Optional note for this line item (e.g., "matted fur surcharge").
+    /// The name of the service, captured at the time the item was created.
+    @Attribute var name: String
+    
+    /// The price for a single unit of this service, captured at the time the item was created.
+    var unitPrice: Decimal
+    
+    /// The quantity of this service provided. Must be at least 1.
+    var quantity: Int
+    
+    /// Optional notes specific to this line item.
     var note: String?
 
-    /// Back‑compat alias for older code that used `price`.
-    var price: Decimal? {
-        get { unitPrice }
-        set { unitPrice = newValue }
+    // MARK: - Relationships
+    
+    /// The `Visit` this line item belongs to. If the visit is deleted, this item is also deleted.
+    // FIX: The inverse side of a relationship is a plain property with NO @Relationship macro.
+    // This resolves the "circular reference" build error.
+    var visit: Visit
+    
+    /// An optional link to the original `Service` in the catalog.
+    /// If the `Service` is deleted, this link becomes `nil` but the historical record remains.
+    @Relationship(deleteRule: .nullify) var service: Service?
+
+    // MARK: - Initializers
+    
+    /// Creates a line item by snapshotting a `Service` from the catalog.
+    private init(service: Service, priceOverride: Decimal? = nil, note: String? = nil, visit: Visit) {
+        self.uuid = UUID()
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.service = service
+        self.visit = visit
+        self.name = service.name.trimmed
+        self.unitPrice = (priceOverride ?? service.effectiveBasePrice).roundedMoney()
+        self.quantity = 1
+        self.note = note
     }
 
-    // MARK: Derived
-    /// Effective **unit** price used for totals: override -> service.defaultPrice -> 0.
-    var effectivePrice: Decimal {
-        if let unitPrice { return unitPrice }
-        if let svc = service, let def = svc.defaultPrice { return def }
-        return 0
+    /// Creates a custom line item that does not link to a catalog `Service`.
+    init(name: String, unitPrice: Decimal, quantity: Int = 1, note: String? = nil, visit: Visit) {
+        self.uuid = UUID()
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.service = nil
+        self.visit = visit
+        self.name = name.trimmed
+        self.unitPrice = unitPrice.roundedMoney()
+        self.quantity = max(1, quantity)
+        self.note = note
     }
 
-    /// Line total = unit price × quantity.
+    // MARK: - Factory
+    
+    /// The preferred factory method for creating a `VisitItem` from a catalog `Service`.
+    static func from(service: Service,
+                     visit: Visit,
+                     quantity: Int = 1,
+                     priceOverride: Decimal? = nil,
+                     note: String? = nil) -> VisitItem {
+        let item = VisitItem(service: service, priceOverride: priceOverride, note: note, visit: visit)
+        item.quantity = max(1, quantity)
+        return item
+    }
+
+    // MARK: - Mutating API
+    func setName(_ newName: String) {
+        self.name = newName.trimmed
+        didUpdate()
+    }
+
+    func setUnitPrice(_ newPrice: Decimal) {
+        self.unitPrice = newPrice.roundedMoney()
+        didUpdate()
+    }
+
+    func setQuantity(_ newQuantity: Int) {
+        self.quantity = max(1, newQuantity)
+        didUpdate()
+    }
+
+    // MARK: - Derived Properties & Formatting
+    
     var lineTotal: Decimal {
-        effectivePrice * Decimal(quantity)
+        (unitPrice * Decimal(quantity)).roundedMoney()
+    }
+    
+    @MainActor
+    var unitPriceString: String {
+        unitPrice.moneyString
+    }
+    
+    @MainActor
+    var lineTotalString: String {
+        lineTotal.moneyString
+    }
+    
+    @MainActor
+    var receiptLine: String {
+        let qtyString = quantity > 1 ? " ×\(quantity)" : ""
+        return "\(name)\(qtyString) • \(lineTotalString)"
     }
 
-    /// Formatted USD price for UI.
-    var formattedPriceUSD: String {
-        NumberFormatters.usd.string(from: NSDecimalNumber(decimal: effectivePrice)) ?? "$0.00"
-    }
+    var displayName: String { name }
 
-    /// Convenience cents accessors for integrations that prefer integer math (line total).
-    var amountCents: Int { NSDecimalNumber(decimal: lineTotal * 100).intValue }
-
-    /// Convenience formatted price property
-    var formattedPrice: String {
-        NumberFormatter.localizedString(from: NSNumber(value: (price as NSDecimalNumber?)?.doubleValue ?? 0.0), number: .currency)
-    }
-
-    // MARK: Init
-    init(service: Service, price: Decimal? = nil, note: String? = nil, visit: Visit) {
-        self.uuid = UUID()
-        self.createdAt = Date()
-        self.updatedAt = Date()
-        self.service = service
-        self.visit = visit
-        self.name = service.name
-        self.unitPrice = price
-        self.quantity = 1
-        self.note = note
-    }
-
-    /// Create directly from a name (if the Service is optional/unknown at creation time).
-    init(name: String, price: Decimal? = nil, note: String? = nil, visit: Visit, service: Service? = nil) {
-        self.uuid = UUID()
-        self.createdAt = Date()
-        self.updatedAt = Date()
-        self.service = service
-        self.visit = visit
-        self.name = name
-        self.unitPrice = price
-        self.quantity = 1
-        self.note = note
-    }
-
-    /// Convenience initializer matching call sites that pass visit first.
-    convenience init(visit: Visit, service: Service, name: String, price: Decimal? = nil, note: String? = nil) {
-        self.init(name: name, price: price, note: note, visit: visit, service: service)
-    }
-
-    // MARK: Mutation helpers
-    func overridePrice(_ newPrice: Decimal?) { self.price = newPrice; touch() }
-    func setNote(_ new: String?) { self.note = new; touch() }
-    func touch() { self.updatedAt = Date() }
-}
-
-// MARK: - Local formatters (USD only)
-private enum NumberFormatters {
-    static let usd: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.currencyCode = "USD"
-        f.locale = .autoupdatingCurrent
-        f.generatesDecimalNumbers = true
-        f.minimumFractionDigits = 2
-        f.maximumFractionDigits = 2
-        return f
-    }()
-}
-
-// MARK: - Preview Seeds
-#if DEBUG
-extension VisitItem {
-    static func preview(_ name: String, dollars: Decimal, note: String? = nil) -> VisitItem {
-        VisitItem(name: name, price: dollars, note: note, visit: Visit.preview)
+    private func didUpdate() {
+        updatedAt = .now
     }
 }
-#endif
+
+// FIX: Add local extensions to resolve 'trimmed' and 'roundedMoney' being inaccessible.
+// A better long-term solution is to move these to their own shared files.
+fileprivate extension String {
+    var trimmed: String { self.trimmingCharacters(in: .whitespacesAndNewlines) }
+}
+
+fileprivate extension Decimal {
+    func roundedMoney() -> Decimal {
+        var result = Decimal()
+        var value = self
+        NSDecimalRound(&result, &value, 2, .bankers)
+        return result
+    }
+}

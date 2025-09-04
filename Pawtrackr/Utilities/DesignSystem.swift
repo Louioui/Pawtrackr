@@ -31,6 +31,11 @@ enum DS {
         static let warning    = Color.orange
         static let danger     = Color.red
 
+        // Session (active visit) accent tokens
+        static let session           = Color.green                       // primary accent (rails, icons)
+        static let sessionBackground = Color.green.opacity(0.12)         // chips / soft fills
+        static let sessionText       = Color.green                       // text on the soft chip
+
         // Gender
         static func gender(_ g: PetGender) -> Color {
             switch g {
@@ -47,6 +52,30 @@ enum DS {
             case .cat: return .orange
             default:   return .gray
             }
+        }
+
+        /// Centralized tint used for species+gender badges (Client Center avatars).
+        /// We bias the tint by gender for clarity, and keep it soft for backgrounds.
+        static func avatarTint(species: Species, gender: PetGender) -> Color {
+            let base = DS.ColorToken.gender(gender)
+            switch species {
+            case .dog:
+                return base.opacity(0.22)
+            case .cat:
+                return base.opacity(0.22)
+            default:
+                return Color.gray.opacity(0.18)
+            }
+        }
+
+        /// Top-bar gradient for cards based on gender.
+        static func genderGradient(_ gender: PetGender) -> LinearGradient {
+            let c = DS.ColorToken.gender(gender)
+            return LinearGradient(
+                colors: [c.opacity(0.95), c.opacity(0.65)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
         }
     }
 
@@ -67,6 +96,11 @@ enum DS {
         static let md: CGFloat = 14
         static let lg: CGFloat = 18
         static let pill: CGFloat = 999
+    }
+
+    // MARK: - Rails
+    enum Rail {
+        static let width: CGFloat = 4
     }
 
     // MARK: - Shadows
@@ -97,5 +131,31 @@ extension View {
         self
             .overlay(Circle().stroke(.white, lineWidth: 2))
             .overlay(Circle().stroke(DS.ColorToken.gender(gender).opacity(0.9), lineWidth: 2))
+    }
+
+    /// Adds a left accent rail. Use with DS.ColorToken.session for active sessions.
+    func leftAccentRail(_ color: Color) -> some View {
+        overlay(alignment: .leading) {
+            Rectangle()
+                .fill(color)
+                .frame(width: DS.Rail.width)
+        }
+    }
+
+    /// Crisp 1px-equivalent border regardless of device scale.
+    func hairlineBorder(_ color: Color, cornerRadius: CGFloat = DS.Radius.md) -> some View {
+        overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(color, lineWidth: 1 / (UIScreen.main.scale))
+        )
+    }
+
+    /// Gender-colored gradient 3pt top bar.
+    func genderAccentTopGradient(_ gender: PetGender) -> some View {
+        overlay(alignment: .top) {
+            Rectangle()
+                .fill(DS.ColorToken.genderGradient(gender))
+                .frame(height: 3)
+        }
     }
 }

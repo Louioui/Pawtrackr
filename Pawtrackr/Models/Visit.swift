@@ -2,11 +2,8 @@
 //  Visit.swift
 //  Pawtrackr
 //
-//  A grooming visit for a specific pet. Tracks timing, items, notes, total,
-//  and optional payment. Used by RecentHistoryView, PetHistoryView, Checkout, etc.
-//
 //  Created by mac on 8/14/25.
-//  Updated by mac on 8/17/25.
+//  Updated by Assistant on 2025-09-03.
 //
 
 import Foundation
@@ -14,190 +11,122 @@ import SwiftData
 
 @Model
 final class Visit {
-    // MARK: - Identity & timestamps
-    @Attribute(.unique) var uuid: UUID
+    // MARK: - Core Fields
+    var uuid: UUID
     var createdAt: Date
     var updatedAt: Date
+    var startedAt: Date
+    var endedAt: Date?
+    var note: String?
+    /// Persisted grand total for a completed visit. While in progress, derive from items.
+    var total: Decimal
 
-    // MARK: - Session timing
-    var startedAt: Date { didSet { updatedAt = Date() } }
-    var endedAt: Date? { didSet { updatedAt = Date() } }
+    // Store large blobs externally
+    @Attribute(.externalStorage) var beforePhotoData: Data?
+    @Attribute(.externalStorage) var afterPhotoData: Data?
 
-    // MARK: - Details
-    var notes: String? { didSet { updatedAt = Date() } }
-    var total: Decimal { didSet { updatedAt = Date() } }
-    @Attribute(.externalStorage) var beforePhotoData: Data? { didSet { updatedAt = Date() } }
-    @Attribute(.externalStorage) var afterPhotoData: Data? { didSet { updatedAt = Date() } }
+    // MARK: - Relationships
+    /// Owning pet for this visit
+    var pet: Pet
 
-    /// Backwards‑compat alias used by older ViewModels
-    var photoBefore: Data? {
-        get { beforePhotoData }
-        set { beforePhotoData = newValue }
-    }
+    /// Line items captured for this visit. Owner side keeps @Relationship; inverse lives on VisitItem as `var visit: Visit` (no macro).
+    @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit)
+    var items: [VisitItem] = []
 
-    /// Backwards‑compat alias used by older ViewModels
-    var photoAfter: Data? {
-        get { afterPhotoData }
-        set { afterPhotoData = newValue }
-    }
-
-    // MARK: - Relations
-    @Relationship var pet: Pet
-    @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit) var items: [VisitItem] = [] { didSet { updatedAt = Date() } }
-    @Relationship(deleteRule: .cascade) var payment: Payment?
+    /// Optional payment associated with this visit. Inverse lives on Payment as `var visit: Visit?` (no macro on that side).
+    @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
+    var payment: Payment?
 
     // MARK: - Init
-    init(pet: Pet,
-         startedAt: Date = Date(),
-         endedAt: Date? = nil,
-         notes: String? = nil,
-         total: Decimal = 0,
-         items: [VisitItem] = [],
-         payment: Payment? = nil) {
+    init(pet: Pet, startedAt: Date = .now) {
         self.uuid = UUID()
-        self.createdAt = Date()
-        self.updatedAt = Date()
-        self.pet = pet
+        self.createdAt = .now
+        self.updatedAt = .now
         self.startedAt = startedAt
-        self.endedAt = endedAt
-        self.notes = notes
-        self.total = total
-        self.items = items
-        self.payment = payment
+        self.endedAt = nil
+        self.note = nil
+        self.total = .zero
+        self.pet = pet
     }
 
-    // MARK: - Derived
+    // MARK: - Derived State
     var isActive: Bool { endedAt == nil }
-    
-    /// Live total from items (sum of prices) while the visit is in progress.
-    var runningTotal: Decimal { items.reduce(0) { $0 + ($1.price ?? 0) } }
-    
-    private enum Formatters {
-        static let currency: NumberFormatter = {
-            let nf = NumberFormatter()
-            nf.numberStyle = .currency
-            nf.currencyCode = "USD"
-            nf.locale = .autoupdatingCurrent
-            nf.minimumFractionDigits = 2
-            nf.maximumFractionDigits = 2
-            return nf
-        }()
-    }
-    
-    /// Always display totals in USD for the USA use‑case.
-    var totalUSDString: String {
-        Formatters.currency.string(from: NSDecimalNumber(decimal: total)) ?? "$0.00"
-    }
-    
-    /// Whether the visit has a recorded payment timestamp.
-    var isPaid: Bool { payment?.paidAt != nil }
-    
-    /// The effective end date used for sorting (endedAt if present, else startedAt).
-    var sortKeyDate: Date { endedAt ?? startedAt }
-    
-    /// Unified date used for comparisons
-    var endOrStart: Date { endedAt ?? startedAt }
-    
-    /// Sort helper: most‑recent visits first (endedAt if available, otherwise startedAt).
-    static func mostRecentFirst(_ lhs: Visit, _ rhs: Visit) -> Bool {
-        lhs.endOrStart > rhs.endOrStart
+    var isCompleted: Bool { endedAt != nil }
+    var isPaid: Bool { payment != nil }
+
+    /// Sort key used by lists (prefer end date, else now while active)
+    var sortKeyDate: Date { endedAt ?? .now }
+
+    /// Defensive duration in seconds (never negative)
+    var duration: TimeInterval {
+        let end = endedAt ?? .now
+        return max(0, end.timeIntervalSince(startedAt))
     }
 
-    var durationSeconds: Int {
-        let end = endedAt ?? Date()
-        return max(0, Int(end.timeIntervalSince(startedAt)))
+    /// Sum of line items (used while visit is in progress or as a fallback)
+    var servicesSubtotal: Decimal {
+        items.reduce(Decimal.zero) { partial, line in
+            partial + (line.unitPrice * Decimal(line.quantity))
+        }
     }
 
+    // MARK: - UI Formatting (MainActor to avoid actor-isolation warnings)
+    @MainActor
+    var dateRangeString: String {
+        Formatters.dateRangeString(from: startedAt, to: endedAt ?? .now)
+    }
+
+    @MainActor
     var durationString: String {
-        let s = durationSeconds
-        let h = s / 3600
-        let m = (s % 3600) / 60
-        let remS = s % 60
-        if h > 0 { return String(format: "%dh %dm", h, m) }
-        if m > 0 { return String(format: "%dm", m) }
-        return String(format: "%ds", remS)
+        Formatters.durationString(from: startedAt, to: endedAt ?? .now)
     }
 
-    /// Names of line items for quick display/search
-    var itemNames: [String] { items.map { $0.name } }
-    
-    /// Live view into the underlying services referenced by items (if still present)
-    var services: [Service] { items.compactMap { $0.service } }
+    @MainActor
+    var totalCurrencyString: String {
+        let amount = isCompleted ? total : servicesSubtotal
+        return amount.moneyString
+    }
 
-    /// Append a VisitItem built from a Service snapshot and keep totals updated.
-    @discardableResult
-    func addItem(from service: Service, priceOverride: Decimal? = nil, quantity: Int = 1) -> VisitItem {
-        let item = VisitItem(visit: self, service: service, name: service.name)
-        item.unitPrice = priceOverride ?? service.defaultPrice
-        item.quantity = max(1, quantity)
+    // MARK: - Business Logic
+    /// Recalculate and store the visit grand total from items. Call on any items mutation.
+    func recalcTotal() {
+        total = servicesSubtotal
+        didUpdate()
+    }
+
+    /// Mark the visit as checked out. If a custom total is provided (after tips/discounts), it wins; otherwise we sum items.
+    func markCheckedOut(total customTotal: Decimal? = nil, now: Date = .now) {
+        if let custom = customTotal { total = custom.roundedMoney() } else { recalcTotal() }
+        if endedAt == nil { endedAt = now }
+        didUpdate()
+    }
+
+    /// Attach a line item (snapshots name & price so history remains stable if the catalog changes).
+    func addItem(title: String, unitPrice: Decimal, quantity: Int = 1, service: Service? = nil) {
+        let qty = max(1, quantity)
+        let item = VisitItem(name: title, unitPrice: max(0, unitPrice), quantity: qty, visit: self)
+        item.service = service
         items.append(item)
         recalcTotal()
-        return item
     }
 
-    /// Replace current items with snapshots from a Service catalog (name + price only)
-    func snapshotItems(from services: [Service]) {
-        items.removeAll()
-        for svc in services { _ = addItem(from: svc) }
-    }
-
-    /// Set before/after photos in one call
-    func applyPhotos(before: Data?, after: Data?) {
-        beforePhotoData = before
-        afterPhotoData = after
-        touch()
-    }
-
-    /// Recalculate and persist the visit's total from its items.
-    func recalcTotal() {
-        let sum = items.reduce(Decimal.zero) { partial, item in
-            partial + (item.price ?? .zero)
+    /// Remove a specific item instance.
+    func removeItem(_ item: VisitItem) {
+        if let idx = items.firstIndex(where: { $0 === item }) {
+            items.remove(at: idx)
+            recalcTotal()
         }
-        total = sum
-        touch()
     }
 
-    func touch() { updatedAt = Date() }
-    
-    /// Mark the visit as started "now" (resets any previous end time).
-    func markCheckedIn(now: Date = .now) {
-        startedAt = now
-        endedAt = nil
-        touch()
+    /// Attach a payment (e.g., after checkout confirm)
+    func attachPayment(_ payment: Payment) {
+        self.payment = payment
+        payment.visit = self
+        didUpdate()
     }
-    
-    /// Mark the visit as ended and persist a final total (still USD).
-    func markCheckedOut(total amount: Decimal, now: Date = .now) {
-        total = (amount > 0) ? amount : runningTotal
-        endedAt = now
-        touch()
+
+    // MARK: - Internal
+    private func didUpdate() {
+        updatedAt = .now
     }
 }
-
-#if DEBUG
-import Foundation
-
-extension Client {
-    static var preview: Client {
-        Client(firstName: "Alex", lastName: "Rivera")
-    }
-}
-
-extension Pet {
-    static var preview: Pet {
-        let client = Client.preview
-        // Create a Pet using the simplest initializer available, then assign fields.
-        let pet = Pet(name: "Milo", species: .dog)
-        pet.gender = .male
-        pet.owner = client
-        return pet
-    }
-}
-
-extension Visit {
-    static var preview: Visit {
-        let pet = Pet.preview
-        return Visit(pet: pet, startedAt: Date().addingTimeInterval(-3600))
-    }
-}
-#endif

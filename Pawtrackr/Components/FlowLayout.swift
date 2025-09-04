@@ -29,6 +29,8 @@ public struct FlowLayout<Content: View>: View {
         _FlowLayout(spacing: spacing, rowSpacing: rowSpacing) {
             content()
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Tag list")
     }
 }
 
@@ -38,25 +40,39 @@ fileprivate struct _FlowLayout: Layout {
     let spacing: CGFloat
     let rowSpacing: CGFloat
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard !subviews.isEmpty else { return .zero }
+    struct Cache {
+        var sizes: [CGSize] = []
+    }
 
+    func makeCache(subviews: Subviews) -> Cache {
+        Cache(sizes: subviews.map { $0.sizeThatFits(.unspecified) })
+    }
+
+    func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        // Keep sizes in sync if subviews change
+        cache.sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        guard !subviews.isEmpty else { return CGSize(width: proposal.width ?? 0, height: 0) }
+
+        let sizes = cache.sizes
         let maxWidth = proposal.width ?? .infinity
         var currentX: CGFloat = 0
         var currentRowHeight: CGFloat = 0
         var totalHeight: CGFloat = 0
         var totalWidth: CGFloat = 0
 
-        for subview in subviews {
-            let subviewSize = subview.sizeThatFits(.unspecified)
-            if currentX > 0 && currentX + subviewSize.width > maxWidth { // Wrap to next row
+        for sz in sizes {
+            let itemWidth = min(sz.width, maxWidth)
+            if currentX > 0 && currentX + itemWidth > maxWidth { // wrap
                 totalHeight += currentRowHeight + rowSpacing
                 totalWidth = max(totalWidth, currentX - spacing)
                 currentX = 0
                 currentRowHeight = 0
             }
-            currentX += subviewSize.width + spacing
-            currentRowHeight = max(currentRowHeight, subviewSize.height)
+            currentX += itemWidth + spacing
+            currentRowHeight = max(currentRowHeight, sz.height)
         }
 
         totalHeight += currentRowHeight
@@ -66,25 +82,31 @@ fileprivate struct _FlowLayout: Layout {
         return CGSize(width: width, height: totalHeight)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
         guard !subviews.isEmpty else { return }
 
+        let sizes = cache.sizes
         let maxWidth = bounds.width
         var x: CGFloat = 0
         var y: CGFloat = bounds.minY
         var rowHeight: CGFloat = 0
 
-        for subview in subviews {
-            let subviewSize = subview.sizeThatFits(.unspecified)
-            if x > 0 && x + subviewSize.width > maxWidth { // Wrap to next row
+        for (idx, subview) in subviews.enumerated() {
+            let sz = sizes[idx]
+            let itemWidth = min(sz.width, maxWidth)
+            if x > 0 && x + itemWidth > maxWidth { // wrap
                 y += rowHeight + rowSpacing
                 x = 0
                 rowHeight = 0
             }
 
-            subview.place(at: CGPoint(x: bounds.minX + x, y: y), anchor: .topLeading, proposal: .unspecified)
-            x += subviewSize.width + spacing
-            rowHeight = max(rowHeight, subviewSize.height)
+            subview.place(
+                at: CGPoint(x: bounds.minX + x, y: y),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: sz.width, height: sz.height)
+            )
+            x += itemWidth + spacing
+            rowHeight = max(rowHeight, sz.height)
         }
     }
 }
