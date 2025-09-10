@@ -69,7 +69,7 @@ struct CheckoutView: View {
                     
                     Label(viewModel.visitTimer.formattedElapsed, systemImage: "clock")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.accent)
+                        .foregroundStyle(Color.accentColor)
                         .monospacedDigit()
                         .padding(.top, 2)
                 }
@@ -275,7 +275,7 @@ fileprivate struct PhotoWell: View {
     
     var body: some View {
         ZStack {
-            if let data = imageData, let image = Image(platformImage: data) {
+            if let data = imageData, let image = imageFromData(data) {
                 image
                     .resizable()
                     .scaledToFill()
@@ -286,4 +286,14 @@ fileprivate struct PhotoWell: View {
         .frame(maxWidth: .infinity, idealHeight: 160)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
+}
+
+// Data → SwiftUI Image helper (module-wide safe)
+fileprivate func imageFromData(_ data: Data) -> Image? {
+    #if canImport(UIKit)
+    if let ui = UIImage(data: data) { return Image(uiImage: ui) }
+    #elseif canImport(AppKit)
+    if let ns = NSImage(data: data) { return Image(nsImage: ns) }
+    #endif
+    return nil
 }

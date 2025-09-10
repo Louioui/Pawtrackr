@@ -88,18 +88,19 @@ final class PetHistoryViewModel: ObservableObject {
     // MARK: - Private
     private func fetchVisits() async {
         let (start, end) = dateBounds(for: scope)
-        var predicate: Predicate<Visit>
-        if let start, let end {
-            predicate = #Predicate { $0.pet == pet && $0.startedAt >= start && $0.startedAt < end }
-        } else {
-            predicate = #Predicate { $0.pet == pet }
-        }
         let descriptor = FetchDescriptor<Visit>(
-            predicate: predicate,
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
         do {
-            visits = try modelContext.fetch(descriptor)
+            var fetched = try modelContext.fetch(descriptor)
+            // Filter by pet identity first
+            let petID = pet.persistentModelID
+            fetched = fetched.filter { $0.pet.persistentModelID == petID }
+            // Apply optional date bounds in-memory
+            if let start, let end {
+                fetched = fetched.filter { v in v.startedAt >= start && v.startedAt < end }
+            }
+            visits = fetched
         } catch {
             visits = []
         }
@@ -182,7 +183,7 @@ struct PetHistoryCSV: Transferable {
 
 struct PetHistoryText: Transferable {
     static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .plainText) { Data($0.utf8) }
+        DataRepresentation(exportedContentType: .plainText) { Data($0.text.utf8) }
     }
     let text: String
 }

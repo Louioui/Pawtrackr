@@ -39,7 +39,7 @@ final class CheckoutViewModel {
     private(set) var alertMessage: String = ""
     
     // MARK: Private State
-    private let allServices: [Service] // Fetched once for performance.
+    let allServices: [Service] // Fetched once for performance; exposed for view rendering.
     
     // MARK: Computed State
     var requiresExternalReference: Bool {

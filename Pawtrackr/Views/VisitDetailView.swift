@@ -12,17 +12,6 @@
 import SwiftUI
 import SwiftData
 
-
-// Single-visit CSV wrapper for ShareLink
-private struct CSVDoc: Transferable {
-    let data: Data
-    static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .commaSeparatedText) { csv in
-            csv.data
-        }
-    }
-}
-
 struct VisitDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -64,7 +53,7 @@ struct VisitDetailView: View {
                 ToolbarItem(placement: .primaryAction) {
                     let csv = exportCSVForVisit()
                     ShareLink(
-                        item: CSVDoc(data: Data(csv.utf8)),
+                        item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Visit.csv"),
                         preview: SharePreview("Pawtrackr_Visit.csv", icon: Image(systemName: "doc.text.fill"))
                     ) {
                         Label("Export", systemImage: "square.and.arrow.up")
@@ -82,7 +71,7 @@ struct VisitDetailView: View {
     // MARK: - Header (pet summary)
 
     private var header: some View {
-        Card(accentTopLine: DS.ColorToken.gender(visit.pet.gender)) {
+        Card(accent: .top(.color(DS.ColorToken.gender(visit.pet.gender)))) {
             HStack(spacing: 12) {
                 if let data = visit.pet.photoData {
                 #if canImport(UIKit)
@@ -117,7 +106,7 @@ struct VisitDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if visit.isSettled {
+                if visit.isPaid {
                     Text("Paid")
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)

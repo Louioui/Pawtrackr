@@ -36,12 +36,12 @@ struct ClientRow: View {
 
     var body: some View {
         let primaryPet = client.pets.sorted(by: { $0.name < $1.name }).first
-        Card(accentTopLine: primaryPet.map { DS.ColorToken.gender($0.gender) }) {
+        Card(accent: primaryPet.map { Card.Accent.top(.color(DS.ColorToken.gender($0.gender))) }) {
             HStack(spacing: 12) {
                 // Avatars (up to 3 pets)
                 HStack(spacing: -8) {
                     ForEach(Array(client.pets.sorted(by: { $0.name < $1.name }).prefix(3)), id: \.persistentModelID) { pet in
-                        IconCircle(style: .auto(species: pet.species, gender: pet.gender), size: .sm, lineWidth: 1)
+                        IconCircle(size: .sm, style: .auto(species: pet.species, gender: pet.gender), lineWidth: 1)
                     }
                 }
 

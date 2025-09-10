@@ -39,17 +39,17 @@ final class ClientDetailViewModel: ObservableObject {
     }
 
     func refreshRecentVisits(limit: Int = 50) {
-        // Fetch completed visits for all of this client's pets, most-recent first
-        let petIDs = Set(client.pets.map { $0.uuid })
+        // Fetch most-recent visits, then filter in-memory for portability
         let descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate { visit in
-                visit.endedAt != nil && petIDs.contains(visit.pet.uuid)
-            },
             sortBy: [SortDescriptor(\Visit.endedAt, order: .reverse)]
         )
         do {
             let results = try modelContext.fetch(descriptor)
-            self.recentVisits = Array(results.prefix(limit))
+            let allowedPetIDs = Set(client.pets.map { $0.persistentModelID })
+            let filtered = results.filter { v in
+                v.endedAt != nil && allowedPetIDs.contains(v.pet.persistentModelID)
+            }
+            self.recentVisits = Array(filtered.prefix(limit))
         } catch {
             Logger.main.error("Failed to fetch recent visits: \(String(describing: error))")
             self.recentVisits = []

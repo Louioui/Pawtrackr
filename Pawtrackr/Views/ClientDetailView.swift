@@ -15,8 +15,8 @@ struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    // FIX: Use @State for a ViewModel that uses the @Observable macro.
-    @State private var vm: ClientDetailViewModel
+    // Use @StateObject for ObservableObject-based view models
+    @StateObject private var vm: ClientDetailViewModel
 
     // Local sheet routing (do not depend on VM for UI routing)
     @State private var sheetDestination: SheetDestination?
@@ -49,8 +49,8 @@ struct ClientDetailView: View {
                 fatalError("ModelContainer creation failed: \(error)")
             }
         }()
-        // FIX: Initialize the @State property wrapper.
-        _vm = State(wrappedValue: ClientDetailViewModel(client: client, modelContext: ctx))
+        // Initialize the @StateObject wrapper.
+        _vm = StateObject(wrappedValue: ClientDetailViewModel(client: client, modelContext: ctx))
     }
 
     // MARK: - Body
@@ -86,7 +86,7 @@ struct ClientDetailView: View {
                 }
             }
         }
-        .task { await vm.refresh() }
+        .task { vm.refreshRecentVisits() }
     }
 
     // MARK: - Subviews

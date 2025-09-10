@@ -17,9 +17,10 @@ struct RecentHistoryView: View {
         NavigationStack {
             Group {
                 if let viewModel {
+                    @Bindable var bvm = viewModel
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
-                            header(viewModel)
+                            header(bvm)
                             summaryChips(viewModel).padding(.horizontal)
                             visitList(viewModel)
                         }
@@ -37,7 +38,7 @@ struct RecentHistoryView: View {
         }
     }
     
-    private func header(_ viewModel: RecentHistoryViewModel) -> some View {
+    private func header(@Bindable _ viewModel: RecentHistoryViewModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SearchField(text: $viewModel.query)
             ScopePicker(scope: $viewModel.scope)

@@ -46,7 +46,11 @@ final class PetDetailViewModel {
     }
     
     func updateTimer() {
-        visitTimer.load(startedAt: activeVisit?.startedAt, endedAt: activeVisit?.endedAt)
+        if let v = activeVisit {
+            visitTimer.load(startedAt: v.startedAt, endedAt: v.endedAt)
+        } else {
+            visitTimer.reset()
+        }
     }
     
     // MARK: Intents
@@ -138,7 +142,7 @@ struct PetDetailView: View {
     }
 
     private func header(_ vm: PetDetailViewModel) -> some View {
-        Card(accentTopLine: DS.ColorToken.gender(vm.pet.gender)) {
+        Card(accent: .top(.color(DS.ColorToken.gender(vm.pet.gender)))) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 16) {
                     AvatarView(.pet(species: vm.pet.species, gender: vm.pet.gender, name: vm.pet.name, imageData: vm.pet.photoData), size: .lg)
