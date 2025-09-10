@@ -12,12 +12,12 @@ import UniformTypeIdentifiers
 
 struct PetHistoryView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var viewModel: PetHistoryViewModel
+    @StateObject private var viewModel: PetHistoryViewModel
 
     init(pet: Pet) {
         // The modelContext is available via the pet object itself.
         // It's safe to force-unwrap here because a managed model will always have a context.
-        _viewModel = State(initialValue: PetHistoryViewModel(pet: pet, modelContext: pet.modelContext!))
+        _viewModel = StateObject(wrappedValue: PetHistoryViewModel(pet: pet, modelContext: pet.modelContext!))
     }
 
     var body: some View {
@@ -27,7 +27,7 @@ struct PetHistoryView: View {
                     headerCard
                         .padding(.horizontal)
 
-                    if viewModel.visits.isEmpty && !viewModel.isLoading {
+                    if viewModel.visits.isEmpty {
                         ContentUnavailableView(
                             "No History Yet",
                             systemImage: "clock.arrow.circlepath",
@@ -45,9 +45,7 @@ struct PetHistoryView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar { toolbarContent }
-            .task {
-                await viewModel.loadInitialVisits()
-            }
+            .task { await viewModel.refresh() }
         }
     }
 
@@ -65,12 +63,7 @@ struct PetHistoryView: View {
                             VisitTimelineRow(visit: visit)
                         }
                         .buttonStyle(.plain)
-                        .onAppear {
-                            // Trigger infinite scroll when the last item appears.
-                            if visit.id == lastVisitID {
-                                viewModel.loadMoreVisits()
-                            }
-                        }
+                        // Infinite scroll removed (no pagination in current view model)
                     }
                 } header: {
                     HStack {
@@ -84,9 +77,7 @@ struct PetHistoryView: View {
                 }
             }
 
-            if viewModel.isLoading {
-                ProgressView().padding()
-            }
+            // Loading indicator removed (view model doesn't expose isLoading)
         }
         .padding(.horizontal)
     }
@@ -101,7 +92,7 @@ struct PetHistoryView: View {
                     Text(viewModel.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
 
                     FlowLayout(spacing: 8) {
-                        Chip.info("\(viewModel.totalVisitsCount) Visits")
+                        Chip.info("\(viewModel.totalVisits) Visits")
                         Chip.info("Avg. \(viewModel.averageDurationString)")
                     }
                     .padding(.top, 4)
@@ -117,14 +108,14 @@ struct PetHistoryView: View {
             Button("Done") { dismiss() }
         }
         ToolbarItem(placement: .primaryAction) {
-            let csv = viewModel.exportCSV()
+            let data = viewModel.exportCSV()
             ShareLink(
-                item: CSVDoc(data: Data(csv.utf8), filename: "\(viewModel.pet.name)_History.csv"),
+                item: CSVDoc(data: data, filename: "\(viewModel.pet.name)_History.csv"),
                 preview: SharePreview("Pet History", icon: Image(systemName: "doc.text.fill"))
             ) {
                 Label("Export", systemImage: "square.and.arrow.up")
             }
-            .disabled(csv.isEmpty)
+            .disabled(viewModel.filtered.isEmpty)
         }
     }
 }

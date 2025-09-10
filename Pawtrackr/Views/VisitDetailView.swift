@@ -15,7 +15,7 @@ import SwiftData
 struct VisitDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @Bindable var visit: Visit
+    let visit: Visit
     @StateObject private var visitTimer = VisitTimer()
 
     var body: some View {
@@ -126,7 +126,7 @@ struct VisitDetailView: View {
                         .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
                 }
                 if let total = amountText {
-                    Pill(text: total, style: .filled(tint: Color.accentColor.opacity(0.12), text: Color.accentColor))
+                    Chip(total, style: .tinted, size: .sm, tint: Color.accentColor)
                         .accessibilityLabel("Total \(total)")
                 }
             }
@@ -205,78 +205,92 @@ struct VisitDetailView: View {
 
     // MARK: - Services
 
+    @ViewBuilder
     private var servicesCard: some View {
-        Group {
-            if visit.items.isEmpty {
-                Card {
-                    HStack {
-                        Image(systemName: "checklist")
-                            .foregroundStyle(.secondary)
-                        Text("No services recorded")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("No services recorded for this visit")
-                }
-            } else {
-                Card {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Services Performed")
-                            .font(.subheadline.weight(.semibold))
+        // Split into simpler subviews to aid type-checking
+        if visit.items.isEmpty { servicesEmptyCard } else { servicesContentCard }
+    }
 
-                        // Chips row (consistent with History/Checkout)
-                        FlowLayout(spacing: 8, lineSpacing: 8) {
-                            ForEach(visit.items, id: \.persistentModelID) { item in
-                                Pill(text: item.displayName,
-                                     style: .tinted(tint: .blue.opacity(0.15), text: .blue))
-                                    .accessibilityLabel("Service \(item.displayName)")
-                                    .allowsHitTesting(false)
-                            }
-                        }
-
-                        Divider().opacity(0.08)
-
-                        // Compact price list
-                        VStack(spacing: 8) {
-                            ForEach(visit.items, id: \.persistentModelID) { item in
-                                HStack(alignment: .firstTextBaseline) {
-                                    Text(item.displayName + (item.quantity > 1 ? " ×\(item.quantity)" : ""))
-                                        .font(.subheadline)
-                                    Spacer()
-                                    Text(item.lineTotalCurrencyString)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
-                                }
-                            }
-                        }
-
-                        Divider().opacity(0.08)
-
-                        HStack {
-                            Text("Total")
-                                .font(.subheadline.weight(.semibold))
-                            Spacer()
-                            Text(visit.totalCurrencyString)
-                                .font(.subheadline.weight(.semibold))
-                                .monospacedDigit()
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Total amount \(visit.totalCurrencyString)")
-                    }
-                }
-                .accessibilityHint("Services performed and prices.")
+    private var servicesEmptyCard: some View {
+        Card {
+            HStack {
+                Image(systemName: "checklist")
+                    .foregroundStyle(.secondary)
+                Text("No services recorded")
+                    .foregroundStyle(.secondary)
+                Spacer()
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("No services recorded for this visit")
         }
         .padding(.horizontal)
+    }
+
+    private var servicesContentCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Services Performed")
+                    .font(.subheadline.weight(.semibold))
+
+                // Chips row (consistent with History/Checkout)
+                servicesChips
+
+                Divider().opacity(0.08)
+
+                // Compact price list
+                servicesPriceList
+
+                Divider().opacity(0.08)
+
+                HStack {
+                    Text("Total")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(visit.totalCurrencyString)
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Total amount \(visit.totalCurrencyString)")
+            }
+        }
+        .accessibilityHint("Services performed and prices.")
+        .padding(.horizontal)
+    }
+
+    private var servicesChips: some View {
+        let items: [VisitItem] = Array(visit.items)
+        return FlowLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(items, id: \.uuid) { (item: VisitItem) in
+                Chip(item.displayName, style: .tinted, size: .sm, tint: .blue)
+                    .accessibilityLabel("Service \(item.displayName)")
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var servicesPriceList: some View {
+        let items: [VisitItem] = Array(visit.items)
+        return VStack(spacing: 8) {
+            ForEach(items, id: \.uuid) { (item: VisitItem) in
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.displayName + (item.quantity > 1 ? " ×\(item.quantity)" : ""))
+                        .font(.subheadline)
+                    Spacer()
+                    Text(item.lineTotalCurrencyString)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
     }
 
     // MARK: - Photos (Before / After)
 
     private var photosCard: some View {
         Group {
-            if visit.photoBefore == nil && visit.photoAfter == nil {
+            if visit.beforePhotoData == nil && visit.afterPhotoData == nil {
                 EmptyView()
             } else {
                 Card {
@@ -284,8 +298,8 @@ struct VisitDetailView: View {
                         Text("Photos")
                             .font(.subheadline.weight(.semibold))
                         HStack(spacing: 12) {
-                            photoBox(title: "Before", data: visit.photoBefore)
-                            photoBox(title: "After", data: visit.photoAfter)
+                            photoBox(title: "Before", data: visit.beforePhotoData)
+                            photoBox(title: "After", data: visit.afterPhotoData)
                         }
                     }
                 }

@@ -127,8 +127,7 @@ final class Visit {
     /// Sum of line items (snapshot math). Coalesces optional unitPrice to 0.
     var servicesSubtotal: Decimal {
         items.reduce(Decimal.zero) { acc, line in
-            let price: Decimal = line.unitPrice ?? 0
-            return acc + (price * Decimal(line.quantity))
+            acc + (line.unitPrice * Decimal(line.quantity))
         }
     }
 

@@ -113,6 +113,12 @@ final class VisitItem {
     var lineTotalString: String {
         lineTotal.moneyString
     }
+
+    // Alias used by some views (e.g., VisitDetailView)
+    @MainActor
+    var lineTotalCurrencyString: String {
+        lineTotal.moneyString
+    }
     
     @MainActor
     var receiptLine: String {

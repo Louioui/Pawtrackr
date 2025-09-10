@@ -176,6 +176,7 @@ enum FormValidators {
 
     /// Parses a user-entered USD amount and returns a Decimal.
     /// Accepts inputs like "$45", "45", "45.00", "1,234.56", and "(45.00)" for negatives.
+    @MainActor
     static func usdAmount(_ value: String) throws -> Decimal {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ValidationError.custom(message: "Enter an amount.") }
@@ -214,6 +215,7 @@ enum FormValidators {
     }
 
     /// Parses a tip string. Empty/whitespace returns 0. Uses same rules as `usdAmount`.
+    @MainActor
     static func tipAmount(_ value: String?) throws -> Decimal {
         guard let raw = value, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return 0 }
         return try usdAmount(raw)
@@ -227,6 +229,7 @@ enum FormValidators {
     struct CheckoutOutput { let amount: Decimal; let tip: Decimal }
 
     /// Validates checkout fields and returns normalized decimals (banker’s rounding to 2dp).
+    @MainActor
     static func validate(checkout input: CheckoutInput) throws -> CheckoutOutput {
         let amount = try usdAmount(input.amountString)
         let tip = try tipAmount(input.tipString)
