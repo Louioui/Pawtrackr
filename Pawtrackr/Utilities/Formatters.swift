@@ -40,7 +40,8 @@ enum Formatters {
 
         // Fallback: strip everything except digits and locale decimal separator
         let decSep = Locale.current.decimalSeparator ?? "."
-        let allowed = CharacterSet(charactersIn: "0123456789\(decSep)")
+        // Allow digits and the current locale's decimal separator.
+        let allowed = CharacterSet(charactersIn: "0123456789" + decSep)
         let compact = raw.unicodeScalars.filter { allowed.contains($0) }
         let cleaned = String(String.UnicodeScalarView(compact))
 

@@ -45,26 +45,8 @@ final class ClientsViewModel {
     func fetchClients() {
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // IMPROVEMENT: Build a predicate to filter in the database for better performance.
-        // This is significantly more efficient than fetching all clients and filtering in memory.
-        let predicate: Predicate<Client>?
-        if trimmedSearch.isEmpty {
-            predicate = nil // No filter, fetch all clients.
-        } else {
-            predicate = #Predicate<Client> { client in
-                // Search by client's first or last name
-                client.firstName.localizedStandardContains(trimmedSearch) ||
-                client.lastName.localizedStandardContains(trimmedSearch) ||
-                
-                // Search by the name of any associated pet
-                client.pets.filter { pet in
-                    pet.name.localizedStandardContains(trimmedSearch)
-                }.isEmpty == false ||
-                
-                // Search by phone number digits (assuming phone is stored normalized)
-                (client.phone?.contains(trimmedSearch) ?? false)
-            }
-        }
+        // Keep DB predicate simple (no nested closures) and filter text in-memory
+        let predicate: Predicate<Client>? = nil
 
         do {
             let sortDescriptors: [SortDescriptor<Client>] = [
@@ -73,7 +55,17 @@ final class ClientsViewModel {
             ]
             
             let descriptor = FetchDescriptor<Client>(predicate: predicate, sortBy: sortDescriptors)
-            let filteredClients = try modelContext.fetch(descriptor)
+            var filteredClients = try modelContext.fetch(descriptor)
+
+            if !trimmedSearch.isEmpty {
+                filteredClients = filteredClients.filter { client in
+                    if client.firstName.localizedStandardContains(trimmedSearch) { return true }
+                    if client.lastName.localizedStandardContains(trimmedSearch) { return true }
+                    if let phone = client.phone, phone.localizedStandardContains(trimmedSearch) { return true }
+                    if client.pets.contains(where: { $0.name.localizedStandardContains(trimmedSearch) }) { return true }
+                    return false
+                }
+            }
 
             // Partition into in-progress vs. other clients using the centralized extension properties.
             // This assumes `hasActiveVisit` and `sortKeyMostRecentVisit`

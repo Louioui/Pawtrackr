@@ -108,10 +108,4 @@ final class Client {
     }
 }
 
-// MARK: - Helpers
-fileprivate extension String {
-    /// Returns the string with leading and trailing whitespace and newlines removed.
-    var trimmed: String {
-        self.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
+

@@ -5,22 +5,21 @@
 //  Created by mac on 8/14/25.
 //
 
-
-
-enum Species: String, CaseIterable, Codable, Identifiable {
+// FIX: Added 'public' to match the access level of AvatarView.
+public enum Species: String, CaseIterable, Codable, Identifiable {
     case dog
     case cat
     case bird
     case reptile
     case other
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var displayName: String {
+    public var displayName: String {
         rawValue.capitalized
     }
 
-    var iconName: String {
+    public var iconName: String {
         switch self {
         case .dog:
             return "pawprint.fill"

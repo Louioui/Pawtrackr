@@ -2,8 +2,7 @@
 //  Visit.swift
 //  Pawtrackr
 //
-//  Created by mac on 8/14/25.
-//  Updated by Assistant on 2025-09-03.
+//  Canonical Visit model for SwiftData
 //
 
 import Foundation
@@ -11,29 +10,29 @@ import SwiftData
 
 @Model
 final class Visit {
-    // MARK: - Core Fields
+    // MARK: - Identity & Timestamps
     var uuid: UUID
     var createdAt: Date
     var updatedAt: Date
     var startedAt: Date
     var endedAt: Date?
-    var note: String?
-    /// Persisted grand total for a completed visit. While in progress, derive from items.
-    var total: Decimal
 
-    // Store large blobs externally
+    // MARK: - Notes & Media
+    var note: String?
     @Attribute(.externalStorage) var beforePhotoData: Data?
     @Attribute(.externalStorage) var afterPhotoData: Data?
 
+    // MARK: - Money
+    /// Persisted grand total for this visit (non-optional, stored).
+    /// IMPORTANT: do not duplicate/extend this with another property named `total`.
+    var total: Decimal
+
     // MARK: - Relationships
-    /// Owning pet for this visit
     var pet: Pet
 
-    /// Line items captured for this visit. Owner side keeps @Relationship; inverse lives on VisitItem as `var visit: Visit` (no macro).
     @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit)
     var items: [VisitItem] = []
 
-    /// Optional payment associated with this visit. Inverse lives on Payment as `var visit: Visit?` (no macro on that side).
     @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
     var payment: Payment?
 
@@ -45,6 +44,8 @@ final class Visit {
         self.startedAt = startedAt
         self.endedAt = nil
         self.note = nil
+        self.beforePhotoData = nil
+        self.afterPhotoData = nil
         self.total = .zero
         self.pet = pet
     }
@@ -54,63 +55,124 @@ final class Visit {
     var isCompleted: Bool { endedAt != nil }
     var isPaid: Bool { payment != nil }
 
-    /// Sort key used by lists (prefer end date, else now while active)
-    var sortKeyDate: Date { endedAt ?? .now }
+    var sortKeyDate: Date { endedAt ?? startedAt }
 
-    /// Defensive duration in seconds (never negative)
+    /// Defensive duration (seconds)
     var duration: TimeInterval {
         let end = endedAt ?? .now
         return max(0, end.timeIntervalSince(startedAt))
     }
-
-    /// Sum of line items (used while visit is in progress or as a fallback)
-    var servicesSubtotal: Decimal {
-        items.reduce(Decimal.zero) { partial, line in
-            partial + (line.unitPrice * Decimal(line.quantity))
+    
+    /// Human-readable duration like "1h 23m" or "45m"
+    var durationString: String {
+        let totalSeconds = Int(duration)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
         }
     }
 
-    // MARK: - UI Formatting (MainActor to avoid actor-isolation warnings)
-    @MainActor
+    /// Human‑readable date/time range for timeline rows.
+    /// Examples:
+    ///  - "Sep 5, 1:10 PM–2:30 PM" (same day, completed)
+    ///  - "Sep 5, 1:10 PM–now"     (same day, active)
+    ///  - "Sep 4, 11:50 PM – Sep 5, 12:15 AM" (spans days)
     var dateRangeString: String {
-        Formatters.dateRangeString(from: startedAt, to: endedAt ?? .now)
+        let cal = Calendar.current
+        let start = startedAt
+        let end = endedAt
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = .current
+        dateFormatter.timeZone = .current
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .none
+        
+        let timeFormatter = DateFormatter()
+        timeFormatter.locale = .current
+        timeFormatter.timeZone = .current
+        timeFormatter.dateStyle = .none
+        timeFormatter.timeStyle = .short
+        
+        // If start & end are the same calendar day, show: "Sep 5, 1:10 PM–2:30 PM"
+        if let end, cal.isDate(start, inSameDayAs: end) {
+            let day = dateFormatter.string(from: start)
+            let startTime = timeFormatter.string(from: start)
+            let endTime = timeFormatter.string(from: end)
+            return "\(day), \(startTime)–\(endTime)"
+        }
+        
+        // If still active, show "...–now"
+        if endedAt == nil {
+            let day = dateFormatter.string(from: start)
+            let startTime = timeFormatter.string(from: start)
+            return "\(day), \(startTime)–now"
+        }
+        
+        // Spans multiple days; show full short date+time on both sides.
+        let dtFormatter = DateFormatter()
+        dtFormatter.locale = .current
+        dtFormatter.timeZone = .current
+        dtFormatter.dateStyle = .medium
+        dtFormatter.timeStyle = .short
+        
+        let left = dtFormatter.string(from: start)
+        let right = dtFormatter.string(from: endedAt!)
+        return "\(left) – \(right)"
     }
 
-    @MainActor
-    var durationString: String {
-        Formatters.durationString(from: startedAt, to: endedAt ?? .now)
+    /// Sum of line items (snapshot math). Coalesces optional unitPrice to 0.
+    var servicesSubtotal: Decimal {
+        items.reduce(Decimal.zero) { acc, line in
+            let price: Decimal = line.unitPrice ?? 0
+            return acc + (price * Decimal(line.quantity))
+        }
     }
 
-    @MainActor
-    var totalCurrencyString: String {
-        let amount = isCompleted ? total : servicesSubtotal
-        return amount.moneyString
-    }
+    /// While active use the running subtotal; once completed use persisted total
+    var effectiveTotal: Decimal { isCompleted ? total : servicesSubtotal }
 
-    // MARK: - Business Logic
-    /// Recalculate and store the visit grand total from items. Call on any items mutation.
+    // MARK: - Formatting helpers (assumes you have Decimal.moneyString)
+    @MainActor var totalCurrencyString: String { effectiveTotal.moneyString }
+
+    // MARK: - Operations
+    
     func recalcTotal() {
         total = servicesSubtotal
         didUpdate()
     }
 
-    /// Mark the visit as checked out. If a custom total is provided (after tips/discounts), it wins; otherwise we sum items.
+    func markCheckedIn(now: Date = .now) {
+        if startedAt > now { startedAt = now }
+        endedAt = nil
+        didUpdate()
+    }
+
     func markCheckedOut(total customTotal: Decimal? = nil, now: Date = .now) {
         if let custom = customTotal { total = custom.roundedMoney() } else { recalcTotal() }
         if endedAt == nil { endedAt = now }
         didUpdate()
     }
 
-    /// Attach a line item (snapshots name & price so history remains stable if the catalog changes).
-    func addItem(title: String, unitPrice: Decimal, quantity: Int = 1, service: Service? = nil) {
+    // NEWLY ADDED: This function was missing, causing the build error in CheckoutViewModel.
+    func applyPhotos(before: Data?, after: Data?) {
+        self.beforePhotoData = before
+        self.afterPhotoData = after
+        didUpdate()
+    }
+
+    func addItem(title: String, unitPrice: Decimal?, quantity: Int = 1, service: Service? = nil) {
         let qty = max(1, quantity)
-        let item = VisitItem(name: title, unitPrice: max(0, unitPrice), quantity: qty, visit: self)
+        let price = unitPrice ?? 0
+        let item = VisitItem(name: title, unitPrice: price, quantity: qty, visit: self)
         item.service = service
         items.append(item)
         recalcTotal()
     }
 
-    /// Remove a specific item instance.
     func removeItem(_ item: VisitItem) {
         if let idx = items.firstIndex(where: { $0 === item }) {
             items.remove(at: idx)
@@ -118,15 +180,11 @@ final class Visit {
         }
     }
 
-    /// Attach a payment (e.g., after checkout confirm)
     func attachPayment(_ payment: Payment) {
         self.payment = payment
         payment.visit = self
         didUpdate()
     }
 
-    // MARK: - Internal
-    private func didUpdate() {
-        updatedAt = .now
-    }
+    private func didUpdate() { updatedAt = .now }
 }

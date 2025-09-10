@@ -2,163 +2,84 @@
 //  ClientDetailViewModel.swift
 //  Pawtrackr
 //
-//  Created by mac on 9/3/25.
+//  View-model for the Client Detail screen
 //
 
 import Foundation
-import SwiftUI
 import SwiftData
+import Observation
 import OSLog
 
 @MainActor
 final class ClientDetailViewModel: ObservableObject {
-    // MARK: - Inputs / Environment
+    // MARK: - Inputs
+    let client: Client
     private let modelContext: ModelContext
-    private let log = Logger.main
 
-    // MARK: - Backing Model
-    @Published var client: Client
+    // MARK: - Outputs
+    @Published var pets: [Pet] = []
+    @Published var recentVisits: [Visit] = []
 
-    // MARK: - Derived Collections
-    @Published private(set) var pets: [Pet] = []
-    @Published private(set) var recentVisits: [Visit] = []
-
-    // MARK: - Stats
-    struct Stats: Equatable {
-        var visitsCount: Int = 0
-        var totalSpent: Decimal = .zero
-        var averageDuration: TimeInterval = 0
-
-        var averageDurationString: String {
-            Self.durationString(from: averageDuration)
-        }
-
-        var totalSpentString: String { totalSpent.moneyString }
-
-        static func durationString(from interval: TimeInterval) -> String {
-            let totalMinutes = max(0, Int(interval / 60))
-            let h = totalMinutes / 60
-            let m = totalMinutes % 60
-            return h > 0 ? "\(h)h \(m)m" : "\(m)m"
-        }
-    }
-
-    @Published private(set) var stats: Stats = .init()
+    // Derived stats (avoid the name `total` here to prevent shadowing compiler weirdness)
+    var visitCount: Int { recentVisits.count }
+    var grandRevenue: Decimal { recentVisits.reduce(0) { $0 + $1.effectiveTotal } }
 
     // MARK: - Init
     init(client: Client, modelContext: ModelContext) {
         self.client = client
         self.modelContext = modelContext
-        Task { await refresh() }
+        self.pets = client.pets
+        refreshRecentVisits()
     }
 
-    // MARK: - Public API
-
-    /// Refreshes pets, recent visits, and stats for the current client.
-    func refresh() async {
-        await fetchPets()
-        await fetchRecentVisits()
-        computeStats()
-    }
-
-    /// Returns the active (in-progress) visit for a given pet, if any.
+    // MARK: - Queries
     func activeVisit(for pet: Pet) -> Visit? {
-        pet.visits.first(where: { $0.endedAt == nil })
+        // Simple in-memory check first
+        return pet.visits.first(where: { $0.endedAt == nil })
     }
 
-    /// Starts a new visit for the given pet if one is not already active.
-    @discardableResult
-    func checkIn(pet: Pet, at date: Date = .now) -> Visit? {
-        if let existing = activeVisit(for: pet) { return existing }
-        let visit = Visit(startedAt: date)
-        visit.pet = pet
-        // ensure relationship integrity
-        pet.visits.append(visit)
-        modelContext.insert(visit)
-        do {
-            try modelContext.save()
-            log.info("Started visit for pet: \(pet.name, privacy: .public)")
-            return visit
-        } catch {
-            log.error("Failed to start visit: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-    }
-
-    /// Ends the current visit for the pet, optionally attaching a payment. Posts `.visitDidComplete` on success.
-    func checkOut(pet: Pet, at date: Date = .now, attachPayment: ((Visit) -> Void)? = nil) {
-        guard let visit = activeVisit(for: pet) else { return }
-        visit.endedAt = max(visit.startedAt, date)
-        // Allow caller (CheckoutViewModel) to attach payment, items, tips, etc.
-        attachPayment?(visit)
-        do {
-            try modelContext.save()
-            log.info("Completed visit for pet: \(pet.name, privacy: .public)")
-            NotificationCenter.default.post(name: .visitDidComplete, object: visit)
-            Task { await refresh() }
-        } catch {
-            log.error("Failed to complete visit: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    // MARK: - Private Fetch Helpers
-
-    private func fetchPets() async {
-        // If relationship is already loaded, prefer it
-        if !client.pets.isEmpty {
-            pets = client.pets.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            return
-        }
-        // Fallback explicit fetch (in case the relationship is not loaded yet)
-        let descriptor = FetchDescriptor<Pet>(
-            predicate: #Predicate { $0.owner?.id == client.id },
-            sortBy: [SortDescriptor(\.name, order: .forward)]
-        )
-        do {
-            pets = try modelContext.fetch(descriptor)
-        } catch {
-            log.error("Failed to fetch pets: \(error.localizedDescription, privacy: .public)")
-            pets = []
-        }
-    }
-
-    private func fetchRecentVisits(limit: Int = 50) async {
-        // Pull by owner via pet.owner relationship
+    func refreshRecentVisits(limit: Int = 50) {
+        // Fetch completed visits for all of this client's pets, most-recent first
+        let petIDs = Set(client.pets.map { $0.uuid })
         let descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate { $0.pet?.owner?.id == client.id },
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            predicate: #Predicate { visit in
+                visit.endedAt != nil && petIDs.contains(visit.pet.uuid)
+            },
+            sortBy: [SortDescriptor(\Visit.endedAt, order: .reverse)]
         )
         do {
-            let fetched = try modelContext.fetch(descriptor)
-            recentVisits = Array(fetched.prefix(limit))
+            let results = try modelContext.fetch(descriptor)
+            self.recentVisits = Array(results.prefix(limit))
         } catch {
-            log.error("Failed to fetch visits: \(error.localizedDescription, privacy: .public)")
-            recentVisits = []
+            Logger.main.error("Failed to fetch recent visits: \(String(describing: error))")
+            self.recentVisits = []
         }
     }
 
-    private func computeStats() {
-        let visits = recentVisits
-        let ended = visits.compactMap { v -> (TimeInterval, Decimal)? in
-            guard let end = v.endedAt else { return nil }
-            let dur = max(0, end.timeIntervalSince(v.startedAt))
-            // Prefer stored total if present, else compute from items
-            let amount: Decimal = v.total ?? v.items.reduce(.zero) { $0 + ($1.unitPrice * Decimal($1.quantity)) }
-            return (dur, amount)
-        }
+    // MARK: - Actions
+    func checkIn(pet: Pet, at date: Date = .now) {
+        // If already active, no-op
+        if activeVisit(for: pet) != nil { return }
+        let v = Visit(pet: pet, startedAt: date)  // ✅ provide required 'pet'
+        modelContext.insert(v)
+        try? modelContext.save()
+        refreshRecentVisits()
+    }
 
-        let count = visits.count
-        let totalSpent = ended.reduce(.zero) { $0 + $1.1 }
-        let totalDuration = ended.reduce(0) { $0 + $1.0 }
-        let averageDuration = count > 0 ? totalDuration / Double(max(1, count)) : 0
+    func addService(_ service: Service, to visit: Visit, quantity: Int = 1) {
+        visit.addItem(title: service.name, unitPrice: service.basePrice, quantity: quantity, service: service)
+        try? modelContext.save()
+        refreshRecentVisits()
+    }
 
-        stats = .init(visitsCount: count, totalSpent: totalSpent, averageDuration: averageDuration)
+    func checkOut(pet: Pet, customTotal: Decimal? = nil, at date: Date = .now) {
+        guard let visit = activeVisit(for: pet) else { return }
+        visit.markCheckedOut(total: customTotal, now: date)
+        try? modelContext.save()
+        refreshRecentVisits()
+        NotificationCenter.default.post(name: .visitDidComplete, object: visit)
     }
 }
 
-// MARK: - Minimal model shims used by the view model
-// These extend your existing @Model types without redefining them.
-extension Visit {
-    /// Stored total if your model has it; otherwise this returns nil and the VM will compute from items.
-    var total: Decimal? { (self as AnyObject).value(forKey: "total") as? Decimal }
-}
+// Shared helpers (kept here for now; move to your common helpers files if you prefer)
+extension Logger { static let main = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ClientDetail") }

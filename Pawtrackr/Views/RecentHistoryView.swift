@@ -11,39 +11,33 @@ import UniformTypeIdentifiers
 
 struct RecentHistoryView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var viewModel: RecentHistoryViewModel
-    
-    init() {
-        let tempContext = try! ModelContainer(for: Visit.self).mainContext
-        _viewModel = State(initialValue: RecentHistoryViewModel(modelContext: tempContext))
-    }
+    @State private var viewModel: RecentHistoryViewModel?
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    header
-                    summaryChips.padding(.horizontal)
-                    visitList
+            Group {
+                if let viewModel {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            header(viewModel)
+                            summaryChips(viewModel).padding(.horizontal)
+                            visitList(viewModel)
+                        }
+                        .padding(.top, 8)
+                        .animation(.default, value: viewModel.scope)
+                    }
+                } else {
+                    ProgressView("Loading…")
                 }
-                .padding(.top, 8)
-                .animation(.default, value: viewModel.scope)
             }
             .navigationTitle("Recent History")
-            .toolbar { toolbarContent }
-            .refreshable {
-                viewModel.fetchVisits()
-            }
-            .task {
-                viewModel.setModelContext(modelContext)
-            }
-            .navigationDestination(for: Visit.self) { visit in
-                VisitDetailView(visit: visit)
-            }
+            .toolbar { if let viewModel { toolbarContent(viewModel) } }
+            .refreshable { viewModel?.fetchVisits() }
+            .task { viewModel = RecentHistoryViewModel(modelContext: modelContext) }
         }
     }
     
-    private var header: some View {
+    private func header(_ viewModel: RecentHistoryViewModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SearchField(text: $viewModel.query)
             ScopePicker(scope: $viewModel.scope)
@@ -51,7 +45,7 @@ struct RecentHistoryView: View {
         .padding(.horizontal)
     }
 
-    private var summaryChips: some View {
+    private func summaryChips(_ viewModel: RecentHistoryViewModel) -> some View {
         HStack(spacing: 8) {
             Chip.info("\(viewModel.summaryVisitCount) visits")
             Chip.info(viewModel.summaryRevenueString)
@@ -59,7 +53,7 @@ struct RecentHistoryView: View {
     }
 
     @ViewBuilder
-    private var visitList: some View {
+    private func visitList(_ viewModel: RecentHistoryViewModel) -> some View {
         if viewModel.isLoading {
             ProgressView().padding(.top, 40)
         } else if viewModel.sortedDays.isEmpty {
@@ -71,7 +65,7 @@ struct RecentHistoryView: View {
                 ForEach(viewModel.sortedDays, id: \.self) { day in
                     Section {
                         ForEach(viewModel.groupedVisits[day]!) { visit in
-                            NavigationLink(value: visit) {
+                            NavigationLink(destination: VisitDetailView(visit: visit)) {
                                 VisitRow(visit: visit)
                             }
                             .buttonStyle(.plain)
@@ -86,7 +80,7 @@ struct RecentHistoryView: View {
     }
     
     @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    private func toolbarContent(_ viewModel: RecentHistoryViewModel) -> some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             let csv = viewModel.exportCSV()
             ShareLink(

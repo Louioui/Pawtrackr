@@ -300,7 +300,7 @@ struct NewClientSheet: View {
                             phone: e164)
         if !email.trimmed.isEmpty { client.email = email.trimmed.lowercased() }
         if !address.trimmed.isEmpty { client.address = address.trimmed }
-        if let emergencyE164 { client.emergencyContact = emergencyE164 }
+        if let emergencyE164 { client.setEmergencyContact(name: nil, phone: emergencyE164) }
 
         // Create Pets
         pets.forEach { tp in

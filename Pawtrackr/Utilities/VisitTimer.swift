@@ -185,7 +185,13 @@ final class VisitTimer: ObservableObject {
 
     /// Short human format like `1h 05m`, `12m`, or `45s` for sub-minute.
     static func format(seconds: Int) -> String {
-        return Formatters.durationString(seconds: max(0, seconds))
+        let s = max(0, seconds)
+        let h = s / 3600
+        let m = (s % 3600) / 60
+        let sec = s % 60
+        if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
+        if m > 0 { return sec > 0 ? "\(m)m \(sec)s" : "\(m)m" }
+        return "\(sec)s"
     }
 
     /// Fully spelled-out duration for VoiceOver (e.g., "1 hour 2 minutes", "12 minutes", "45 seconds").

@@ -31,6 +31,16 @@ final class RecentHistoryViewModel {
         self.modelContext = modelContext
         fetchVisits()
     }
+
+    /// Allows the view to provide a real ModelContext from the environment
+    /// after initializing with a temporary one. Triggers a refresh when changed.
+    func setModelContext(_ newContext: ModelContext) {
+        // Only swap if different to avoid redundant fetches
+        if newContext !== self.modelContext {
+            self.modelContext = newContext
+            fetchVisits()
+        }
+    }
     
     private func scheduleFetch() {
         searchTask?.cancel()
@@ -45,25 +55,25 @@ final class RecentHistoryViewModel {
         self.isLoading = true
         
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // IMPROVEMENT: Build a smarter predicate to filter as much as possible in the database.
-        let predicate = #Predicate<Visit> { visit in
-            // Always fetch only completed visits.
-            visit.endedAt != nil &&
-            
-            // Text search condition
-            (trimmedQuery.isEmpty ||
-             visit.pet.name.localizedStandardContains(trimmedQuery) ||
-             (visit.pet.owner?.firstName.localizedStandardContains(trimmedQuery) ?? false) ||
-             (visit.pet.owner?.lastName.localizedStandardContains(trimmedQuery) ?? false) ||
-             visit.items.filter { item in
-                 item.name.localizedStandardContains(trimmedQuery)
-             }.isEmpty == false)
-        }
+        // Keep the SwiftData predicate simple and portable (no nested closures)
+        let predicate = #Predicate<Visit> { visit in visit.endedAt != nil }
         
         do {
             let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.sortKeyDate, order: .reverse)])
             var fetchedVisits = try modelContext.fetch(descriptor)
+
+            // Apply text search in-memory (SwiftData predicate DSL can't use nested closures)
+            if !trimmedQuery.isEmpty {
+                fetchedVisits = fetchedVisits.filter { v in
+                    if v.pet.name.localizedStandardContains(trimmedQuery) { return true }
+                    if let owner = v.pet.owner {
+                        if owner.firstName.localizedStandardContains(trimmedQuery) { return true }
+                        if owner.lastName.localizedStandardContains(trimmedQuery) { return true }
+                    }
+                    if v.items.contains(where: { $0.name.localizedStandardContains(trimmedQuery) }) { return true }
+                    return false
+                }
+            }
             
             // Perform final date scoping in-memory
             let calendar = Calendar.current

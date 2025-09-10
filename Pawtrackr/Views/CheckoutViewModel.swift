@@ -188,7 +188,7 @@ final class CheckoutViewModel {
             }
             // Add new items
             for service in servicesToSnapshot where !existingServiceIDs.contains(service.persistentModelID) {
-                visit.addItem(from: service)
+                visit.addItem(title: service.name, unitPrice: service.basePrice, quantity: 1, service: service)
             }
             
             // 2. Apply notes, tags, and photos.
@@ -201,12 +201,13 @@ final class CheckoutViewModel {
 
             // 4. Create and attach payment.
             let cleanedRef = externalReference.trimmed
-            visit.attachPayment(
+            let payment = Payment(
                 amount: servicesTotalDecimal,
                 method: selectedPaymentMethod,
-                paidAt: .now,
+                paidAt: Date(),
                 externalReference: cleanedRef.isEmpty ? nil : cleanedRef
             )
+            visit.attachPayment(payment)
             
             // 5. Save and notify.
             try modelContext.save()

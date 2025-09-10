@@ -246,7 +246,3 @@ extension Binding {
     return AddPetSheet(client: c)
         .modelContainer(container)
 }
-
-private extension String {
-    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
-}

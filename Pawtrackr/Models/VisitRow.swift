@@ -50,7 +50,7 @@ struct VisitRow: View {
             FlowLayout(spacing: 6) {
                 ForEach(visit.items) { item in
                     // FIX: Replaced 'Pill' with the correct 'Chip' component.
-                    Chip(item.displayName, size: .xs, style: .tinted)
+                    Chip(item.displayName, style: .tinted, size: .xs)
                 }
             }
         }

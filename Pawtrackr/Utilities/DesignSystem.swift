@@ -144,9 +144,16 @@ extension View {
 
     /// Crisp 1px-equivalent border regardless of device scale.
     func hairlineBorder(_ color: Color, cornerRadius: CGFloat = DS.Radius.md) -> some View {
-        overlay(
+        #if os(iOS)
+        let width = 1 / UIScreen.main.scale
+        #elseif os(macOS)
+        let width = 1 / (NSScreen.main?.backingScaleFactor ?? 2.0)
+        #else
+        let width: CGFloat = 1.0
+        #endif
+        return overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(color, lineWidth: 1 / (UIScreen.main.scale))
+                .strokeBorder(color, lineWidth: width)
         )
     }
 

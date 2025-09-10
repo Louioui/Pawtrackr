@@ -56,7 +56,7 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "7EADE67D-785C-48AC-9CE6-55818CA7720D"
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "../../../../var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr5VisitC5total5ModelfMr6_.swift"
@@ -72,7 +72,7 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "8A93047A-51C2-4662-BD17-6BDF654CE92F"
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "../../../../var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr5VisitC5total18_PersistedPropertyfMa_.swift"
@@ -82,6 +82,22 @@
             endingLineNumber = "1"
             landmarkName = "unknown"
             landmarkType = "0">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "09A56D56-12A8-47D0-8671-4AF9DAF343CB"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "../../../../var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr0030PetHistoryViewModelswift_eDAEifMX94_24_33_2AFB53ECCEE24E57C459C5C7EAC04918Ll9PredicatefMf0_.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "1"
+            endingLineNumber = "1"
+            landmarkName = "fetchVisits()"
+            landmarkType = "37">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

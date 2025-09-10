@@ -1,10 +1,3 @@
-//
-//  PetHistoryViewModel.swift
-//  Pawtrackr
-//
-//  Created by mac on 9/3/25.
-//
-
 
 //
 //  PetHistoryViewModel.swift

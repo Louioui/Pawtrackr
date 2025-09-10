@@ -129,9 +129,6 @@ final class VisitItem {
 
 // FIX: Add local extensions to resolve 'trimmed' and 'roundedMoney' being inaccessible.
 // A better long-term solution is to move these to their own shared files.
-fileprivate extension String {
-    var trimmed: String { self.trimmingCharacters(in: .whitespacesAndNewlines) }
-}
 
 fileprivate extension Decimal {
     func roundedMoney() -> Decimal {

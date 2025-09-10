@@ -11,7 +11,7 @@
 
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
+
 
 // Single-visit CSV wrapper for ShareLink
 private struct CSVDoc: Transferable {

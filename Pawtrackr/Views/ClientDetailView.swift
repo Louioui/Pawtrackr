@@ -15,8 +15,8 @@ struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    // ViewModel is an ObservableObject (not @Observable), so use @StateObject
-    @StateObject private var vm: ClientDetailViewModel
+    // FIX: Use @State for a ViewModel that uses the @Observable macro.
+    @State private var vm: ClientDetailViewModel
 
     // Local sheet routing (do not depend on VM for UI routing)
     @State private var sheetDestination: SheetDestination?
@@ -49,7 +49,8 @@ struct ClientDetailView: View {
                 fatalError("ModelContainer creation failed: \(error)")
             }
         }()
-        _vm = StateObject(wrappedValue: ClientDetailViewModel(client: client, modelContext: ctx))
+        // FIX: Initialize the @State property wrapper.
+        _vm = State(wrappedValue: ClientDetailViewModel(client: client, modelContext: ctx))
     }
 
     // MARK: - Body
@@ -83,9 +84,6 @@ struct ClientDetailView: View {
                 case .history(let pet):
                     PetHistoryView(pet: pet)
                 }
-            }
-            .navigationDestination(for: Visit.self) { visit in
-                VisitDetailView(visit: visit)
             }
         }
         .task { await vm.refresh() }
@@ -163,7 +161,7 @@ struct ClientDetailView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(vm.recentVisits.prefix(5)) { visit in
-                        NavigationLink(value: visit) {
+                        NavigationLink(destination: VisitDetailView(visit: visit)) {
                             VisitTimelineRow(visit: visit)
                         }
                         .buttonStyle(.plain)

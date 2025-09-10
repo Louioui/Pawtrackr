@@ -250,3 +250,30 @@ extension InsightsViewModel {
         let amountString: String
     }
 }
+
+// MARK: - CSV & Date Utilities (local to Insights)
+private extension String {
+    /// Escape a string for CSV cells:
+    /// - doubles any embedded quotes,
+    /// - wraps in quotes if it contains comma, quote, newline, or leading/trailing space.
+    var csvEscaped: String {
+        guard !isEmpty else { return "" }
+        let doubledQuotes = self.replacingOccurrences(of: "\"", with: "\"\"")
+        let needsWrap =
+            doubledQuotes.contains(",") ||
+            doubledQuotes.contains("\n") ||
+            doubledQuotes.contains("\"") ||
+            self.first?.isWhitespace == true ||
+            self.last?.isWhitespace == true
+        return needsWrap ? "\"\(doubledQuotes)\"" : doubledQuotes
+    }
+}
+
+private extension Calendar {
+    /// End-of-day for a given date (23:59:59 on the same calendar day).
+    func endOfDay(for date: Date) -> Date {
+        let start = startOfDay(for: date)
+        // start of next day minus 1 second to remain inclusive
+        return self.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? date
+    }
+}

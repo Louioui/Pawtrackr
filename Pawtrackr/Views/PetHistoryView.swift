@@ -48,10 +48,6 @@ struct PetHistoryView: View {
             .task {
                 await viewModel.loadInitialVisits()
             }
-            // IMPROVEMENT: Use the modern .navigationDestination modifier for type-safe navigation.
-            .navigationDestination(for: Visit.self) { visit in
-                VisitDetailView(visit: visit)
-            }
         }
     }
 
@@ -64,7 +60,7 @@ struct PetHistoryView: View {
             ForEach(sortedDays, id: \.self) { day in
                 Section {
                     ForEach(groups[day]!.sorted { $0.sortKeyDate > $1.sortKeyDate }) { visit in
-                        NavigationLink(value: visit) {
+                        NavigationLink(destination: VisitDetailView(visit: visit)) {
                             // Use the new, standalone VisitTimelineRow.
                             VisitTimelineRow(visit: visit)
                         }

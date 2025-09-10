@@ -71,9 +71,11 @@ struct ClientsView: View {
                     set: { viewModel.searchText = $0 }
                 )
             )
-            .textInputAutocapitalization(.none)
-            .disableAutocorrection(true)
-            .submitLabel(.search)
+            #if canImport(UIKit)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .submitLabel(.search)
+            #endif
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 14)
@@ -95,16 +97,13 @@ struct ClientsView: View {
     private func clientList(for clients: [Client]) -> some View {
         VStack(spacing: 10) {
             ForEach(clients) { client in
-                NavigationLink(value: client) {
+                NavigationLink(destination: ClientDetailView(client: client)) {
                     ClientCard(client: client)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal)
-        .navigationDestination(for: Client.self) { client in
-            ClientDetailView(client: client)
-        }
     }
     
     private var emptyState: some View {
