@@ -32,6 +32,29 @@ final class PetDetailViewModel {
     var sortedVisits: [Visit] {
         pet.visits.sorted { $0.sortKeyDate > $1.sortKeyDate }
     }
+
+    // MARK: - Stats
+    var completedVisits: [Visit] {
+        pet.visits.filter { $0.isCompleted }
+            .sorted { $0.sortKeyDate > $1.sortKeyDate }
+    }
+    
+    var totalVisits: Int { pet.visits.count }
+    
+    var totalSpent: Decimal {
+        completedVisits.reduce(0) { $0 + $1.effectiveTotal }
+    }
+    
+    var totalSpentString: String {
+        totalSpent.moneyString
+    }
+    
+    var averageDurationString: String {
+        guard !completedVisits.isEmpty else { return "–" }
+        let totalSeconds = completedVisits.map { Int($0.duration) }.reduce(0, +)
+        let avg = max(0, totalSeconds / completedVisits.count)
+        return VisitTimer.format(seconds: avg)
+    }
     
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
@@ -112,10 +135,11 @@ final class PetDetailViewModel {
                     NavigationStack {
                         ScrollView {
                             VStack(spacing: 12) {
-                                header(vm)
-                                actionRow(vm)
-                                visitsSection(vm)
-                            }
+                        header(vm)
+                        actionRow(vm)
+                        quickStats(vm)
+                        visitsSection(vm)
+                    }
                             .padding(.vertical, 8)
                         }
                         .navigationTitle(pet.name)
@@ -160,47 +184,115 @@ final class PetDetailViewModel {
                             Text(vm.pet.name).font(.title2.weight(.semibold))
                             Text(vm.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
                             if let age = vm.pet.ageString { Text("Age: \(age)").font(.footnote).foregroundStyle(.secondary) }
+                            ownerInfo(vm)
                         }
                         Spacer()
                     }
-                    if vm.activeVisit != nil { timerDisplay(vm) }
+                    if vm.activeVisit != nil { sessionStatus(vm) }
                 }
             }
             .padding(.horizontal)
         }
-        
-        private func timerDisplay(_ vm: PetDetailViewModel) -> some View {
-            Label(vm.visitTimer.formattedElapsed, systemImage: "clock.arrow.circlepath")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color.accentColor)
-                .monospacedDigit()
-                .padding(10)
-                .frame(maxWidth: .infinity)
-                .background(Color.accentColor.opacity(0.08), in: .capsule)
-                .accessibilityLabel(vm.visitTimer.accessibilityElapsedLabel)
+
+        private func ownerInfo(_ vm: PetDetailViewModel) -> some View {
+            Group {
+                if let owner = vm.pet.owner {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Owner").font(.caption).foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.fill").foregroundStyle(.secondary)
+                            Text(owner.fullName).font(.footnote.weight(.medium))
+                            if let phone = owner.phone, !phone.isEmpty {
+                                Spacer(minLength: 8)
+                                Image(systemName: "phone.fill").foregroundStyle(.secondary)
+                                Text(phone).font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+
+        private func sessionStatus(_ vm: PetDetailViewModel) -> some View {
+            HStack(spacing: 10) {
+                Label("In Session", systemImage: "checkmark.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(DS.ColorToken.success)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .background(DS.ColorToken.success.opacity(0.12), in: Capsule())
+                Spacer()
+                Label(vm.visitTimer.formattedElapsed, systemImage: "clock.arrow.circlepath")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.accentColor)
+                    .monospacedDigit()
+                    .accessibilityLabel(vm.visitTimer.accessibilityElapsedLabel)
+            }
         }
         
         private func actionRow(_ vm: PetDetailViewModel) -> some View {
-            HStack(spacing: 8) {
-                Button("View History", systemImage: "doc.text.magnifyingglass", action: vm.showHistory)
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                Button("Check In", systemImage: "play.circle.fill", action: vm.checkIn)
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(vm.activeVisit != nil)
-                Button("Check Out", systemImage: "checkmark.circle.fill", action: vm.showCheckout)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(vm.activeVisit == nil)
+            HStack(spacing: 12) {
+                actionTile(title: "View History", systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
+                actionTile(title: "Check In", systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { vm.checkIn() }
+                actionTile(title: "Check Out", systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)
+        }
+
+        private func actionTile(title: String, systemImage: String, tint: Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+            Button(action: action) {
+                VStack(spacing: 8) {
+                    Image(systemName: systemImage)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(tint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Text(title)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(12)
+                .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .opacity(disabled ? 0.5 : 1)
+            .disabled(disabled)
+        }
+
+        private func quickStats(_ vm: PetDetailViewModel) -> some View {
+            Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Quick Stats").font(.subheadline.weight(.semibold))
+                    HStack(spacing: 12) {
+                        statTile(label: "Total Visits", value: "\(vm.totalVisits)", tint: .blue)
+                        statTile(label: "Total Spent", value: vm.totalSpentString, tint: .green)
+                        statTile(label: "Avg Duration", value: vm.averageDurationString, tint: .purple)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+
+        private func statTile(label: String, value: String, tint: Color) -> some View {
+            VStack(spacing: 6) {
+                Text(value).font(.headline.weight(.bold)).foregroundStyle(tint)
+                Text(label).font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(10)
+            .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         
         private func visitsSection(_ vm: PetDetailViewModel) -> some View {
             VStack(alignment: .leading, spacing: 12) {
+                // Section header
                 HStack {
-                    Text("Recent History").font(.headline)
+                    Text("Recent Visits").font(.headline)
                     Spacer()
                     Text("\(vm.sortedVisits.count)")
                         .font(.caption.monospacedDigit())
@@ -211,20 +303,148 @@ final class PetDetailViewModel {
                         .accessibilityLabel("Recent visits count \(vm.sortedVisits.count)")
                 }
                 .padding(.horizontal)
+
+                // Empty state
                 if vm.sortedVisits.isEmpty {
                     ContentUnavailableView("No Visits Yet", systemImage: "calendar.badge.plus")
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(vm.sortedVisits) { visit in
+                    VStack(spacing: 12) {
+                        // Highlight current visit (if any)
+                        if let current = vm.activeVisit {
+                            currentVisitCard(current)
+                                .padding(.horizontal)
+                        }
+
+                        // Remaining visits
+                        ForEach(vm.sortedVisits.filter { $0.endedAt != nil }) { visit in
                             NavigationLink(destination: VisitDetailView(visit: visit)) {
                                 VisitTimelineRow(visit: visit)
                             }
                             .buttonStyle(.plain)
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
             }
+        }
+
+        private func currentVisitCard(_ visit: Visit) -> some View {
+            Card(showBorder: true) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label("In Progress", systemImage: "bolt.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(DS.ColorToken.success)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(DS.ColorToken.sessionBackground, in: Capsule())
+                        Text(startedString(visit.startedAt))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(visit.totalCurrencyString)
+                                .font(.subheadline.weight(.semibold))
+                            Text(vmElapsedLabel())
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    // Services
+                    if !visit.items.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(visit.items) { item in
+                                Chip(item.displayName, style: .tinted, size: .sm)
+                            }
+                        }
+                    }
+
+                    // Payment / media footer
+                    HStack(spacing: 8) {
+                        if let method = visit.payment?.method {
+                            Label(method.displayName, systemImage: method.systemImage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Label("Payment pending", systemImage: "creditcard")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        mediaThumbs(visit)
+                    }
+                }
+            }
+            .leftAccentRail(DS.ColorToken.session)
+        }
+
+        private func mediaThumbs(_ visit: Visit) -> some View {
+            HStack(spacing: 6) {
+                if let data = visit.beforePhotoData {
+                #if canImport(UIKit)
+                    if let img = UIImage(data: data) {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(DS.ColorToken.border, lineWidth: 0.5))
+                    }
+                #elseif canImport(AppKit)
+                    if let img = NSImage(data: data) {
+                        Image(nsImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(DS.ColorToken.border, lineWidth: 0.5))
+                    }
+                #endif
+                }
+                if let data = visit.afterPhotoData {
+                #if canImport(UIKit)
+                    if let img = UIImage(data: data) {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(DS.ColorToken.border, lineWidth: 0.5))
+                    }
+                #elseif canImport(AppKit)
+                    if let img = NSImage(data: data) {
+                        Image(nsImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(DS.ColorToken.border, lineWidth: 0.5))
+                    }
+                #endif
+                }
+            }
+        }
+
+        private func startedString(_ date: Date) -> String {
+            let cal = Calendar.current
+            let df = DateFormatter()
+            df.dateStyle = .medium
+            df.timeStyle = .short
+            let tf = DateFormatter()
+            tf.dateStyle = .none
+            tf.timeStyle = .short
+            if cal.isDateInToday(date) {
+                return "Today, \(tf.string(from: date))"
+            } else if cal.isDateInYesterday(date) {
+                return "Yesterday, \(tf.string(from: date))"
+            } else {
+                return df.string(from: date)
+            }
+        }
+
+        private func vmElapsedLabel() -> String {
+            viewModel?.visitTimer.formattedElapsed ?? ""
         }
     }
 }

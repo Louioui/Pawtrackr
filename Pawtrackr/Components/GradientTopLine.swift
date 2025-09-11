@@ -28,8 +28,8 @@ public struct GradientTopLine: View {
 
     /// - Parameters:
     ///   - color: Base color for the gradient (use DS tokens outside to avoid hardcoded colors).
-    ///   - height: Height of the line in points. Defaults to `2`.
-    public init(color: Color, height: CGFloat = 2) {
+    ///   - height: Height of the line in points. Defaults to `5`.
+    public init(color: Color, height: CGFloat = 5) {
         self.color = color
         self.height = height
     }
@@ -59,7 +59,7 @@ public extension View {
     /// Overlays a `GradientTopLine` aligned to the top edge.
     /// Use DS tokens to choose the color, e.g.:
     /// `someView.gradientTopLine(color: DS.ColorToken.gender(gender))`
-    func gradientTopLine(color: Color, height: CGFloat = 2) -> some View {
+    func gradientTopLine(color: Color, height: CGFloat = 5) -> some View {
         overlay(GradientTopLine(color: color, height: height), alignment: .top)
     }
 }

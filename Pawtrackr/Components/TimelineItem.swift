@@ -43,6 +43,9 @@ public struct TimelineItem<Content: View>: View {
     @ViewBuilder public var content: () -> Content
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    #endif
 
     private func scaled(_ base: CGFloat) -> CGFloat {
         switch dynamicTypeSize {
@@ -67,13 +70,20 @@ public struct TimelineItem<Content: View>: View {
             // Left rail + dot (scaled for Dynamic Type)
             let sDot = scaled(dotSize)
             let sRail = max(1, scaled(railWidth))
+            #if os(iOS)
+            let baseCol: CGFloat = (hSizeClass == .regular) ? 26 : 22
+            #else
+            let baseCol: CGFloat = 22
+            #endif
+            let columnWidth = max(sDot, baseCol)
             RailColumn(
                 dotSize: sDot,
                 railWidth: sRail,
                 dotColor: dotColor,
                 railColor: railColor,
                 showTop: showTopLine,
-                showBottom: showBottomLine
+                showBottom: showBottomLine,
+                columnWidth: columnWidth
             )
             .accessibilityHidden(true)
 
@@ -81,7 +91,6 @@ public struct TimelineItem<Content: View>: View {
             content()
                 .accessibilityElement(children: .combine)
         }
-        .alignmentGuide(.top) { d in d[.top] } // keep dot aligned with row top
     }
 }
 
@@ -93,6 +102,7 @@ private struct RailColumn: View {
     var railColor: Color
     var showTop: Bool
     var showBottom: Bool
+    var columnWidth: CGFloat
 
     var body: some View {
         GeometryReader { geo in
@@ -126,9 +136,10 @@ private struct RailColumn: View {
                         .frame(height: max(0, (geo.size.height - dotSize) / 2))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(width: max(dotSize, 22)) // a comfortable rail column width
+        .frame(width: columnWidth, alignment: .topLeading)
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

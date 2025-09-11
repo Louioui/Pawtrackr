@@ -83,11 +83,13 @@ struct RecentHistoryView: View {
             LazyVStack(spacing: 16, pinnedViews: .sectionHeaders) {
                 ForEach(viewModel.sortedDays, id: \.self) { day in
                     Section {
-                        ForEach(viewModel.groupedVisits[day]!) { visit in
-                            NavigationLink(destination: VisitDetailView(visit: visit)) {
-                                VisitRow(visit: visit)
+                        if let visits = viewModel.groupedVisits[day] {
+                            ForEach(visits) { visit in
+                                NavigationLink(destination: VisitDetailView(visit: visit)) {
+                                    VisitRow(visit: visit)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     } header: {
                         SectionHeader(date: day)

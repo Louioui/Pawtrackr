@@ -20,31 +20,43 @@ struct PetCard: View {
 
     // MARK: - State / Environment
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var visitTimer = VisitTimer()
 
     // MARK: - Derived
     private var isActive: Bool { activeVisit?.endedAt == nil && activeVisit != nil }
 
     private var elapsedString: String {
         guard let v = activeVisit else { return "" }
-        // If the visit has ended somehow, show a range; otherwise duration
-        if let end = v.endedAt { return Formatters.dateRangeString(from: v.startedAt, to: end) }
-        return Formatters.durationString(from: v.startedAt, to: .now)
+        if v.endedAt != nil { return v.durationString }
+        return visitTimer.formattedElapsed
     }
 
     // MARK: - View
     var body: some View {
-        Card {
+        Card(accent: .top(.color(DS.ColorToken.gender(pet.gender)))) {
             HStack(alignment: .top, spacing: 12) {
                 AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    // Title + badge
+                    // Title + badge + trailing details chevron
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(pet.name)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        if isActive { inProgressBadge }
+                        HStack(spacing: 8) {
+                            Text(pet.name)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            if isActive { inProgressBadge }
+                        }
+                        Spacer()
+                        Button(action: onViewDetails) {
+                            Image(systemName: "chevron.right")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(6)
+                                .background(DS.ColorToken.surface, in: Circle())
+                                .accessibilityLabel("View details")
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     // Subline (breed / color)
@@ -60,33 +72,27 @@ struct PetCard: View {
                         Label(elapsedString, systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(DS.ColorToken.success)
-                            .accessibilityLabel("Checked in for \(elapsedString)")
+                            .accessibilityLabel(visitTimer.accessibilityElapsedLabel)
                     } else if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
                         Text("Last Visit: \(last.sortKeyDate.formatted(date: .abbreviated, time: .omitted))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    // Actions
+                    // Actions: Check In and Check Out grouped together
                     HStack(spacing: 8) {
-                        if isActive {
-                            Button(role: .none, action: onCheckOut) {
-                                Label("Check Out", systemImage: "checkmark.circle.fill")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(DS.ColorToken.success)
-                        } else {
-                            Button(action: onCheckIn) {
-                                Label("Check In", systemImage: "play.circle.fill")
-                            }
-                            .buttonStyle(.borderedProminent)
+                        Button(action: onCheckIn) {
+                            Label("Check In", systemImage: "play.circle.fill")
                         }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isActive)
 
-                        Button(action: onViewDetails) {
-                            Label("View Details", systemImage: "chevron.right")
-                                .labelStyle(.titleAndIcon)
+                        Button(action: onCheckOut) {
+                            Label("Check Out", systemImage: "checkmark.circle.fill")
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(DS.ColorToken.success)
+                        .disabled(!isActive)
                     }
                     .font(.subheadline)
                     .padding(.top, 2)
@@ -95,29 +101,18 @@ struct PetCard: View {
                 Spacer(minLength: 0)
             }
         }
-        // Top accent line using DS gender color (replaces old Card initializer params)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(DS.ColorToken.gender(pet.gender))
-                .frame(height: 3)
-        }
-        .overlay(alignment: .leading) {
-            if isActive {
-                Rectangle()
-                    .fill(DS.ColorToken.success)
-                    .frame(width: 3)
-                    .padding(.vertical, 8)
-            }
-        }
+        .leftAccentRail(isActive ? DS.ColorToken.session : .clear)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .onChange(of: scenePhase) { _, phase in
             // When returning to foreground, snap any durations to now so the timer text is fresh
             if phase == .active && isActive {
-                // Trigger a small redraw by touching an ephemeral state if you add one later.
-                // For now, the computed `elapsedString` uses .now and will naturally refresh on next tick.
+                visitTimer.sceneBecameActive()
             }
         }
+        .onAppear { syncTimer() }
+        .onChange(of: activeVisit?.startedAt) { _ in syncTimer() }
+        .onChange(of: activeVisit?.endedAt) { _ in syncTimer() }
     }
 
     // MARK: - Subviews
@@ -137,13 +132,19 @@ struct PetCard: View {
         var parts: [String] = [pet.name]
         parts.append(genderLabel)
         parts.append(speciesLabel)
-        if isActive { parts.append("In session \(elapsedString)") }
+        if isActive { parts.append("In session \(visitTimer.accessibilityElapsedLabel)") }
         return parts.joined(separator: ", ")
     }
 
     private var genderLabel: String { pet.gender == .male ? "Male" : "Female" }
 
-    private var speciesLabel: String { pet.species == .dog ? "Dog" : "Cat" }
+    private var speciesLabel: String { pet.species.displayName }
+
+    // MARK: - Timer sync
+    private func syncTimer() {
+        guard let v = activeVisit else { visitTimer.reset(); return }
+        visitTimer.load(startedAt: v.startedAt, endedAt: v.endedAt)
+    }
 }
 
 // MARK: - Preview

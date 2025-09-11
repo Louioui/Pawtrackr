@@ -13,28 +13,23 @@ import SwiftData
 struct ClientsView: View {
     @Environment(\.modelContext) private var modelContext
     
-    // IMPROVEMENT: Initialize the ViewModel directly as a @State property.
-    // This simplifies the view body and avoids using optionals.
-    @State private var viewModel: ClientsViewModel
+    // Initialize with the app's environment ModelContext to avoid schema/store mismatches.
+    @State private var viewModel: ClientsViewModel?
     @State private var showingNewClientSheet = false
 
-    init() {
-        // This is a common pattern to initialize a @State ViewModel that needs dependencies.
-        // In a more complex app, you might use a dedicated dependency injection system.
-        let tempContext = try! ModelContainer(for: Client.self).mainContext
-        _viewModel = State(initialValue: ClientsViewModel(modelContext: tempContext))
-    }
+    init() { _viewModel = State(initialValue: nil) }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    searchBar
-                    
-                    if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
-                        emptyState
-                    } else {
-                        clientSections
+                    if let viewModel {
+                        searchBar
+                        if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
+                            emptyState(viewModel)
+                        } else {
+                            clientSections(viewModel)
+                        }
                     }
                 }
                 .padding(.vertical, 8)
@@ -48,7 +43,7 @@ struct ClientsView: View {
             }
             .sheet(isPresented: $showingNewClientSheet) {
                 // When the sheet is dismissed, trigger a refresh to show the new client.
-                viewModel.fetchClients()
+                viewModel?.fetchClients()
             } content: {
                 // FIX: Pass the model context to the sheet.
                 NewClientSheet()
@@ -56,16 +51,19 @@ struct ClientsView: View {
             }
             .onAppear {
                 // Also fetch on appear to catch changes made in other parts of the app.
-                viewModel.fetchClients()
+                if viewModel == nil { viewModel = ClientsViewModel(modelContext: modelContext) }
+                viewModel?.fetchClients()
             }
         }
         .searchable(text: Binding(
-            get: { viewModel.searchText },
-            set: { viewModel.searchText = $0 }
+            get: { viewModel?.searchText ?? "" },
+            set: { viewModel?.searchText = $0 }
         ), placement: .navigationBarDrawer(displayMode: .always))
     }
-    
+
+    @ViewBuilder
     private var searchBar: some View {
+        if let viewModel {
         HStack {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField(
@@ -85,15 +83,16 @@ struct ClientsView: View {
         .padding(.horizontal, 14)
         .background(DS.ColorToken.surface, in: .capsule)
         .padding(.horizontal)
+        }
     }
     
     @ViewBuilder
-    private var clientSections: some View {
+    private func clientSections(_ viewModel: ClientsViewModel) -> some View {
         if !viewModel.inProgressClients.isEmpty {
-            sectionHeader("IN PROGRESS", count: viewModel.inProgressCount)
+            sectionHeader("IN PROGRESS", count: viewModel.inProgressCount, topPadding: 0)
             clientList(for: viewModel.inProgressClients)
         }
-        sectionHeader("ALL CLIENTS", count: viewModel.otherClients.count)
+        sectionHeader("ALL CLIENTS", count: viewModel.otherClients.count, topPadding: viewModel.inProgressClients.isEmpty ? 0 : 16)
         clientList(for: viewModel.otherClients)
     }
     
@@ -110,7 +109,7 @@ struct ClientsView: View {
         .padding(.horizontal)
     }
     
-    private var emptyState: some View {
+    private func emptyState(_ viewModel: ClientsViewModel) -> some View {
         let isSearching = !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return ContentUnavailableView(
             isSearching ? "No Results Found" : "No Clients Yet",
@@ -120,7 +119,7 @@ struct ClientsView: View {
         .padding(40)
     }
     
-    private func sectionHeader(_ title: String, count: Int) -> some View {
+    private func sectionHeader(_ title: String, count: Int, topPadding: CGFloat = 0) -> some View {
         HStack {
             Text(title)
                 .font(.footnote.weight(.semibold))
@@ -136,6 +135,6 @@ struct ClientsView: View {
             }
         }
         .padding(.horizontal)
-        .padding(.top, viewModel.inProgressClients.isEmpty ? 0 : 16)
+        .padding(.top, topPadding)
     }
 }
