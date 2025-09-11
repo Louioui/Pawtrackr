@@ -10,10 +10,10 @@ import SwiftUI
 import SwiftData
 import OSLog
 
-@MainActor
-struct ClientDetailView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    @MainActor
+    struct ClientDetailView: View {
+        @Environment(\.modelContext) private var modelContext
+        @Environment(\.dismiss) private var dismiss
 
     // Use @StateObject for ObservableObject-based view models
     @StateObject private var vm: ClientDetailViewModel
@@ -37,6 +37,11 @@ struct ClientDetailView: View {
             }
         }
     }
+
+    // MARK: - Local State
+    @State private var showDeleteConfirm = false
+    @State private var showDeleteErrorAlert = false
+    @State private var deleteErrorMessage: String = ""
 
     // MARK: - Init
     init(client: Client) {
@@ -85,6 +90,21 @@ struct ClientDetailView: View {
                     PetHistoryView(pet: pet)
                 }
             }
+        }
+        // Global confirmation + alert so they always present (not tied to toolbar items)
+        .alert(
+            "Are you sure you want to delete \(vm.client.fullName)?",
+            isPresented: $showDeleteConfirm
+        ) {
+            Button("No", role: .cancel) { }
+            Button("Yes", role: .destructive) { deleteClient() }
+        } message: {
+            Text("This will permanently delete the client, their pets, and all visit history. This action cannot be undone.")
+        }
+        .alert("Delete Failed", isPresented: $showDeleteErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(deleteErrorMessage)
         }
         .task { vm.refreshRecentVisits() }
     }
@@ -180,7 +200,50 @@ struct ClientDetailView: View {
             Button { dismiss() } label: { Image(systemName: "chevron.backward") }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button { /* TODO: Edit owner info */ } label: { Text("Edit") }
+            Menu {
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Delete Client", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+        }
+        // Confirm deletion
+        ToolbarItem(placement: .bottomBar) {
+            EmptyView()
+                .confirmationDialog(
+                    "Are you sure you want to delete \(vm.client.fullName)?",
+                    isPresented: $showDeleteConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Yes", role: .destructive) { deleteClient() }
+                    Button("No", role: .cancel) { }
+                } message: {
+                    Text("This will permanently delete the client, their pets, and all visit history. This action cannot be undone.")
+                }
+        }
+        ToolbarItem(placement: .automatic) {
+            EmptyView()
+                .alert("Delete Failed", isPresented: $showDeleteErrorAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text(deleteErrorMessage)
+                }
+        }
+    }
+
+    // MARK: - Actions
+    private func deleteClient() {
+        let client = vm.client
+        modelContext.delete(client)
+        do {
+            try modelContext.save()
+            dismiss()
+        } catch {
+            deleteErrorMessage = error.localizedDescription
+            showDeleteErrorAlert = true
         }
     }
 }

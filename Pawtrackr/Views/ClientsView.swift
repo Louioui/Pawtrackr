@@ -16,6 +16,9 @@ struct ClientsView: View {
     // Initialize with the app's environment ModelContext to avoid schema/store mismatches.
     @State private var viewModel: ClientsViewModel?
     @State private var showingNewClientSheet = false
+    @State private var clientPendingDeletion: Client? = nil
+    @State private var showDeleteErrorAlert = false
+    @State private var deleteErrorMessage: String = ""
 
     init() { _viewModel = State(initialValue: nil) }
 
@@ -40,6 +43,23 @@ struct ClientsView: View {
                 FAB(systemImage: "plus", accessibilityLabel: "Add New Client") {
                     showingNewClientSheet = true
                 }
+            }
+            .alert(
+                clientPendingDeletion.map { "Are you sure you want to delete \($0.fullName)?" } ?? "",
+                isPresented: Binding(
+                    get: { clientPendingDeletion != nil },
+                    set: { if !$0 { clientPendingDeletion = nil } }
+                )
+            ) {
+                Button("No", role: .cancel) { clientPendingDeletion = nil }
+                Button("Yes", role: .destructive) { deletePendingClient() }
+            } message: {
+                Text("This will permanently delete the client, their pets, and all visit history.")
+            }
+            .alert("Delete Failed", isPresented: $showDeleteErrorAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(deleteErrorMessage)
             }
             .sheet(isPresented: $showingNewClientSheet) {
                 // When the sheet is dismissed, trigger a refresh to show the new client.
@@ -104,6 +124,13 @@ struct ClientsView: View {
                     ClientCard(client: client)
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button(role: .destructive) {
+                        clientPendingDeletion = client
+                    } label: {
+                        Label("Delete Client", systemImage: "trash")
+                    }
+                }
             }
         }
         .padding(.horizontal)
@@ -136,5 +163,20 @@ struct ClientsView: View {
         }
         .padding(.horizontal)
         .padding(.top, topPadding)
+    }
+
+    // MARK: - Delete
+    private func deletePendingClient() {
+        guard let client = clientPendingDeletion else { return }
+        modelContext.delete(client)
+        do {
+            try modelContext.save()
+            clientPendingDeletion = nil
+            // Refresh list
+            viewModel?.fetchClients()
+        } catch {
+            deleteErrorMessage = error.localizedDescription
+            showDeleteErrorAlert = true
+        }
     }
 }
