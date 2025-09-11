@@ -155,7 +155,6 @@ struct IconCircle: View {
 
     // MARK: - Subviews
     
-    @ViewBuilder
     private func glyphView(content: GlyphContent, tints: (bg: Color, fg: Color, ring: Color)) -> AnyView {
         let dim = sizeToken.dimension
         

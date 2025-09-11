@@ -44,7 +44,7 @@ final class InsightsViewModel {
         searchTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
             guard !Task.isCancelled else { return }
-            await self?.fetchAndProcessData()
+            self?.fetchAndProcessData()
         }
     }
     
@@ -95,10 +95,11 @@ final class InsightsViewModel {
     }
     
     var exportCSV: String {
-        // ... CSV generation logic remains the same, but uses `scopedVisits`
-        var lines: [String] = ["startedAt,endedAt,pet,owner,services,amount,payment,notes"]
+        var lines: [String] = [
+            "VisitID,StartedAt,EndedAt,Pet,Owner,Services,Amount,Payment,Reference,Notes"
+        ]
         for v in scopedVisits {
-            // (Same CSV line generation as before)
+            let id = v.uuid.uuidString
             let started = Formatters.iso8601.string(from: v.startedAt)
             let ended = v.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
             let pet = v.pet.name.csvEscaped
@@ -106,8 +107,9 @@ final class InsightsViewModel {
             let services = v.items.map { $0.displayName.csvEscaped }.joined(separator: "; ")
             let amount = Formatters.currency.string(from: NSDecimalNumber(decimal: v.total)) ?? "$0.00"
             let payment = v.payment?.method.displayName.csvEscaped ?? ""
+            let reference = v.payment?.externalReference?.csvEscaped ?? ""
             let notes = v.note?.replacingOccurrences(of: "\n", with: " ").csvEscaped ?? ""
-            lines.append([started, ended, pet, owner, services, amount, payment, notes].joined(separator: ","))
+            lines.append([id, started, ended, pet, owner, services, amount, payment, reference, notes].joined(separator: ","))
         }
         return lines.joined(separator: "\n")
     }

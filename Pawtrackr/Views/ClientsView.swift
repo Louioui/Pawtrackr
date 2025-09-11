@@ -59,6 +59,10 @@ struct ClientsView: View {
                 viewModel.fetchClients()
             }
         }
+        .searchable(text: Binding(
+            get: { viewModel.searchText },
+            set: { viewModel.searchText = $0 }
+        ), placement: .navigationBarDrawer(displayMode: .always))
     }
     
     private var searchBar: some View {

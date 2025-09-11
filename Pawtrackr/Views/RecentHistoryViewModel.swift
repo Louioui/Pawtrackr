@@ -55,8 +55,29 @@ final class RecentHistoryViewModel {
         self.isLoading = true
         
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Keep the SwiftData predicate simple and portable (no nested closures)
-        let predicate = #Predicate<Visit> { visit in visit.endedAt != nil }
+        // Compute date bounds for the selected scope and push them into the store predicate
+        let cal = Calendar.current
+        let now = Date()
+        let (start, end): (Date?, Date?) = {
+            switch scope {
+            case .all:
+                return (nil, nil)
+            case .today:
+                let s = cal.startOfDay(for: now)
+                let e = cal.date(byAdding: .day, value: 1, to: s)!
+                return (s, e)
+            case .thisWeek:
+                let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now))!
+                let e = cal.date(byAdding: .day, value: 7, to: s)!
+                return (s, e)
+            }
+        }()
+        // SwiftData predicate with date bounds only (text search remains in-memory)
+        let predicate = #Predicate<Visit> { visit in
+            visit.endedAt != nil &&
+            (start == nil || visit.sortKeyDate >= start!) &&
+            (end == nil || visit.sortKeyDate < end!)
+        }
         
         do {
             let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.sortKeyDate, order: .reverse)])
@@ -75,25 +96,14 @@ final class RecentHistoryViewModel {
                 }
             }
             
-            // Perform final date scoping in-memory
+            // Group for the view based on start of day
             let calendar = Calendar.current
-            fetchedVisits = fetchedVisits.filter { visit in
-                switch scope {
-                case .all:
-                    return true
-                case .today:
-                    return calendar.isDateInToday(visit.sortKeyDate)
-                case .thisWeek:
-                    return calendar.dateInterval(of: .weekOfYear, for: .now)?.contains(visit.sortKeyDate) ?? false
-                }
-            }
             
             // Update summary stats
             self.summaryVisitCount = fetchedVisits.count
             let totalRevenue = fetchedVisits.reduce(Decimal.zero) { $0 +~ $1.total }
             self.summaryRevenueString = totalRevenue.moneyString
             
-            // Group for the view
             self.groupedVisits = Dictionary(grouping: fetchedVisits, by: { calendar.startOfDay(for: $0.sortKeyDate) })
             self.sortedDays = self.groupedVisits.keys.sorted(by: >)
             
@@ -106,8 +116,11 @@ final class RecentHistoryViewModel {
     
     func exportCSV() -> String {
         let allVisits = sortedDays.flatMap { groupedVisits[$0] ?? [] }
-        var lines: [String] = ["startedAt,endedAt,pet,owner,services,amount,payment,notes"]
+        var lines: [String] = [
+            "VisitID,StartedAt,EndedAt,Pet,Owner,Services,Amount,Payment,Reference,Notes"
+        ]
         for v in allVisits {
+            let id = v.uuid.uuidString
             let started = Formatters.iso8601.string(from: v.startedAt)
             let ended = v.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
             let pet = v.pet.name.csvEscaped
@@ -115,8 +128,9 @@ final class RecentHistoryViewModel {
             let services = v.items.map { $0.displayName.csvEscaped }.joined(separator: "; ")
             let amount = v.total.moneyString
             let payment = v.payment?.method.displayName.csvEscaped ?? ""
+            let reference = v.payment?.externalReference?.csvEscaped ?? ""
             let notes = v.note?.replacingOccurrences(of: "\n", with: " ").csvEscaped ?? ""
-            lines.append("\(started),\(ended),\(pet),\(owner),\(services),\(amount),\(payment),\(notes)")
+            lines.append([id, started, ended, pet, owner, services, amount, payment, reference, notes].joined(separator: ","))
         }
         return lines.joined(separator: "\n")
     }

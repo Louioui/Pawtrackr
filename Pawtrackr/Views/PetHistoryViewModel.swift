@@ -88,18 +88,20 @@ final class PetHistoryViewModel: ObservableObject {
     // MARK: - Private
     private func fetchVisits() async {
         let (start, end) = dateBounds(for: scope)
+        // Push date bounds into the store-level predicate for performance
+        let predicate = #Predicate<Visit> { v in
+            (start == nil || v.startedAt >= start!) &&
+            (end == nil || v.startedAt < end!)
+        }
         let descriptor = FetchDescriptor<Visit>(
+            predicate: predicate,
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
         do {
             var fetched = try modelContext.fetch(descriptor)
-            // Filter by pet identity first
+            // Filter by pet identity in-memory (relationship compare varies by store)
             let petID = pet.persistentModelID
             fetched = fetched.filter { $0.pet.persistentModelID == petID }
-            // Apply optional date bounds in-memory
-            if let start, let end {
-                fetched = fetched.filter { v in v.startedAt >= start && v.startedAt < end }
-            }
             visits = fetched
         } catch {
             visits = []

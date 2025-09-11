@@ -12,6 +12,13 @@ import UniformTypeIdentifiers
 struct RecentHistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: RecentHistoryViewModel?
+    private var initialScope: RecentHistoryViewModel.Scope?
+    private var initialQuery: String?
+
+    init(initialScope: RecentHistoryViewModel.Scope? = nil, initialQuery: String? = nil) {
+        self.initialScope = initialScope
+        self.initialQuery = initialQuery
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,8 +41,19 @@ struct RecentHistoryView: View {
             .navigationTitle("Recent History")
             .toolbar { if let viewModel { toolbarContent(viewModel) } }
             .refreshable { viewModel?.fetchVisits() }
-            .task { viewModel = RecentHistoryViewModel(modelContext: modelContext) }
+            .task {
+                if viewModel == nil {
+                    let vm = RecentHistoryViewModel(modelContext: modelContext)
+                    if let s = initialScope { vm.scope = s }
+                    if let q = initialQuery { vm.query = q }
+                    viewModel = vm
+                }
+            }
         }
+        .searchable(text: Binding(
+            get: { viewModel?.query ?? "" },
+            set: { newValue in viewModel?.query = newValue }
+        ))
     }
     
     private func header(@Bindable _ viewModel: RecentHistoryViewModel) -> some View {

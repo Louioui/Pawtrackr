@@ -37,13 +37,7 @@ enum DS {
         static let sessionText       = Color.green                       // text on the soft chip
 
         // Gender
-        static func gender(_ g: PetGender) -> Color {
-            switch g {
-            case .male: return .blue
-            case .female: return .pink
-            case .unknown: return .gray
-            }
-        }
+        static func gender(_ g: PetGender) -> Color { g == .male ? .blue : .pink }
 
         // Species (soft tints used behind paw/badges)
         static func species(_ s: Species) -> Color {
@@ -58,14 +52,7 @@ enum DS {
         /// We bias the tint by gender for clarity, and keep it soft for backgrounds.
         static func avatarTint(species: Species, gender: PetGender) -> Color {
             let base = DS.ColorToken.gender(gender)
-            switch species {
-            case .dog:
-                return base.opacity(0.22)
-            case .cat:
-                return base.opacity(0.22)
-            default:
-                return Color.gray.opacity(0.18)
-            }
+            switch species { case .dog, .cat: return base.opacity(0.22) }
         }
 
         /// Top-bar gradient for cards based on gender.

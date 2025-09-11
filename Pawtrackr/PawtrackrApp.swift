@@ -14,10 +14,8 @@ import OSLog
 struct PawtrackrApp: App {
     var body: some Scene {
         WindowGroup {
-            PinLockGate {
-                ClientsView()   // or your actual root view
-            }
-            .modelContainer(for: [Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self])
+            RootView()
+                .modelContainer(for: [Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self])
         }
     }
 }

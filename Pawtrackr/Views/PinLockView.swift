@@ -14,6 +14,7 @@ import SwiftUI
 ///   PinLockGate { ClientsView() }   // or PetHistoryView(), etc.
 public struct PinLockGate<Content: View>: View {
     @State private var isUnlocked = false
+    @Environment(\.scenePhase) private var scenePhase
     private let content: Content
 
     public init(@ViewBuilder content: () -> Content) {
@@ -27,6 +28,9 @@ public struct PinLockGate<Content: View>: View {
             } else {
                 PinLockView(isUnlocked: $isUnlocked)
             }
+        }
+        .onChange(of: scenePhase) {
+            if scenePhase != .active { isUnlocked = false }
         }
     }
 }
@@ -86,7 +90,7 @@ public struct PinLockView: View {
         }
         .padding(24)
         .frame(maxWidth: 420)
-        .onChange(of: digits) { _ in validateIfComplete() }
+        .onChange(of: digits) { validateIfComplete() }
         .accessibilityElement(children: .contain)
     }
 

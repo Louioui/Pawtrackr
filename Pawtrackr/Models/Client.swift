@@ -69,11 +69,17 @@ final class Client {
         didUpdate()
     }
     func setPhone(_ value: String?) {
-        phone = value?.trimmed
+        let trimmed = value?.trimmed
+        if let t = trimmed, !t.isEmpty {
+            phone = PhoneUtils.toE164(t) ?? t // prefer canonical E.164, fallback to trimmed
+        } else {
+            phone = nil
+        }
         didUpdate()
     }
     func setEmail(_ value: String?) {
-        email = value?.trimmed
+        let trimmed = value?.trimmed
+        email = trimmed?.lowercased()
         didUpdate()
     }
     func setAddress(_ value: String?) {
@@ -107,5 +113,4 @@ final class Client {
         updatedAt = .now
     }
 }
-
 

@@ -14,24 +14,11 @@ import Foundation
 public enum PetGender: String, CaseIterable, Codable, Identifiable {
     case male
     case female
-    case unknown
 
     public var id: String { rawValue }
 
-    public var displayName: String {
-        switch self {
-        case .male: return "Male"
-        case .female: return "Female"
-        case .unknown: return "Unknown"
-        }
-    }
+    public var displayName: String { self == .male ? "Male" : "Female" }
 
     /// Optional SF Symbol for small badges (actual color chosen by the View layer)
-    public var symbolName: String {
-        switch self {
-        case .male: return "m.circle.fill"
-        case .female: return "f.circle.fill"
-        case .unknown: return "questionmark.circle.fill"
-        }
-    }
+    public var symbolName: String { self == .male ? "m.circle.fill" : "f.circle.fill" }
 }

@@ -119,13 +119,15 @@ final class DashboardViewModel: ObservableObject {
     let cal = Calendar.current
     let end = cal.startOfDay(for: .now)
     let start = cal.date(byAdding: .day, value: -days + 1, to: end)!
+    // Precompute boundary outside predicate (builders disallow calling date math inside)
+    let endExclusive = cal.date(byAdding: .day, value: 1, to: end)!
 
     do {
       let desc = FetchDescriptor<Visit>(
         predicate: #Predicate { v in
           v.endedAt != nil &&
           v.sortKeyDate >= start &&
-          v.sortKeyDate < cal.date(byAdding: .day, value: 1, to: end)!
+          v.sortKeyDate < endExclusive
         },
         sortBy: [SortDescriptor(\.sortKeyDate, order: .reverse)]
       )

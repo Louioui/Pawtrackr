@@ -62,20 +62,26 @@ final class ClientDetailViewModel: ObservableObject {
         if activeVisit(for: pet) != nil { return }
         let v = Visit(pet: pet, startedAt: date)  // ✅ provide required 'pet'
         modelContext.insert(v)
-        try? modelContext.save()
+        do { try modelContext.save() } catch {
+            Logger.main.error("Failed to check in: \(String(describing: error))")
+        }
         refreshRecentVisits()
     }
 
     func addService(_ service: Service, to visit: Visit, quantity: Int = 1) {
         visit.addItem(title: service.name, unitPrice: service.basePrice, quantity: quantity, service: service)
-        try? modelContext.save()
+        do { try modelContext.save() } catch {
+            Logger.main.error("Failed to add service: \(String(describing: error))")
+        }
         refreshRecentVisits()
     }
 
     func checkOut(pet: Pet, customTotal: Decimal? = nil, at date: Date = .now) {
         guard let visit = activeVisit(for: pet) else { return }
         visit.markCheckedOut(total: customTotal, now: date)
-        try? modelContext.save()
+        do { try modelContext.save() } catch {
+            Logger.main.error("Failed to check out: \(String(describing: error))")
+        }
         refreshRecentVisits()
         NotificationCenter.default.post(name: .visitDidComplete, object: visit)
     }

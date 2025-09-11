@@ -98,16 +98,16 @@ struct AddPetSheet: View {
                         .submitLabel(.done)
 
                     Picker("Species", selection: Binding($selectedSpecies, replacingNilWith: .dog)) {
-                        ForEach(Species.allCases, id: \.self) { species in
-                            Text(species.rawValue.capitalized)
-                        }
+                        // Restrict to Dog or Cat only
+                        Text(Species.dog.displayName).tag(Species.dog as Species)
+                        Text(Species.cat.displayName).tag(Species.cat as Species)
                     }
                     .pickerStyle(.segmented)
 
                     Picker("Gender", selection: $selectedGender) {
-                        ForEach(PetGender.allCases, id: \.self) { gender in
-                            Text(gender.rawValue.capitalized)
-                        }
+                        // Restrict to Male or Female only
+                        Text(PetGender.male.displayName).tag(PetGender.male)
+                        Text(PetGender.female.displayName).tag(PetGender.female)
                     }
                     .pickerStyle(.segmented)
 

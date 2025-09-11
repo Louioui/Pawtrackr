@@ -9,9 +9,6 @@
 public enum Species: String, CaseIterable, Codable, Identifiable {
     case dog
     case cat
-    case bird
-    case reptile
-    case other
 
     public var id: String { rawValue }
 
@@ -21,16 +18,8 @@ public enum Species: String, CaseIterable, Codable, Identifiable {
 
     public var iconName: String {
         switch self {
-        case .dog:
-            return "pawprint.fill"
-        case .cat:
-            return "pawprint"
-        case .bird:
-            return "bird"
-        case .reptile:
-            return "tortoise"
-        case .other:
-            return "questionmark.circle"
+        case .dog: return "pawprint.fill"
+        case .cat: return "pawprint"
         }
     }
 }

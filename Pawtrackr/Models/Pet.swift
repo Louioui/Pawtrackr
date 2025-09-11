@@ -46,7 +46,7 @@ final class Pet {
     @Relationship(deleteRule: .cascade) var visits: [Visit] = []
 
     // MARK: - Init
-    init(name: String, species: Species, gender: PetGender = .unknown) {
+    init(name: String, species: Species, gender: PetGender = .male) {
         self.uuid = UUID()
         self.createdAt = .now
         self.updatedAt = .now

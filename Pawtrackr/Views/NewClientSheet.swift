@@ -149,12 +149,9 @@ struct NewClientSheet: View {
                         }
 
                         Picker("Gender", selection: $p.gender) {
+                            // Restrict to Male or Female only
                             Text("Male").tag(PetGender.male)
                             Text("Female").tag(PetGender.female)
-                            Text("Unknown").tag(PetGender.unknown)
-                        }
-                        if attemptedSubmit && p.gender == .unknown {
-                            Text("Please choose a gender").font(.caption).foregroundStyle(.red)
                         }
 
                         TextField("Breed (optional)", text: $p.breed)
@@ -259,7 +256,7 @@ struct NewClientSheet: View {
     }
 
     private var hasAtLeastOneValidPet: Bool {
-        pets.contains { !$0.name.trimmed.isEmpty && $0.gender != .unknown }
+        pets.contains { !$0.name.trimmed.isEmpty }
     }
 
     // MARK: - Actions
@@ -357,7 +354,7 @@ private struct TempPet: Identifiable {
     var index: Int
     var name = ""
     var species: Species = .dog
-    var gender: PetGender = .unknown
+    var gender: PetGender = .male
     var breed = ""
     var color = ""
     var health = ""          // free-text, stored later when Pet has this property
@@ -384,7 +381,7 @@ private struct PetAvatar: View {
                 .accessibilityAddTraits(.isImage)
         } else {
             SpeciesAndGenderIcons.badge(for: species, gender: gender, size: size)
-                .accessibilityLabel("\(species == .dog ? "Dog" : "Cat"), \(gender == .male ? "Male" : (gender == .female ? "Female" : "Gender unknown"))")
+                .accessibilityLabel("\(species == .dog ? "Dog" : "Cat"), \(gender == .male ? "Male" : "Female")")
         }
         #else
         if let data = photoData, let image = UIImage(data: data) {
@@ -396,7 +393,7 @@ private struct PetAvatar: View {
                 .accessibilityAddTraits(.isImage)
         } else {
             SpeciesAndGenderIcons.badge(for: species, gender: gender, size: size)
-                .accessibilityLabel("\(species == .dog ? "Dog" : "Cat"), \(gender == .male ? "Male" : (gender == .female ? "Female" : "Gender unknown"))")
+                .accessibilityLabel("\(species == .dog ? "Dog" : "Cat"), \(gender == .male ? "Male" : "Female")")
         }
         #endif
     }

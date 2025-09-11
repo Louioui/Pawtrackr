@@ -210,9 +210,7 @@ public struct AvatarView: View {
     private func systemImageForPet(species: Species?) -> String {
         switch species {
         case .some(.cat): return "pawprint"
-        case .some(.bird): return "bird"
-        case .some(.reptile): return "tortoise"
-        case .some(.other): return "questionmark.circle.fill"
+        case .some(.dog): return "pawprint.fill"
         default: return "pawprint.fill"
         }
     }
@@ -230,7 +228,7 @@ public struct AvatarView: View {
         HStack(spacing: 16) {
             AvatarView(.pet(species: .dog, gender: .male, name: "Max"), size: .sm)
             AvatarView(.pet(species: .cat, gender: .female, name: "Luna"), size: .md, ringWidth: 2)
-            AvatarView(.pet(species: .other, gender: .unknown, name: "Spike"), size: .lg, badgeSystemImage: "clock.fill")
+            AvatarView(.pet(species: .dog, gender: .male, name: "Spike"), size: .lg, badgeSystemImage: "clock.fill")
         }
         HStack(spacing: 16) {
             AvatarView(.systemImage("pawprint.circle.fill"), size: .sm)

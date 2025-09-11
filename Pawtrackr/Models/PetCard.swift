@@ -141,23 +141,9 @@ struct PetCard: View {
         return parts.joined(separator: ", ")
     }
 
-    private var genderLabel: String {
-        switch pet.gender {
-        case .male: return "Male"
-        case .female: return "Female"
-        case .unknown: return "Unknown gender"
-        }
-    }
+    private var genderLabel: String { pet.gender == .male ? "Male" : "Female" }
 
-    private var speciesLabel: String {
-        switch pet.species {
-        case .dog: return "Dog"
-        case .cat: return "Cat"
-        case .bird: return "Bird"
-        case .reptile: return "Reptile"
-        case .other: return "Other species"
-        }
-    }
+    private var speciesLabel: String { pet.species == .dog ? "Dog" : "Cat" }
 }
 
 // MARK: - Preview
