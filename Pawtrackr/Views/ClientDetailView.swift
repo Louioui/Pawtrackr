@@ -112,23 +112,21 @@ import OSLog
     // MARK: - Subviews
     private func ownerHeader(client: Client) -> some View {
         Card {
-            HStack(alignment: .top, spacing: 12) {
-                // Reusable Avatar component
-                AvatarView(.client(name: client.fullName), size: .lg)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(client.fullName)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(client.fullName).font(.title3.weight(.semibold))
-                    if let phone = client.phone, !phone.isEmpty {
-                        Label(PhoneUtils.display(phone) ?? phone, systemImage: "phone.fill")
-                    }
-                    if let email = client.email, !email.isEmpty {
-                        Label(email, systemImage: "envelope.fill")
-                    }
+                if let phone = client.phone, !phone.isEmpty {
+                    Label(PhoneUtils.display(phone) ?? phone, systemImage: "phone.fill")
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                Spacer()
+                if let email = client.email, !email.isEmpty {
+                    Label(email, systemImage: "envelope.fill")
+                }
             }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
     }

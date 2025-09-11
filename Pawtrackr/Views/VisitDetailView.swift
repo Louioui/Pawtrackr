@@ -37,19 +37,7 @@ struct VisitDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
-#if os(iOS)
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.left").foregroundStyle(.blue)
-                    }
-                }
-#elseif os(macOS)
-                ToolbarItem(placement: .automatic) {
-                    Button { dismiss() } label: {
-                        Label("Back", systemImage: "chevron.left")
-                    }
-                }
-#endif
+                // Rely on the system-provided back button to avoid duplicates
                 ToolbarItem(placement: .primaryAction) {
                     let csv = exportCSVForVisit()
                     ShareLink(
