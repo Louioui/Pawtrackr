@@ -196,9 +196,7 @@ import OSLog
     // MARK: - Toolbar
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button { dismiss() } label: { Image(systemName: "chevron.backward") }
-        }
+        // Rely on the system-provided back button to avoid duplicates
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Button(role: .destructive) {
