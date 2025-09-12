@@ -143,7 +143,7 @@ public struct AddPhotoPlaceholder: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(title))
-                .accessibilityHint(Text("Opens the photo chooser"))
+                .accessibilityHint(Text(NSLocalizedString("a11y.opens_photo_chooser", comment: "")))
             } else {
                 placeholderContent
             }

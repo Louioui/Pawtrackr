@@ -84,7 +84,7 @@ struct CheckoutView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("Started").font(.caption).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("checkout.started", comment: "")).font(.caption).foregroundStyle(.secondary)
                     Text(Formatters.timeOnly.string(from: viewModel.visit.startedAt))
                         .font(.subheadline.weight(.medium))
                 }
@@ -246,7 +246,7 @@ struct CheckoutView: View {
         Card {
             VStack(alignment: .leading, spacing: 16) {
                 Text("checkout.service_charge").font(.subheadline.weight(.semibold))
-                labeledContent("Base Amount") {
+                labeledContent(NSLocalizedString("checkout.base_amount", comment: "")) {
                     TextField("0.00", text: $baseAmountString)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
@@ -270,7 +270,7 @@ struct CheckoutView: View {
                             }
                         }
                     }
-                    TextField("Custom tip amount", text: $customTipString)
+                    TextField(NSLocalizedString("checkout.custom_tip", comment: ""), text: $customTipString)
                         .keyboardType(.decimalPad)
                         .onChange(of: customTipString) { _ in
                             selectedTipPercent = nil
@@ -279,7 +279,7 @@ struct CheckoutView: View {
                 }
 
                 if viewModel.requiresExternalReference {
-                    labeledContent("Reference") {
+                    labeledContent(NSLocalizedString("checkout.reference", comment: "")) {
                         TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.trailing)
@@ -361,7 +361,7 @@ struct CheckoutView: View {
                     paymentTile(.zelle, icon: "dollarsign.circle", tint: .yellow)
                 }
                 if viewModel.requiresExternalReference {
-                    labeledContent("Transaction Reference") {
+                    labeledContent(NSLocalizedString("checkout.transaction_reference", comment: "")) {
                         TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.trailing)

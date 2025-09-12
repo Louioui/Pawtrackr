@@ -88,7 +88,7 @@ struct ClientRow: View {
                                 .padding(.vertical, 4)
                                 .background(DS.ColorToken.success.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
                                 .foregroundStyle(DS.ColorToken.success)
-                                .accessibilityLabel("In session")
+                                .accessibilityLabel(Text(NSLocalizedString("a11y.in_session", comment: "")))
                         }
                     }
                 }

@@ -151,7 +151,7 @@ struct InsightsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("insights.top_services").font(.subheadline.weight(.semibold))
                 if vm.serviceLeaders.isEmpty {
-                    Text("No service data in this range.").font(.subheadline).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("insights.no_service_data", comment: "")).font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     VStack(spacing: 6) {
                         ForEach(Array(vm.serviceLeaders.enumerated()), id: \.element.id) { index, row in
@@ -168,7 +168,7 @@ struct InsightsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("insights.top_clients").font(.subheadline.weight(.semibold))
                 if vm.clientLeaders.isEmpty {
-                    Text("No client data in this range.").font(.subheadline).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("insights.no_client_data", comment: "")).font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     VStack(spacing: 6) {
                         ForEach(Array(vm.clientLeaders.enumerated()), id: \.element.id) { index, row in

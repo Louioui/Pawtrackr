@@ -126,7 +126,7 @@ public struct FAB: View {
             .accessibilityLabel(Text(accessibilityLabel))
             .accessibilityValue(Text(accessibilityValueText))
             .accessibilityAddTraits(.isButton)
-            .accessibilityHint(Text("Primary action"))
+            .accessibilityHint(Text(NSLocalizedString("a11y.primary_action", comment: "")))
             .keyboardShortcut(.defaultAction)
             .opacity(isDisabled ? 0.6 : 1.0)
         }

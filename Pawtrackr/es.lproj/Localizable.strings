@@ -20,6 +20,8 @@
 "insights.package_mix" = "Mezcla de paquetes";
 "insights.no_revenue" = "Sin datos de ingresos";
 "insights.no_category" = "Sin datos de categoría";
+"insights.no_service_data" = "Sin datos de servicios en este rango.";
+"insights.no_client_data" = "Sin datos de clientes en este rango.";
 
 "visits.avg_duration" = "Prom.";
 
@@ -99,6 +101,9 @@
 // Client Detail
 "client_details.checkin_confirm_title_fmt" = "¿Iniciar sesión para %@?";
 "client_details.checkin_confirm_message" = "Esto iniciará una nueva sesión y comenzará el temporizador.";
+"client_details.notes_title" = "Notas del cliente";
+"client_details.pets_title" = "Mascotas";
+"client_details.recent_history" = "Historial reciente";
 
 // Pet Detail
 "pet.age_fmt" = "Edad: %@";
@@ -155,6 +160,7 @@
 // Status & common labels
 "status.in_session" = "En sesión";
 "pet.last_visit_fmt" = "Última visita: %@";
+"client.last_visit_relative_fmt" = "Última visita: %@";
 
 // Pin Lock
 "pin.enter" = "Ingresar PIN";
@@ -163,6 +169,9 @@
 
 // Photo Preview
 "photo_preview.unable_to_load" = "No se puede cargar la imagen";
+"a11y.in_session" = "En sesión";
+"a11y.primary_action" = "Acción principal";
+"a11y.opens_photo_chooser" = "Abre el selector de fotos";
 
 // Checkout (additional)
 "checkout.services_performed" = "Servicios realizados";

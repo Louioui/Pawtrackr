@@ -108,7 +108,8 @@ struct ClientCard: View {
                 .onDisappear { pulse = false }
             }
         } else if let lastEnded = client.mostRecentEndedAt {
-            Text("Last visit: \(lastEnded, style: .relative)")
+            let rel = lastEnded.formatted(.relative(presentation: .named))
+            Text(String(format: NSLocalizedString("client.last_visit_relative_fmt", comment: ""), rel))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }

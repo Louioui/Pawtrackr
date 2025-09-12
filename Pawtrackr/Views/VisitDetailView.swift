@@ -130,19 +130,19 @@ struct VisitDetailView: View {
                 }
                 Spacer()
                 if visit.isPaid {
-                    Text("Paid")
+                    Text(NSLocalizedString("status.paid", comment: ""))
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
                 } else if visit.isCompleted {
-                    Text("Completed")
+                    Text(NSLocalizedString("status.completed", comment: ""))
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
                 } else {
-                    Text("In Progress")
+                    Text(NSLocalizedString("status.in_session", comment: ""))
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)

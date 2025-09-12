@@ -172,7 +172,7 @@ import OSLog
         if let notes = client.notes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Client Notes").font(.headline)
+                    Text(NSLocalizedString("client_details.notes_title", comment: "")).font(.headline)
                     Text(notes.trimmingCharacters(in: .whitespacesAndNewlines)).foregroundStyle(.secondary)
                 }
             }
@@ -182,7 +182,7 @@ import OSLog
 
     private var petsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Pets").font(.headline).padding(.horizontal)
+            Text(NSLocalizedString("client_details.pets_title", comment: "")).font(.headline).padding(.horizontal)
 
             let columns: [GridItem] = [GridItem(.adaptive(minimum: 320, maximum: 400), spacing: 16)]
             LazyVGrid(columns: columns, spacing: 16) {
@@ -206,7 +206,7 @@ import OSLog
 
     private var recentHistorySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Recent History").font(.headline).padding(.horizontal)
+            Text(NSLocalizedString("client_details.recent_history", comment: "")).font(.headline).padding(.horizontal)
 
             if vm.recentVisits.isEmpty {
                 ContentUnavailableView("No History Yet", systemImage: "clock.badge.questionmark")
