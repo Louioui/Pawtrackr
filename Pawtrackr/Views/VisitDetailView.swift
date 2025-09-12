@@ -14,9 +14,11 @@ import SwiftData
 
 struct VisitDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let visit: Visit
     @StateObject private var visitTimer = VisitTimer()
+    @State private var showCheckout = false
 
     var body: some View {
         NavigationStack {
@@ -49,6 +51,31 @@ struct VisitDetailView: View {
                     .disabled(csv.isEmpty)
                     .accessibilityHint(csv.isEmpty ? "No data to export" : "Shares a CSV summary of this visit")
                 }
+                // New: Check Out / Resume Checkout action available until payment is attached
+                ToolbarItem(placement: .bottomBar) {
+                    if visit.payment == nil {
+                        Button {
+                            // If still active, stop timer and save; otherwise just resume checkout UI
+                            if visit.endedAt == nil {
+                                visit.endedAt = Date()
+                                do { try modelContext.save() } catch { /* best-effort; checkout will re-save */ }
+                            }
+                            showCheckout = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text(visit.endedAt == nil ? "Check Out" : "Resume Checkout")
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.green)
+                        .accessibilityLabel("Open checkout to complete payment")
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showCheckout) {
+                CheckoutView(pet: visit.pet)
             }
             .onAppear {
                 visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt)

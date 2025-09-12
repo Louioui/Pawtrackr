@@ -12,6 +12,12 @@ import SwiftData
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: CheckoutViewModel
+    // UI extras to match the HTML mockup
+    @State private var baseAmountString: String = ""
+    @State private var selectedTipPercent: Int? = nil
+    @State private var customTipString: String = ""
+    @State private var showSuccessModal = false
+    @State private var selectedExtras: Set<String> = []
 
     init(pet: Pet) {
         // The modelContext can be accessed via the pet itself
@@ -22,11 +28,13 @@ struct CheckoutView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    headerSection
-                    servicesSection
-                    notesSection
-                    photosSection
-                    chargeSection
+                    petSessionHeader
+                    servicesBlock
+                    notesAndTagsBlock
+                    photosBlock
+                    chargeBlock
+                    paymentMethodBlock
+                    summaryBlock
                     Spacer(minLength: 80) // Space for bottom CTA
                 }
                 .padding(.horizontal)
@@ -44,6 +52,8 @@ struct CheckoutView: View {
             } message: {
                 Text(viewModel.alertMessage)
             }
+            .overlay { processingOverlay }
+            .overlay { successOverlay }
         }
     }
     
@@ -55,53 +65,123 @@ struct CheckoutView: View {
         }
     }
     
-    // MARK: - Sections
+    // MARK: - Sections (facelifted)
     @ViewBuilder
-    private var headerSection: some View {
+    private var petSessionHeader: some View {
         Card {
             HStack(spacing: 12) {
-                // FIX: Use the correct AvatarView initializer
-                AvatarView(.pet(species: viewModel.pet.species, gender: viewModel.pet.gender, name: viewModel.pet.name, imageData: viewModel.pet.photoData), size: .lg)
-                
-                VStack(alignment: .leading, spacing: 2) {
+                AvatarView(.pet(species: viewModel.pet.species, gender: viewModel.pet.gender, name: viewModel.pet.name, imageData: viewModel.pet.photoData), size: .lg, ringWidth: 4)
+                VStack(alignment: .leading, spacing: 4) {
                     Text(viewModel.pet.name).font(.headline)
-                    Text(viewModel.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
-                    
-                    Label(viewModel.visitTimer.formattedElapsed, systemImage: "clock")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .monospacedDigit()
-                        .padding(.top, 2)
+                    Text(viewModel.pet.owner?.fullName ?? "").font(.subheadline).foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock").foregroundStyle(.green)
+                        Text("Session: \(viewModel.visitTimer.formattedElapsed)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.green)
+                            .monospacedDigit()
+                    }
                 }
                 Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Started").font(.caption).foregroundStyle(.secondary)
+                    Text(Formatters.timeOnly.string(from: viewModel.visit.startedAt))
+                        .font(.subheadline.weight(.medium))
+                }
             }
         }
     }
     
-    private var servicesSection: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Services Performed").font(.subheadline.weight(.semibold))
-                // FIX: Use the correct 'Chip' component and binding syntax
-                FlowLayout(spacing: 8) {
-                    ForEach(viewModel.allServices) { service in
-                        Chip.selectable(
-                            service.name,
-                            isSelected: Binding(
-                                get: { viewModel.isServiceSelected(service) },
-                                set: { _, _  in viewModel.toggleService(service) }
-                            )
-                        )
+    private var servicesBlock: some View {
+        VStack(spacing: 12) {
+            // Services catalog (packages + individual services)
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Services Performed").font(.subheadline.weight(.semibold))
+                    // Packages (.groom category)
+                    let packages = viewModel.allServices.filter { $0.category == .groom }
+                    if !packages.isEmpty {
+                        VStack(spacing: 10) {
+                            ForEach(packages) { service in
+                                packageRow(service)
+                            }
+                        }
+                    }
+                    // Individual services (non-groom)
+                    let individuals = viewModel.allServices.filter { $0.category != .groom }
+                    if !individuals.isEmpty {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ForEach(individuals) { s in serviceTile(s) }
+                        }
+                    }
+
+                    // Additional services (variable pricing)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Additional Services").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        VStack(spacing: 8) {
+                            additionalServiceRow(title: "Knots & Matting Fee", subtitle: "$5–10+ (varies by severity)", icon: "k.square.fill")
+                            additionalServiceRow(title: "Flea & Tick Treatment", subtitle: "$5–10", icon: "ant.fill")
+                            additionalServiceRow(title: "Hair Dye", subtitle: "$80–1,000 (varies by complexity)", icon: "paintpalette.fill")
+                        }
                     }
                 }
             }
+
+            // Selected services summary (catalog + extras)
+            Card {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Selected Services").font(.subheadline.weight(.semibold))
+                    if selectedServices.isEmpty && selectedExtras.isEmpty {
+                        Text("No services selected").font(.subheadline).foregroundStyle(.secondary)
+                    } else {
+                        FlowLayout(spacing: 6) {
+                            ForEach(selectedServices, id: \.persistentModelID) { svc in
+                                Chip("\(svc.name)", style: .tinted, size: .sm)
+                            }
+                            ForEach(Array(selectedExtras), id: \.self) { extra in
+                                Chip(extra, style: .tinted, size: .sm)
+                            }
+                        }
+                    }
+                    Text("Prices may vary based on pet size, weight & condition")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                }
+            }
         }
     }
+
+    private func additionalServiceRow(title: String, subtitle: String, icon: String) -> some View {
+        let isSel = selectedExtras.contains(title)
+        return Button {
+            if isSel { selectedExtras.remove(title) } else { selectedExtras.insert(title) }
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) }
+                    .frame(width: 32, height: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSel ? .green : .secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSel ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+    }
     
-    private var notesSection: some View {
+    private var notesAndTagsBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Session Notes").font(.subheadline.weight(.semibold))
+                Text("Notes & Behavior Tags").font(.subheadline.weight(.semibold))
                 TextEditor(text: $viewModel.notes)
                     .frame(minHeight: 100)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -130,7 +210,7 @@ struct CheckoutView: View {
         }
     }
     
-    private var photosSection: some View {
+    private var photosBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Before & After Photos").font(.subheadline.weight(.semibold))
@@ -162,31 +242,42 @@ struct CheckoutView: View {
         }
     }
     
-    private var chargeSection: some View {
+    private var chargeBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Payment Details").font(.subheadline.weight(.semibold))
-                
-                labeledContent("Amount") {
-                    TextField("$0.00", text: $viewModel.amountString)
+                Text("Service Charge").font(.subheadline.weight(.semibold))
+                labeledContent("Base Amount") {
+                    TextField("0.00", text: $baseAmountString)
                         .keyboardType(.decimalPad)
-                        .textFieldStyle(.plain)
                         .multilineTextAlignment(.trailing)
-                        .onChange(of: viewModel.amountString) { newValue in
-                            viewModel.setAmountDirectly(newValue)
-                        }
-                        .onSubmit {
-                            viewModel.formatAmountInput()
-                        }
+                        .onChange(of: baseAmountString) { _ in syncManualAmount() }
                 }
                 
-                labeledContent("Method") {
-                    Picker("Payment Method", selection: $viewModel.selectedPaymentMethod) {
-                        ForEach(Payment.Method.allCases) { m in Text(m.displayName).tag(m) }
+                // Tip UI — contributes into total via syncManualAmount
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tip Amount").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        ForEach([0, 15, 20, 25], id: \.self) { pct in
+                            let isSel = selectedTipPercent == pct
+                            Chip("\(pct == 0 ? "None" : "\(pct)%")",
+                                 style: isSel ? .prominent : .outline,
+                                 size: .sm,
+                                 tint: .green
+                            ) {
+                                selectedTipPercent = pct
+                                customTipString = ""
+                                syncManualAmount()
+                            }
+                        }
                     }
-                    .labelsHidden()
+                    TextField("Custom tip amount", text: $customTipString)
+                        .keyboardType(.decimalPad)
+                        .onChange(of: customTipString) { _ in
+                            selectedTipPercent = nil
+                            syncManualAmount()
+                        }
                 }
-                
+
                 if viewModel.requiresExternalReference {
                     labeledContent("Reference") {
                         TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
@@ -199,7 +290,6 @@ struct CheckoutView: View {
                 Divider()
                 
                 VStack(spacing: 8) {
-                    // FIX: Access the final total from the ViewModel
                     HStack { Text("Total").fontWeight(.semibold); Spacer(); Text(viewModel.finalTotalString).fontWeight(.semibold) }
                 }
                 .monospacedDigit()
@@ -223,7 +313,7 @@ struct CheckoutView: View {
             Button("Cancel", role: .cancel) { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-            Button("Confirm", action: confirmAndDismiss)
+            Button("Confirm", action: confirmCheckoutFlow)
                 .disabled(!viewModel.isConfirmEnabled)
         }
         ToolbarItemGroup(placement: .keyboard) {
@@ -236,7 +326,7 @@ struct CheckoutView: View {
     }
 
     private func bottomCta() -> some View {
-        Button(action: confirmAndDismiss) {
+        Button(action: confirmCheckoutFlow) {
             HStack {
                 if viewModel.isSaving {
                     ProgressView().tint(.white)
@@ -257,6 +347,206 @@ struct CheckoutView: View {
         .controlSize(.large)
         .padding()
         .background(.ultraThinMaterial)
+    }
+
+    // MARK: - Payment methods block (button grid)
+    private var paymentMethodBlock: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Payment Method").font(.subheadline.weight(.semibold))
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    paymentTile(.cash, icon: "banknote", tint: .green)
+                    paymentTile(.creditCard, icon: "creditcard", tint: .blue)
+                    paymentTile(.debitCard, icon: "creditcard", tint: .purple)
+                    paymentTile(.zelle, icon: "dollarsign.circle", tint: .yellow)
+                }
+                if viewModel.requiresExternalReference {
+                    labeledContent("Transaction Reference") {
+                        TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private func paymentTile(_ method: Payment.Method, icon: String, tint: Color) -> some View {
+        let isSel = viewModel.selectedPaymentMethod == method
+        return Button {
+            viewModel.choosePayment(method)
+        } label: {
+            VStack(spacing: 8) {
+                ZStack { Circle().fill(tint.opacity(0.12)); Image(systemName: icon).foregroundStyle(tint) }
+                    .frame(width: 48, height: 48)
+                Text(method.displayName).font(.caption.weight(.medium)).foregroundStyle(.primary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSel ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: 2)
+                    .background(isSel ? Color.accentColor.opacity(0.06) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Summary block
+    private var summaryBlock: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Payment Summary").font(.subheadline.weight(.semibold))
+                HStack { Text("Base Charge"); Spacer(); Text(baseAmountDecimal.moneyString) }
+                HStack { Text("Tip Amount"); Spacer(); Text(tipDecimal.moneyString) }
+                Divider()
+                HStack { Text("Total Amount").font(.headline); Spacer(); Text(viewModel.finalTotalString).font(.title3).fontWeight(.bold).foregroundStyle(.green) }
+                Card {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill").foregroundStyle(.blue)
+                        Text("Session Summary").font(.subheadline.weight(.medium))
+                    }
+                    .padding(.bottom, 2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Duration: \(viewModel.visitTimer.formattedElapsed)")
+                        Text("Started: \(Formatters.timeOnly.string(from: viewModel.visit.startedAt))")
+                        Text("Payment Method: \(viewModel.selectedPaymentMethod.displayName)")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .monospacedDigit()
+    }
+
+    // MARK: - Service tiles/helpers
+    private func packageRow(_ service: Service) -> some View {
+        let isSelected = viewModel.isServiceSelected(service)
+        return Button {
+            viewModel.toggleService(service)
+            syncManualAmount()
+        } label: {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(service.name).font(.subheadline.weight(.semibold))
+                    if let price = service.basePrice { Text(price.moneyString).font(.caption).foregroundStyle(.secondary) }
+                }
+                Spacer()
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle").foregroundStyle(isSelected ? .green : .secondary)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSelected ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func serviceTile(_ service: Service) -> some View {
+        let isSelected = viewModel.isServiceSelected(service)
+        let icon = service.systemIcon ?? "pawprint.fill"
+        return Button {
+            viewModel.toggleService(service)
+            syncManualAmount()
+        } label: {
+            VStack(spacing: 6) {
+                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) }
+                    .frame(width: 36, height: 36)
+                Text(service.name).font(.caption.weight(.medium)).foregroundStyle(.primary)
+                Text(service.basePrice?.moneyString ?? "").font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(isSelected ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: 2)
+                    .background(isSelected ? Color.accentColor.opacity(0.06) : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Overlays
+    @ViewBuilder private var processingOverlay: some View {
+        if viewModel.isSaving {
+            ZStack {
+                Color.black.opacity(0.4).ignoresSafeArea()
+                VStack(spacing: 12) {
+                    ZStack { Circle().fill(Color.accentColor.opacity(0.12)); ProgressView().tint(.accentColor) }
+                        .frame(width: 64, height: 64)
+                    Text("Processing Payment").font(.headline)
+                    Text("Please wait while we complete your transaction...")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
+                .padding(24)
+            }
+        }
+    }
+
+    @ViewBuilder private var successOverlay: some View {
+        if showSuccessModal {
+            ZStack {
+                Color.black.opacity(0.4).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    ZStack { Circle().fill(Color.green.opacity(0.15)); Image(systemName: "checkmark").foregroundStyle(.green) }
+                        .frame(width: 64, height: 64)
+                    Text("Checkout Complete!").font(.headline)
+                    Text("Payment of \(viewModel.finalTotalString) has been processed successfully.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("Continue") { showSuccessModal = false; dismiss() }
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding()
+                .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
+                .padding(24)
+            }
+        }
+    }
+
+    // MARK: - Derived (UI money math)
+    private var selectedServices: [Service] {
+        viewModel.allServices.filter { viewModel.isServiceSelected($0) }
+    }
+
+    private var servicesSubtotal: Decimal {
+        viewModel.allServices
+            .filter { viewModel.isServiceSelected($0) }
+            .reduce(Decimal.zero) { $0 +~ $1.effectiveBasePrice }
+    }
+
+    private var baseAmountDecimal: Decimal {
+        Formatters.parseCurrency(baseAmountString) ?? 0
+    }
+
+    private var tipDecimal: Decimal {
+        if let pct = selectedTipPercent {
+            let base = baseAmountDecimal +~ servicesSubtotal
+            return (base *~ Decimal(pct) / 100).roundedMoney()
+        }
+        return Formatters.parseCurrency(customTipString) ?? 0
+    }
+
+    private func syncManualAmount() {
+        let total = (servicesSubtotal +~ baseAmountDecimal +~ tipDecimal).roundedMoney()
+        viewModel.setAmountDirectly(total.moneyString)
+    }
+
+    private func confirmCheckoutFlow() {
+        Task { @MainActor in
+            syncManualAmount()
+            if await viewModel.confirmCheckout() {
+                showSuccessModal = true
+            }
+        }
     }
 }
 

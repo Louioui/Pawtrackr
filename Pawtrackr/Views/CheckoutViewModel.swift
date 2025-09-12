@@ -80,9 +80,9 @@ final class CheckoutViewModel {
         )
         self.allServices = (try? modelContext.fetch(descriptor)) ?? []
 
-        // Find or create the active visit for state hydration.
-        if let activeVisit = pet.visits.first(where: { $0.isActive }) {
-            self.visit = activeVisit
+        // Choose the most recent visit (active if present; otherwise the latest ended visit).
+        if let recent = pet.visits.sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
+            self.visit = recent
         } else {
             // Create a temporary visit for the UI, but DON'T insert it yet.
             // It will only be inserted upon confirmation.

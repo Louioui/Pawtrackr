@@ -20,6 +20,8 @@ import OSLog
 
     // Local sheet routing (do not depend on VM for UI routing)
     @State private var sheetDestination: SheetDestination?
+    @State private var checkoutPet: Pet? = nil
+    @State private var petPendingCheckIn: Pet? = nil
 
     enum SheetDestination: Identifiable {
         case addPet
@@ -84,14 +86,33 @@ import OSLog
                 switch destination {
                 case .addPet:
                     AddPetSheet(client: vm.client)
-                case .checkout(let pet):
-                    CheckoutView(pet: pet)
+                case .checkout:
+                    // Handled by fullScreenCover below
+                    EmptyView()
                 case .history(let pet):
                     PetHistoryView(pet: pet)
                 }
             }
+            .fullScreenCover(item: $checkoutPet) { pet in
+                CheckoutView(pet: pet)
+            }
         }
-        // Global confirmation + alert so they always present (not tied to toolbar items)
+        // Global confirmation + alerts so they always present (not tied to toolbar items)
+        .alert(
+            petPendingCheckIn.map { "Start session for \($0.name)?" } ?? "",
+            isPresented: Binding(
+                get: { petPendingCheckIn != nil },
+                set: { if !$0 { petPendingCheckIn = nil } }
+            )
+        ) {
+            Button("No", role: .cancel) { petPendingCheckIn = nil }
+            Button("Yes", role: .destructive) {
+                if let pet = petPendingCheckIn { vm.checkIn(pet: pet) }
+                petPendingCheckIn = nil
+            }
+        } message: {
+            Text("This will begin a new session and start the timer.")
+        }
         .alert(
             "Are you sure you want to delete \(vm.client.fullName)?",
             isPresented: $showDeleteConfirm
@@ -151,16 +172,15 @@ import OSLog
             let columns: [GridItem] = [GridItem(.adaptive(minimum: 320, maximum: 400), spacing: 16)]
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(vm.pets) { pet in
-                    PetCard(
-                        pet: pet,
-                        activeVisit: vm.activeVisit(for: pet),
-                        onViewDetails: { sheetDestination = .history(pet) },
-                        onCheckIn: {
-                            _ = vm.checkIn(pet: pet)
-                        },
+                        PetCard(
+                            pet: pet,
+                            activeVisit: vm.activeVisit(for: pet),
+                            onViewDetails: { sheetDestination = .history(pet) },
+                        onCheckIn: { petPendingCheckIn = pet },
                         onCheckOut: {
-                            // End the visit in Checkout flow; the checkout screen will attach payment
-                            sheetDestination = .checkout(pet)
+                            // Stop timer immediately, then present checkout full‑screen to finalize
+                            vm.pauseVisitForCheckout(pet: pet)
+                            checkoutPet = pet
                         }
                     )
                 }

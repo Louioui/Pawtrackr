@@ -14,6 +14,7 @@ struct ClientCard: View {
     
     // IMPROVEMENT: Logic is self-contained within the card.
     private var isInProgress: Bool { client.hasActiveVisit }
+    @State private var pulse: Bool = false
 
     var body: some View {
         // FIX: Use the correct Card initializer with a Card.Accent struct.
@@ -92,10 +93,19 @@ struct ClientCard: View {
         if let activeVisit = client.mostRecentActiveVisit {
             TimelineView(.everyMinute) { context in
                 let duration = Formatters.durationString(from: activeVisit.startedAt, to: context.date)
-                Text(duration)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(DS.ColorToken.success)
-                    .fontWeight(.medium)
+                HStack(spacing: 6) {
+                    Image(systemName: "clock").font(.caption.weight(.semibold))
+                    Text(duration).font(.caption.monospacedDigit().weight(.semibold))
+                }
+                .foregroundStyle(DS.ColorToken.success)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(DS.ColorToken.success.opacity(0.12), in: Capsule())
+                .overlay(Capsule().stroke(DS.ColorToken.success.opacity(0.2)))
+                .scaleEffect(pulse ? 1.03 : 1.0)
+                .animation(.easeOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+                .onAppear { pulse = true }
+                .onDisappear { pulse = false }
             }
         } else if let lastEnded = client.mostRecentEndedAt {
             Text("Last visit: \(lastEnded, style: .relative)")

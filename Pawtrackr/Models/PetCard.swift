@@ -21,6 +21,7 @@ struct PetCard: View {
     // MARK: - State / Environment
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var visitTimer = VisitTimer()
+    @State private var pulse: Bool = false
 
     // MARK: - Derived
     private var isActive: Bool { activeVisit?.endedAt == nil && activeVisit != nil }
@@ -69,17 +70,54 @@ struct PetCard: View {
 
                     // Timer / last visit line
                     if isActive {
-                        Label(elapsedString, systemImage: "clock")
-                            .font(.caption)
-                            .foregroundStyle(DS.ColorToken.success)
-                            .accessibilityLabel(visitTimer.accessibilityElapsedLabel)
+                        // Prominent, centered live timer with subtle pulse and green accent
+                        HStack {
+                            Spacer(minLength: 0)
+                            HStack(spacing: 8) {
+                                Image(systemName: "clock")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(DS.ColorToken.success)
+                                VStack(spacing: 2) {
+                                    Text(elapsedString)
+                                        .font(.title2.weight(.bold))
+                                        .monospacedDigit()
+                                        .foregroundStyle(DS.ColorToken.success)
+                                    Text("In Session")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(DS.ColorToken.success)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                LinearGradient(
+                                    colors: [
+                                        DS.ColorToken.success.opacity(0.18),
+                                        DS.ColorToken.success.opacity(0.10)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            , in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(DS.ColorToken.success.opacity(0.25), lineWidth: 1)
+                            )
+                            .scaleEffect(pulse ? 1.03 : 1.0)
+                            .animation(.easeOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+                            .onAppear { pulse = true }
+                            .onDisappear { pulse = false }
+                            Spacer(minLength: 0)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(visitTimer.accessibilityElapsedLabel)
                     } else if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
                         Text("Last Visit: \(last.sortKeyDate.formatted(date: .abbreviated, time: .omitted))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    // Actions: Check In and Check Out grouped together
+                    // Actions: Keep Check In here; move Check Out into Visit Details screen
                     HStack(spacing: 8) {
                         Button(action: onCheckIn) {
                             Label("Check In", systemImage: "play.circle.fill")
@@ -87,12 +125,10 @@ struct PetCard: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(isActive)
 
-                        Button(action: onCheckOut) {
-                            Label("Check Out", systemImage: "checkmark.circle.fill")
+                        Button(action: onViewDetails) {
+                            Label("View Details", systemImage: "chevron.right")
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DS.ColorToken.success)
-                        .disabled(!isActive)
+                        .buttonStyle(.bordered)
                     }
                     .font(.subheadline)
                     .padding(.top, 2)
@@ -113,6 +149,14 @@ struct PetCard: View {
         .onAppear { syncTimer() }
         .onChange(of: activeVisit?.startedAt) { _ in syncTimer() }
         .onChange(of: activeVisit?.endedAt) { _ in syncTimer() }
+        .onChange(of: isActive) { _, nowActive in
+            // Start/stop pulse when the session toggles
+            if nowActive {
+                pulse = true
+            } else {
+                pulse = false
+            }
+        }
     }
 
     // MARK: - Subviews

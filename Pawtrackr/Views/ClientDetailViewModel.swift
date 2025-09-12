@@ -62,7 +62,12 @@ final class ClientDetailViewModel: ObservableObject {
         if activeVisit(for: pet) != nil { return }
         let v = Visit(pet: pet, startedAt: date)  // ✅ provide required 'pet'
         modelContext.insert(v)
-        do { try modelContext.save() } catch {
+        do {
+            try modelContext.save()
+            // Trigger UI refresh for pet cards and lists
+            self.pets = client.pets
+            objectWillChange.send()
+        } catch {
             Logger.main.error("Failed to check in: \(String(describing: error))")
         }
         refreshRecentVisits()
@@ -79,11 +84,31 @@ final class ClientDetailViewModel: ObservableObject {
     func checkOut(pet: Pet, customTotal: Decimal? = nil, at date: Date = .now) {
         guard let visit = activeVisit(for: pet) else { return }
         visit.markCheckedOut(total: customTotal, now: date)
-        do { try modelContext.save() } catch {
+        do {
+            try modelContext.save()
+            // Trigger UI refresh to flip buttons/timer state
+            self.pets = client.pets
+            objectWillChange.send()
+        } catch {
             Logger.main.error("Failed to check out: \(String(describing: error))")
         }
         refreshRecentVisits()
         NotificationCenter.default.post(name: .visitDidComplete, object: visit)
+    }
+
+    /// Stops the running timer by ending the current active visit without finalizing totals.
+    /// Use this right before presenting the Checkout view; Checkout will handle totals and payment.
+    func pauseVisitForCheckout(pet: Pet, at date: Date = .now) {
+        guard let visit = activeVisit(for: pet) else { return }
+        if visit.endedAt == nil { visit.endedAt = date }
+        do {
+            try modelContext.save()
+            // refresh lists so the pet card reflects non-running state immediately
+            self.pets = client.pets
+            objectWillChange.send()
+        } catch {
+            Logger.main.error("Failed to pause visit for checkout: \(String(describing: error))")
+        }
     }
 }
 

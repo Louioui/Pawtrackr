@@ -121,6 +121,7 @@ final class PetDetailViewModel {
         @Environment(\.dismiss) private var dismiss
         @Environment(\.modelContext) private var modelContext
         @State private var viewModel: PetDetailViewModel?
+        @State private var confirmCheckIn: Bool = false
         private let initialPet: Pet
         init(pet: Pet) {
             self.initialPet = pet
@@ -150,6 +151,12 @@ final class PetDetailViewModel {
                             ToolbarItem(placement: .topBarLeading) {
                                 Button { dismiss() } label: { Image(systemName: "chevron.backward") }
                             }
+                        }
+                        .alert("Start session for \(pet.name)?", isPresented: $confirmCheckIn) {
+                            Button("No", role: .cancel) {}
+                            Button("Yes", role: .destructive) { vm.checkIn() }
+                        } message: {
+                            Text("This will begin a new session and start the timer.")
                         }
                         .sheet(item: $bvm.sheetDestination) { destination in
                             switch destination {
@@ -236,7 +243,7 @@ final class PetDetailViewModel {
         private func actionRow(_ vm: PetDetailViewModel) -> some View {
             HStack(spacing: 12) {
                 actionTile(title: "View History", systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
-                actionTile(title: "Check In", systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { vm.checkIn() }
+                actionTile(title: "Check In", systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { confirmCheckIn = true }
                 actionTile(title: "Check Out", systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)
