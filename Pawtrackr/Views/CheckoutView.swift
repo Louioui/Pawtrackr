@@ -76,7 +76,7 @@ struct CheckoutView: View {
                     Text(viewModel.pet.owner?.fullName ?? "").font(.subheadline).foregroundStyle(.secondary)
                     HStack(spacing: 6) {
                         Image(systemName: "clock").foregroundStyle(.green)
-                        Text("Session: \(viewModel.visitTimer.formattedElapsed)")
+                        Text("Session: \(viewModel.sessionDurationString)")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.green)
                             .monospacedDigit()
@@ -409,7 +409,7 @@ struct CheckoutView: View {
                     }
                     .padding(.bottom, 2)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Duration: \(viewModel.visitTimer.formattedElapsed)")
+                        Text("Duration: \(viewModel.sessionDurationString)")
                         Text("Started: \(Formatters.timeOnly.string(from: viewModel.visit.startedAt))")
                         Text("Payment Method: \(viewModel.selectedPaymentMethod.displayName)")
                     }

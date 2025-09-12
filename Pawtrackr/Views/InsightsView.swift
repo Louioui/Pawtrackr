@@ -39,13 +39,12 @@ struct InsightsView: View {
     @State private var viewModel: InsightsViewModel?
 
     var body: some View {
-        Group {
-            if let vm = viewModel {
-                @Bindable var bvm = vm
-                NavigationStack {
+        NavigationStack {
+            Group {
+                if let vm = viewModel {
+                    @Bindable var bvm = vm
                     ScrollView {
                         VStack(spacing: 16) {
-                            header(bvm)
                             filtersSection(bvm)
                             kpiRibbon(bvm)
                             revenueChart(bvm)
@@ -58,7 +57,6 @@ struct InsightsView: View {
                         .padding(.top, 8)
                         .padding(.bottom, 24)
                     }
-                    .navigationTitle("Insights")
                     .toolbar { toolbar(bvm) }
                     .animation(.default, value: bvm.scope)
                     .overlay {
@@ -68,11 +66,12 @@ struct InsightsView: View {
                                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                     }
+                } else {
+                    ProgressView("Loading Insights...")
                 }
-            } else {
-                ProgressView("Loading Insights...")
-                    .task { viewModel = InsightsViewModel(modelContext: modelContext) }
             }
+            .navigationTitle("Insights")
+            .task { if viewModel == nil { viewModel = InsightsViewModel(modelContext: modelContext) } }
         }
     }
 
@@ -229,23 +228,7 @@ struct InsightsView: View {
         #endif
     }
 
-    // Header with inline Export action similar to sample
-    private func header(_ vm: InsightsViewModel) -> some View {
-        HStack {
-            Text("Insights").font(.title.weight(.bold))
-                .foregroundStyle(.primary)
-            Spacer()
-            let csv = vm.exportCSV
-            ShareLink(
-                item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Insights.csv"),
-                preview: SharePreview("Pawtrackr Insights", icon: Image(systemName: "doc.text.fill"))
-            ) {
-                Label("Export", systemImage: "square.and.arrow.up")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(csv.isEmpty)
-        }
-    }
+    // (Header removed to avoid duplicate "Insights" with the navigation title.)
 
     @ToolbarContentBuilder
     private func toolbar(_ vm: InsightsViewModel) -> some ToolbarContent {

@@ -70,6 +70,16 @@ final class CheckoutViewModel {
     let visitTimer = VisitTimer()
     static let tagOptions: [String] = Pet.BehaviorTag.allCases.map { $0.displayName }
 
+    /// Duration string frozen at checkout time (if active), or using visit's endedAt if already completed.
+    var sessionDurationString: String {
+        let start = visit.startedAt
+        if let end = visit.endedAt ?? checkoutEndsAt {
+            return Formatters.durationString(from: start, to: end)
+        } else {
+            return Formatters.durationString(from: start, to: .now)
+        }
+    }
+
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
         self.modelContext = modelContext
@@ -96,7 +106,13 @@ final class CheckoutViewModel {
         // Freeze the timer at the moment Checkout starts if the visit is still active.
         // This avoids persisting an interim $0.00 completion while stopping the clock for UI.
         self.checkoutEndsAt = (visitCandidate.endedAt == nil) ? Date() : nil
-        
+
+        // Ensure the timer is truly frozen by persisting endedAt if needed.
+        if let freezeAt = checkoutEndsAt, visitCandidate.modelContext != nil {
+            visitCandidate.endedAt = freezeAt
+            do { try modelContext.save() } catch { /* non-fatal; UI still uses freezeAt */ }
+        }
+
         hydrateStateFromVisit()
     }
     
