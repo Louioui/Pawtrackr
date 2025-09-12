@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 /// A lightweight, UI-friendly stopwatch for active visits.
 /// - Does **not** reference app model types to avoid access-control cycles.
@@ -44,24 +45,22 @@ final class VisitTimer: ObservableObject {
     /// Accumulated seconds from previous runs (if the timer was paused/resumed).
     private var accumulatedSeconds: Int = 0
 
-    /// The underlying RunLoop timer (allows tolerance to save battery).
-    private var runloopTimer: Timer?
+    /// Subscription to the shared time hub to keep all timers in sync.
+    private var tickSubscription: AnyCancellable?
 
     // MARK: - Lifecycle
 
     deinit {
-        runloopTimer?.invalidate()
-        runloopTimer = nil
+        // Avoid cross-actor call in deinit by inlining cancellation.
+        tickSubscription?.cancel()
+        tickSubscription = nil
     }
 
     // MARK: - Public API
 
     /// Call when the scene becomes active/foreground. Safely restarts ticking if needed and snaps the UI to now.
     func sceneBecameActive(now: Date = .now) {
-        if isRunning {
-            if runloopTimer == nil { beginTicking() }
-            updateElapsed(now: now)
-        }
+        if isRunning { if tickSubscription == nil { beginTicking() }; updateElapsed(now: now) }
     }
 
     /// Call when the scene resigns active/backgrounds. Stops ticking to save battery and freezes the current elapsed.
@@ -73,7 +72,7 @@ final class VisitTimer: ObservableObject {
     /// Manually force an elapsed recompute (does not alter running/paused state).
     func refresh(now: Date = .now) {
         updateElapsed(now: now)
-        if isRunning && runloopTimer == nil { beginTicking() }
+        if isRunning && tickSubscription == nil { beginTicking() }
     }
 
     /// Start (or resume) the timer at a specific wall-clock time.
@@ -208,22 +207,16 @@ final class VisitTimer: ObservableObject {
     // MARK: - Private helpers
 
     private func beginTicking() {
-        // Invalidate any existing timer first.
-        runloopTimer?.invalidate()
-
-        // Schedule a 1s timer with a small tolerance to reduce power usage.
-        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.updateElapsed(now: Date())
+        // Subscribe to the shared hub so all timers update in sync.
+        tickSubscription?.cancel()
+        tickSubscription = TimeHub.shared.$now.sink { [weak self] now in
+            self?.updateElapsed(now: now)
         }
-        t.tolerance = 0.2
-        RunLoop.main.add(t, forMode: .common)
-        runloopTimer = t
     }
 
     private func endTicking() {
-        runloopTimer?.invalidate()
-        runloopTimer = nil
+        tickSubscription?.cancel()
+        tickSubscription = nil
     }
 
     private func updateElapsed(now: Date) {

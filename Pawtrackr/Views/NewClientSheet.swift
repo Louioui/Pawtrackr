@@ -24,7 +24,8 @@ struct NewClientSheet: View {
     @State private var phone = ""
     @State private var email = ""
     @State private var address = ""
-    @State private var emergency = ""
+    @State private var emergencyName = ""
+    @State private var emergencyPhone = ""
 
     // Pets buffer (at least one)
     @State private var pets: [TempPet] = [TempPet(index: 1)]
@@ -88,7 +89,16 @@ struct NewClientSheet: View {
                         .textContentType(.fullStreetAddress)
                         .submitLabel(.next)
                     #endif
-                    TextField("Emergency Contact (optional)", text: $emergency)
+                    TextField("Emergency Contact Name (optional)", text: $emergencyName)
+                    #if os(iOS)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.next)
+                    #endif
+                    TextField("Emergency Contact Phone (optional)", text: $emergencyPhone)
+                        .autocorrectionDisabled()
+                        .onChange(of: emergencyPhone) { _, newValue in
+                            if let pretty = PhoneUtils.display(newValue) { emergencyPhone = pretty }
+                        }
                     #if os(iOS)
                         .keyboardType(.phonePad)
                         .textContentType(.telephoneNumber)
@@ -272,10 +282,10 @@ struct NewClientSheet: View {
 
         // Optional: normalize emergency contact if present
         var emergencyE164: String? = nil
-        if !emergency.trimmed.isEmpty {
-            emergencyE164 = PhoneUtils.toE164(emergency)
+        if !emergencyPhone.trimmed.isEmpty {
+            emergencyE164 = PhoneUtils.toE164(emergencyPhone)
             if emergencyE164 == nil {
-                alertText = "Emergency contact must be a valid US phone number."
+                alertText = "Emergency contact phone must be a valid US number."
                 return false
             }
         }
@@ -297,7 +307,10 @@ struct NewClientSheet: View {
                             phone: e164)
         if !email.trimmed.isEmpty { client.email = email.trimmed.lowercased() }
         if !address.trimmed.isEmpty { client.address = address.trimmed }
-        if let emergencyE164 { client.setEmergencyContact(name: nil, phone: emergencyE164) }
+        if emergencyE164 != nil || !emergencyName.trimmed.isEmpty {
+            client.setEmergencyContact(name: emergencyName.trimmed.isEmpty ? nil : emergencyName.trimmed,
+                                       phone: emergencyE164)
+        }
 
         // Create Pets
         pets.forEach { tp in
@@ -308,21 +321,11 @@ struct NewClientSheet: View {
             if !tp.color.trimmed.isEmpty { pet.color = tp.color.trimmed }
             if let data = tp.photoData { pet.photoData = data }
 
-            // Consolidate extra fields into the canonical note if your model doesn’t yet have dedicated properties
-            var noteParts: [String] = []
-            if !tp.notes.trimmed.isEmpty { noteParts.append(tp.notes.trimmed) }
-            if !tp.health.trimmed.isEmpty { noteParts.append("Health: \(tp.health.trimmed)") }
-            let tags = tp.behaviorCSV.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            if !tags.isEmpty { noteParts.append("Behavior: \(tags.joined(separator: ", "))") }
-            if !noteParts.isEmpty {
-                let joined = noteParts.joined(separator: "\n")
-                // Prefer `notes` if available, else fall back to `note`
-                #if compiler(>=6.0)
-                pet.notes = joined
-                #else
-                pet.note = joined
-                #endif
-            }
+            // Store structured fields directly on the model
+            if !tp.health.trimmed.isEmpty { pet.setHealth(tp.health.trimmed) }
+            let parsedTags = FormValidators.parseBehaviorTagsCSV(tp.behaviorCSV)
+            if !parsedTags.isEmpty { pet.setBehaviorTags(parsedTags) }
+            if !tp.notes.trimmed.isEmpty { pet.setNotes(tp.notes.trimmed) }
 
             pet.owner = client
         }

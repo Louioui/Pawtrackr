@@ -68,6 +68,23 @@ struct PetCard: View {
                             .lineLimit(1)
                     }
 
+                    // Behavior tags with emoji chips
+                    if !pet.behaviorTags.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(pet.behaviorTags, id: \.self) { tag in
+                                let disp = BehaviorTagIcons.display(for: tag)
+                                Chip((disp.emoji != nil ? "\(disp.emoji!) " : "") + disp.label, style: .tinted, size: .xs)
+                            }
+                        }
+                    }
+
+                    if let health = pet.health?.trimmingCharacters(in: .whitespacesAndNewlines), !health.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "cross.case.fill").foregroundStyle(.red.opacity(0.8))
+                            Text(health).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+
                     // Timer / last visit line
                     if isActive {
                         // Prominent, centered live timer with subtle pulse and green accent

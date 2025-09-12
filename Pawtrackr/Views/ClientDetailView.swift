@@ -25,6 +25,7 @@ import OSLog
 
     enum SheetDestination: Identifiable {
         case addPet
+        case editClient
         case checkout(Pet)
         case history(Pet)
 
@@ -32,6 +33,8 @@ import OSLog
             switch self {
             case .addPet:
                 return "addPet"
+            case .editClient:
+                return "editClient"
             case .checkout(let pet):
                 return "checkout_\(String(describing: pet.persistentModelID))"
             case .history(let pet):
@@ -86,6 +89,8 @@ import OSLog
                 switch destination {
                 case .addPet:
                     AddPetSheet(client: vm.client)
+                case .editClient:
+                    EditClientSheet(client: vm.client)
                 case .checkout:
                     // Handled by fullScreenCover below
                     EmptyView()
@@ -133,20 +138,30 @@ import OSLog
     // MARK: - Subviews
     private func ownerHeader(client: Client) -> some View {
         Card {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(client.fullName)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
 
-                if let phone = client.phone, !phone.isEmpty {
-                    Label(PhoneUtils.display(phone) ?? phone, systemImage: "phone.fill")
+                VStack(alignment: .leading, spacing: 6) {
+                    if let phone = client.phone, !phone.isEmpty {
+                        Label(PhoneUtils.display(phone) ?? phone, systemImage: "phone.fill")
+                    }
+                    if let email = client.email, !email.isEmpty {
+                        Label(email, systemImage: "envelope.fill")
+                    }
+                    if let address = client.address, !address.trimmed.isEmpty {
+                        Label(address, systemImage: "house.fill")
+                    }
+                    if client.emergencyContactName?.trimmed.isEmpty == false || client.emergencyContactPhone?.trimmed.isEmpty == false {
+                        let name = client.emergencyContactName?.trimmed ?? "Emergency Contact"
+                        let phone = client.emergencyContactPhone.flatMap { PhoneUtils.display($0) } ?? client.emergencyContactPhone
+                        Label("\(name)\(phone != nil ? ": \(phone!)" : "")", systemImage: "person.badge.key.fill")
+                    }
                 }
-                if let email = client.email, !email.isEmpty {
-                    Label(email, systemImage: "envelope.fill")
-                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
@@ -217,6 +232,11 @@ import OSLog
         // Rely on the system-provided back button to avoid duplicates
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
+                Button {
+                    sheetDestination = .editClient
+                } label: {
+                    Label("Edit Client", systemImage: "pencil")
+                }
                 Button(role: .destructive) {
                     showDeleteConfirm = true
                 } label: {
