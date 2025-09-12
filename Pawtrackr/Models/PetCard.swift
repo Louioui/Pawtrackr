@@ -99,7 +99,7 @@ struct PetCard: View {
                                         .font(.title2.weight(.bold))
                                         .monospacedDigit()
                                         .foregroundStyle(DS.ColorToken.success)
-                                    Text("In Session")
+                                    Text(NSLocalizedString("status.in_session", comment: ""))
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(DS.ColorToken.success)
                                 }
@@ -129,7 +129,7 @@ struct PetCard: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(visitTimer.accessibilityElapsedLabel)
                     } else if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
-                        Text("Last Visit: \(last.sortKeyDate.formatted(date: .abbreviated, time: .omitted))")
+                        Text(String(format: NSLocalizedString("pet.last_visit_fmt", comment: ""), last.sortKeyDate.formatted(date: .abbreviated, time: .omitted)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -180,7 +180,7 @@ struct PetCard: View {
     private var inProgressBadge: some View {
         HStack(spacing: 6) {
             Circle().fill(DS.ColorToken.success).frame(width: 6, height: 6).accessibilityHidden(true)
-            Text("In Session").font(.caption2.weight(.semibold))
+            Text(NSLocalizedString("status.in_session", comment: "")).font(.caption2.weight(.semibold))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)

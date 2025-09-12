@@ -70,7 +70,7 @@ struct InsightsView: View {
                     ProgressView("Loading Insights...")
                 }
             }
-            .navigationTitle("Insights")
+            .navigationTitle("insights.title")
             .task { if viewModel == nil { viewModel = InsightsViewModel(modelContext: modelContext) } }
         }
     }
@@ -80,7 +80,7 @@ struct InsightsView: View {
     private func filtersSection(@Bindable _ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Filters").font(.subheadline.weight(.semibold))
+                Text("insights.filters").font(.subheadline.weight(.semibold))
 
                 // FIX: Use the bindable `vm` to avoid force unwrapping optionals.
                 Picker("Scope", selection: $vm.scope) {
@@ -102,12 +102,12 @@ struct InsightsView: View {
     private func kpiGrid(_ vm: InsightsViewModel) -> some View {
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
             GridRow {
-                KPI(title: "Revenue", value: vm.kpis.revenueString)
-                KPI(title: "Total Visits", value: "\(vm.kpis.count)")
+                KPI(title: "insights.revenue", value: vm.kpis.revenueString)
+                KPI(title: "insights.total_visits", value: "\(vm.kpis.count)")
             }
             GridRow {
-                KPI(title: "Avg. Sale (AOV)", value: vm.kpis.aovString)
-                KPI(title: "Avg. Duration", value: vm.kpis.avgDurationString)
+                KPI(title: "insights.aov", value: vm.kpis.aovString)
+                KPI(title: "insights.avg_duration", value: vm.kpis.avgDurationString)
             }
         }
     }
@@ -115,8 +115,8 @@ struct InsightsView: View {
     // A more visual ribbon to echo the sample UI style
     private func kpiRibbon(_ vm: InsightsViewModel) -> some View {
         HStack(spacing: 12) {
-            RibbonCard(icon: "dollarsign", title: "Revenue", value: vm.kpis.revenueString, tint: .green)
-            RibbonCard(icon: "checkmark.circle", title: "Visits", value: "\(vm.kpis.count)", tint: .blue)
+            RibbonCard(icon: "dollarsign", title: "insights.revenue", value: vm.kpis.revenueString, tint: .green)
+            RibbonCard(icon: "checkmark.circle", title: "insights.visits", value: "\(vm.kpis.count)", tint: .blue)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -126,9 +126,9 @@ struct InsightsView: View {
         #if canImport(Charts)
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Revenue Trend").font(.subheadline.weight(.semibold))
+                Text("insights.revenue_trend").font(.subheadline.weight(.semibold))
                 if vm.revenueSeries.isEmpty {
-                    ContentUnavailableView("No Revenue Data", systemImage: "chart.bar.xaxis")
+                    ContentUnavailableView(NSLocalizedString("insights.no_revenue", comment: ""), systemImage: "chart.bar.xaxis")
                         .frame(height: 180)
                 } else {
                     Chart(vm.revenueSeries) { point in
@@ -149,7 +149,7 @@ struct InsightsView: View {
     private func topServices(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Top Services").font(.subheadline.weight(.semibold))
+                Text("insights.top_services").font(.subheadline.weight(.semibold))
                 if vm.serviceLeaders.isEmpty {
                     Text("No service data in this range.").font(.subheadline).foregroundStyle(.secondary)
                 } else {
@@ -166,7 +166,7 @@ struct InsightsView: View {
     private func topClients(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Top Clients").font(.subheadline.weight(.semibold))
+                Text("insights.top_clients").font(.subheadline.weight(.semibold))
                 if vm.clientLeaders.isEmpty {
                     Text("No client data in this range.").font(.subheadline).foregroundStyle(.secondary)
                 } else {
@@ -186,7 +186,7 @@ struct InsightsView: View {
         #if canImport(Charts)
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Visits by Package").font(.subheadline.weight(.semibold))
+                Text("insights.visits_by_package").font(.subheadline.weight(.semibold))
                 if vm.packageLeaders.isEmpty {
                     ContentUnavailableView("No package data", systemImage: "chart.bar")
                         .frame(height: 160)
@@ -210,9 +210,9 @@ struct InsightsView: View {
         #if canImport(Charts)
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Package Mix").font(.subheadline.weight(.semibold))
+                Text("insights.package_mix").font(.subheadline.weight(.semibold))
                 if vm.categoryTotals.isEmpty {
-                    ContentUnavailableView("No category data", systemImage: "chart.pie")
+                    ContentUnavailableView(NSLocalizedString("insights.no_category", comment: ""), systemImage: "chart.pie")
                         .frame(height: 160)
                 } else {
                     Chart(vm.categoryTotals) { row in
@@ -238,7 +238,7 @@ struct InsightsView: View {
                 item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Insights.csv"),
                 preview: SharePreview("Pawtrackr Insights", icon: Image(systemName: "doc.text.fill"))
             ) {
-                Label("Export", systemImage: "square.and.arrow.up")
+                Label("common.export", systemImage: "square.and.arrow.up")
             }
             .disabled(csv.isEmpty)
             .accessibilityHint(csv.isEmpty ? "No data to export for the current filters" : "Shares a CSV of the current Insights")

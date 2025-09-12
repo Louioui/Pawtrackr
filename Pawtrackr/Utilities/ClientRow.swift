@@ -82,7 +82,7 @@ struct ClientRow: View {
                             }
                         }
                         if inProgress {
-                            Text("In Session")
+                            Text(NSLocalizedString("status.in_session", comment: ""))
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)

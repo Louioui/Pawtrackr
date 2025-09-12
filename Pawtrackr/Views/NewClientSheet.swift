@@ -40,26 +40,26 @@ struct NewClientSheet: View {
         NavigationStack {
             List {
                 // MARK: Owner Info
-                Section("Owner Information") {
-                    TextField("First Name *", text: $first)
+                Section(NSLocalizedString("new_client.owner_section", comment: "")) {
+                    TextField("new_client.first_name_required", text: $first)
                     #if os(iOS)
                         .textContentType(.givenName)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.next)
                     #endif
                     if (attemptedSubmit && first.trimmed.isEmpty) {
-                        Text("First name is required").font(.caption).foregroundStyle(.red)
+                        Text(NSLocalizedString("new_client.error.first_required", comment: "")).font(.caption).foregroundStyle(.red)
                     }
-                    TextField("Last Name *", text: $last)
+                    TextField("new_client.last_name_required", text: $last)
                     #if os(iOS)
                         .textContentType(.familyName)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.next)
                     #endif
                     if (attemptedSubmit && last.trimmed.isEmpty) {
-                        Text("Last name is required").font(.caption).foregroundStyle(.red)
+                        Text(NSLocalizedString("new_client.error.last_required", comment: "")).font(.caption).foregroundStyle(.red)
                     }
-                    TextField("Phone *", text: $phone)
+                    TextField("new_client.phone_required", text: $phone)
                         .autocorrectionDisabled()
                         .onChange(of: phone) { _, newValue in
                             // Normalize live display using PhoneUtils; if unavailable, keep user input
@@ -71,9 +71,9 @@ struct NewClientSheet: View {
                         .submitLabel(.next)
                     #endif
                     if (attemptedSubmit && PhoneUtils.toE164(phone) == nil) {
-                        Text("Enter a valid US phone number").font(.caption).foregroundStyle(.red)
+                        Text(NSLocalizedString("new_client.error.phone_invalid", comment: "")).font(.caption).foregroundStyle(.red)
                     }
-                    TextField("Email (optional)", text: $email)
+                    TextField("new_client.email_optional", text: $email)
                     #if os(iOS)
                         .keyboardType(.emailAddress)
                         .textContentType(.emailAddress)
@@ -82,19 +82,19 @@ struct NewClientSheet: View {
                         .submitLabel(.next)
                     #endif
                     if (attemptedSubmit && !email.trimmed.isEmpty && !isValidEmail(email)) {
-                        Text("Email looks invalid").font(.caption).foregroundStyle(.red)
+                        Text(NSLocalizedString("new_client.error.email_invalid", comment: "")).font(.caption).foregroundStyle(.red)
                     }
-                    TextField("Address (optional)", text: $address)
+                    TextField("new_client.address_optional", text: $address)
                     #if os(iOS)
                         .textContentType(.fullStreetAddress)
                         .submitLabel(.next)
                     #endif
-                    TextField("Emergency Contact Name (optional)", text: $emergencyName)
+                    TextField("new_client.emergency_name_optional", text: $emergencyName)
                     #if os(iOS)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.next)
                     #endif
-                    TextField("Emergency Contact Phone (optional)", text: $emergencyPhone)
+                    TextField("new_client.emergency_phone_optional", text: $emergencyPhone)
                         .autocorrectionDisabled()
                         .onChange(of: emergencyPhone) { _, newValue in
                             if let pretty = PhoneUtils.display(newValue) { emergencyPhone = pretty }
@@ -109,7 +109,7 @@ struct NewClientSheet: View {
                 // MARK: Pet Info
                 Section {
                     HStack {
-                        Text("Pet Information").font(.headline)
+                        Text(NSLocalizedString("new_client.pets_section", comment: "")).font(.headline)
                         Spacer()
                         Text("\(pets.count)")
                             .font(.caption.monospacedDigit())
@@ -120,13 +120,13 @@ struct NewClientSheet: View {
                             .accessibilityLabel("Pet forms \(pets.count)")
                     }
                     HStack {
-                        Text("Add at least one (name + gender)")
+                        Text(NSLocalizedString("new_client.pets_hint", comment: ""))
                             .foregroundStyle(.secondary).font(.footnote)
                         Spacer()
                     }
                 }
                 if attemptedSubmit && !hasAtLeastOneValidPet {
-                    Text("Add at least one pet with a name and selected gender").font(.caption).foregroundStyle(.red)
+                    Text(NSLocalizedString("new_client.error.pet_required", comment: "")).font(.caption).foregroundStyle(.red)
                         .padding(.horizontal, 2)
                 }
 
@@ -138,57 +138,57 @@ struct NewClientSheet: View {
                                 PetAvatar(photoData: p.photoData, species: p.species, gender: p.gender)
                             }
                             VStack(alignment: .leading) {
-                                Text("Tap to add photo").font(.caption).foregroundStyle(.secondary)
-                                Text("JPEG auto‑resized for storage").font(.caption2).foregroundStyle(.tertiary)
+                        Text(NSLocalizedString("new_client.photo_hint", comment: "")).font(.caption).foregroundStyle(.secondary)
+                        Text(NSLocalizedString("new_client.photo_subhint", comment: "")).font(.caption2).foregroundStyle(.tertiary)
                             }
                         }
                         .padding(.vertical, 4)
 
-                        TextField("Pet Name *", text: $p.name)
+                        TextField("new_client.pet_name_required", text: $p.name)
                         #if os(iOS)
                             .textInputAutocapitalization(.words)
                             .submitLabel(.next)
                         #endif
                         if attemptedSubmit && p.name.trimmed.isEmpty {
-                            Text("Pet name is required").font(.caption).foregroundStyle(.red)
+                            Text(NSLocalizedString("new_client.error.pet_name_required", comment: "")).font(.caption).foregroundStyle(.red)
                         }
 
-                        Picker("Species", selection: $p.species) {
-                            Text("Dog").tag(Species.dog)
-                            Text("Cat").tag(Species.cat)
+                        Picker(NSLocalizedString("new_client.species", comment: ""), selection: $p.species) {
+                            Text(NSLocalizedString("species.dog", comment: "")).tag(Species.dog)
+                            Text(NSLocalizedString("species.cat", comment: "")).tag(Species.cat)
                         }
 
-                        Picker("Gender", selection: $p.gender) {
+                        Picker(NSLocalizedString("new_client.gender", comment: ""), selection: $p.gender) {
                             // Restrict to Male or Female only
-                            Text("Male").tag(PetGender.male)
-                            Text("Female").tag(PetGender.female)
+                            Text(NSLocalizedString("gender.male", comment: "")).tag(PetGender.male)
+                            Text(NSLocalizedString("gender.female", comment: "")).tag(PetGender.female)
                         }
 
-                        TextField("Breed (optional)", text: $p.breed)
+                        TextField("new_client.breed_optional", text: $p.breed)
                         #if os(iOS)
                             .textInputAutocapitalization(.words)
                             .submitLabel(.next)
                         #endif
-                        TextField("Color (optional)", text: $p.color)
+                        TextField("new_client.color_optional", text: $p.color)
                         #if os(iOS)
                             .textInputAutocapitalization(.words)
                             .submitLabel(.next)
                         #endif
 
                         // Extra fields (captured for future use; uncomment assignments below when your model includes them)
-                        TextField("Health Issues (optional)", text: $p.health)
+                        TextField("new_client.health_optional", text: $p.health)
                         #if os(iOS)
                             .textInputAutocapitalization(.sentences)
                             .submitLabel(.next)
                         #endif
-                        TextField("Behavior Tags (comma-separated, optional)", text: $p.behaviorCSV)
+                        TextField("new_client.behavior_optional", text: $p.behaviorCSV)
                         #if os(iOS)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
                             .submitLabel(.next)
                         #endif
 
-                        TextField("Notes (optional)", text: $p.notes, axis: .vertical)
+                        TextField("new_client.notes_optional", text: $p.notes, axis: .vertical)
                             .lineLimit(3, reservesSpace: true)
                         #if os(iOS)
                             .textInputAutocapitalization(.sentences)
@@ -218,28 +218,24 @@ struct NewClientSheet: View {
                     }
                 }
 
-                Button {
-                    pets.append(TempPet(index: pets.count + 1))
-                } label: {
-                    Label("Add Another Pet", systemImage: "plus")
-                }
+                Button { pets.append(TempPet(index: pets.count + 1)) } label: { Label(NSLocalizedString("new_client.add_pet", comment: ""), systemImage: "plus") }
                 .buttonStyle(.borderedProminent)
                 .tint(.accentColor)
-                .accessibilityHint("Adds a new pet form")
+                .accessibilityHint(NSLocalizedString("new_client.add_pet_a11y", comment: ""))
             }
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
             #endif
-            .navigationTitle("Add New Client")
+            .navigationTitle("new_client.title")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) { dismiss() }
+                    Button("common.cancel", role: .cancel) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
+                    Button("common.create") {
                         attemptedSubmit = true
                         if !createClient() {
-                            if alertText.isEmpty { alertText = "Please double‑check the required fields and phone number." }
+                            if alertText.isEmpty { alertText = NSLocalizedString("new_client.error.double_check", comment: "") }
                             showAlert = true
                         }
                     }
@@ -248,7 +244,7 @@ struct NewClientSheet: View {
                     .accessibilityHint("Saves the owner and pet information")
                 }
             }
-            .alert("Cannot Create Client", isPresented: $showAlert) {
+            .alert(NSLocalizedString("new_client.cannot_create_title", comment: ""), isPresented: $showAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(alertText)
@@ -272,11 +268,11 @@ struct NewClientSheet: View {
     // MARK: - Actions
     private func createClient() -> Bool {
         guard let e164 = PhoneUtils.toE164(phone) else {
-            alertText = "Phone number must be a valid US number (10 digits)."
+            alertText = NSLocalizedString("new_client.error.phone_invalid_long", comment: "")
             return false
         }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
-            alertText = "Email address looks invalid."
+            alertText = NSLocalizedString("new_client.error.email_invalid_long", comment: "")
             return false
         }
 
@@ -285,7 +281,7 @@ struct NewClientSheet: View {
         if !emergencyPhone.trimmed.isEmpty {
             emergencyE164 = PhoneUtils.toE164(emergencyPhone)
             if emergencyE164 == nil {
-                alertText = "Emergency contact phone must be a valid US number."
+                alertText = NSLocalizedString("new_client.error.emergency_invalid", comment: "")
                 return false
             }
         }
@@ -296,7 +292,7 @@ struct NewClientSheet: View {
                 predicate: #Predicate { $0.phone == e164 }
             )
             if let existing = try? ctx.fetch(desc), !existing.isEmpty {
-                alertText = "A client with this phone number already exists."
+                alertText = NSLocalizedString("new_client.error.duplicate_phone", comment: "")
                 return false
             }
         }
@@ -337,7 +333,7 @@ struct NewClientSheet: View {
             dismiss()
             return true
         } catch {
-            alertText = "Save failed. Please try again.\n\n\(error.localizedDescription)"
+            alertText = String(format: NSLocalizedString("common.save_failed", comment: ""), error.localizedDescription)
             return false
         }
     }

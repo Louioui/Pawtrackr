@@ -1,0 +1,186 @@
+"clients.tab" = "Clients";
+"insights.tab" = "Insights";
+
+"clients.title" = "Client Center";
+"client_details.title" = "Client Details";
+"client_details.edit" = "Edit Client";
+"client_details.delete" = "Delete Client";
+
+"insights.title" = "Insights";
+"insights.filters" = "Filters";
+"insights.revenue" = "Revenue";
+"insights.total_visits" = "Total Visits";
+"insights.aov" = "Avg. Sale (AOV)";
+"insights.avg_duration" = "Avg. Duration";
+"insights.visits" = "Visits";
+"insights.revenue_trend" = "Revenue Trend";
+"insights.top_services" = "Top Services";
+"insights.top_clients" = "Top Clients";
+"insights.visits_by_package" = "Visits by Package";
+"insights.package_mix" = "Package Mix";
+"insights.no_revenue" = "No Revenue Data";
+"insights.no_category" = "No category data";
+
+"visits.avg_duration" = "Avg.";
+
+"checkout.title" = "Check Out";
+"checkout.complete" = "Complete Checkout";
+"checkout.processing" = "Processing Payment";
+"checkout.processing_desc" = "Please wait while we complete your transaction...";
+"checkout.complete_title" = "Checkout Complete!";
+"checkout.complete_desc_fmt" = "Payment of %@ has been processed successfully.";
+"common.continue" = "Continue";
+
+"new_client.title" = "Add New Client";
+
+"common.cancel" = "Cancel";
+"common.confirm" = "Confirm";
+"common.save" = "Save";
+"common.create" = "Create";
+"common.export" = "Export";
+"common.ok" = "OK";
+"common.no" = "No";
+"common.yes" = "Yes";
+"common.save_failed" = "Save failed. Please try again.\n\n%@";
+
+// New Client Sheet
+"new_client.owner_section" = "Owner Information";
+"new_client.first_name_required" = "First Name *";
+"new_client.last_name_required" = "Last Name *";
+"new_client.phone_required" = "Phone *";
+"new_client.email_optional" = "Email (optional)";
+"new_client.address_optional" = "Address (optional)";
+"new_client.emergency_name_optional" = "Emergency Contact Name (optional)";
+"new_client.emergency_phone_optional" = "Emergency Contact Phone (optional)";
+"new_client.error.first_required" = "First name is required";
+"new_client.error.last_required" = "Last name is required";
+"new_client.error.phone_invalid" = "Enter a valid US phone number";
+"new_client.error.phone_invalid_long" = "Phone number must be a valid US number (10 digits).";
+"new_client.error.email_invalid" = "Email looks invalid";
+"new_client.error.email_invalid_long" = "Email address looks invalid.";
+"new_client.pets_section" = "Pet Information";
+"new_client.pets_hint" = "Add at least one (name + gender)";
+"new_client.error.pet_required" = "Add at least one pet with a name and selected gender";
+"new_client.photo_hint" = "Tap to add photo";
+"new_client.photo_subhint" = "JPEG auto‑resized for storage";
+"new_client.pet_name_required" = "Pet Name *";
+"new_client.error.pet_name_required" = "Pet name is required";
+"new_client.species" = "Species";
+"new_client.gender" = "Gender";
+"species.dog" = "Dog";
+"species.cat" = "Cat";
+"gender.male" = "Male";
+"gender.female" = "Female";
+"new_client.breed_optional" = "Breed (optional)";
+"new_client.color_optional" = "Color (optional)";
+"new_client.health_optional" = "Health Issues (optional)";
+"new_client.behavior_optional" = "Behavior Tags (comma-separated, optional)";
+"new_client.notes_optional" = "Notes (optional)";
+"new_client.add_pet" = "Add Another Pet";
+"new_client.add_pet_a11y" = "Adds a new pet form";
+"new_client.cannot_create_title" = "Cannot Create Client";
+"new_client.error.emergency_invalid" = "Emergency contact phone must be a valid US number.";
+"new_client.error.duplicate_phone" = "A client with this phone number already exists.";
+"new_client.error.double_check" = "Please double‑check the required fields and phone number.";
+
+// Clients
+"clients.add_client" = "Add New Client";
+"clients.delete_confirm_title_fmt" = "Are you sure you want to delete %@?";
+"clients.delete_confirm_message" = "This will permanently delete the client, their pets, and all visit history.";
+"clients.delete_failed" = "Delete Failed";
+"clients.no_results_title" = "No Results Found";
+"clients.no_results_desc_fmt" = "No clients match \"%@\".";
+"clients.empty_title" = "No Clients Yet";
+"clients.empty_desc" = "Tap the + button to add your first client.";
+"clients.in_progress" = "IN PROGRESS";
+"clients.all_clients" = "ALL CLIENTS";
+"clients.search_placeholder" = "Search owners, pets, or phone";
+
+// Client Detail
+"client_details.checkin_confirm_title_fmt" = "Start session for %@?";
+"client_details.checkin_confirm_message" = "This will begin a new session and start the timer.";
+
+// Pet Detail
+"pet.age_fmt" = "Age: %@";
+"pet.owner" = "Owner";
+"pet.view_history" = "View History";
+"pet.check_in" = "Check In";
+"pet.check_out" = "Check Out";
+"pet.quick_stats" = "Quick Stats";
+"pet.total_visits" = "Total Visits";
+"pet.total_spent" = "Total Spent";
+"pet.avg_duration" = "Avg Duration";
+"pet.recent_visits" = "Recent Visits";
+"pet.no_visits_yet" = "No Visits Yet";
+"visit.payment_pending" = "Payment pending";
+// Recent History
+"history.search_placeholder" = "Search owner, pet, or service...";
+"history.empty_title" = "No Recent History";
+"history.empty_desc" = "Completed checkouts will appear here.";
+"history.no_results_title" = "No Results";
+"history.no_results_desc" = "No visits match your search.";
+// Visit Detail
+"visit.title" = "Visit Details";
+"visit.when" = "When";
+"visit.duration" = "Duration";
+"visit.payment" = "Payment";
+"visit.no_services" = "No services recorded";
+"visit.services_performed" = "Services Performed";
+"visit.total" = "Total";
+"visit.photos" = "Photos";
+"visit.photo_a11y_label_fmt" = "%@ photo";
+"visit.photo_a11y_hint" = "Double-tap to preview full screen";
+"visit.no_notes" = "No notes";
+"visit.notes" = "Notes";
+
+// Dashboard
+"dashboard.today" = "Today";
+"dashboard.quick_actions" = "Quick Actions";
+"dashboard.new_client" = "New Client";
+"dashboard.check_in" = "Check In";
+"dashboard.check_out" = "Check Out";
+"dashboard.reports" = "Reports";
+"dashboard.active_sessions" = "Active Sessions";
+"dashboard.recent_clients" = "Recent Clients";
+"dashboard.view_all" = "View All";
+"dashboard.revenue_7d" = "Revenue (7 Days)";
+"dashboard.no_revenue_yet" = "No Revenue Yet";
+"dashboard.no_revenue_desc" = "Complete a checkout to see revenue.";
+"dashboard.pet_gallery" = "Pet Gallery";
+
+// Pet History
+"pet_history.empty_title" = "No History Yet";
+"pet_history.empty_desc_fmt" = "Completed checkouts for %@ will appear here.";
+
+// Status & common labels
+"status.in_session" = "In Session";
+"pet.last_visit_fmt" = "Last Visit: %@";
+
+// Pin Lock
+"pin.enter" = "Enter PIN";
+"pin.requirement" = "4-digit passcode required";
+"pin.hint" = "Hint: 1994";
+
+// Photo Preview
+"photo_preview.unable_to_load" = "Unable to load image";
+
+// Checkout (additional)
+"checkout.services_performed" = "Services Performed";
+"checkout.additional_services" = "Additional Services";
+"checkout.selected_services" = "Selected Services";
+"checkout.none_selected" = "No services selected";
+"checkout.prices_may_vary" = "Prices may vary based on pet size, weight & condition";
+"checkout.notes_and_tags" = "Notes & Behavior Tags";
+"checkout.behavior_tags" = "Behavior Tags";
+"checkout.before_after_photos" = "Before & After Photos";
+"checkout.service_charge" = "Service Charge";
+"checkout.tip_amount" = "Tip Amount";
+"checkout.total" = "Total";
+"checkout.payment_method" = "Payment Method";
+"checkout.payment_summary" = "Payment Summary";
+"checkout.base_charge" = "Base Charge";
+"checkout.total_amount" = "Total Amount";
+"checkout.session_summary" = "Session Summary";
+"checkout.duration_fmt" = "Duration: %@";
+"checkout.started_time_fmt" = "Started: %@";
+"checkout.payment_method_fmt" = "Payment Method: %@";

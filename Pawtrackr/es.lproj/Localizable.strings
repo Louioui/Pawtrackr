@@ -1,0 +1,186 @@
+"clients.tab" = "Clientes";
+"insights.tab" = "Estadísticas";
+
+"clients.title" = "Centro de clientes";
+"client_details.title" = "Detalles del cliente";
+"client_details.edit" = "Editar cliente";
+"client_details.delete" = "Eliminar cliente";
+
+"insights.title" = "Estadísticas";
+"insights.filters" = "Filtros";
+"insights.revenue" = "Ingresos";
+"insights.total_visits" = "Visitas totales";
+"insights.aov" = "Venta prom. (AOV)";
+"insights.avg_duration" = "Duración prom.";
+"insights.visits" = "Visitas";
+"insights.revenue_trend" = "Tendencia de ingresos";
+"insights.top_services" = "Servicios destacados";
+"insights.top_clients" = "Clientes destacados";
+"insights.visits_by_package" = "Visitas por paquete";
+"insights.package_mix" = "Mezcla de paquetes";
+"insights.no_revenue" = "Sin datos de ingresos";
+"insights.no_category" = "Sin datos de categoría";
+
+"visits.avg_duration" = "Prom.";
+
+"checkout.title" = "Finalizar";
+"checkout.complete" = "Completar pago";
+"checkout.processing" = "Procesando pago";
+"checkout.processing_desc" = "Espera mientras completamos tu transacción...";
+"checkout.complete_title" = "¡Pago completado!";
+"checkout.complete_desc_fmt" = "El pago de %@ se ha procesado correctamente.";
+"common.continue" = "Continuar";
+
+"new_client.title" = "Añadir cliente";
+
+"common.cancel" = "Cancelar";
+"common.confirm" = "Confirmar";
+"common.save" = "Guardar";
+"common.create" = "Crear";
+"common.export" = "Exportar";
+"common.ok" = "OK";
+"common.no" = "No";
+"common.yes" = "Sí";
+"common.save_failed" = "Error al guardar. Inténtalo de nuevo.\n\n%@";
+
+// New Client Sheet
+"new_client.owner_section" = "Información del propietario";
+"new_client.first_name_required" = "Nombre *";
+"new_client.last_name_required" = "Apellido *";
+"new_client.phone_required" = "Teléfono *";
+"new_client.email_optional" = "Correo (opcional)";
+"new_client.address_optional" = "Dirección (opcional)";
+"new_client.emergency_name_optional" = "Nombre de contacto de emergencia (opcional)";
+"new_client.emergency_phone_optional" = "Teléfono de emergencia (opcional)";
+"new_client.error.first_required" = "El nombre es obligatorio";
+"new_client.error.last_required" = "El apellido es obligatorio";
+"new_client.error.phone_invalid" = "Introduce un teléfono válido de EE. UU.";
+"new_client.error.phone_invalid_long" = "El teléfono debe ser un número válido de EE. UU. (10 dígitos).";
+"new_client.error.email_invalid" = "El correo no parece válido";
+"new_client.error.email_invalid_long" = "El correo electrónico no parece válido.";
+"new_client.pets_section" = "Información de la mascota";
+"new_client.pets_hint" = "Añade al menos una (nombre + sexo)";
+"new_client.error.pet_required" = "Añade al menos una mascota con nombre y sexo";
+"new_client.photo_hint" = "Toca para añadir foto";
+"new_client.photo_subhint" = "JPEG redimensionado automáticamente";
+"new_client.pet_name_required" = "Nombre de la mascota *";
+"new_client.error.pet_name_required" = "El nombre de la mascota es obligatorio";
+"new_client.species" = "Especie";
+"new_client.gender" = "Sexo";
+"species.dog" = "Perro";
+"species.cat" = "Gato";
+"gender.male" = "Macho";
+"gender.female" = "Hembra";
+"new_client.breed_optional" = "Raza (opcional)";
+"new_client.color_optional" = "Color (opcional)";
+"new_client.health_optional" = "Problemas de salud (opcional)";
+"new_client.behavior_optional" = "Etiquetas de comportamiento (separadas por comas, opcional)";
+"new_client.notes_optional" = "Notas (opcional)";
+"new_client.add_pet" = "Añadir otra mascota";
+"new_client.add_pet_a11y" = "Añade un formulario de mascota";
+"new_client.cannot_create_title" = "No se puede crear el cliente";
+"new_client.error.emergency_invalid" = "El teléfono de emergencia debe ser un número válido de EE. UU.";
+"new_client.error.duplicate_phone" = "Ya existe un cliente con este teléfono.";
+"new_client.error.double_check" = "Revisa los campos obligatorios y el teléfono.";
+
+// Clients
+"clients.add_client" = "Añadir cliente";
+"clients.delete_confirm_title_fmt" = "¿Seguro que deseas eliminar a %@?";
+"clients.delete_confirm_message" = "Esto eliminará permanentemente al cliente, sus mascotas y todo el historial.";
+"clients.delete_failed" = "Error al eliminar";
+"clients.no_results_title" = "No se encontraron resultados";
+"clients.no_results_desc_fmt" = "Ningún cliente coincide con \"%@\".";
+"clients.empty_title" = "Aún no hay clientes";
+"clients.empty_desc" = "Pulsa el botón + para añadir tu primer cliente.";
+"clients.in_progress" = "EN PROCESO";
+"clients.all_clients" = "TODOS LOS CLIENTES";
+"clients.search_placeholder" = "Buscar dueños, mascotas o teléfono";
+
+// Client Detail
+"client_details.checkin_confirm_title_fmt" = "¿Iniciar sesión para %@?";
+"client_details.checkin_confirm_message" = "Esto iniciará una nueva sesión y comenzará el temporizador.";
+
+// Pet Detail
+"pet.age_fmt" = "Edad: %@";
+"pet.owner" = "Propietario";
+"pet.view_history" = "Ver historial";
+"pet.check_in" = "Registrar entrada";
+"pet.check_out" = "Registrar salida";
+"pet.quick_stats" = "Estadísticas";
+"pet.total_visits" = "Visitas totales";
+"pet.total_spent" = "Gasto total";
+"pet.avg_duration" = "Duración prom.";
+"pet.recent_visits" = "Visitas recientes";
+"pet.no_visits_yet" = "Aún no hay visitas";
+"visit.payment_pending" = "Pago pendiente";
+// Recent History
+"history.search_placeholder" = "Buscar dueño, mascota o servicio...";
+"history.empty_title" = "Sin historial reciente";
+"history.empty_desc" = "Los pagos completados aparecerán aquí.";
+"history.no_results_title" = "Sin resultados";
+"history.no_results_desc" = "No hay visitas que coincidan con tu búsqueda.";
+// Visit Detail
+"visit.title" = "Detalles de la visita";
+"visit.when" = "Cuándo";
+"visit.duration" = "Duración";
+"visit.payment" = "Pago";
+"visit.no_services" = "No hay servicios registrados";
+"visit.services_performed" = "Servicios realizados";
+"visit.total" = "Total";
+"visit.photos" = "Fotos";
+"visit.photo_a11y_label_fmt" = "Foto de %@";
+"visit.photo_a11y_hint" = "Doble toque para ver en pantalla completa";
+"visit.no_notes" = "Sin notas";
+"visit.notes" = "Notas";
+
+// Dashboard
+"dashboard.today" = "Hoy";
+"dashboard.quick_actions" = "Acciones rápidas";
+"dashboard.new_client" = "Nuevo cliente";
+"dashboard.check_in" = "Registrar entrada";
+"dashboard.check_out" = "Registrar salida";
+"dashboard.reports" = "Informes";
+"dashboard.active_sessions" = "Sesiones activas";
+"dashboard.recent_clients" = "Clientes recientes";
+"dashboard.view_all" = "Ver todo";
+"dashboard.revenue_7d" = "Ingresos (7 días)";
+"dashboard.no_revenue_yet" = "Sin ingresos aún";
+"dashboard.no_revenue_desc" = "Completa un pago para ver ingresos.";
+"dashboard.pet_gallery" = "Galería de mascotas";
+
+// Pet History
+"pet_history.empty_title" = "Sin historial";
+"pet_history.empty_desc_fmt" = "Los pagos completados de %@ aparecerán aquí.";
+
+// Status & common labels
+"status.in_session" = "En sesión";
+"pet.last_visit_fmt" = "Última visita: %@";
+
+// Pin Lock
+"pin.enter" = "Ingresar PIN";
+"pin.requirement" = "Se requiere un código de 4 dígitos";
+"pin.hint" = "Pista: 1994";
+
+// Photo Preview
+"photo_preview.unable_to_load" = "No se puede cargar la imagen";
+
+// Checkout (additional)
+"checkout.services_performed" = "Servicios realizados";
+"checkout.additional_services" = "Servicios adicionales";
+"checkout.selected_services" = "Servicios seleccionados";
+"checkout.none_selected" = "Ningún servicio seleccionado";
+"checkout.prices_may_vary" = "Los precios pueden variar según el tamaño, peso y condición";
+"checkout.notes_and_tags" = "Notas y etiquetas de comportamiento";
+"checkout.behavior_tags" = "Etiquetas de comportamiento";
+"checkout.before_after_photos" = "Fotos de antes y después";
+"checkout.service_charge" = "Cargo por servicio";
+"checkout.tip_amount" = "Propina";
+"checkout.total" = "Total";
+"checkout.payment_method" = "Método de pago";
+"checkout.payment_summary" = "Resumen de pago";
+"checkout.base_charge" = "Cargo base";
+"checkout.total_amount" = "Importe total";
+"checkout.session_summary" = "Resumen de la sesión";
+"checkout.duration_fmt" = "Duración: %@";
+"checkout.started_time_fmt" = "Inicio: %@";
+"checkout.payment_method_fmt" = "Método de pago: %@";

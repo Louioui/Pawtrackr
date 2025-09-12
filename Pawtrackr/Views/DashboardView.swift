@@ -64,7 +64,7 @@ struct DashboardView: View {
   // MARK: Sections
   private func kpiSection(_ vm: DashboardViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("Today").font(.headline)
+      Text(NSLocalizedString("dashboard.today", comment: "")).font(.headline)
       Grid(horizontalSpacing: 12, verticalSpacing: 12) {
         GridRow {
           NavigationLink { RecentHistoryView(initialScope: .today) } label: {
@@ -88,13 +88,13 @@ struct DashboardView: View {
 
   private var quickActionsSection: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("Quick Actions").font(.headline)
+      Text(NSLocalizedString("dashboard.quick_actions", comment: "")).font(.headline)
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 12) {
-          actionCard(title: "New Client", symbol: "person.crop.circle.badge.plus") { showNewClient = true }
-          NavigationLink { ClientsView() } label: { actionCardLabel(title: "Check In", symbol: "play.circle") }
-          NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: "Check Out", symbol: "stop.circle") }
-          NavigationLink { InsightsView() } label: { actionCardLabel(title: "Reports", symbol: "doc.chart") }
+          actionCard(title: NSLocalizedString("dashboard.new_client", comment: ""), symbol: "person.crop.circle.badge.plus") { showNewClient = true }
+          NavigationLink { ClientsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") }
+          NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
+          NavigationLink { InsightsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "doc.chart") }
         }
       }
     }
@@ -102,7 +102,7 @@ struct DashboardView: View {
 
   private func activeSessionsSection(_ vm: DashboardViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("Active Sessions").font(.headline)
+      Text(NSLocalizedString("dashboard.active_sessions", comment: "")).font(.headline)
       VStack(spacing: 10) {
         ForEach(vm.activeVisits) { visit in
           Card {
@@ -130,9 +130,9 @@ struct DashboardView: View {
   private func recentClientsSection(_ vm: DashboardViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("Recent Clients").font(.headline)
+        Text(NSLocalizedString("dashboard.recent_clients", comment: "")).font(.headline)
         Spacer()
-        NavigationLink("View All", destination: ClientsView())
+        NavigationLink(NSLocalizedString("dashboard.view_all", comment: ""), destination: ClientsView())
           .font(.footnote)
       }
       VStack(spacing: 10) {
@@ -150,10 +150,10 @@ struct DashboardView: View {
   private func revenueSection(_ vm: DashboardViewModel) -> some View {
     #if canImport(Charts)
     VStack(alignment: .leading, spacing: 8) {
-      Text("Revenue (7 Days)").font(.headline)
+      Text(NSLocalizedString("dashboard.revenue_7d", comment: "")).font(.headline)
       Card {
         if vm.revenueSeries.isEmpty {
-          ContentUnavailableView("No Revenue Yet", systemImage: "chart.bar.xaxis", description: Text("Complete a checkout to see revenue."))
+          ContentUnavailableView(NSLocalizedString("dashboard.no_revenue_yet", comment: ""), systemImage: "chart.bar.xaxis", description: Text(NSLocalizedString("dashboard.no_revenue_desc", comment: "")))
             .frame(height: 180)
         } else {
           Chart(vm.revenueSeries) { point in
@@ -173,7 +173,7 @@ struct DashboardView: View {
 
   private func gallerySection(_ vm: DashboardViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("Pet Gallery").font(.headline)
+      Text(NSLocalizedString("dashboard.pet_gallery", comment: "")).font(.headline)
       LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
         ForEach(vm.gallery) { item in
           Card {

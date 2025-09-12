@@ -36,7 +36,7 @@ struct VisitDetailView: View {
                     .padding(.top, 8)
                 }
             }
-            .navigationTitle("Visit Details")
+            .navigationTitle(NSLocalizedString("visit.title", comment: ""))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -48,7 +48,7 @@ struct VisitDetailView: View {
                         item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Visit.csv"),
                         preview: SharePreview("Pawtrackr_Visit.csv", icon: Image(systemName: "doc.text.fill"))
                     ) {
-                        Label("Export", systemImage: "square.and.arrow.up")
+                        Label("common.export", systemImage: "square.and.arrow.up")
                     }
                     .disabled(csv.isEmpty)
                     .accessibilityHint(csv.isEmpty ? "No data to export" : "Shares a CSV summary of this visit")
@@ -174,7 +174,7 @@ struct VisitDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     let range = Formatters.dateRangeString(from: visit.startedAt, to: visit.endedAt ?? visit.startedAt)
                     HStack {
-                        Label("When", systemImage: "calendar")
+                        Label(NSLocalizedString("visit.when", comment: ""), systemImage: "calendar")
                             .font(.subheadline.weight(.semibold))
                         Spacer()
                         Text(range)
@@ -182,7 +182,7 @@ struct VisitDetailView: View {
                     }
                     Divider().opacity(0.1)
                     HStack {
-                        Label("Duration", systemImage: "hourglass")
+                        Label(NSLocalizedString("visit.duration", comment: ""), systemImage: "hourglass")
                             .font(.subheadline.weight(.semibold))
                         Spacer()
                         Group {
@@ -204,7 +204,7 @@ struct VisitDetailView: View {
             if let payment = visit.payment {
                 Card {
                     HStack(alignment: .firstTextBaseline) {
-                        Label("Payment", systemImage: payment.method.systemImage)
+                        Label(NSLocalizedString("visit.payment", comment: ""), systemImage: payment.method.systemImage)
                             .font(.subheadline.weight(.semibold))
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
@@ -239,7 +239,7 @@ struct VisitDetailView: View {
             HStack {
                 Image(systemName: "checklist")
                     .foregroundStyle(.secondary)
-                Text("No services recorded")
+                Text(NSLocalizedString("visit.no_services", comment: ""))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
@@ -252,7 +252,7 @@ struct VisitDetailView: View {
     private var servicesContentCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Services Performed")
+                Text(NSLocalizedString("visit.services_performed", comment: ""))
                     .font(.subheadline.weight(.semibold))
                 
                 // Chips row (consistent with History/Checkout)
@@ -266,7 +266,7 @@ struct VisitDetailView: View {
                 Divider().opacity(0.08)
                 
                 HStack {
-                    Text("Total")
+                    Text(NSLocalizedString("visit.total", comment: ""))
                         .font(.subheadline.weight(.semibold))
                     Spacer()
                     Text(visit.totalCurrencyString)
@@ -318,7 +318,7 @@ struct VisitDetailView: View {
             } else {
                 Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Photos")
+                        Text(NSLocalizedString("visit.photos", comment: ""))
                             .font(.subheadline.weight(.semibold))
                         HStack(spacing: 12) {
                             photoBox(title: "Before", data: visit.beforePhotoData)
@@ -370,8 +370,8 @@ struct VisitDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: 180, height: 180)
-                .accessibilityLabel("\(title) photo")
-                .accessibilityHint("Double-tap to preview full screen")
+                .accessibilityLabel(Text(String(format: NSLocalizedString("visit.photo_a11y_label_fmt", comment: ""), title)))
+                .accessibilityHint(Text(NSLocalizedString("visit.photo_a11y_hint", comment: "")))
             }
         }
     }
@@ -393,7 +393,7 @@ struct VisitDetailView: View {
                 if trimmed.isEmpty {
                     Card {
                         HStack {
-                            Text("No notes")
+                            Text(NSLocalizedString("visit.no_notes", comment: ""))
                                 .foregroundStyle(.secondary)
                             Spacer()
                         }
@@ -401,7 +401,7 @@ struct VisitDetailView: View {
                 } else {
                     Card {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Notes")
+                            Text(NSLocalizedString("visit.notes", comment: ""))
                                 .font(.subheadline.weight(.semibold))
                             let attr = (try? AttributedString(markdown: trimmed)) ?? AttributedString(trimmed)
                             Text(attr)

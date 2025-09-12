@@ -41,7 +41,7 @@ struct CheckoutView: View {
                 .padding(.top, 8)
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("Check Out")
+            .navigationTitle("checkout.title")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -97,7 +97,7 @@ struct CheckoutView: View {
             // Services catalog (packages + individual services)
             Card {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Services Performed").font(.subheadline.weight(.semibold))
+                    Text("checkout.services_performed").font(.subheadline.weight(.semibold))
                     // Packages (.groom category)
                     let packages = viewModel.allServices.filter { $0.category == .groom }
                     if !packages.isEmpty {
@@ -117,7 +117,7 @@ struct CheckoutView: View {
 
                     // Additional services (variable pricing)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Additional Services").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("checkout.additional_services").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                         VStack(spacing: 8) {
                             additionalServiceRow(title: "Knots & Matting Fee", subtitle: "$5–10+ (varies by severity)", icon: "k.square.fill")
                             additionalServiceRow(title: "Flea & Tick Treatment", subtitle: "$5–10", icon: "ant.fill")
@@ -130,9 +130,9 @@ struct CheckoutView: View {
             // Selected services summary (catalog + extras)
             Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Selected Services").font(.subheadline.weight(.semibold))
+                    Text("checkout.selected_services").font(.subheadline.weight(.semibold))
                     if selectedServices.isEmpty && selectedExtras.isEmpty {
-                        Text("No services selected").font(.subheadline).foregroundStyle(.secondary)
+                        Text("checkout.none_selected").font(.subheadline).foregroundStyle(.secondary)
                     } else {
                         FlowLayout(spacing: 6) {
                             ForEach(selectedServices, id: \.persistentModelID) { svc in
@@ -143,7 +143,7 @@ struct CheckoutView: View {
                             }
                         }
                     }
-                    Text("Prices may vary based on pet size, weight & condition")
+                    Text("checkout.prices_may_vary")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)
@@ -181,13 +181,13 @@ struct CheckoutView: View {
     private var notesAndTagsBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Notes & Behavior Tags").font(.subheadline.weight(.semibold))
+                Text("checkout.notes_and_tags").font(.subheadline.weight(.semibold))
                 TextEditor(text: $viewModel.notes)
                     .frame(minHeight: 100)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(.separator, lineWidth: 1))
                 
-                Text("Behavior Tags").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                Text("checkout.behavior_tags").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                 FlowLayout(spacing: 6) {
                     // FIX: Use the correct 'Chip' component and binding syntax for the tags Set
                     ForEach(CheckoutViewModel.tagOptions, id: \.self) { tag in
@@ -213,7 +213,7 @@ struct CheckoutView: View {
     private var photosBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Before & After Photos").font(.subheadline.weight(.semibold))
+                Text("checkout.before_after_photos").font(.subheadline.weight(.semibold))
                 HStack(spacing: 12) {
                     ImagePicker(imageData: $viewModel.beforePhotoData, source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
                         // FIX: Use the correct 'AddPhotoPlaceholder' view.
@@ -245,7 +245,7 @@ struct CheckoutView: View {
     private var chargeBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Service Charge").font(.subheadline.weight(.semibold))
+                Text("checkout.service_charge").font(.subheadline.weight(.semibold))
                 labeledContent("Base Amount") {
                     TextField("0.00", text: $baseAmountString)
                         .keyboardType(.decimalPad)
@@ -255,7 +255,7 @@ struct CheckoutView: View {
                 
                 // Tip UI — contributes into total via syncManualAmount
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Tip Amount").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("checkout.tip_amount").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                     HStack(spacing: 8) {
                         ForEach([0, 15, 20, 25], id: \.self) { pct in
                             let isSel = selectedTipPercent == pct
@@ -290,7 +290,7 @@ struct CheckoutView: View {
                 Divider()
                 
                 VStack(spacing: 8) {
-                    HStack { Text("Total").fontWeight(.semibold); Spacer(); Text(viewModel.finalTotalString).fontWeight(.semibold) }
+                    HStack { Text("checkout.total").fontWeight(.semibold); Spacer(); Text(viewModel.finalTotalString).fontWeight(.semibold) }
                 }
                 .monospacedDigit()
             }
@@ -310,10 +310,10 @@ struct CheckoutView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel", role: .cancel) { dismiss() }
+            Button("common.cancel", role: .cancel) { dismiss() }
         }
         ToolbarItem(placement: .confirmationAction) {
-            Button("Confirm", action: confirmCheckoutFlow)
+            Button("common.confirm", action: confirmCheckoutFlow)
                 .disabled(!viewModel.isConfirmEnabled)
         }
         ToolbarItemGroup(placement: .keyboard) {
@@ -332,7 +332,7 @@ struct CheckoutView: View {
                     ProgressView().tint(.white)
                 } else {
                     Image(systemName: "checkmark.circle.fill")
-                    Text("Complete Checkout")
+                    Text("checkout.complete")
                         .fontWeight(.semibold)
                     Spacer()
                     Text(viewModel.finalTotalString)
@@ -353,7 +353,7 @@ struct CheckoutView: View {
     private var paymentMethodBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Payment Method").font(.subheadline.weight(.semibold))
+                Text("checkout.payment_method").font(.subheadline.weight(.semibold))
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                     paymentTile(.cash, icon: "banknote", tint: .green)
                     paymentTile(.creditCard, icon: "creditcard", tint: .blue)
@@ -397,21 +397,21 @@ struct CheckoutView: View {
     private var summaryBlock: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Payment Summary").font(.subheadline.weight(.semibold))
-                HStack { Text("Base Charge"); Spacer(); Text(baseAmountDecimal.moneyString) }
-                HStack { Text("Tip Amount"); Spacer(); Text(tipDecimal.moneyString) }
+                Text("checkout.payment_summary").font(.subheadline.weight(.semibold))
+                HStack { Text("checkout.base_charge"); Spacer(); Text(baseAmountDecimal.moneyString) }
+                HStack { Text("checkout.tip_amount"); Spacer(); Text(tipDecimal.moneyString) }
                 Divider()
-                HStack { Text("Total Amount").font(.headline); Spacer(); Text(viewModel.finalTotalString).font(.title3).fontWeight(.bold).foregroundStyle(.green) }
+                HStack { Text("checkout.total_amount").font(.headline); Spacer(); Text(viewModel.finalTotalString).font(.title3).fontWeight(.bold).foregroundStyle(.green) }
                 Card {
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle.fill").foregroundStyle(.blue)
-                        Text("Session Summary").font(.subheadline.weight(.medium))
+                        Text("checkout.session_summary").font(.subheadline.weight(.medium))
                     }
                     .padding(.bottom, 2)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Duration: \(viewModel.sessionDurationString)")
-                        Text("Started: \(Formatters.timeOnly.string(from: viewModel.visit.startedAt))")
-                        Text("Payment Method: \(viewModel.selectedPaymentMethod.displayName)")
+                        Text(String(format: NSLocalizedString("checkout.duration_fmt", comment: ""), viewModel.sessionDurationString))
+                        Text(String(format: NSLocalizedString("checkout.started_time_fmt", comment: ""), Formatters.timeOnly.string(from: viewModel.visit.startedAt)))
+                        Text(String(format: NSLocalizedString("checkout.payment_method_fmt", comment: ""), viewModel.selectedPaymentMethod.displayName))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -478,8 +478,8 @@ struct CheckoutView: View {
                 VStack(spacing: 12) {
                     ZStack { Circle().fill(Color.accentColor.opacity(0.12)); ProgressView().tint(.accentColor) }
                         .frame(width: 64, height: 64)
-                    Text("Processing Payment").font(.headline)
-                    Text("Please wait while we complete your transaction...")
+                    Text("checkout.processing").font(.headline)
+                    Text("checkout.processing_desc")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -497,11 +497,11 @@ struct CheckoutView: View {
                 VStack(spacing: 16) {
                     ZStack { Circle().fill(Color.green.opacity(0.15)); Image(systemName: "checkmark").foregroundStyle(.green) }
                         .frame(width: 64, height: 64)
-                    Text("Checkout Complete!").font(.headline)
-                    Text("Payment of \(viewModel.finalTotalString) has been processed successfully.")
+                    Text("checkout.complete_title").font(.headline)
+                    Text(String(format: NSLocalizedString("checkout.complete_desc_fmt", comment: ""), viewModel.finalTotalString))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    Button("Continue") { showSuccessModal = false; dismiss() }
+                    Button(NSLocalizedString("common.continue", comment: "")) { showSuccessModal = false; dismiss() }
                         .buttonStyle(.borderedProminent)
                 }
                 .padding()

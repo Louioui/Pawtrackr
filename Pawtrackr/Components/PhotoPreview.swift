@@ -59,7 +59,7 @@ struct PhotoPreview: View {
                         .accessibilityLabel(Text("\(title) photo preview"))
                         .accessibilityHint(Text("Pinch with two fingers to zoom"))
                 } else {
-                    Text("Unable to load image").foregroundStyle(.white)
+                    Text(NSLocalizedString("photo_preview.unable_to_load", comment: "")).foregroundStyle(.white)
                 }
 
                 Spacer(minLength: 0)

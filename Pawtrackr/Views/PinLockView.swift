@@ -53,8 +53,8 @@ public struct PinLockView: View {
             Spacer(minLength: 20)
 
             VStack(spacing: 8) {
-                Text("Enter PIN").font(.title2).bold()
-                Text("4-digit passcode required")
+                Text(NSLocalizedString("pin.enter", comment: "")).font(.title2).bold()
+                Text(NSLocalizedString("pin.requirement", comment: ""))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -82,7 +82,7 @@ public struct PinLockView: View {
             }
 
             // (Optional) remove this hint when you’re ready
-            Text("Hint: 1994")
+            Text(NSLocalizedString("pin.hint", comment: ""))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

@@ -38,26 +38,26 @@ struct ClientsView: View {
                 .padding(.vertical, 8)
                 .padding(.bottom, 80) // Padding to avoid the FAB
             }
-            .navigationTitle("Client Center")
+            .navigationTitle("clients.title")
             .fabOverlay {
-                FAB(systemImage: "plus", accessibilityLabel: "Add New Client") {
+                FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
                     showingNewClientSheet = true
                 }
             }
             .alert(
-                clientPendingDeletion.map { "Are you sure you want to delete \($0.fullName)?" } ?? "",
+                clientPendingDeletion.map { String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), $0.fullName) } ?? "",
                 isPresented: Binding(
                     get: { clientPendingDeletion != nil },
                     set: { if !$0 { clientPendingDeletion = nil } }
                 )
             ) {
-                Button("No", role: .cancel) { clientPendingDeletion = nil }
-                Button("Yes", role: .destructive) { deletePendingClient() }
+                Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { clientPendingDeletion = nil }
+                Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { deletePendingClient() }
             } message: {
-                Text("This will permanently delete the client, their pets, and all visit history.")
+                Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
             }
-            .alert("Delete Failed", isPresented: $showDeleteErrorAlert) {
-                Button("OK", role: .cancel) { }
+            .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
+                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
             } message: {
                 Text(deleteErrorMessage)
             }
@@ -87,7 +87,7 @@ struct ClientsView: View {
         HStack {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField(
-                "Search owners, pets, or phone",
+                NSLocalizedString("clients.search_placeholder", comment: ""),
                 text: Binding(
                     get: { viewModel.searchText },
                     set: { viewModel.searchText = $0 }
@@ -109,10 +109,10 @@ struct ClientsView: View {
     @ViewBuilder
     private func clientSections(_ viewModel: ClientsViewModel) -> some View {
         if !viewModel.inProgressClients.isEmpty {
-            sectionHeader("IN PROGRESS", count: viewModel.inProgressCount, topPadding: 0)
+            sectionHeader(NSLocalizedString("clients.in_progress", comment: ""), count: viewModel.inProgressCount, topPadding: 0)
             clientList(for: viewModel.inProgressClients)
         }
-        sectionHeader("ALL CLIENTS", count: viewModel.otherClients.count, topPadding: viewModel.inProgressClients.isEmpty ? 0 : 16)
+        sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: viewModel.inProgressClients.isEmpty ? 0 : 16)
         clientList(for: viewModel.otherClients)
     }
     
@@ -128,7 +128,7 @@ struct ClientsView: View {
                     Button(role: .destructive) {
                         clientPendingDeletion = client
                     } label: {
-                        Label("Delete Client", systemImage: "trash")
+                        Label(NSLocalizedString("client_details.delete", comment: ""), systemImage: "trash")
                     }
                 }
             }

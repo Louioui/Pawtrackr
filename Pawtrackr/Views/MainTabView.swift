@@ -11,11 +11,10 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             ClientsView()
-                .tabItem { Label("Clients", systemImage: "person.3.fill") }
+                .tabItem { Label("clients.tab", systemImage: "person.3.fill") }
 
             InsightsView()
-                .tabItem { Label("Insights", systemImage: "chart.bar.fill") }
+                .tabItem { Label("insights.tab", systemImage: "chart.bar.fill") }
         }
     }
 }
-

@@ -29,9 +29,9 @@ struct PetHistoryView: View {
 
                     if viewModel.visits.isEmpty {
                         ContentUnavailableView(
-                            "No History Yet",
+                            NSLocalizedString("pet_history.empty_title", comment: ""),
                             systemImage: "clock.arrow.circlepath",
-                            description: Text("Completed checkouts for \(viewModel.pet.name) will appear here.")
+                            description: Text(String(format: NSLocalizedString("pet_history.empty_desc_fmt", comment: ""), viewModel.pet.name))
                         )
                         .padding(.top, 40)
                     } else {
@@ -92,8 +92,10 @@ struct PetHistoryView: View {
                     Text(viewModel.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
 
                     FlowLayout(spacing: 8) {
-                        Chip.info("\(viewModel.totalVisits) Visits")
-                        Chip.info("Avg. \(viewModel.averageDurationString)")
+                        let visits = viewModel.totalVisits
+                        let visitsText = String.localizedStringWithFormat(NSLocalizedString("visits.count", comment: "visit count"), visits)
+                        Chip.info(visitsText)
+                        Chip.info(String(format: "%@ %@", NSLocalizedString("visits.avg_duration", comment: "avg duration short"), viewModel.averageDurationString))
                     }
                     .padding(.top, 4)
                 }
@@ -113,7 +115,7 @@ struct PetHistoryView: View {
                 item: CSVDoc(data: data, filename: "\(viewModel.pet.name)_History.csv"),
                 preview: SharePreview("Pet History", icon: Image(systemName: "doc.text.fill"))
             ) {
-                Label("Export", systemImage: "square.and.arrow.up")
+                Label("common.export", systemImage: "square.and.arrow.up")
             }
             .disabled(viewModel.filtered.isEmpty)
         }

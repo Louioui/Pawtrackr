@@ -53,7 +53,7 @@ struct RecentHistoryView: View {
         .searchable(text: Binding(
             get: { viewModel?.query ?? "" },
             set: { newValue in viewModel?.query = newValue }
-        ))
+        ), prompt: Text(NSLocalizedString("history.search_placeholder", comment: "")))
     }
     
     private func header(@Bindable _ viewModel: RecentHistoryViewModel) -> some View {
@@ -66,7 +66,9 @@ struct RecentHistoryView: View {
 
     private func summaryChips(_ viewModel: RecentHistoryViewModel) -> some View {
         HStack(spacing: 8) {
-            Chip.info("\(viewModel.summaryVisitCount) visits")
+            let count = viewModel.summaryVisitCount
+            let visitsText = String.localizedStringWithFormat(NSLocalizedString("visits.count", comment: "visit count"), count)
+            Chip.info(visitsText)
             Chip.info(viewModel.summaryRevenueString)
         }
     }
@@ -76,8 +78,8 @@ struct RecentHistoryView: View {
         if viewModel.isLoading {
             ProgressView().padding(.top, 40)
         } else if viewModel.sortedDays.isEmpty {
-            let message = viewModel.query.isEmpty ? "Completed checkouts will appear here." : "No visits match your search."
-            ContentUnavailableView(viewModel.query.isEmpty ? "No Recent History" : "No Results", systemImage: "clock.badge.questionmark", description: Text(message))
+            let message = viewModel.query.isEmpty ? NSLocalizedString("history.empty_desc", comment: "") : NSLocalizedString("history.no_results_desc", comment: "")
+            ContentUnavailableView(viewModel.query.isEmpty ? NSLocalizedString("history.empty_title", comment: "") : NSLocalizedString("history.no_results_title", comment: ""), systemImage: "clock.badge.questionmark", description: Text(message))
                 .padding(.top, 40)
         } else {
             LazyVStack(spacing: 16, pinnedViews: .sectionHeaders) {
@@ -108,7 +110,7 @@ struct RecentHistoryView: View {
                 item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_History.csv"),
                 preview: SharePreview("Recent History", icon: Image(systemName: "doc.text.fill"))
             ) {
-                Label("Export", systemImage: "square.and.arrow.up")
+                Label("common.export", systemImage: "square.and.arrow.up")
             }
             .disabled(csv.isEmpty)
         }

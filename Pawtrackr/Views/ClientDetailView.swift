@@ -75,7 +75,7 @@ import OSLog
                 }
                 .padding(.vertical, 8)
             }
-            .navigationTitle(vm.client.fullName)
+            .navigationTitle("client_details.title")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -104,31 +104,31 @@ import OSLog
         }
         // Global confirmation + alerts so they always present (not tied to toolbar items)
         .alert(
-            petPendingCheckIn.map { "Start session for \($0.name)?" } ?? "",
+            petPendingCheckIn.map { String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), $0.name) } ?? "",
             isPresented: Binding(
                 get: { petPendingCheckIn != nil },
                 set: { if !$0 { petPendingCheckIn = nil } }
             )
         ) {
-            Button("No", role: .cancel) { petPendingCheckIn = nil }
-            Button("Yes", role: .destructive) {
+            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { petPendingCheckIn = nil }
+            Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) {
                 if let pet = petPendingCheckIn { vm.checkIn(pet: pet) }
                 petPendingCheckIn = nil
             }
         } message: {
-            Text("This will begin a new session and start the timer.")
+            Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
         }
         .alert(
-            "Are you sure you want to delete \(vm.client.fullName)?",
+            String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName),
             isPresented: $showDeleteConfirm
         ) {
-            Button("No", role: .cancel) { }
-            Button("Yes", role: .destructive) { deleteClient() }
+            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { }
+            Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { deleteClient() }
         } message: {
-            Text("This will permanently delete the client, their pets, and all visit history. This action cannot be undone.")
+            Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
         }
-        .alert("Delete Failed", isPresented: $showDeleteErrorAlert) {
-            Button("OK", role: .cancel) { }
+        .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
         } message: {
             Text(deleteErrorMessage)
         }
@@ -232,16 +232,8 @@ import OSLog
         // Rely on the system-provided back button to avoid duplicates
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button {
-                    sheetDestination = .editClient
-                } label: {
-                    Label("Edit Client", systemImage: "pencil")
-                }
-                Button(role: .destructive) {
-                    showDeleteConfirm = true
-                } label: {
-                    Label("Delete Client", systemImage: "trash")
-                }
+                Button { sheetDestination = .editClient } label: { Label("client_details.edit", systemImage: "pencil") }
+                Button(role: .destructive) { showDeleteConfirm = true } label: { Label("client_details.delete", systemImage: "trash") }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -250,20 +242,20 @@ import OSLog
         ToolbarItem(placement: .bottomBar) {
             EmptyView()
                 .confirmationDialog(
-                    "Are you sure you want to delete \(vm.client.fullName)?",
+                    String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName),
                     isPresented: $showDeleteConfirm,
                     titleVisibility: .visible
                 ) {
-                    Button("Yes", role: .destructive) { deleteClient() }
-                    Button("No", role: .cancel) { }
+                    Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { deleteClient() }
+                    Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { }
                 } message: {
-                    Text("This will permanently delete the client, their pets, and all visit history. This action cannot be undone.")
+                    Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
                 }
         }
         ToolbarItem(placement: .automatic) {
             EmptyView()
-                .alert("Delete Failed", isPresented: $showDeleteErrorAlert) {
-                    Button("OK", role: .cancel) { }
+                .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
+                    Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
                 } message: {
                     Text(deleteErrorMessage)
                 }

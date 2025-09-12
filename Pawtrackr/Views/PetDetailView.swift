@@ -152,11 +152,11 @@ final class PetDetailViewModel {
                                 Button { dismiss() } label: { Image(systemName: "chevron.backward") }
                             }
                         }
-                        .alert("Start session for \(pet.name)?", isPresented: $confirmCheckIn) {
-                            Button("No", role: .cancel) {}
-                            Button("Yes", role: .destructive) { vm.checkIn() }
+                        .alert(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name), isPresented: $confirmCheckIn) {
+                            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
+                            Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { vm.checkIn() }
                         } message: {
-                            Text("This will begin a new session and start the timer.")
+                            Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
                         }
                         .sheet(item: $bvm.sheetDestination) { destination in
                             switch destination {
@@ -190,7 +190,7 @@ final class PetDetailViewModel {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(vm.pet.name).font(.title2.weight(.semibold))
                             Text(vm.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
-                            if let age = vm.pet.ageString { Text("Age: \(age)").font(.footnote).foregroundStyle(.secondary) }
+                            if let age = vm.pet.ageString { Text(String(format: NSLocalizedString("pet.age_fmt", comment: ""), age)).font(.footnote).foregroundStyle(.secondary) }
                             ownerInfo(vm)
                         }
                         Spacer()
@@ -205,7 +205,7 @@ final class PetDetailViewModel {
             Group {
                 if let owner = vm.pet.owner {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Owner").font(.caption).foregroundStyle(.secondary)
+                        Text(NSLocalizedString("pet.owner", comment: "")).font(.caption).foregroundStyle(.secondary)
                         HStack(spacing: 8) {
                             Image(systemName: "person.fill").foregroundStyle(.secondary)
                             Text(owner.fullName).font(.footnote.weight(.medium))
@@ -225,7 +225,7 @@ final class PetDetailViewModel {
 
         private func sessionStatus(_ vm: PetDetailViewModel) -> some View {
             HStack(spacing: 10) {
-                Label("In Session", systemImage: "checkmark.circle.fill")
+                Label(NSLocalizedString("status.in_session", comment: ""), systemImage: "checkmark.circle.fill")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(DS.ColorToken.success)
                     .padding(.vertical, 6)
@@ -242,9 +242,9 @@ final class PetDetailViewModel {
         
         private func actionRow(_ vm: PetDetailViewModel) -> some View {
             HStack(spacing: 12) {
-                actionTile(title: "View History", systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
-                actionTile(title: "Check In", systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { confirmCheckIn = true }
-                actionTile(title: "Check Out", systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
+                actionTile(title: NSLocalizedString("pet.view_history", comment: ""), systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
+                actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { confirmCheckIn = true }
+                actionTile(title: NSLocalizedString("pet.check_out", comment: ""), systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)
         }
@@ -274,11 +274,11 @@ final class PetDetailViewModel {
         private func quickStats(_ vm: PetDetailViewModel) -> some View {
             Card {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Quick Stats").font(.subheadline.weight(.semibold))
+                    Text(NSLocalizedString("pet.quick_stats", comment: "")).font(.subheadline.weight(.semibold))
                     HStack(spacing: 12) {
-                        statTile(label: "Total Visits", value: "\(vm.totalVisits)", tint: .blue)
-                        statTile(label: "Total Spent", value: vm.totalSpentString, tint: .green)
-                        statTile(label: "Avg Duration", value: vm.averageDurationString, tint: .purple)
+                        statTile(label: NSLocalizedString("pet.total_visits", comment: ""), value: "\(vm.totalVisits)", tint: .blue)
+                        statTile(label: NSLocalizedString("pet.total_spent", comment: ""), value: vm.totalSpentString, tint: .green)
+                        statTile(label: NSLocalizedString("pet.avg_duration", comment: ""), value: vm.averageDurationString, tint: .purple)
                     }
                 }
             }
@@ -299,7 +299,7 @@ final class PetDetailViewModel {
             VStack(alignment: .leading, spacing: 12) {
                 // Section header
                 HStack {
-                    Text("Recent Visits").font(.headline)
+                    Text(NSLocalizedString("pet.recent_visits", comment: "")).font(.headline)
                     Spacer()
                     Text("\(vm.sortedVisits.count)")
                         .font(.caption.monospacedDigit())
@@ -313,7 +313,7 @@ final class PetDetailViewModel {
 
                 // Empty state
                 if vm.sortedVisits.isEmpty {
-                    ContentUnavailableView("No Visits Yet", systemImage: "calendar.badge.plus")
+                    ContentUnavailableView(NSLocalizedString("pet.no_visits_yet", comment: ""), systemImage: "calendar.badge.plus")
                 } else {
                     VStack(spacing: 12) {
                         // Highlight current visit (if any)
@@ -374,7 +374,7 @@ final class PetDetailViewModel {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Label("Payment pending", systemImage: "creditcard")
+                            Label(NSLocalizedString("visit.payment_pending", comment: ""), systemImage: "creditcard")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -434,20 +434,17 @@ final class PetDetailViewModel {
         }
 
         private func startedString(_ date: Date) -> String {
-            let cal = Calendar.current
-            let df = DateFormatter()
-            df.dateStyle = .medium
-            df.timeStyle = .short
-            let tf = DateFormatter()
-            tf.dateStyle = .none
-            tf.timeStyle = .short
-            if cal.isDateInToday(date) {
-                return "Today, \(tf.string(from: date))"
-            } else if cal.isDateInYesterday(date) {
-                return "Yesterday, \(tf.string(from: date))"
-            } else {
-                return df.string(from: date)
-            }
+            // Localized relative day (Today/Yesterday) + time for current locale
+            let dateOnly = DateFormatter()
+            dateOnly.locale = .current
+            dateOnly.dateStyle = .medium
+            dateOnly.timeStyle = .none
+            dateOnly.doesRelativeDateFormatting = true
+            let timeOnly = DateFormatter()
+            timeOnly.locale = .current
+            timeOnly.dateStyle = .none
+            timeOnly.timeStyle = .short
+            return "\(dateOnly.string(from: date)), \(timeOnly.string(from: date))"
         }
 
         private func vmElapsedLabel() -> String {
