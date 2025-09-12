@@ -14,6 +14,9 @@ struct RootView: View {
         PinLockGate {
             MainTabView()
         }
-        .task { DataMigrations.coercePets(in: modelContext) }
+        .task {
+            DataMigrations.coercePets(in: modelContext)
+            DataMigrations.seedServicesIfNeeded(in: modelContext)
+        }
     }
 }

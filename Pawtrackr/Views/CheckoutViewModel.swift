@@ -186,9 +186,9 @@ final class CheckoutViewModel {
                 guard let serviceID = item.service?.persistentModelID else { return false }
                 return !selectedServiceIDs.contains(serviceID)
             }
-            // Add new items
+            // Add new items with zeroed unit price; total will be set from the user's input
             for service in servicesToSnapshot where !existingServiceIDs.contains(service.persistentModelID) {
-                visit.addItem(title: service.name, unitPrice: service.basePrice, quantity: 1, service: service)
+                visit.addItem(title: service.name, unitPrice: 0, quantity: 1, service: service)
             }
             
             // 2. Apply notes, tags, and photos.

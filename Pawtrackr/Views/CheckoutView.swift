@@ -431,7 +431,6 @@ struct CheckoutView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(service.name).font(.subheadline.weight(.semibold))
-                    if let price = service.basePrice { Text(price.moneyString).font(.caption).foregroundStyle(.secondary) }
                 }
                 Spacer()
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle").foregroundStyle(isSelected ? .green : .secondary)
@@ -457,7 +456,7 @@ struct CheckoutView: View {
                 ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) }
                     .frame(width: 36, height: 36)
                 Text(service.name).font(.caption.weight(.medium)).foregroundStyle(.primary)
-                Text(service.basePrice?.moneyString ?? "").font(.caption2).foregroundStyle(.secondary)
+                // Hide per-service price; user will input amount manually
             }
             .padding(10)
             .frame(maxWidth: .infinity)
@@ -517,11 +516,7 @@ struct CheckoutView: View {
         viewModel.allServices.filter { viewModel.isServiceSelected($0) }
     }
 
-    private var servicesSubtotal: Decimal {
-        viewModel.allServices
-            .filter { viewModel.isServiceSelected($0) }
-            .reduce(Decimal.zero) { $0 +~ $1.effectiveBasePrice }
-    }
+    private var servicesSubtotal: Decimal { 0 } // User will provide total amount manually
 
     private var baseAmountDecimal: Decimal {
         Formatters.parseCurrency(baseAmountString) ?? 0

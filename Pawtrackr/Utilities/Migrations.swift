@@ -36,9 +36,59 @@ enum DataMigrations {
             Logger.migrations.error("Migration failed: \(String(describing: error))")
         }
     }
+
+    /// Seed a default set of Services if the catalog is empty (or missing key entries).
+    /// This provides Grooming Packages and common Individual Services so Checkout has data.
+    static func seedServicesIfNeeded(in context: ModelContext) {
+        do {
+            let existing = try context.fetch(FetchDescriptor<Service>())
+            let names = Set(existing.map { $0.name.lowercased() })
+
+            func ensure(_ service: Service) {
+                if !names.contains(service.name.lowercased()) {
+                    context.insert(service)
+                }
+            }
+
+            if existing.isEmpty {
+                // Grooming Packages
+                ensure(Service(name: "Full Grooming Package",  category: .groom, systemIcon: "scissors",           basePrice: 75, defaultDurationMinutes: 120, isEnabled: true))
+                ensure(Service(name: "Basic Grooming Package", category: .groom, systemIcon: "sparkles",          basePrice: 65, defaultDurationMinutes: 90,  isEnabled: true))
+                ensure(Service(name: "SPA Bath Package",       category: .groom, systemIcon: "shower.fill",       basePrice: 55, defaultDurationMinutes: 75,  isEnabled: true))
+
+                // Individual Services (non-groom)
+                ensure(Service(name: "Bath Only",        category: .care,  systemIcon: "drop.fill",            basePrice: 40, defaultDurationMinutes: 45))
+                ensure(Service(name: "Haircut",          category: .care,  systemIcon: "scissors",             basePrice: 40, defaultDurationMinutes: 45))
+                ensure(Service(name: "De-shedding",      category: .care,  systemIcon: "wind",                 basePrice: 20, defaultDurationMinutes: 15))
+                ensure(Service(name: "Anal Glands",      category: .addOn, systemIcon: "circle.fill",          basePrice: 10, defaultDurationMinutes: 10))
+                ensure(Service(name: "Nail Clipping",    category: .addOn, systemIcon: "hand.raised.fill",     basePrice: 20, defaultDurationMinutes: 10))
+                ensure(Service(name: "Ear Cleaning",     category: .addOn, systemIcon: "ear.and.waveform",     basePrice: 10, defaultDurationMinutes: 10))
+                ensure(Service(name: "Face Grooming",    category: .addOn, systemIcon: "person.circle",        basePrice: 12, defaultDurationMinutes: 10))
+                ensure(Service(name: "Paw Pad Trim",     category: .addOn, systemIcon: "pawprint",             basePrice: 6,  defaultDurationMinutes: 5))
+                ensure(Service(name: "Hygiene Trim",     category: .addOn, systemIcon: "scissors",             basePrice: 9,  defaultDurationMinutes: 8))
+                ensure(Service(name: "Teeth Brushing",   category: .addOn, systemIcon: "mouth.fill",           basePrice: 9,  defaultDurationMinutes: 8))
+
+                try context.save()
+                Logger.migrations.info("Seeded default Service catalog (packages + individual services).")
+            } else {
+                // Backfill missing key entries without disturbing existing catalog
+                let wanted: [Service] = [
+                    Service(name: "Full Grooming Package",  category: .groom, systemIcon: "scissors",       basePrice: 75, defaultDurationMinutes: 120),
+                    Service(name: "Basic Grooming Package", category: .groom, systemIcon: "sparkles",      basePrice: 65, defaultDurationMinutes: 90),
+                    Service(name: "SPA Bath Package",       category: .groom, systemIcon: "shower.fill",   basePrice: 55, defaultDurationMinutes: 75),
+                ]
+                var inserted = 0
+                for s in wanted where !names.contains(s.name.lowercased()) {
+                    context.insert(s); inserted += 1
+                }
+                if inserted > 0 { try context.save(); Logger.migrations.info("Backfilled \(inserted) package services.") }
+            }
+        } catch {
+            Logger.migrations.error("Service seeding failed: \(String(describing: error))")
+        }
+    }
 }
 
 extension Logger {
     static let migrations = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "migrations")
 }
-
