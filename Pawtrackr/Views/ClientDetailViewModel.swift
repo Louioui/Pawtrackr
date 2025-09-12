@@ -99,16 +99,10 @@ final class ClientDetailViewModel: ObservableObject {
     /// Stops the running timer by ending the current active visit without finalizing totals.
     /// Use this right before presenting the Checkout view; Checkout will handle totals and payment.
     func pauseVisitForCheckout(pet: Pet, at date: Date = .now) {
-        guard let visit = activeVisit(for: pet) else { return }
-        if visit.endedAt == nil { visit.endedAt = date }
-        do {
-            try modelContext.save()
-            // refresh lists so the pet card reflects non-running state immediately
-            self.pets = client.pets
-            objectWillChange.send()
-        } catch {
-            Logger.main.error("Failed to pause visit for checkout: \(String(describing: error))")
-        }
+        // Intentionally a no‑op: we do NOT persist an ended visit here to avoid creating
+        // a completed record with $0.00. The CheckoutViewModel will freeze the timer locally
+        // and persist the final state (endedAt, total, payment) on confirmation.
+        return
     }
 }
 

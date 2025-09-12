@@ -40,6 +40,7 @@ final class CheckoutViewModel {
     
     // MARK: Private State
     let allServices: [Service] // Fetched once for performance; exposed for view rendering.
+    private let checkoutEndsAt: Date?
     
     // MARK: Computed State
     var requiresExternalReference: Bool {
@@ -81,14 +82,20 @@ final class CheckoutViewModel {
         self.allServices = (try? modelContext.fetch(descriptor)) ?? []
 
         // Choose the most recent visit (active if present; otherwise the latest ended visit).
+        let visitCandidate: Visit
         if let recent = pet.visits.sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
-            self.visit = recent
+            visitCandidate = recent
         } else {
             // Create a temporary visit for the UI, but DON'T insert it yet.
             // It will only be inserted upon confirmation.
-            self.visit = Visit(pet: pet)
+            visitCandidate = Visit(pet: pet)
             Logger.main.info("Staging new visit for pet \(pet.name).")
         }
+        self.visit = visitCandidate
+
+        // Freeze the timer at the moment Checkout starts if the visit is still active.
+        // This avoids persisting an interim $0.00 completion while stopping the clock for UI.
+        self.checkoutEndsAt = (visitCandidate.endedAt == nil) ? Date() : nil
         
         hydrateStateFromVisit()
     }
@@ -109,7 +116,8 @@ final class CheckoutViewModel {
             recomputeAmountFromServices()
         }
         
-        visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt)
+        // Use a local, non-persisted end date for the timer if we are checking out an active visit.
+        visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt ?? checkoutEndsAt)
     }
     
     // MARK: - Intents
@@ -197,7 +205,10 @@ final class CheckoutViewModel {
             visit.applyPhotos(before: beforePhotoData, after: afterPhotoData)
             
             // 3. Finalize visit total and mark as checked out.
-            visit.markCheckedOut(total: servicesTotalDecimal)
+            // If the visit was active, use the frozen checkoutEndsAt for endedAt;
+            // if already completed, preserve its original endedAt.
+            let finalEndedAt = visit.endedAt ?? checkoutEndsAt ?? Date()
+            visit.markCheckedOut(total: servicesTotalDecimal, now: finalEndedAt)
 
             // 4. Create and attach payment.
             let cleanedRef = externalReference.trimmed
