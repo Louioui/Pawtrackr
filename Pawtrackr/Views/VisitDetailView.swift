@@ -15,11 +15,13 @@ import SwiftData
 struct VisitDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-
+    
     let visit: Visit
     @StateObject private var visitTimer = VisitTimer()
     @State private var showCheckout = false
-
+    @State private var previewData: Data? = nil
+    @State private var previewTitle: String = ""
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -55,11 +57,7 @@ struct VisitDetailView: View {
                 ToolbarItem(placement: .bottomBar) {
                     if visit.payment == nil {
                         Button {
-                            // If still active, stop timer and save; otherwise just resume checkout UI
-                            if visit.endedAt == nil {
-                                visit.endedAt = Date()
-                                do { try modelContext.save() } catch { /* best-effort; checkout will re-save */ }
-                            }
+                            // Do not persist an interim completion; present checkout and let it finalize.
                             showCheckout = true
                         } label: {
                             HStack {
@@ -77,19 +75,29 @@ struct VisitDetailView: View {
             .fullScreenCover(isPresented: $showCheckout) {
                 CheckoutView(pet: visit.pet)
             }
+            .fullScreenCover(item: Binding(
+                get: {
+                    previewData.map { PreviewItem(data: $0, title: previewTitle) }
+                },
+                set: { newValue in
+                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" }
+                }
+            )) { item in
+                PhotoPreview(imageData: item.data, title: item.title)
+            }
             .onAppear {
                 visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt)
             }
         }
     }
-
+    
     // MARK: - Header (pet summary)
-
+    
     private var header: some View {
         Card(accent: .top(.color(DS.ColorToken.gender(visit.pet.gender)))) {
             HStack(spacing: 12) {
                 if let data = visit.pet.photoData {
-                #if canImport(UIKit)
+#if canImport(UIKit)
                     if let ui = UIImage(data: data) {
                         Image(uiImage: ui)
                             .resizable().scaledToFill()
@@ -98,7 +106,7 @@ struct VisitDetailView: View {
                     } else {
                         SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
                     }
-                #elseif canImport(AppKit)
+#elseif canImport(AppKit)
                     if let ns = NSImage(data: data) {
                         Image(nsImage: ns)
                             .resizable().scaledToFill()
@@ -107,9 +115,9 @@ struct VisitDetailView: View {
                     } else {
                         SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
                     }
-                #else
+#else
                     SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
-                #endif
+#endif
                 } else {
                     SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
                 }
@@ -148,18 +156,18 @@ struct VisitDetailView: View {
         }
         .padding(.horizontal)
     }
-
+    
     private func petSubtitle(_ pet: Pet) -> String {
         if let breed = pet.breed, !breed.isEmpty { return "\(breed) • \(pet.species.displayName)" }
         return pet.species.displayName
     }
-
+    
     private var amountText: String? {
         visit.total > 0 ? visit.totalCurrencyString : nil
     }
-
+    
     // MARK: - Meta: timestamps, duration, payment
-
+    
     private var metaCards: some View {
         VStack(spacing: 12) {
             Card {
@@ -192,7 +200,7 @@ struct VisitDetailView: View {
                     }
                 }
             }
-
+            
             if let payment = visit.payment {
                 Card {
                     HStack(alignment: .firstTextBaseline) {
@@ -217,15 +225,15 @@ struct VisitDetailView: View {
         }
         .padding(.horizontal)
     }
-
+    
     // MARK: - Services
-
+    
     @ViewBuilder
     private var servicesCard: some View {
         // Split into simpler subviews to aid type-checking
         if visit.items.isEmpty { servicesEmptyCard } else { servicesContentCard }
     }
-
+    
     private var servicesEmptyCard: some View {
         Card {
             HStack {
@@ -240,23 +248,23 @@ struct VisitDetailView: View {
         }
         .padding(.horizontal)
     }
-
+    
     private var servicesContentCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Services Performed")
                     .font(.subheadline.weight(.semibold))
-
+                
                 // Chips row (consistent with History/Checkout)
                 servicesChips
-
+                
                 Divider().opacity(0.08)
-
+                
                 // Compact price list
                 servicesPriceList
-
+                
                 Divider().opacity(0.08)
-
+                
                 HStack {
                     Text("Total")
                         .font(.subheadline.weight(.semibold))
@@ -272,7 +280,7 @@ struct VisitDetailView: View {
         .accessibilityHint("Services performed and prices.")
         .padding(.horizontal)
     }
-
+    
     private var servicesChips: some View {
         let items: [VisitItem] = Array(visit.items)
         return FlowLayout(spacing: 8, rowSpacing: 8) {
@@ -283,7 +291,7 @@ struct VisitDetailView: View {
             }
         }
     }
-
+    
     private var servicesPriceList: some View {
         let items: [VisitItem] = Array(visit.items)
         return VStack(spacing: 8) {
@@ -292,7 +300,7 @@ struct VisitDetailView: View {
                     Text(item.displayName + (item.quantity > 1 ? " ×\(item.quantity)" : ""))
                         .font(.subheadline)
                     Spacer()
-                    Text(item.lineTotalCurrencyString)
+                    Text(item.lineTotalString)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -300,9 +308,9 @@ struct VisitDetailView: View {
             }
         }
     }
-
+    
     // MARK: - Photos (Before / After)
-
+    
     private var photosCard: some View {
         Group {
             if visit.beforePhotoData == nil && visit.afterPhotoData == nil {
@@ -322,115 +330,128 @@ struct VisitDetailView: View {
         }
         .padding(.horizontal)
     }
-
+    
     @ViewBuilder
     private func photoBox(title: String, data: Data?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.08))
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(.gray.opacity(0.2))
-                Group {
-                    #if canImport(UIKit)
-                    if let d = data, let ui = UIImage(data: d) {
-                        Image(uiImage: ui)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
+            Button {
+                if let data { previewData = data; previewTitle = title }
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.gray.opacity(0.08))
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(.gray.opacity(0.2))
+                    Group {
+#if canImport(UIKit)
+                        if let d = data, let ui = UIImage(data: d) {
+                            Image(uiImage: ui)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            placeholder
+                        }
+#elseif canImport(AppKit)
+                        if let d = data, let ns = NSImage(data: d) {
+                            Image(nsImage: ns)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            placeholder
+                        }
+#else
                         placeholder
+#endif
                     }
-                    #elseif canImport(AppKit)
-                    if let d = data, let ns = NSImage(data: d) {
-                        Image(nsImage: ns)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        placeholder
-                    }
-                    #else
-                    placeholder
-                    #endif
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .buttonStyle(.plain)
+                .frame(width: 180, height: 180)
+                .accessibilityLabel("\(title) photo")
+                .accessibilityHint("Double-tap to preview full screen")
             }
-            .frame(width: 160, height: 160)
-            .accessibilityLabel("\(title) photo")
         }
     }
 
-    private var placeholder: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "photo")
-            Text("No Photo")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        private var placeholder: some View {
+            VStack(spacing: 6) {
+                Image(systemName: "photo")
+                Text("No Photo")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-    }
-
-    // MARK: - Notes
-
-    private var notesCard: some View {
-        Group {
-            let trimmed = visit.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if trimmed.isEmpty {
-                Card {
-                    HStack {
-                        Text("No notes")
-                            .foregroundStyle(.secondary)
-                        Spacer()
+        
+        // MARK: - Notes
+        
+        private var notesCard: some View {
+            Group {
+                let trimmed = visit.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if trimmed.isEmpty {
+                    Card {
+                        HStack {
+                            Text("No notes")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
                     }
-                }
-            } else {
-                Card {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Notes")
-                            .font(.subheadline.weight(.semibold))
-                        let attr = (try? AttributedString(markdown: trimmed)) ?? AttributedString(trimmed)
-                        Text(attr)
-                            .font(.body)
-                            .textSelection(.enabled)
-                            .lineSpacing(2)
-                            .accessibilityLabel("Notes, \(trimmed)")
+                } else {
+                    Card {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Notes")
+                                .font(.subheadline.weight(.semibold))
+                            let attr = (try? AttributedString(markdown: trimmed)) ?? AttributedString(trimmed)
+                            Text(attr)
+                                .font(.body)
+                                .textSelection(.enabled)
+                                .lineSpacing(2)
+                                .accessibilityLabel("Notes, \(trimmed)")
+                        }
                     }
                 }
             }
+            .padding(.horizontal)
         }
-        .padding(.horizontal)
+        
+        // MARK: - Export (CSV)
+        
+        private func exportCSVForVisit() -> String {
+            // Header + single row for this Visit
+            var lines: [String] = ["startedAt,endedAt,pet,owner,services,amount,payment,notes"]
+            let started = Formatters.iso8601.string(from: visit.startedAt)
+            let ended = visit.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
+            
+            let petName = visit.pet.name.replacingOccurrences(of: "\"", with: "\"\"")
+            let ownerName: String = {
+                if let o = visit.pet.owner {
+                    return "\(o.firstName) \(o.lastName)".replacingOccurrences(of: "\"", with: "\"\"")
+                }
+                return ""
+            }()
+            
+            // Use SNAPSHOT names from VisitItem to ensure historical integrity
+            let services = visit.items
+                .map { $0.displayName.replacingOccurrences(of: "\"", with: "\"\"") }
+                .joined(separator: "; ")
+            
+            let amount = Formatters.currency.string(from: NSDecimalNumber(decimal: visit.total)) ?? "$0.00"
+            let payment = (visit.payment?.method.displayName ?? "").replacingOccurrences(of: "\"", with: "\"\"")
+            let notes = (visit.note ?? "")
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+                .replacingOccurrences(of: "\"", with: "\"\"")
+            
+            lines.append("\(started),\(ended),\"\(petName)\",\"\(ownerName)\",\"\(services)\",\(amount),\"\(payment)\",\"\(notes)\"")
+            return lines.joined(separator: "\n")
+        }
     }
-
-    // MARK: - Export (CSV)
-
-    private func exportCSVForVisit() -> String {
-        // Header + single row for this Visit
-        var lines: [String] = ["startedAt,endedAt,pet,owner,services,amount,payment,notes"]
-        let started = Formatters.iso8601.string(from: visit.startedAt)
-        let ended = visit.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
-
-        let petName = visit.pet.name.replacingOccurrences(of: "\"", with: "\"\"")
-        let ownerName: String = {
-            if let o = visit.pet.owner {
-                return "\(o.firstName) \(o.lastName)".replacingOccurrences(of: "\"", with: "\"\"")
-            }
-            return ""
-        }()
-
-        // Use SNAPSHOT names from VisitItem to ensure historical integrity
-        let services = visit.items
-            .map { $0.displayName.replacingOccurrences(of: "\"", with: "\"\"") }
-            .joined(separator: "; ")
-
-        let amount = Formatters.currency.string(from: NSDecimalNumber(decimal: visit.total)) ?? "$0.00"
-        let payment = (visit.payment?.method.displayName ?? "").replacingOccurrences(of: "\"", with: "\"\"")
-        let notes = (visit.note ?? "")
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            .replacingOccurrences(of: "\"", with: "\"\"")
-
-        lines.append("\(started),\(ended),\"\(petName)\",\"\(ownerName)\",\"\(services)\",\(amount),\"\(payment)\",\"\(notes)\"")
-        return lines.joined(separator: "\n")
-    }
+    
+    // Wrapper type to drive fullScreenCover(item:)
+fileprivate struct PreviewItem: Identifiable {
+    let id = UUID()
+    let data: Data
+    let title: String
 }
