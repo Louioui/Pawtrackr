@@ -25,12 +25,26 @@ final class RecentHistoryViewModel {
     
     // MARK: - Private Properties
     private var modelContext: ModelContext
+    private var notificationToken: NSObjectProtocol? = nil
     private var searchTask: Task<Void, Never>? = nil
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+        // Auto-refresh when a checkout completes
+        notificationToken = NotificationCenter.default.addObserver(
+            forName: .visitDidComplete,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.fetchVisits()
+        }
         fetchVisits()
     }
+
+    // Note: For simplicity and to avoid actor‑isolation issues in deinit,
+    // we are not explicitly removing the observer token. The VM is short‑lived
+    // and the token will be released with it. If needed, refactor to selector-based
+    // observers on NSObject and call removeObserver(self) in deinit on main.
 
     /// Allows the view to provide a real ModelContext from the environment
     /// after initializing with a temporary one. Triggers a refresh when changed.
@@ -75,12 +89,12 @@ final class RecentHistoryViewModel {
         // SwiftData predicate with date bounds only (text search remains in-memory)
         let predicate = #Predicate<Visit> { visit in
             visit.endedAt != nil &&
-            (start == nil || visit.sortKeyDate >= start!) &&
-            (end == nil || visit.sortKeyDate < end!)
+            (start == nil || visit.endedAt! >= start!) &&
+            (end == nil || visit.endedAt! < end!)
         }
         
         do {
-            let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.sortKeyDate, order: .reverse)])
+            let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
             var fetchedVisits = try modelContext.fetch(descriptor)
 
             // Apply text search in-memory (SwiftData predicate DSL can't use nested closures)
@@ -104,7 +118,7 @@ final class RecentHistoryViewModel {
             let totalRevenue = fetchedVisits.reduce(Decimal.zero) { $0 +~ $1.total }
             self.summaryRevenueString = totalRevenue.moneyString
             
-            self.groupedVisits = Dictionary(grouping: fetchedVisits, by: { calendar.startOfDay(for: $0.sortKeyDate) })
+            self.groupedVisits = Dictionary(grouping: fetchedVisits, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
             self.sortedDays = self.groupedVisits.keys.sorted(by: >)
             
         } catch {

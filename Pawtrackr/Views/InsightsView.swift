@@ -40,15 +40,17 @@ struct InsightsView: View {
 
     var body: some View {
         Group {
-            // Safely unwrap the optional viewModel
             if let vm = viewModel {
                 @Bindable var bvm = vm
                 NavigationStack {
                     ScrollView {
                         VStack(spacing: 16) {
+                            header(bvm)
                             filtersSection(bvm)
-                            kpiGrid(bvm)
+                            kpiRibbon(bvm)
                             revenueChart(bvm)
+                            visitsByPackage(bvm)
+                            packageMix(bvm)
                             topServices(bvm)
                             topClients(bvm)
                         }
@@ -57,23 +59,9 @@ struct InsightsView: View {
                         .padding(.bottom, 24)
                     }
                     .navigationTitle("Insights")
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            // Disable export if there's nothing to share yet.
-                            let csv = bvm.exportCSV
-                            ShareLink(
-                                item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Insights.csv"),
-                                preview: SharePreview("Pawtrackr Insights", icon: Image(systemName: "doc.text.fill"))
-                            ) {
-                                Label("Export CSV", systemImage: "square.and.arrow.up")
-                            }
-                            .disabled(csv.isEmpty)
-                            .accessibilityHint(csv.isEmpty ? "No data to export for the current filters" : "Shares a CSV of the current Insights")
-                        }
-                    }
+                    .toolbar { toolbar(bvm) }
                     .animation(.default, value: bvm.scope)
                     .overlay {
-                        // Add a loading indicator for better UX
                         if bvm.isLoading {
                             ProgressView()
                                 .padding()
@@ -83,10 +71,7 @@ struct InsightsView: View {
                 }
             } else {
                 ProgressView("Loading Insights...")
-                    .task {
-                        // Initialize the ViewModel on first appearance
-                        viewModel = InsightsViewModel(modelContext: modelContext)
-                    }
+                    .task { viewModel = InsightsViewModel(modelContext: modelContext) }
             }
         }
     }
@@ -126,6 +111,15 @@ struct InsightsView: View {
                 KPI(title: "Avg. Duration", value: vm.kpis.avgDurationString)
             }
         }
+    }
+
+    // A more visual ribbon to echo the sample UI style
+    private func kpiRibbon(_ vm: InsightsViewModel) -> some View {
+        HStack(spacing: 12) {
+            RibbonCard(icon: "dollarsign", title: "Revenue", value: vm.kpis.revenueString, tint: .green)
+            RibbonCard(icon: "checkmark.circle", title: "Visits", value: "\(vm.kpis.count)", tint: .blue)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
@@ -186,6 +180,87 @@ struct InsightsView: View {
             }
         }
     }
+
+    // MARK: - Additional Sections inspired by sample
+    @ViewBuilder
+    private func visitsByPackage(_ vm: InsightsViewModel) -> some View {
+        #if canImport(Charts)
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Visits by Package").font(.subheadline.weight(.semibold))
+                if vm.packageLeaders.isEmpty {
+                    ContentUnavailableView("No package data", systemImage: "chart.bar")
+                        .frame(height: 160)
+                } else {
+                    Chart(vm.packageLeaders) { row in
+                        BarMark(
+                            x: .value("Count", row.count),
+                            y: .value("Package", row.name)
+                        )
+                        .foregroundStyle(.blue.gradient)
+                    }
+                    .frame(height: max(160, CGFloat(vm.packageLeaders.count) * 24 + 40))
+                }
+            }
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private func packageMix(_ vm: InsightsViewModel) -> some View {
+        #if canImport(Charts)
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Package Mix").font(.subheadline.weight(.semibold))
+                if vm.categoryTotals.isEmpty {
+                    ContentUnavailableView("No category data", systemImage: "chart.pie")
+                        .frame(height: 160)
+                } else {
+                    Chart(vm.categoryTotals) { row in
+                        SectorMark(
+                            angle: .value("Count", row.count)
+                        )
+                        .foregroundStyle(by: .value("Category", row.name))
+                    }
+                    .frame(height: 180)
+                }
+            }
+        }
+        #endif
+    }
+
+    // Header with inline Export action similar to sample
+    private func header(_ vm: InsightsViewModel) -> some View {
+        HStack {
+            Text("Insights").font(.title.weight(.bold))
+                .foregroundStyle(.primary)
+            Spacer()
+            let csv = vm.exportCSV
+            ShareLink(
+                item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Insights.csv"),
+                preview: SharePreview("Pawtrackr Insights", icon: Image(systemName: "doc.text.fill"))
+            ) {
+                Label("Export", systemImage: "square.and.arrow.up")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(csv.isEmpty)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func toolbar(_ vm: InsightsViewModel) -> some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            let csv = vm.exportCSV
+            ShareLink(
+                item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Insights.csv"),
+                preview: SharePreview("Pawtrackr Insights", icon: Image(systemName: "doc.text.fill"))
+            ) {
+                Label("Export", systemImage: "square.and.arrow.up")
+            }
+            .disabled(csv.isEmpty)
+            .accessibilityHint(csv.isEmpty ? "No data to export for the current filters" : "Shares a CSV of the current Insights")
+        }
+    }
 }
 
 // MARK: - Small Components (can be moved to a shared file)
@@ -238,6 +313,32 @@ private struct LeaderRow: View {
                 .foregroundStyle(.secondary)
         }
         .font(.subheadline)
+    }
+}
+
+// Small ribbon card to echo the sample KPI style
+private struct RibbonCard: View {
+    let icon: String
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        Card(padding: EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12), elevation: .raised, showBorder: false) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: icon).foregroundStyle(tint)
+                    Spacer()
+                }
+                Text(value)
+                    .font(.title3.weight(.bold))
+                    .monospacedDigit()
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

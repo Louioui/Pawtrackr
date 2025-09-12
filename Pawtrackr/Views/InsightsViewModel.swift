@@ -26,18 +26,31 @@ final class InsightsViewModel {
     private(set) var revenueSeries: [RevenuePoint] = []
     #endif
     private(set) var serviceLeaders: [ServiceLeader] = []
+    private(set) var packageLeaders: [PackageLeader] = []
+    private(set) var categoryTotals: [CategoryTotal] = []
     private(set) var clientLeaders: [ClientLeader] = []
     private(set) var isLoading: Bool = false
     
     // MARK: - Dependencies
     private var modelContext: ModelContext
     private var searchTask: Task<Void, Never>? = nil
+    private var notificationToken: NSObjectProtocol?
     private var scopedVisits: [Visit] = []
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+        // Refresh when a checkout completes anywhere in the app
+        notificationToken = NotificationCenter.default.addObserver(
+            forName: .visitDidComplete,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.fetchAndProcessData()
+        }
         fetchAndProcessData()
     }
+    
+    // See note in RecentHistoryViewModel about deinit and actor isolation.
     
     private func scheduleFetch() {
         searchTask?.cancel()
@@ -60,11 +73,11 @@ final class InsightsViewModel {
         // Build a predicate only for completion and date range filtering
         let visitPredicate = #Predicate<Visit> { visit in
             visit.endedAt != nil &&
-            (start == nil || visit.sortKeyDate >= start!) &&
-            (end == nil || visit.sortKeyDate <= end!)
+            (start == nil || visit.endedAt! >= start!) &&
+            (end == nil || visit.endedAt! <= end!)
         }
         
-        let descriptor = FetchDescriptor<Visit>(predicate: visitPredicate, sortBy: [SortDescriptor(\.sortKeyDate, order: .reverse)])
+        let descriptor = FetchDescriptor<Visit>(predicate: visitPredicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
         
         do {
             scopedVisits = try modelContext.fetch(descriptor)
@@ -85,6 +98,8 @@ final class InsightsViewModel {
             self.revenueSeries = calculateRevenueSeries(from: scopedVisits)
             #endif
             self.serviceLeaders = calculateServiceLeaders(from: scopedVisits)
+            self.packageLeaders = calculatePackageLeaders(from: scopedVisits)
+            self.categoryTotals = calculateCategoryTotals(from: scopedVisits)
             self.clientLeaders = calculateClientLeaders(from: scopedVisits)
             
         } catch {
@@ -168,7 +183,7 @@ final class InsightsViewModel {
         let cal = Calendar.current
         var buckets: [Date: Decimal] = [:]
         for v in visits {
-            let day = cal.startOfDay(for: v.sortKeyDate)
+            let day = cal.startOfDay(for: v.endedAt ?? v.startedAt)
             buckets[day, default: 0] += v.total
         }
         let points = buckets.keys.sorted().map { day -> RevenuePoint in
@@ -212,6 +227,43 @@ final class InsightsViewModel {
         }
         return leaders
     }
+
+    private func calculatePackageLeaders(from visits: [Visit]) -> [PackageLeader] {
+        // Count only services that are part of the Grooming packages
+        var counts: [String: Int] = [:]
+        for v in visits {
+            for item in v.items {
+                if let service = item.service, service.category == .groom {
+                    counts[service.name, default: 0] += 1
+                }
+            }
+        }
+        let rows = counts.map { PackageLeader(name: $0.key, count: $0.value) }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count { return lhs.name < rhs.name }
+                return lhs.count > rhs.count
+            }
+        return rows
+    }
+
+    private func calculateCategoryTotals(from visits: [Visit]) -> [CategoryTotal] {
+        // Totals across all categories for a simple breakdown chart
+        var byCategory: [Service.Category: Int] = [:]
+        for v in visits {
+            for item in v.items {
+                if let cat = item.service?.category {
+                    byCategory[cat, default: 0] += 1
+                }
+            }
+        }
+        let mapped: [CategoryTotal] = byCategory
+            .map { CategoryTotal(category: $0.key, count: $0.value) }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count { return lhs.category.rawValue < rhs.category.rawValue }
+                return lhs.count > rhs.count
+            }
+        return mapped
+    }
 }
 
 // MARK: - Data Structures
@@ -250,6 +302,20 @@ extension InsightsViewModel {
         let id: PersistentIdentifier
         let name: String
         let amountString: String
+    }
+
+    struct PackageLeader: Identifiable {
+        let name: String
+        let count: Int
+        var id: String { name }
+        var countString: String { "\(count)x" }
+    }
+    
+    struct CategoryTotal: Identifiable {
+        let category: Service.Category
+        let count: Int
+        var id: String { category.rawValue }
+        var name: String { category.rawValue }
     }
 }
 

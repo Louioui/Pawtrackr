@@ -41,7 +41,7 @@ final class ClientDetailViewModel: ObservableObject {
     func refreshRecentVisits(limit: Int = 50) {
         // Fetch most-recent visits, then filter in-memory for portability
         let descriptor = FetchDescriptor<Visit>(
-            sortBy: [SortDescriptor(\Visit.endedAt, order: .reverse)]
+            sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
         )
         do {
             let results = try modelContext.fetch(descriptor)

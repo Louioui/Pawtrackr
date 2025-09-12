@@ -48,7 +48,21 @@ final class DashboardViewModel: ObservableObject {
   @Published var gallery: [GalleryItem] = []
 
   private let modelContext: ModelContext
-  init(modelContext: ModelContext) { self.modelContext = modelContext }
+  private var notificationToken: NSObjectProtocol? = nil
+  init(modelContext: ModelContext) {
+    self.modelContext = modelContext
+    // Auto-refresh dashboard when a checkout completes
+    notificationToken = NotificationCenter.default.addObserver(
+      forName: .visitDidComplete,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      guard let self else { return }
+      Task { await self.refresh() }
+    }
+  }
+
+  // See note in RecentHistoryViewModel about deinit and actor isolation.
 
   func refresh() async {
     await fetchKPIs()
@@ -126,16 +140,16 @@ final class DashboardViewModel: ObservableObject {
       let desc = FetchDescriptor<Visit>(
         predicate: #Predicate { v in
           v.endedAt != nil &&
-          v.sortKeyDate >= start &&
-          v.sortKeyDate < endExclusive
+          v.endedAt! >= start &&
+          v.endedAt! < endExclusive
         },
-        sortBy: [SortDescriptor(\.sortKeyDate, order: .reverse)]
+        sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
       )
       let visits = try modelContext.fetch(desc)
 
       var bucket: [Date: Decimal] = [:]
       for v in visits {
-        let day = cal.startOfDay(for: v.sortKeyDate)
+        let day = cal.startOfDay(for: v.endedAt ?? v.startedAt)
         bucket[day, default: .zero] = bucket[day, default: .zero] +~ v.total
       }
       revenueSeries = (0..<days).compactMap { i in
@@ -154,8 +168,8 @@ final class DashboardViewModel: ObservableObject {
 
     do {
       let desc = FetchDescriptor<Visit>(
-        predicate: #Predicate { v in v.sortKeyDate >= start && v.sortKeyDate < end },
-        sortBy: [SortDescriptor(\.sortKeyDate, order: .reverse)]
+        predicate: #Predicate { v in v.startedAt >= start && v.startedAt < end },
+        sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
       )
       let visits = try modelContext.fetch(desc)
       let photos = visits.compactMap { $0.afterPhotoData ?? $0.beforePhotoData }
