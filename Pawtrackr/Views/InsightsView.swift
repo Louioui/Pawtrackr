@@ -92,9 +92,7 @@ struct InsightsView: View {
                     DatePicker("Start Date", selection: $vm.customStartDate, in: ...Date(), displayedComponents: .date)
                     DatePicker("End Date", selection: $vm.customEndDate, in: vm.customStartDate..., displayedComponents: .date)
                 }
-                
-                // IMPROVEMENT: Use a dedicated SearchField component for better UI.
-                SearchField(text: $vm.searchText, placeholder: "Search clients, pets, or services…")
+                // Search removed per request: Insights should not expose a search UI.
             }
         }
     }
