@@ -98,7 +98,7 @@ struct VisitDetailView: View {
             HStack(spacing: 12) {
                 if let data = visit.pet.photoData {
 #if canImport(UIKit)
-                    if let ui = UIImage(data: data) {
+                    if let ui = ImageCache.shared.image(data: data, maxDimension: 128) {
                         Image(uiImage: ui)
                             .resizable().scaledToFill()
                             .frame(width: 64, height: 64)
@@ -347,7 +347,7 @@ struct VisitDetailView: View {
                         .stroke(.gray.opacity(0.2))
                     Group {
 #if canImport(UIKit)
-                        if let d = data, let ui = UIImage(data: d) {
+                        if let d = data, let ui = ImageCache.shared.image(data: d, maxDimension: 360) {
                             Image(uiImage: ui)
                                 .resizable()
                                 .scaledToFill()

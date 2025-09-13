@@ -390,7 +390,7 @@ final class PetDetailViewModel {
             HStack(spacing: 6) {
                 if let data = visit.beforePhotoData {
                 #if canImport(UIKit)
-                    if let img = UIImage(data: data) {
+                    if let img = ImageCache.shared.image(data: data, maxDimension: 64) {
                         Image(uiImage: img)
                             .resizable()
                             .scaledToFill()
@@ -411,7 +411,7 @@ final class PetDetailViewModel {
                 }
                 if let data = visit.afterPhotoData {
                 #if canImport(UIKit)
-                    if let img = UIImage(data: data) {
+                    if let img = ImageCache.shared.image(data: data, maxDimension: 64) {
                         Image(uiImage: img)
                             .resizable()
                             .scaledToFill()

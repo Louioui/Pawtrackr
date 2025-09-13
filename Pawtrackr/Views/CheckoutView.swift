@@ -11,7 +11,9 @@ import SwiftData
 
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var viewModel: CheckoutViewModel
+    @Environment(\.modelContext) private var modelContext
+    private let pet: Pet
+    @State private var viewModel: CheckoutViewModel?
     // UI extras to match the HTML mockup
     @State private var baseAmountString: String = ""
     @State private var selectedTipPercent: Int? = nil
@@ -19,10 +21,7 @@ struct CheckoutView: View {
     @State private var showSuccessModal = false
     @State private var selectedExtras: Set<String> = []
 
-    init(pet: Pet) {
-        // The modelContext can be accessed via the pet itself
-        _viewModel = State(initialValue: CheckoutViewModel(pet: pet, modelContext: pet.modelContext!))
-    }
+    init(pet: Pet) { self.pet = pet }
     
     var body: some View {
         NavigationStack {
@@ -47,19 +46,28 @@ struct CheckoutView: View {
             #endif
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom, content: bottomCta)
-            .alert("Checkout Error", isPresented: $viewModel.showAlert) {
+            .alert("Checkout Error", isPresented: Binding(get: { viewModel?.showAlert ?? false }, set: { if !$0 { viewModel?.showAlert = false } })) {
                 Button("OK") {}
             } message: {
-                Text(viewModel.alertMessage)
+                Text(viewModel?.alertMessage ?? "")
             }
-            .overlay { processingOverlay }
-            .overlay { successOverlay }
+            .overlay { if let vm = viewModel { processingOverlay(vm) } }
+            .overlay { if let vm = viewModel { successOverlay(vm) } }
+            .overlay {
+                if viewModel == nil {
+                    ZStack {
+                        Color.clear
+                        ProgressView()
+                    }
+                }
+            }
         }
+        .task { if viewModel == nil { viewModel = CheckoutViewModel(pet: pet, modelContext: modelContext) } }
     }
     
     private func confirmAndDismiss() {
         Task {
-            if await viewModel.confirmCheckout() {
+            if let vm = viewModel, await vm.confirmCheckout() {
                 dismiss()
             }
         }
@@ -68,31 +76,34 @@ struct CheckoutView: View {
     // MARK: - Sections (facelifted)
     @ViewBuilder
     private var petSessionHeader: some View {
-        Card {
-            HStack(spacing: 12) {
-                AvatarView(.pet(species: viewModel.pet.species, gender: viewModel.pet.gender, name: viewModel.pet.name, imageData: viewModel.pet.photoData), size: .lg, ringWidth: 4)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(viewModel.pet.name).font(.headline)
-                    Text(viewModel.pet.owner?.fullName ?? "").font(.subheadline).foregroundStyle(.secondary)
-                    HStack(spacing: 6) {
-                        Image(systemName: "clock").foregroundStyle(.green)
-                        Text("Session: \(viewModel.sessionDurationString)")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.green)
-                            .monospacedDigit()
+        if let viewModel = viewModel {
+            Card {
+                HStack(spacing: 12) {
+                    AvatarView(.pet(species: viewModel.pet.species, gender: viewModel.pet.gender, name: viewModel.pet.name, imageData: viewModel.pet.photoData), size: .lg, ringWidth: 4)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(viewModel.pet.name).font(.headline)
+                        Text(viewModel.pet.owner?.fullName ?? "").font(.subheadline).foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock").foregroundStyle(.secondary)
+                            Text(String(
+                                format: NSLocalizedString("checkout.started_time_fmt", comment: ""),
+                                Formatters.timeOnly.string(from: viewModel.visit.startedAt)
+                            ))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        }
                     }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(NSLocalizedString("checkout.started", comment: "")).font(.caption).foregroundStyle(.secondary)
-                    Text(Formatters.timeOnly.string(from: viewModel.visit.startedAt))
-                        .font(.subheadline.weight(.medium))
+                    Spacer()
                 }
             }
+        } else {
+            EmptyView()
         }
     }
     
+    @ViewBuilder
     private var servicesBlock: some View {
+        if let viewModel = viewModel {
         VStack(spacing: 12) {
             // Services catalog (packages + individual services)
             Card {
@@ -150,6 +161,7 @@ struct CheckoutView: View {
                 }
             }
         }
+        } else { EmptyView() }
     }
 
     private func additionalServiceRow(title: String, subtitle: String, icon: String) -> some View {
@@ -178,11 +190,13 @@ struct CheckoutView: View {
         .buttonStyle(.plain)
     }
     
+    @ViewBuilder
     private var notesAndTagsBlock: some View {
+        if let viewModel = viewModel {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 Text("checkout.notes_and_tags").font(.subheadline.weight(.semibold))
-                TextEditor(text: $viewModel.notes)
+                TextEditor(text: Binding(get: { viewModel.notes }, set: { viewModel.notes = $0 }))
                     .frame(minHeight: 100)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(.separator, lineWidth: 1))
@@ -196,11 +210,7 @@ struct CheckoutView: View {
                             isSelected: Binding(
                                 get: { viewModel.tags.contains(tag) },
                                 set: { isSelected, _ in
-                                    if isSelected {
-                                        viewModel.tags.insert(tag)
-                                    } else {
-                                        viewModel.tags.remove(tag)
-                                    }
+                                    if isSelected { viewModel.tags.insert(tag) } else { viewModel.tags.remove(tag) }
                                 }
                             )
                         )
@@ -208,14 +218,17 @@ struct CheckoutView: View {
                 }
             }
         }
+        } else { EmptyView() }
     }
     
+    @ViewBuilder
     private var photosBlock: some View {
+        if let viewModel = viewModel {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("checkout.before_after_photos").font(.subheadline.weight(.semibold))
                 HStack(spacing: 12) {
-                    ImagePicker(imageData: $viewModel.beforePhotoData, source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
+                    ImagePicker(imageData: Binding(get: { viewModel.beforePhotoData }, set: { viewModel.beforePhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
                         // FIX: Use the correct 'AddPhotoPlaceholder' view.
                         // We also create a small helper to display the image once chosen.
                         PhotoWell(imageData: viewModel.beforePhotoData, title: "Before")
@@ -227,7 +240,7 @@ struct CheckoutView: View {
                                 }
                             }
                     }
-                    ImagePicker(imageData: $viewModel.afterPhotoData, source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
+                    ImagePicker(imageData: Binding(get: { viewModel.afterPhotoData }, set: { viewModel.afterPhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
                         PhotoWell(imageData: viewModel.afterPhotoData, title: "After")
                             .contextMenu {
                                 if viewModel.afterPhotoData != nil {
@@ -240,9 +253,12 @@ struct CheckoutView: View {
                 }
             }
         }
+        } else { EmptyView() }
     }
     
+    @ViewBuilder
     private var chargeBlock: some View {
+        if let viewModel = viewModel {
         Card {
             VStack(alignment: .leading, spacing: 16) {
                 Text("checkout.service_charge").font(.subheadline.weight(.semibold))
@@ -280,7 +296,7 @@ struct CheckoutView: View {
 
                 if viewModel.requiresExternalReference {
                     labeledContent(NSLocalizedString("checkout.reference", comment: "")) {
-                        TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
+                        TextField(viewModel.referencePlaceholder, text: Binding(get: { viewModel.externalReference }, set: { viewModel.externalReference = $0 }))
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.trailing)
                     }
@@ -296,6 +312,7 @@ struct CheckoutView: View {
             }
             .animation(.default, value: viewModel.requiresExternalReference)
         }
+        } else { EmptyView() }
     }
     
     private func labeledContent<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -312,14 +329,11 @@ struct CheckoutView: View {
         ToolbarItem(placement: .cancellationAction) {
             Button("common.cancel", role: .cancel) { dismiss() }
         }
-        ToolbarItem(placement: .confirmationAction) {
-            Button("common.confirm", action: confirmCheckoutFlow)
-                .disabled(!viewModel.isConfirmEnabled)
-        }
+        // Removed top-right confirm button; use bottom CTA only
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
             Button("Done") {
-                viewModel.formatAmountInput()
+                viewModel?.formatAmountInput()
                 hideKeyboard()
             }
         }
@@ -328,21 +342,21 @@ struct CheckoutView: View {
     private func bottomCta() -> some View {
         Button(action: confirmCheckoutFlow) {
             HStack {
-                if viewModel.isSaving {
+                if viewModel?.isSaving ?? false {
                     ProgressView().tint(.white)
                 } else {
                     Image(systemName: "checkmark.circle.fill")
                     Text("checkout.complete")
                         .fontWeight(.semibold)
                     Spacer()
-                    Text(viewModel.finalTotalString)
+                    Text(viewModel?.finalTotalString ?? "")
                         .monospacedDigit()
                 }
             }
             .font(.headline)
             .frame(maxWidth: .infinity)
         }
-        .disabled(!viewModel.isConfirmEnabled || viewModel.isSaving)
+        .disabled(!(viewModel?.isConfirmEnabled ?? false) || (viewModel?.isSaving ?? false))
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .padding()
@@ -350,7 +364,9 @@ struct CheckoutView: View {
     }
 
     // MARK: - Payment methods block (button grid)
+    @ViewBuilder
     private var paymentMethodBlock: some View {
+        if let viewModel = viewModel {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 Text("checkout.payment_method").font(.subheadline.weight(.semibold))
@@ -362,19 +378,20 @@ struct CheckoutView: View {
                 }
                 if viewModel.requiresExternalReference {
                     labeledContent(NSLocalizedString("checkout.transaction_reference", comment: "")) {
-                        TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
+                        TextField(viewModel.referencePlaceholder, text: Binding(get: { viewModel.externalReference }, set: { viewModel.externalReference = $0 }))
                             .textFieldStyle(.plain)
                             .multilineTextAlignment(.trailing)
                     }
                 }
             }
         }
+        } else { EmptyView() }
     }
 
     private func paymentTile(_ method: Payment.Method, icon: String, tint: Color) -> some View {
-        let isSel = viewModel.selectedPaymentMethod == method
+        let isSel = (viewModel?.selectedPaymentMethod == method)
         return Button {
-            viewModel.choosePayment(method)
+            viewModel?.choosePayment(method)
         } label: {
             VStack(spacing: 8) {
                 ZStack { Circle().fill(tint.opacity(0.12)); Image(systemName: icon).foregroundStyle(tint) }
@@ -394,7 +411,9 @@ struct CheckoutView: View {
     }
 
     // MARK: - Summary block
+    @ViewBuilder
     private var summaryBlock: some View {
+        if let viewModel = viewModel {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 Text("checkout.payment_summary").font(.subheadline.weight(.semibold))
@@ -402,30 +421,18 @@ struct CheckoutView: View {
                 HStack { Text("checkout.tip_amount"); Spacer(); Text(tipDecimal.moneyString) }
                 Divider()
                 HStack { Text("checkout.total_amount").font(.headline); Spacer(); Text(viewModel.finalTotalString).font(.title3).fontWeight(.bold).foregroundStyle(.green) }
-                Card {
-                    HStack(spacing: 8) {
-                        Image(systemName: "info.circle.fill").foregroundStyle(.blue)
-                        Text("checkout.session_summary").font(.subheadline.weight(.medium))
-                    }
-                    .padding(.bottom, 2)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(format: NSLocalizedString("checkout.duration_fmt", comment: ""), viewModel.sessionDurationString))
-                        Text(String(format: NSLocalizedString("checkout.started_time_fmt", comment: ""), Formatters.timeOnly.string(from: viewModel.visit.startedAt)))
-                        Text(String(format: NSLocalizedString("checkout.payment_method_fmt", comment: ""), viewModel.selectedPaymentMethod.displayName))
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
+                // Removed session summary section per request
             }
         }
         .monospacedDigit()
+        } else { EmptyView() }
     }
 
     // MARK: - Service tiles/helpers
     private func packageRow(_ service: Service) -> some View {
-        let isSelected = viewModel.isServiceSelected(service)
+        let isSelected = viewModel?.isServiceSelected(service) ?? false
         return Button {
-            viewModel.toggleService(service)
+            viewModel?.toggleService(service)
             syncManualAmount()
         } label: {
             HStack(alignment: .top) {
@@ -446,10 +453,10 @@ struct CheckoutView: View {
     }
 
     private func serviceTile(_ service: Service) -> some View {
-        let isSelected = viewModel.isServiceSelected(service)
+        let isSelected = viewModel?.isServiceSelected(service) ?? false
         let icon = service.systemIcon ?? "pawprint.fill"
         return Button {
-            viewModel.toggleService(service)
+            viewModel?.toggleService(service)
             syncManualAmount()
         } label: {
             VStack(spacing: 6) {
@@ -471,7 +478,7 @@ struct CheckoutView: View {
     }
 
     // MARK: - Overlays
-    @ViewBuilder private var processingOverlay: some View {
+    @ViewBuilder private func processingOverlay(_ viewModel: CheckoutViewModel) -> some View {
         if viewModel.isSaving {
             ZStack {
                 Color.black.opacity(0.4).ignoresSafeArea()
@@ -490,7 +497,7 @@ struct CheckoutView: View {
         }
     }
 
-    @ViewBuilder private var successOverlay: some View {
+    @ViewBuilder private func successOverlay(_ viewModel: CheckoutViewModel) -> some View {
         if showSuccessModal {
             ZStack {
                 Color.black.opacity(0.4).ignoresSafeArea()
@@ -513,7 +520,8 @@ struct CheckoutView: View {
 
     // MARK: - Derived (UI money math)
     private var selectedServices: [Service] {
-        viewModel.allServices.filter { viewModel.isServiceSelected($0) }
+        guard let vm = viewModel else { return [] }
+        return vm.allServices.filter { vm.isServiceSelected($0) }
     }
 
     private var servicesSubtotal: Decimal { 0 } // User will provide total amount manually
@@ -532,13 +540,13 @@ struct CheckoutView: View {
 
     private func syncManualAmount() {
         let total = (servicesSubtotal +~ baseAmountDecimal +~ tipDecimal).roundedMoney()
-        viewModel.setAmountDirectly(total.moneyString)
+        viewModel?.setAmountDirectly(total.moneyString)
     }
 
     private func confirmCheckoutFlow() {
         Task { @MainActor in
             syncManualAmount()
-            if await viewModel.confirmCheckout() {
+            if let vm = viewModel, await vm.confirmCheckout() {
                 showSuccessModal = true
             }
         }
@@ -560,7 +568,7 @@ fileprivate struct PhotoWell: View {
     
     var body: some View {
         ZStack {
-            if let data = imageData, let image = imageFromData(data) {
+            if let data = imageData, let image = cachedImage(data) {
                 image
                     .resizable()
                     .scaledToFill()
@@ -574,9 +582,9 @@ fileprivate struct PhotoWell: View {
 }
 
 // Data → SwiftUI Image helper (module-wide safe)
-fileprivate func imageFromData(_ data: Data) -> Image? {
+fileprivate func cachedImage(_ data: Data) -> Image? {
     #if canImport(UIKit)
-    if let ui = UIImage(data: data) { return Image(uiImage: ui) }
+    if let ui = ImageCache.shared.image(data: data, maxDimension: 800) { return Image(uiImage: ui) }
     #elseif canImport(AppKit)
     if let ns = NSImage(data: data) { return Image(nsImage: ns) }
     #endif

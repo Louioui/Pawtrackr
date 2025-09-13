@@ -27,6 +27,7 @@ final class RecentHistoryViewModel {
     private var modelContext: ModelContext
     private var notificationToken: NSObjectProtocol? = nil
     private var searchTask: Task<Void, Never>? = nil
+    private var workSeq: Int = 0 // guards async filtering application
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -67,7 +68,11 @@ final class RecentHistoryViewModel {
     
     func fetchVisits() {
         self.isLoading = true
-        
+        #if DEBUG
+        let t0 = Date()
+        #endif
+        let currentSeq = { workSeq &+= 1; return workSeq }()
+
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         // Compute date bounds for the selected scope and push them into the store predicate
         let cal = Calendar.current
@@ -92,40 +97,48 @@ final class RecentHistoryViewModel {
             (start == nil || visit.endedAt! >= start!) &&
             (end == nil || visit.endedAt! < end!)
         }
-        
+
         do {
             let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
-            var fetchedVisits = try modelContext.fetch(descriptor)
+            let fetchedVisits = try modelContext.fetch(descriptor)
 
-            // Apply text search in-memory (SwiftData predicate DSL can't use nested closures)
-            if !trimmedQuery.isEmpty {
-                fetchedVisits = fetchedVisits.filter { v in
-                    if v.pet.name.localizedStandardContains(trimmedQuery) { return true }
-                    if let owner = v.pet.owner {
-                        if owner.firstName.localizedStandardContains(trimmedQuery) { return true }
-                        if owner.lastName.localizedStandardContains(trimmedQuery) { return true }
-                    }
-                    if v.items.contains(where: { $0.name.localizedStandardContains(trimmedQuery) }) { return true }
-                    return false
+            // Snapshot minimal data for off-main filtering and summary
+            let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in
+                HistoryVisitSnap(
+                    id: v.uuid,
+                    startedAt: v.startedAt,
+                    endedAt: v.endedAt,
+                    petName: v.pet.name,
+                    ownerFirst: v.pet.owner?.firstName ?? "",
+                    ownerLast: v.pet.owner?.lastName ?? "",
+                    itemNames: v.items.map { $0.name },
+                    total: (v.total as NSDecimalNumber).doubleValue
+                )
+            }
+
+            Task.detached(priority: .utility) { [currentSeq] in
+                let result = RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
+                await MainActor.run {
+                    guard currentSeq == self.workSeq else { return }
+
+                    // Apply filtered IDs to concrete visits
+                    let filtered = fetchedVisits.filter { result.filteredIDs.contains($0.uuid) }
+                    let calendar = Calendar.current
+                    self.summaryVisitCount = filtered.count
+                    self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
+                    self.groupedVisits = Dictionary(grouping: filtered, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
+                    self.sortedDays = self.groupedVisits.keys.sorted(by: >)
+                    self.isLoading = false
+                    #if DEBUG
+                    let dt = Date().timeIntervalSince(t0)
+                    print("History filter+apply in \(String(format: "%.2f", dt))s for \(snaps.count) visits")
+                    #endif
                 }
             }
-            
-            // Group for the view based on start of day
-            let calendar = Calendar.current
-            
-            // Update summary stats
-            self.summaryVisitCount = fetchedVisits.count
-            let totalRevenue = fetchedVisits.reduce(Decimal.zero) { $0 +~ $1.total }
-            self.summaryRevenueString = totalRevenue.moneyString
-            
-            self.groupedVisits = Dictionary(grouping: fetchedVisits, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
-            self.sortedDays = self.groupedVisits.keys.sorted(by: >)
-            
         } catch {
             print("Failed to fetch recent history: \(error)")
+            self.isLoading = false
         }
-        
-        self.isLoading = false
     }
     
     func exportCSV() -> String {
@@ -154,5 +167,43 @@ extension RecentHistoryViewModel {
     enum Scope: String, CaseIterable, Identifiable {
         case all = "All", today = "Today", thisWeek = "This Week"
         var id: String { rawValue }
+    }
+}
+
+// MARK: - Background Compute Helpers
+fileprivate struct HistoryVisitSnap: Sendable {
+    let id: UUID
+    let startedAt: Date
+    let endedAt: Date?
+    let petName: String
+    let ownerFirst: String
+    let ownerLast: String
+    let itemNames: [String]
+    let total: Double
+}
+
+fileprivate enum RecentHistoryComputer {
+    static func filterAndSummarize(snaps: [HistoryVisitSnap], query: String) -> (filteredIDs: Set<UUID>, totalRevenue: Double) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            let total = snaps.reduce(0.0) { $0 + $1.total }
+            return (Set(snaps.map { $0.id }), total)
+        }
+        let needle = trimmed.folding(options: .diacriticInsensitive, locale: .current).lowercased()
+        var ids: Set<UUID> = []
+        var total: Double = 0
+        for s in snaps {
+            let fields: [String] = [
+                s.petName,
+                s.ownerFirst,
+                s.ownerLast
+            ] + s.itemNames
+            let match = fields.contains { $0.folding(options: .diacriticInsensitive, locale: .current).lowercased().contains(needle) }
+            if match {
+                ids.insert(s.id)
+                total += s.total
+            }
+        }
+        return (ids, total)
     }
 }

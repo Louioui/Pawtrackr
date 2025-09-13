@@ -98,17 +98,9 @@ final class ClientDetailViewModel: ObservableObject {
 
     /// Freezes the active visit's timer by setting `endedAt` to the provided date.
     /// Does not attach payment or change totals. Checkout will finalize totals/payment.
+    @available(*, deprecated, message: "Freezing now occurs centrally when entering Checkout.")
     func pauseVisitForCheckout(pet: Pet, at date: Date = .now) {
-        guard let visit = activeVisit(for: pet), visit.endedAt == nil else { return }
-        visit.endedAt = date
-        do {
-            try modelContext.save()
-            // Trigger UI refresh (pet goes from active → completed (unpaid))
-            self.pets = client.pets
-            objectWillChange.send()
-        } catch {
-            Logger.main.error("Failed to freeze visit before checkout: \(String(describing: error))")
-        }
+        // No-op. Use Checkout flow to freeze at entry.
     }
 }
 

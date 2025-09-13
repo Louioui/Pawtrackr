@@ -66,19 +66,17 @@ final class CheckoutViewModel {
         return hasValidAmount && !isSaving && (!requiresExternalReference || !ref.isEmpty)
     }
 
-    // Timer for live duration display
-    let visitTimer = VisitTimer()
     static let tagOptions: [String] = Pet.BehaviorTag.allCases.map { $0.displayName }
 
-    /// Duration string frozen at checkout time (if active), or using visit's endedAt if already completed.
+    /// Duration string captured at checkout: check-in starts timer, checkout stops it.
     var sessionDurationString: String {
         let start = visit.startedAt
-        if let end = visit.endedAt ?? checkoutEndsAt {
-            return Formatters.durationString(from: start, to: end)
-        } else {
-            return Formatters.durationString(from: start, to: .now)
-        }
+        let end = visit.endedAt ?? checkoutEndsAt ?? Date()
+        return Formatters.durationString(from: start, to: end)
     }
+
+    /// The captured end timestamp used for the checkout summary (not persisted until confirm).
+    var sessionEndedAt: Date { visit.endedAt ?? checkoutEndsAt ?? Date() }
 
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
@@ -103,18 +101,14 @@ final class CheckoutViewModel {
         }
         self.visit = visitCandidate
 
-        // Freeze the timer at the moment Checkout starts if the visit is still active.
-        // This avoids persisting an interim $0.00 completion while stopping the clock for UI.
+        // Capture a local end timestamp for display, but do not persist.
+        // If the user cancels, the session resumes. If they confirm, we persist this value.
         self.checkoutEndsAt = (visitCandidate.endedAt == nil) ? Date() : nil
-
-        // Ensure the timer is truly frozen by persisting endedAt if needed.
-        if let freezeAt = checkoutEndsAt, visitCandidate.modelContext != nil {
-            visitCandidate.endedAt = freezeAt
-            do { try modelContext.save() } catch { /* non-fatal; UI still uses freezeAt */ }
-        }
 
         hydrateStateFromVisit()
     }
+
+    // No deinit work needed.
     
     private func hydrateStateFromVisit() {
         notes = visit.note ?? ""
@@ -132,8 +126,7 @@ final class CheckoutViewModel {
             recomputeAmountFromServices()
         }
         
-        // Use a local, non-persisted end date for the timer if we are checking out an active visit.
-        visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt ?? checkoutEndsAt)
+        // Timer is frozen at checkout entry; no live ticking needed here.
     }
     
     // MARK: - Intents
@@ -221,8 +214,7 @@ final class CheckoutViewModel {
             visit.applyPhotos(before: beforePhotoData, after: afterPhotoData)
             
             // 3. Finalize visit total and mark as checked out.
-            // If the visit was active, use the frozen checkoutEndsAt for endedAt;
-            // if already completed, preserve its original endedAt.
+            // If already completed, preserve its original endedAt; otherwise, use captured checkout end.
             let finalEndedAt = visit.endedAt ?? checkoutEndsAt ?? Date()
             visit.markCheckedOut(total: servicesTotalDecimal, now: finalEndedAt)
 

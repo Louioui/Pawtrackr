@@ -31,7 +31,6 @@ struct AddPetSheet: View {
     @State private var selectedGender: PetGender = .male
     @State private var breed: String = ""
     @State private var color: String = ""
-    @State private var notes: String = ""
 
     // Image picking - Corrected to use Data?
     @State private var avatarImageData: Data? = nil
@@ -119,10 +118,7 @@ struct AddPetSheet: View {
                         .disableAutocorrection(true)
                 }
 
-                Section("Notes") {
-                    TextField("Behavior, allergies, instructions…", text: $notes, axis: .vertical)
-                        .lineLimit(3, reservesSpace: true)
-                }
+                // Notes removed per request
             }
             .overlay(
                 Rectangle()
@@ -175,11 +171,9 @@ struct AddPetSheet: View {
 
         let trimmedBreed = canonicalOptionalWord(breed)
         let trimmedColor = canonicalOptionalWord(color)
-        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if let trimmedBreed { newPet.breed = trimmedBreed }
         if let trimmedColor { newPet.color = trimmedColor }
-        if !trimmedNotes.isEmpty { newPet.notes = trimmedNotes }
 
         newPet.photoData = avatarImageData
         newPet.owner = client

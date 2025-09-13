@@ -45,7 +45,7 @@ struct PhotoPreview: View {
 
                 Spacer(minLength: 0)
 
-                if let image = imageFromData(imageData) {
+                if let image = cachedImage(imageData) {
                     image
                         .resizable()
                         .scaledToFit()
@@ -113,9 +113,11 @@ struct PhotoPreview: View {
 }
 
 // Data → SwiftUI Image helper (module-wide safe)
-fileprivate func imageFromData(_ data: Data) -> Image? {
+fileprivate func cachedImage(_ data: Data) -> Image? {
     #if canImport(UIKit)
-    if let ui = UIImage(data: data) { return Image(uiImage: ui) }
+    if let ui = ImageCache.shared.image(data: data, maxDimension: max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * 2) {
+        return Image(uiImage: ui)
+    }
     #elseif canImport(AppKit)
     if let ns = NSImage(data: data) { return Image(nsImage: ns) }
     #endif

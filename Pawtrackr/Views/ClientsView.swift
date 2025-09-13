@@ -25,7 +25,7 @@ struct ClientsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                LazyVStack(spacing: 16) {
                     if let viewModel {
                         searchBar
                         if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
@@ -115,7 +115,7 @@ struct ClientsView: View {
     
     @ViewBuilder
     private func clientList(for clients: [Client]) -> some View {
-        VStack(spacing: 10) {
+        LazyVStack(spacing: 10) {
             ForEach(clients) { client in
                 NavigationLink(destination: ClientDetailView(client: client)) {
                     ClientCard(client: client)

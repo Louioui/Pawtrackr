@@ -44,7 +44,7 @@ struct InsightsView: View {
                 if let vm = viewModel {
                     @Bindable var bvm = vm
                     ScrollView {
-                        VStack(spacing: 16) {
+                        LazyVStack(spacing: 16) {
                             filtersSection(bvm)
                             kpiRibbon(bvm)
                             revenueChart(bvm)

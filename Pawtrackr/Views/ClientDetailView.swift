@@ -193,8 +193,7 @@ import OSLog
                             onViewDetails: { sheetDestination = .history(pet) },
                         onCheckIn: { petPendingCheckIn = pet },
                         onCheckOut: {
-                            // Stop timer immediately, then present checkout full‑screen to finalize
-                            vm.pauseVisitForCheckout(pet: pet)
+                            // Present checkout; keep timer live until confirmation
                             checkoutPet = pet
                         }
                     )

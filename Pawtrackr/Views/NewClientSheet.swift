@@ -188,12 +188,7 @@ struct NewClientSheet: View {
                             .submitLabel(.next)
                         #endif
 
-                        TextField("new_client.notes_optional", text: $p.notes, axis: .vertical)
-                            .lineLimit(3, reservesSpace: true)
-                        #if os(iOS)
-                            .textInputAutocapitalization(.sentences)
-                            .submitLabel(.done)
-                        #endif
+                        // Notes removed per request
                     } label: {
                         HStack(spacing: 10) {
                             PetAvatar(photoData: p.photoData, species: p.species, gender: p.gender, size: 28)
@@ -321,7 +316,7 @@ struct NewClientSheet: View {
             if !tp.health.trimmed.isEmpty { pet.setHealth(tp.health.trimmed) }
             let parsedTags = FormValidators.parseBehaviorTagsCSV(tp.behaviorCSV)
             if !parsedTags.isEmpty { pet.setBehaviorTags(parsedTags) }
-            if !tp.notes.trimmed.isEmpty { pet.setNotes(tp.notes.trimmed) }
+            // Notes removed per request
 
             pet.owner = client
         }
@@ -358,7 +353,6 @@ private struct TempPet: Identifiable {
     var color = ""
     var health = ""          // free-text, stored later when Pet has this property
     var behaviorCSV = ""     // “Calm, Cooperative”, stored later when Pet has tags
-    var notes = ""
     var photoData: Data? = nil
 }
 

@@ -180,21 +180,32 @@ struct IconCircle: View {
             )
 
         case .local(let data):
+            #if canImport(UIKit)
+            if let ui = ImageCache.shared.image(data: data, maxDimension: dim * 2) {
+                return AnyView(
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: dim, height: dim)
+                        .clipShape(Circle())
+                )
+            }
+            #else
             if let image = Image(platformImage: data) {
                 return AnyView(
                     image.resizable().scaledToFill()
                         .frame(width: dim, height: dim)
                         .clipShape(Circle())
                 )
-            } else {
-                return AnyView(
-                    Image(systemName: "pawprint.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: dim * sizeToken.iconScale, height: dim * sizeToken.iconScale)
-                        .foregroundStyle(tints.fg)
-                )
             }
+            #endif
+            return AnyView(
+                Image(systemName: "pawprint.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: dim * sizeToken.iconScale, height: dim * sizeToken.iconScale)
+                    .foregroundStyle(tints.fg)
+            )
 
         case .initials(let text):
             return AnyView(

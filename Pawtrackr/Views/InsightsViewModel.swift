@@ -33,9 +33,11 @@ final class InsightsViewModel {
     
     // MARK: - Dependencies
     private var modelContext: ModelContext
+    private var workSeq: Int = 0 // guards async result application
     private var searchTask: Task<Void, Never>? = nil
     private var notificationToken: NSObjectProtocol?
-    private var scopedVisits: [Visit] = []
+    // Keep lightweight snapshots for export to avoid retaining large graphs on main
+    private var scopedSnaps: [InsightVisitSnap] = []
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -65,66 +67,133 @@ final class InsightsViewModel {
     
     func fetchAndProcessData() {
         isLoading = true
-        
+        #if DEBUG
+        let t0 = Date()
+        #endif
+        let currentSeq = { workSeq &+= 1; return workSeq }()
+
         let (start, end) = dateRange(for: scope)
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let needle = trimmedSearch.folding(options: .diacriticInsensitive, locale: .current).lowercased()
-        
-        // Build a predicate only for completion and date range filtering
-        let visitPredicate = #Predicate<Visit> { visit in
-            visit.endedAt != nil &&
-            (start == nil || visit.endedAt! >= start!) &&
-            (end == nil || visit.endedAt! <= end!)
-        }
-        
-        let descriptor = FetchDescriptor<Visit>(predicate: visitPredicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
-        
-        do {
-            scopedVisits = try modelContext.fetch(descriptor)
-            
+
+        let container = modelContext.container
+        Task.detached(priority: .utility) { [currentSeq] in
+            // Build predicate for completed visits in optional date range
+            let visitPredicate = #Predicate<Visit> { visit in
+                visit.endedAt != nil &&
+                (start == nil || visit.endedAt! >= start!) &&
+                (end == nil || visit.endedAt! <= end!)
+            }
+            var descriptor = FetchDescriptor<Visit>(predicate: visitPredicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
+            // For extremely large datasets, apply a soft cap to keep UI snappy
+            if start == nil && end == nil { descriptor.fetchLimit = 5000 }
+
+            let bg = ModelContext(container)
+            var visits: [Visit] = []
+            do { visits = try bg.fetch(descriptor) } catch { }
+
+            // Map to snapshots off-main
+            var snaps: [InsightVisitSnap] = visits.map { v in
+                InsightVisitSnap(
+                    startedAt: v.startedAt,
+                    endedAt: v.endedAt,
+                    total: (v.total as NSDecimalNumber).doubleValue,
+                    petName: v.pet.name,
+                    ownerName: v.pet.owner?.fullName ?? "",
+                    itemDisplayNames: v.items.map { $0.displayName },
+                    itemServiceCategories: v.items.compactMap { $0.service?.category?.rawValue },
+                    paymentMethod: v.payment?.method.displayName,
+                    paymentReference: v.payment?.externalReference,
+                    note: v.note
+                )
+            }
+
             if !needle.isEmpty {
-                scopedVisits = scopedVisits.filter { v in
-                    let pet = v.pet.name.folding(options: .diacriticInsensitive, locale: .current).lowercased()
-                    let ownerFirst = v.pet.owner?.firstName.folding(options: .diacriticInsensitive, locale: .current).lowercased() ?? ""
-                    let ownerLast  = v.pet.owner?.lastName.folding(options: .diacriticInsensitive, locale: .current).lowercased() ?? ""
-                    let services = v.items.map { $0.displayName.folding(options: .diacriticInsensitive, locale: .current).lowercased() }
-                    return pet.contains(needle) || ownerFirst.contains(needle) || ownerLast.contains(needle) || services.contains { $0.contains(needle) }
+                snaps = snaps.filter { s in
+                    func norm(_ s: String) -> String { s.folding(options: .diacriticInsensitive, locale: .current).lowercased() }
+                    let pet = norm(s.petName)
+                    let owner = norm(s.ownerName)
+                    let services = s.itemDisplayNames.map(norm)
+                    return pet.contains(needle) || owner.contains(needle) || services.contains { $0.contains(needle) }
                 }
             }
-            
-            // Once we have the filtered data, compute all aggregations
-            self.kpis = calculateKpis(from: scopedVisits)
-            #if canImport(Charts)
-            self.revenueSeries = calculateRevenueSeries(from: scopedVisits)
-            #endif
-            self.serviceLeaders = calculateServiceLeaders(from: scopedVisits)
-            self.packageLeaders = calculatePackageLeaders(from: scopedVisits)
-            self.categoryTotals = calculateCategoryTotals(from: scopedVisits)
-            self.clientLeaders = calculateClientLeaders(from: scopedVisits)
-            
-        } catch {
-            print("Failed to fetch or process insights data: \(error)")
+
+            let computed = InsightsComputer.compute(from: snaps)
+            await MainActor.run {
+                guard currentSeq == self.workSeq else { return }
+
+                self.scopedSnaps = snaps
+
+                let revenueString = Formatters.currency.string(from: NSNumber(value: computed.totalRevenue)) ?? "$0.00"
+                let aov = computed.count > 0 ? computed.totalRevenue / Double(computed.count) : 0.0
+                let aovString = Formatters.currency.string(from: NSNumber(value: aov)) ?? "$0.00"
+                let avgDurationString: String = {
+                    guard computed.avgMinutes > 0 else { return "—" }
+                    let mins = Int(computed.avgMinutes.rounded())
+                    let hrs = mins / 60
+                    let rem = mins % 60
+                    return hrs > 0 ? "\(hrs)h \(rem)m" : "\(rem)m"
+                }()
+                self.kpis = KpiSet(revenueString: revenueString, count: computed.count, aovString: aovString, avgDurationString: avgDurationString)
+                #if canImport(Charts)
+                self.revenueSeries = computed.revenuePerDay.keys.sorted().map { day in
+                    let amount = Decimal(computed.revenuePerDay[day] ?? 0)
+                    let label = day.formatted(date: .abbreviated, time: .omitted)
+                    return RevenuePoint(label: label, date: day, amount: amount)
+                }
+                #endif
+                self.serviceLeaders = computed.serviceCounts.map { ServiceLeader(name: $0.key, count: $0.value) }
+                    .sorted { lhs, rhs in
+                        if lhs.count == rhs.count { return lhs.name < rhs.name }
+                        return lhs.count > rhs.count
+                    }
+                    .prefix(10).map { $0 }
+                self.packageLeaders = computed.packageCounts.map { PackageLeader(name: $0.key, count: $0.value) }
+                    .sorted { lhs, rhs in
+                        if lhs.count == rhs.count { return lhs.name < rhs.name }
+                        return lhs.count > rhs.count
+                    }
+                self.categoryTotals = computed.categoryCounts.compactMap { (key, value) in
+                        Service.Category(rawValue: key).map { CategoryTotal(category: $0, count: value) }
+                    }
+                    .sorted { lhs, rhs in
+                        if lhs.count == rhs.count { return lhs.category.rawValue < rhs.category.rawValue }
+                        return lhs.count > rhs.count
+                    }
+                self.clientLeaders = computed.clientAmounts.sorted { a, b in
+                        if a.value == b.value { return a.key < b.key }
+                        return a.value > b.value
+                    }
+                    .prefix(10)
+                    .map { (name, amount) in
+                        let amt = Formatters.currency.string(from: NSNumber(value: amount)) ?? "$0.00"
+                        return ClientLeader(id: name, name: name, amountString: amt)
+                    }
+
+                self.isLoading = false
+                #if DEBUG
+                let dt = Date().timeIntervalSince(t0)
+                print("Insights fetch+compute+apply in \(String(format: "%.2f", dt))s for \(snaps.count) visits")
+                #endif
+            }
         }
-        
-        isLoading = false
     }
     
     var exportCSV: String {
         var lines: [String] = [
-            "VisitID,StartedAt,EndedAt,Pet,Owner,Services,Amount,Payment,Reference,Notes"
+            "StartedAt,EndedAt,Pet,Owner,Services,Amount,Payment,Reference,Notes"
         ]
-        for v in scopedVisits {
-            let id = v.uuid.uuidString
-            let started = Formatters.iso8601.string(from: v.startedAt)
-            let ended = v.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
-            let pet = v.pet.name.csvEscaped
-            let owner = v.pet.owner?.fullName.csvEscaped ?? ""
-            let services = v.items.map { $0.displayName.csvEscaped }.joined(separator: "; ")
-            let amount = Formatters.currency.string(from: NSDecimalNumber(decimal: v.total)) ?? "$0.00"
-            let payment = v.payment?.method.displayName.csvEscaped ?? ""
-            let reference = v.payment?.externalReference?.csvEscaped ?? ""
-            let notes = v.note?.replacingOccurrences(of: "\n", with: " ").csvEscaped ?? ""
-            lines.append([id, started, ended, pet, owner, services, amount, payment, reference, notes].joined(separator: ","))
+        for s in scopedSnaps {
+            let started = Formatters.iso8601.string(from: s.startedAt)
+            let ended = s.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
+            let pet = s.petName.csvEscaped
+            let owner = s.ownerName.csvEscaped
+            let services = s.itemDisplayNames.map { $0.csvEscaped }.joined(separator: "; ")
+            let amount = Formatters.currency.string(from: NSNumber(value: s.total)) ?? "$0.00"
+            let payment = (s.paymentMethod ?? "").csvEscaped
+            let reference = (s.paymentReference ?? "").csvEscaped
+            let notes = (s.note ?? "").replacingOccurrences(of: "\n", with: " ").csvEscaped
+            lines.append([started, ended, pet, owner, services, amount, payment, reference, notes].joined(separator: ","))
         }
         return lines.joined(separator: "\n")
     }
@@ -209,10 +278,10 @@ final class InsightsViewModel {
 
     private func calculateClientLeaders(from visits: [Visit]) -> [ClientLeader] {
         struct Totals { var name: String; var amount: Decimal }
-        var byClient: [PersistentIdentifier: Totals] = [:]
+        var byClient: [String: Totals] = [:]
         for v in visits {
             guard let owner = v.pet.owner else { continue }
-            let id = owner.persistentModelID
+            let id = String(describing: owner.persistentModelID)
             var entry = byClient[id] ?? Totals(name: owner.fullName, amount: 0)
             entry.amount += v.total
             byClient[id] = entry
@@ -299,7 +368,7 @@ extension InsightsViewModel {
     }
     
     struct ClientLeader: Identifiable {
-        let id: PersistentIdentifier
+        let id: String
         let name: String
         let amountString: String
     }
@@ -325,5 +394,82 @@ private extension Calendar {
         let start = startOfDay(for: date)
         // start of next day minus 1 second to remain inclusive
         return self.date(byAdding: DateComponents(day: 1, second: -1), to: start) ?? date
+    }
+}
+
+// MARK: - Background Compute Helpers
+fileprivate struct InsightVisitSnap: Sendable {
+    let startedAt: Date
+    let endedAt: Date?
+    let total: Double
+    let petName: String
+    let ownerName: String
+    let itemDisplayNames: [String]
+    let itemServiceCategories: [String]
+    let paymentMethod: String?
+    let paymentReference: String?
+    let note: String?
+}
+
+fileprivate struct InsightsComputed: Sendable {
+    let totalRevenue: Double
+    let count: Int
+    let avgMinutes: Double
+    let revenuePerDay: [Date: Double]
+    let serviceCounts: [String: Int]
+    let packageCounts: [String: Int]
+    let categoryCounts: [String: Int]
+    let clientAmounts: [String: Double]
+}
+
+fileprivate enum InsightsComputer {
+    static func compute(from snaps: [InsightVisitSnap]) -> InsightsComputed {
+        let count = snaps.count
+
+        // Revenue & durations
+        var totalRevenue: Double = 0
+        var totalDurationSec: Double = 0
+        var durationCount = 0
+
+        // Buckets
+        var revenuePerDay: [Date: Double] = [:]
+        var serviceCounts: [String: Int] = [:]
+        var packageCounts: [String: Int] = [:]
+        var categoryCounts: [String: Int] = [:]
+        var clientAmounts: [String: Double] = [:]
+
+        let cal = Calendar.current
+
+        for v in snaps {
+            totalRevenue += v.total
+            if let end = v.endedAt {
+                totalDurationSec += end.timeIntervalSince(v.startedAt)
+                durationCount += 1
+                let day = cal.startOfDay(for: end)
+                revenuePerDay[day, default: 0] += v.total
+            } else {
+                let day = cal.startOfDay(for: v.startedAt)
+                revenuePerDay[day, default: 0] += v.total
+            }
+
+            for name in v.itemDisplayNames { serviceCounts[name, default: 0] += 1 }
+            // Treat all service categories as packages for a simple ranking
+            for cat in v.itemServiceCategories { packageCounts[cat, default: 0] += 1 }
+            for cat in v.itemServiceCategories { categoryCounts[cat, default: 0] += 1 }
+            clientAmounts[v.ownerName, default: 0] += v.total
+        }
+
+        let avgMinutes = durationCount > 0 ? (totalDurationSec / Double(durationCount)) / 60.0 : 0
+
+        return InsightsComputed(
+            totalRevenue: totalRevenue,
+            count: count,
+            avgMinutes: avgMinutes,
+            revenuePerDay: revenuePerDay,
+            serviceCounts: serviceCounts,
+            packageCounts: packageCounts,
+            categoryCounts: categoryCounts,
+            clientAmounts: clientAmounts
+        )
     }
 }

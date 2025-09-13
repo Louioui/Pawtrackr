@@ -34,7 +34,7 @@ final class DashboardViewModel: ObservableObject {
     var uiImage: UIImage? {
       #if os(iOS)
       guard let imageData else { return nil }
-      return UIImage(data: imageData)
+      return ImageCache.shared.image(data: imageData, maxDimension: 300)
       #else
       return nil
       #endif

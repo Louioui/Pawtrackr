@@ -47,7 +47,7 @@ struct DashboardView: View {
   @ViewBuilder
   private func content(_ vm: DashboardViewModel) -> some View {
     ScrollView {
-      VStack(spacing: 16) {
+      LazyVStack(spacing: 16) {
         kpiSection(vm)
         quickActionsSection
         if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
@@ -103,7 +103,7 @@ struct DashboardView: View {
   private func activeSessionsSection(_ vm: DashboardViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(NSLocalizedString("dashboard.active_sessions", comment: "")).font(.headline)
-      VStack(spacing: 10) {
+      LazyVStack(spacing: 10) {
         ForEach(vm.activeVisits) { visit in
           Card {
             HStack(spacing: 12) {
@@ -135,7 +135,7 @@ struct DashboardView: View {
         NavigationLink(NSLocalizedString("dashboard.view_all", comment: ""), destination: ClientsView())
           .font(.footnote)
       }
-      VStack(spacing: 10) {
+      LazyVStack(spacing: 10) {
         ForEach(vm.recentClients.prefix(5)) { client in
           NavigationLink { ClientDetailView(client: client) } label: {
             ClientRow(client: client)
