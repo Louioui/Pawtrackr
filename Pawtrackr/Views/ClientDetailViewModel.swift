@@ -19,16 +19,24 @@ final class ClientDetailViewModel: ObservableObject {
     // MARK: - Outputs
     @Published var pets: [Pet] = []
     @Published var recentVisits: [Visit] = []
+    @Published var historyRange: HistoryRange = .all { didSet { refreshRecentVisits() } }
+    @Published private(set) var canLoadMore: Bool = false
 
     // Derived stats (avoid the name `total` here to prevent shadowing compiler weirdness)
     var visitCount: Int { recentVisits.count }
     var grandRevenue: Decimal { recentVisits.reduce(0) { $0 + $1.effectiveTotal } }
 
     // MARK: - Init
-    init(client: Client, modelContext: ModelContext) {
+    // Paging configuration
+    private let pageSize: Int = 50
+    private var currentLimit: Int
+    private var lastTotalForClient: Int = 0
+
+    init(client: Client, modelContext: ModelContext, initialLimit: Int = 50) {
         self.client = client
         self.modelContext = modelContext
         self.pets = client.pets
+        self.currentLimit = max(initialLimit, pageSize)
         refreshRecentVisits()
     }
 
@@ -38,22 +46,58 @@ final class ClientDetailViewModel: ObservableObject {
         return pet.visits.first(where: { $0.endedAt == nil })
     }
 
-    func refreshRecentVisits(limit: Int = 50) {
-        // Fetch most-recent visits, then filter in-memory for portability
-        let descriptor = FetchDescriptor<Visit>(
+    func refreshRecentVisits(limit: Int? = nil) {
+        if let limit { currentLimit = max(limit, pageSize) }
+        // Fetch most-recent visits globally, then filter to this client's pets for portability across stores
+        var descriptor = FetchDescriptor<Visit>(
             sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
         )
+        // Avoid materializing the entire Visit table; we need just a window
+        descriptor.fetchLimit = max(currentLimit * 10, pageSize * 10)
         do {
+            #if DEBUG
+            let t0 = Date()
+            #endif
             let results = try modelContext.fetch(descriptor)
             let allowedPetIDs = Set(client.pets.map { $0.persistentModelID })
+            let now = Date()
+            let cal = Calendar.current
+            let startBound: Date? = {
+                switch historyRange {
+                case .all: return nil
+                case .lastNDays(let days):
+                    return cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: now))
+                }
+            }()
             let filtered = results.filter { v in
-                v.endedAt != nil && allowedPetIDs.contains(v.pet.persistentModelID)
+                guard v.endedAt != nil else { return false }
+                guard allowedPetIDs.contains(v.pet.persistentModelID) else { return false }
+                if let start = startBound, let ended = v.endedAt { return ended >= start }
+                return true
             }
-            self.recentVisits = Array(filtered.prefix(limit))
+            self.lastTotalForClient = filtered.count
+            self.canLoadMore = filtered.count > currentLimit
+            self.recentVisits = Array(filtered.prefix(currentLimit))
+            #if DEBUG
+            let dt = Date().timeIntervalSince(t0)
+            Logger.main.debug("Fetched client recent visits: total=\(self.lastTotalForClient), limit=\(self.currentLimit) in \(String(format: "%.2f", dt))s")
+            #endif
         } catch {
             Logger.main.error("Failed to fetch recent visits: \(String(describing: error))")
             self.recentVisits = []
+            self.canLoadMore = false
         }
+    }
+
+    func loadMore() {
+        currentLimit += pageSize
+        refreshRecentVisits()
+    }
+
+    // MARK: - Types
+    enum HistoryRange: Hashable {
+        case all
+        case lastNDays(Int)
     }
 
     // MARK: - Actions
@@ -89,6 +133,10 @@ final class ClientDetailViewModel: ObservableObject {
             // Trigger UI refresh to flip buttons/timer state
             self.pets = client.pets
             objectWillChange.send()
+            // Update per-day summaries for Insights
+            if let ended = visit.endedAt {
+                SummaryUpdater.rebuildDay(for: ended, in: modelContext)
+            }
         } catch {
             Logger.main.error("Failed to check out: \(String(describing: error))")
         }

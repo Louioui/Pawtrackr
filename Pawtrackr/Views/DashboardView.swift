@@ -11,10 +11,13 @@ import SwiftData
 import Charts
 #endif
 
-struct DashboardView: View {
-  @Environment(\.modelContext) private var modelContext
-  @State private var vm: DashboardViewModel?
-  @State private var showNewClient = false
+  struct DashboardView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var vm: DashboardViewModel?
+    @State private var showNewClient = false
+    @State private var clientPendingDeletion: Client? = nil
+    @State private var showDeleteErrorAlert = false
+    @State private var deleteErrorMessage: String = ""
 
   var body: some View {
     NavigationStack {
@@ -40,6 +43,26 @@ struct DashboardView: View {
           }
           .accessibilityLabel("Open Insights")
         }
+      }
+      // Confirm delete client
+      .alert(
+        clientPendingDeletion.map { String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), $0.fullName) } ?? "",
+        isPresented: Binding(
+          get: { clientPendingDeletion != nil },
+          set: { if !$0 { clientPendingDeletion = nil } }
+        )
+      ) {
+        Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { clientPendingDeletion = nil }
+        Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) {
+          if let vm { deletePendingClient(vm) }
+        }
+      } message: {
+        Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
+      }
+      .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
+        Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
+      } message: {
+        Text(deleteErrorMessage)
       }
     }
   }
@@ -137,10 +160,15 @@ struct DashboardView: View {
       }
       LazyVStack(spacing: 10) {
         ForEach(vm.recentClients.prefix(5)) { client in
-          NavigationLink { ClientDetailView(client: client) } label: {
-            ClientRow(client: client)
-          }
-          .buttonStyle(.plain)
+          NavigationLink { ClientDetailView(client: client) } label: { ClientRow(client: client) }
+            .buttonStyle(.plain)
+            .contextMenu {
+              Button(role: .destructive) {
+                clientPendingDeletion = client
+              } label: {
+                Label(NSLocalizedString("client_details.delete", comment: ""), systemImage: "trash")
+              }
+            }
         }
       }
     }
@@ -169,6 +197,20 @@ struct DashboardView: View {
     #else
     EmptyView()
     #endif
+  }
+
+  // MARK: - Delete
+  private func deletePendingClient(_ vm: DashboardViewModel) {
+    guard let client = clientPendingDeletion else { return }
+    modelContext.delete(client)
+    do {
+      try modelContext.save()
+      clientPendingDeletion = nil
+      Task { await vm.refresh() }
+    } catch {
+      deleteErrorMessage = error.localizedDescription
+      showDeleteErrorAlert = true
+    }
   }
 
   private func gallerySection(_ vm: DashboardViewModel) -> some View {

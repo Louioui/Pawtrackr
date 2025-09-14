@@ -15,13 +15,11 @@
 "insights.visits" = "Visits";
 "insights.revenue_trend" = "Revenue Trend";
 "insights.top_services" = "Top Services";
-"insights.top_clients" = "Top Clients";
 "insights.visits_by_package" = "Visits by Package";
 "insights.package_mix" = "Package Mix";
 "insights.no_revenue" = "No Revenue Data";
 "insights.no_category" = "No category data";
 "insights.no_service_data" = "No service data in this range.";
-"insights.no_client_data" = "No client data in this range.";
 
 "visits.avg_duration" = "Avg.";
 

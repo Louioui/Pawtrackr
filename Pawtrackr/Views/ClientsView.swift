@@ -74,7 +74,7 @@ struct ClientsView: View {
                 if viewModel == nil { viewModel = ClientsViewModel(modelContext: modelContext) }
                 viewModel?.fetchClients()
             }
-        }
+            }
         // Keep only the in-view search bar to avoid duplicate search UIs.
     }
 
@@ -118,16 +118,9 @@ struct ClientsView: View {
         LazyVStack(spacing: 10) {
             ForEach(clients) { client in
                 NavigationLink(destination: ClientDetailView(client: client)) {
-                    ClientCard(client: client)
+                    ClientCard(client: client, onDelete: { clientPendingDeletion = client })
                 }
                 .buttonStyle(.plain)
-                .contextMenu {
-                    Button(role: .destructive) {
-                        clientPendingDeletion = client
-                    } label: {
-                        Label(NSLocalizedString("client_details.delete", comment: ""), systemImage: "trash")
-                    }
-                }
             }
         }
         .padding(.horizontal)

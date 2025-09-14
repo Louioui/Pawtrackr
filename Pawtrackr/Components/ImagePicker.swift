@@ -30,7 +30,7 @@ public struct ImagePicker<Label: View>: View {
     private let source: ImagePickerSource
     private let allowsEditing: Bool
     private let maxDimension: CGFloat?
-    private let jpegQuality: CGFloat
+    private let jpegQuality: CGFloat?
     private let label: () -> Label
 
     @State private var isPresenting = false
@@ -40,8 +40,8 @@ public struct ImagePicker<Label: View>: View {
     public init(imageData: Binding<Data?>,
                 source: ImagePickerSource = .prompt,
                 allowsEditing: Bool = true,
-                maxDimension: CGFloat? = 1600,
-                jpegQuality: CGFloat = 0.85,
+                maxDimension: CGFloat? = nil,
+                jpegQuality: CGFloat? = nil,
                 @ViewBuilder label: @escaping () -> Label) {
         _imageData = imageData
         self.source = source
@@ -92,7 +92,7 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
     let source: ImagePickerSource
     let allowsEditing: Bool
     let maxDimension: CGFloat?
-    let jpegQuality: CGFloat
+    let jpegQuality: CGFloat?
     
     func makeUIViewController(context: Context) -> UIViewController {
         switch source {
@@ -143,7 +143,9 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
             
             Task {
                 if let data = await loadImageData(from: result.itemProvider) {
-                    let processor = ImageProcessor(maxDimension: parent.maxDimension, jpegQuality: parent.jpegQuality)
+                    let md = parent.maxDimension ?? DeviceConfig.imageMaxDimension
+                    let jq = parent.jpegQuality ?? DeviceConfig.jpegQuality
+                    let processor = ImageProcessor(maxDimension: md, jpegQuality: jq)
                     parent.imageData = await processor.process(data: data)
                 }
             }
@@ -155,7 +157,9 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
             guard let image = (info[.editedImage] ?? info[.originalImage]) as? UIImage else { return }
             
             Task {
-                let processor = ImageProcessor(maxDimension: parent.maxDimension, jpegQuality: parent.jpegQuality)
+                let md = parent.maxDimension ?? DeviceConfig.imageMaxDimension
+                let jq = parent.jpegQuality ?? DeviceConfig.jpegQuality
+                let processor = ImageProcessor(maxDimension: md, jpegQuality: jq)
                 parent.imageData = await processor.process(image: image)
             }
         }
@@ -276,4 +280,3 @@ fileprivate extension UIImage {
     }
 }
 #endif
-

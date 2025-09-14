@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ClientCard: View {
     let client: Client
+    var onDelete: (() -> Void)? = nil
     
     // IMPROVEMENT: Logic is self-contained within the card.
     private var isInProgress: Bool { client.hasActiveVisit }
@@ -31,17 +32,20 @@ struct ClientCard: View {
             if let phone = client.phone, !phone.isEmpty {
                 // FIX: Use correct PhoneUtils methods and guard against iOS-only APIs.
                 #if canImport(UIKit)
-                if let telURL = URL(string: PhoneUtils.telURLString(phone) ?? "") {
+                if let telStr = PhoneUtils.telURLString(phone), let telURL = URL(string: telStr) {
                     Link(destination: telURL) {
                         Label("Call \(PhoneUtils.display(phone) ?? phone)", systemImage: "phone.fill")
                     }
                 }
-                if let smsURL = URL(string: PhoneUtils.smsURLString(phone) ?? "") {
+                if let smsStr = PhoneUtils.smsURLString(phone), let smsURL = URL(string: smsStr) {
                     Link(destination: smsURL) {
                         Label("Text Message", systemImage: "message.fill")
                     }
                 }
                 #endif
+            }
+            Button(role: .destructive) { onDelete?() } label: {
+                Label(NSLocalizedString("client_details.delete", comment: ""), systemImage: "trash")
             }
         }
     }

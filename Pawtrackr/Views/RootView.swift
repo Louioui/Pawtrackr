@@ -18,6 +18,7 @@ struct RootView: View {
         .task {
             DataMigrations.coercePets(in: modelContext)
             DataMigrations.seedServicesIfNeeded(in: modelContext)
+            DataMigrations.backfillDaySummaries(in: modelContext)
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

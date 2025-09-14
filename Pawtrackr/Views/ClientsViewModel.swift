@@ -54,7 +54,8 @@ final class ClientsViewModel {
                 SortDescriptor(\.firstName, order: .forward)
             ]
             
-            let descriptor = FetchDescriptor<Client>(predicate: predicate, sortBy: sortDescriptors)
+            var descriptor = FetchDescriptor<Client>(predicate: predicate, sortBy: sortDescriptors)
+            descriptor.fetchLimit = 2000
             var filteredClients = try modelContext.fetch(descriptor)
 
             if !trimmedSearch.isEmpty {

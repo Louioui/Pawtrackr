@@ -47,8 +47,8 @@ struct AddPetSheet: View {
                     HStack(spacing: 16) {
                         ImagePicker(imageData: $avatarImageData,
                                     allowsEditing: true,
-                                    maxDimension: 2048,
-                                    jpegQuality: 0.8) {
+                                    maxDimension: nil,
+                                    jpegQuality: nil) {
                             ZStack {
                                 Circle()
                                     .fill(Color.gray.opacity(0.1))
@@ -233,10 +233,12 @@ extension Binding {
     // Lightweight preview with an in-memory model
     let schema = Schema([Client.self, Pet.self])
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: schema, configurations: config)
-    let c = Client(firstName: "Sarah", lastName: "Johnson", phone: "(555) 123-4567")
-    container.mainContext.insert(c)
-
-    return AddPetSheet(client: c)
-        .modelContainer(container)
+    if let container = try? ModelContainer(for: schema, configurations: config) {
+        let c = Client(firstName: "Sarah", lastName: "Johnson", phone: "(555) 123-4567")
+        container.mainContext.insert(c)
+        return AddPetSheet(client: c)
+            .modelContainer(container)
+    } else {
+        return Text("Preview Unavailable")
+    }
 }

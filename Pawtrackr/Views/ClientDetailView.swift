@@ -15,8 +15,9 @@ import OSLog
         @Environment(\.modelContext) private var modelContext
         @Environment(\.dismiss) private var dismiss
 
-    // Use @StateObject for ObservableObject-based view models
-    @StateObject private var vm: ClientDetailViewModel
+    // Lazy-initialized ViewModel to avoid context crashes
+    @State private var viewModel: ClientDetailViewModel? = nil
+    private var vm: ClientDetailViewModel { viewModel! }
 
     // Local sheet routing (do not depend on VM for UI routing)
     @State private var sheetDestination: SheetDestination?
@@ -49,90 +50,92 @@ import OSLog
     @State private var deleteErrorMessage: String = ""
 
     // MARK: - Init
-    init(client: Client) {
-        // Prefer the client's existing context; as a last resort, create a temporary container (debug-friendly)
-        let ctx = client.modelContext ?? {
-            do {
-                let container = try ModelContainer(for: Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self)
-                return container.mainContext
-            } catch {
-                fatalError("ModelContainer creation failed: \(error)")
-            }
-        }()
-        // Initialize the @StateObject wrapper.
-        _vm = StateObject(wrappedValue: ClientDetailViewModel(client: client, modelContext: ctx))
-    }
+    private let client: Client
+    init(client: Client) { self.client = client }
 
     // MARK: - Body
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    ownerHeader(client: vm.client)
-                    notesCard(client: vm.client)
-                    petsSection
-                    recentHistorySection
+        Group {
+            if viewModel != nil {
+                NavigationStack {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ownerHeader(client: vm.client)
+                            notesCard(client: vm.client)
+                            petsSection
+                            recentHistorySection
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .navigationTitle("client_details.title")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                    .toolbar { toolbarContent(vm) }
+                    .fabOverlay {
+                        FAB(systemImage: "pawprint.fill", accessibilityLabel: "Add New Pet") {
+                            sheetDestination = .addPet
+                        }
+                    }
+                    .sheet(item: $sheetDestination) { destination in
+                        switch destination {
+                        case .addPet:
+                            AddPetSheet(client: vm.client)
+                        case .editClient:
+                            EditClientSheet(client: vm.client)
+                        case .checkout:
+                            EmptyView()
+                        case .history(let pet):
+                            PetHistoryView(pet: pet)
+                        }
+                    }
+                    .fullScreenCover(item: $checkoutPet) { pet in
+                        CheckoutView(pet: pet)
+                    }
+                    // Alerts bound while VM exists
+                    .alert(
+                        petPendingCheckIn.map { String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), $0.name) } ?? "",
+                        isPresented: Binding(
+                            get: { petPendingCheckIn != nil },
+                            set: { if !$0 { petPendingCheckIn = nil } }
+                        )
+                    ) {
+                        Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { petPendingCheckIn = nil }
+                        Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) {
+                            if let pet = petPendingCheckIn { vm.checkIn(pet: pet) }
+                            petPendingCheckIn = nil
+                        }
+                    } message: {
+                        Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
+                    }
+                    .alert(
+                        String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName),
+                        isPresented: $showDeleteConfirm
+                    ) {
+                        Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { }
+                        Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { deleteClient() }
+                    } message: {
+                        Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
+                    }
+                    .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
+                        Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
+                    } message: {
+                        Text(deleteErrorMessage)
+                    }
+                    .task { vm.refreshRecentVisits() }
                 }
-                .padding(.vertical, 8)
-            }
-            .navigationTitle("client_details.title")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar { toolbarContent }
-            .fabOverlay {
-                FAB(systemImage: "pawprint.fill", accessibilityLabel: "Add New Pet") {
-                    sheetDestination = .addPet
-                }
-            }
-            .sheet(item: $sheetDestination) { destination in
-                switch destination {
-                case .addPet:
-                    AddPetSheet(client: vm.client)
-                case .editClient:
-                    EditClientSheet(client: vm.client)
-                case .checkout:
-                    // Handled by fullScreenCover below
-                    EmptyView()
-                case .history(let pet):
-                    PetHistoryView(pet: pet)
-                }
-            }
-            .fullScreenCover(item: $checkoutPet) { pet in
-                CheckoutView(pet: pet)
+            } else {
+                ProgressView()
+                    .padding()
             }
         }
-        // Global confirmation + alerts so they always present (not tied to toolbar items)
-        .alert(
-            petPendingCheckIn.map { String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), $0.name) } ?? "",
-            isPresented: Binding(
-                get: { petPendingCheckIn != nil },
-                set: { if !$0 { petPendingCheckIn = nil } }
-            )
-        ) {
-            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { petPendingCheckIn = nil }
-            Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) {
-                if let pet = petPendingCheckIn { vm.checkIn(pet: pet) }
-                petPendingCheckIn = nil
+        .onAppear {
+            if viewModel == nil {
+                let ctx = client.modelContext ?? modelContext
+                viewModel = ClientDetailViewModel(client: client, modelContext: ctx)
+                viewModel?.refreshRecentVisits()
             }
-        } message: {
-            Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
         }
-        .alert(
-            String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName),
-            isPresented: $showDeleteConfirm
-        ) {
-            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { }
-            Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { deleteClient() }
-        } message: {
-            Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
-        }
-        .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
-            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-        } message: {
-            Text(deleteErrorMessage)
-        }
-        .task { vm.refreshRecentVisits() }
     }
 
     // MARK: - Subviews
@@ -155,8 +158,12 @@ import OSLog
                     }
                     if client.emergencyContactName?.trimmed.isEmpty == false || client.emergencyContactPhone?.trimmed.isEmpty == false {
                         let name = client.emergencyContactName?.trimmed ?? "Emergency Contact"
-                        let phone = client.emergencyContactPhone.flatMap { PhoneUtils.display($0) } ?? client.emergencyContactPhone
-                        Label("\(name)\(phone != nil ? ": \(phone!)" : "")", systemImage: "person.badge.key.fill")
+                        let phoneDisplay = client.emergencyContactPhone.flatMap { PhoneUtils.display($0) } ?? client.emergencyContactPhone
+                        let composed: String = {
+                            if let phoneDisplay, !phoneDisplay.isEmpty { return "\(name): \(phoneDisplay)" }
+                            return name
+                        }()
+                        Label(composed, systemImage: "person.badge.key.fill")
                     }
                 }
                 .font(.subheadline)
@@ -205,7 +212,20 @@ import OSLog
 
     private var recentHistorySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(NSLocalizedString("client_details.recent_history", comment: "")).font(.headline).padding(.horizontal)
+            HStack {
+                Text(NSLocalizedString("client_details.recent_history", comment: "")).font(.headline)
+                Spacer()
+                Picker("Range", selection: Binding(
+                    get: { vm.historyRange },
+                    set: { vm.historyRange = $0 }
+                )) {
+                    Text("All").tag(ClientDetailViewModel.HistoryRange.all)
+                    Text("Last 90d").tag(ClientDetailViewModel.HistoryRange.lastNDays(90))
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 260)
+            }
+            .padding(.horizontal)
 
             if vm.recentVisits.isEmpty {
                 ContentUnavailableView("No History Yet", systemImage: "clock.badge.questionmark")
@@ -218,6 +238,31 @@ import OSLog
                         }
                         .buttonStyle(.plain)
                     }
+                    if vm.recentVisits.count > 5 {
+                        // Show the rest (up to current page)
+                        ForEach(vm.recentVisits.dropFirst(5)) { visit in
+                            NavigationLink(destination: VisitDetailView(visit: visit)) {
+                                VisitTimelineRow(visit: visit)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if vm.canLoadMore {
+                        Button {
+                            vm.loadMore()
+                        } label: {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text(NSLocalizedString("common.load_more", comment: "Load More"))
+                                    .font(.footnote.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(10)
+                            .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 6)
+                    }
                 }
                 .padding(.horizontal)
             }
@@ -227,7 +272,7 @@ import OSLog
 
     // MARK: - Toolbar
     @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    private func toolbarContent(_ vm: ClientDetailViewModel) -> some ToolbarContent {
         // Rely on the system-provided back button to avoid duplicates
         ToolbarItem(placement: .topBarTrailing) {
             Menu {

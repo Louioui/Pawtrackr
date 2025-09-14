@@ -228,7 +228,7 @@ struct CheckoutView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("checkout.before_after_photos").font(.subheadline.weight(.semibold))
                 HStack(spacing: 12) {
-                    ImagePicker(imageData: Binding(get: { viewModel.beforePhotoData }, set: { viewModel.beforePhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
+                    ImagePicker(imageData: Binding(get: { viewModel.beforePhotoData }, set: { viewModel.beforePhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: nil, jpegQuality: nil) {
                         // FIX: Use the correct 'AddPhotoPlaceholder' view.
                         // We also create a small helper to display the image once chosen.
                         PhotoWell(imageData: viewModel.beforePhotoData, title: "Before")
@@ -240,7 +240,7 @@ struct CheckoutView: View {
                                 }
                             }
                     }
-                    ImagePicker(imageData: Binding(get: { viewModel.afterPhotoData }, set: { viewModel.afterPhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: 1600, jpegQuality: 0.88) {
+                    ImagePicker(imageData: Binding(get: { viewModel.afterPhotoData }, set: { viewModel.afterPhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: nil, jpegQuality: nil) {
                         PhotoWell(imageData: viewModel.afterPhotoData, title: "After")
                             .contextMenu {
                                 if viewModel.afterPhotoData != nil {
@@ -547,7 +547,12 @@ struct CheckoutView: View {
         Task { @MainActor in
             syncManualAmount()
             if let vm = viewModel, await vm.confirmCheckout() {
+                // Brief success toast then auto-dismiss to avoid user confusion
                 showSuccessModal = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                    showSuccessModal = false
+                    dismiss()
+                }
             }
         }
     }

@@ -45,19 +45,18 @@ struct InsightsView: View {
                     @Bindable var bvm = vm
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            filtersSection(bvm)
-                            kpiRibbon(bvm)
-                            revenueChart(bvm)
-                            visitsByPackage(bvm)
-                            packageMix(bvm)
-                            topServices(bvm)
-                            topClients(bvm)
+                            filtersSection(vm)
+                            kpiRibbon(vm)
+                            revenueChart(vm)
+                            visitsByPackage(vm)
+                            packageMix(vm)
+                            topServices(vm)
                         }
                         .padding(.horizontal)
                         .padding(.top, 8)
                         .padding(.bottom, 24)
                     }
-                    .toolbar { toolbar(bvm) }
+                    .toolbar { toolbar(vm) }
                     .animation(.default, value: bvm.scope)
                     .overlay {
                         if bvm.isLoading {
@@ -77,20 +76,26 @@ struct InsightsView: View {
 
     // MARK: - Sections
     
-    private func filtersSection(@Bindable _ vm: InsightsViewModel) -> some View {
-        Card {
+    private func filtersSection(_ vm: InsightsViewModel) -> some View {
+        @Bindable var bvm = vm
+        return Card {
             VStack(alignment: .leading, spacing: 12) {
                 Text("insights.filters").font(.subheadline.weight(.semibold))
 
-                // FIX: Use the bindable `vm` to avoid force unwrapping optionals.
-                Picker("Scope", selection: $vm.scope) {
+                Picker("Scope", selection: $bvm.scope) {
                     ForEach(InsightsViewModel.Scope.allCases) { s in Text(s.title).tag(s) }
                 }
                 .pickerStyle(.segmented)
 
                 if vm.scope == .custom {
-                    DatePicker("Start Date", selection: $vm.customStartDate, in: ...Date(), displayedComponents: .date)
-                    DatePicker("End Date", selection: $vm.customEndDate, in: vm.customStartDate..., displayedComponents: .date)
+                    DatePicker("Start Date", selection: $bvm.customDraftStart, in: ...Date(), displayedComponents: .date)
+                    DatePicker("End Date", selection: $bvm.customDraftEnd, in: bvm.customDraftStart..., displayedComponents: .date)
+                    Button(action: { vm.applyCustomDates() }) {
+                        Label("Apply Range", systemImage: "checkmark.circle.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(bvm.customDraftEnd < bvm.customDraftStart)
                 }
                 // Search removed per request: Insights should not expose a search UI.
             }
@@ -113,8 +118,18 @@ struct InsightsView: View {
     // A more visual ribbon to echo the sample UI style
     private func kpiRibbon(_ vm: InsightsViewModel) -> some View {
         HStack(spacing: 12) {
-            RibbonCard(icon: "dollarsign", title: "insights.revenue", value: vm.kpis.revenueString, tint: .green)
-            RibbonCard(icon: "checkmark.circle", title: "insights.visits", value: "\(vm.kpis.count)", tint: .blue)
+            RibbonCard(
+                icon: "dollarsign",
+                title: "insights.revenue",
+                value: vm.kpis.revenueString,
+                tint: .green
+            )
+            RibbonCard(
+                icon: "checkmark.circle",
+                title: "insights.visits",
+                value: "\(vm.kpis.count)",
+                tint: .blue
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -138,6 +153,10 @@ struct InsightsView: View {
                     }
                     .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) }
                     .frame(height: 180)
+                    // Subtle animation on data changes (scope/timeframe updates)
+                    .animation(.easeOut(duration: 0.35), value: vm.scope)
+                    // Encourage a small re-layout when scope changes to replay the animation
+                    // keep identity stable to avoid heavy view rebuilds
                 }
             }
         }
@@ -161,22 +180,7 @@ struct InsightsView: View {
         }
     }
     
-    private func topClients(_ vm: InsightsViewModel) -> some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("insights.top_clients").font(.subheadline.weight(.semibold))
-                if vm.clientLeaders.isEmpty {
-                    Text(NSLocalizedString("insights.no_client_data", comment: "")).font(.subheadline).foregroundStyle(.secondary)
-                } else {
-                    VStack(spacing: 6) {
-                        ForEach(Array(vm.clientLeaders.enumerated()), id: \.element.id) { index, row in
-                            LeaderRow(title: row.name, trailing: row.amountString, rank: index + 1)
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Top Clients section removed
 
     // MARK: - Additional Sections inspired by sample
     @ViewBuilder
@@ -197,6 +201,8 @@ struct InsightsView: View {
                         .foregroundStyle(.blue.gradient)
                     }
                     .frame(height: max(160, CGFloat(vm.packageLeaders.count) * 24 + 40))
+                    .animation(.easeOut(duration: 0.35), value: vm.scope)
+                    // keep identity stable to avoid heavy view rebuilds
                 }
             }
         }
@@ -220,6 +226,8 @@ struct InsightsView: View {
                         .foregroundStyle(by: .value("Category", row.name))
                     }
                     .frame(height: 180)
+                    .animation(.easeOut(duration: 0.35), value: vm.scope)
+                    // keep identity stable to avoid heavy view rebuilds
                 }
             }
         }
@@ -303,6 +311,8 @@ private struct RibbonCard: View {
     let title: String
     let value: String
     let tint: Color
+    let delta: String? = nil
+    let trendUp: Bool? = nil
 
     var body: some View {
         Card(padding: EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12), elevation: .raised, showBorder: false) {
@@ -317,6 +327,18 @@ private struct RibbonCard: View {
                 Text(title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let delta {
+                    HStack(spacing: 4) {
+                        if trendUp != nil {
+                            Image(systemName: (trendUp ?? false) ? "arrow.up.right" : "arrow.down.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle((trendUp ?? false) ? .green : .red)
+                        }
+                        Text(delta)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

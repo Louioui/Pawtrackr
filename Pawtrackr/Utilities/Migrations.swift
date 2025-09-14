@@ -87,6 +87,46 @@ enum DataMigrations {
             Logger.migrations.error("Service seeding failed: \(String(describing: error))")
         }
     }
+
+    /// Build or refresh DaySummary rows from existing completed visits.
+    /// Safe to run multiple times; it re-computes aggregates per distinct day.
+    static func backfillDaySummaries(in context: ModelContext) {
+        do {
+            let completedDesc = FetchDescriptor<Visit>(
+                predicate: #Predicate { $0.endedAt != nil },
+                sortBy: [SortDescriptor(\.endedAt, order: .forward)]
+            )
+            let visits = try context.fetch(completedDesc)
+            let cal = Calendar.current
+            var byDay: [Date: (Decimal, Int)] = [:]
+            for v in visits {
+                guard let end = v.endedAt else { continue }
+                let day = cal.startOfDay(for: end)
+                var agg = byDay[day] ?? (.zero, 0)
+                agg.0 += v.total
+                agg.1 += 1
+                byDay[day] = agg
+            }
+
+            // Fetch existing summaries to upsert
+            let existing = try context.fetch(FetchDescriptor<DaySummary>())
+            var index: [Date: DaySummary] = [:]
+            for s in existing { index[s.day] = s }
+
+            var updated = 0, inserted = 0
+            for (day, (rev, cnt)) in byDay {
+                if let s = index[day] {
+                    if s.revenue != rev || s.visitCount != cnt { s.revenue = rev; s.visitCount = cnt; updated += 1 }
+                } else {
+                    context.insert(DaySummary(day: day, revenue: rev, visitCount: cnt)); inserted += 1
+                }
+            }
+            if inserted + updated > 0 { try context.save() }
+            Logger.migrations.info("DaySummary backfill: inserted=\(inserted), updated=\(updated)")
+        } catch {
+            Logger.migrations.error("DaySummary backfill failed: \(String(describing: error))")
+        }
+    }
 }
 
 extension Logger {

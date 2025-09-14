@@ -59,16 +59,17 @@ struct ClientRow: View {
                     HStack(spacing: 8) {
                         // Phone actions (Call + SMS) with graceful fallback to plain text
                         if let phone = formattedPhone {
-                            if let tel = PhoneUtils.telURLString(phone), let sms = PhoneUtils.smsURLString(phone) {
+                            if let tel = PhoneUtils.telURLString(phone), let sms = PhoneUtils.smsURLString(phone),
+                               let telURL = URL(string: tel), let smsURL = URL(string: sms) {
                                 HStack(spacing: 10) {
-                                    Link(destination: URL(string: tel)!) {
+                                    Link(destination: telURL) {
                                         Label(phone, systemImage: "phone")
                                     }
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .accessibilityLabel("Call \(phone)")
 
-                                    Link(destination: URL(string: sms)!) {
+                                    Link(destination: smsURL) {
                                         Image(systemName: "message")
                                     }
                                     .font(.caption)
