@@ -55,10 +55,10 @@ struct VisitTimelineRow: View {
     
     private var footer: some View {
         HStack {
-            Label(visit.durationString, systemImage: "clock")
+                        Label(visit.durationString, systemImage: "clock")
             Spacer()
             if let paymentMethod = visit.payment?.method {
-                Label(paymentMethod.displayName, systemImage: paymentMethod.systemImage)
+                                Label(paymentMethod.displayName, systemImage: paymentMethod.systemImage)
             }
         }
         .font(.footnote)

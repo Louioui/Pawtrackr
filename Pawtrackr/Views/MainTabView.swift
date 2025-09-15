@@ -15,6 +15,9 @@ struct MainTabView: View {
 
             InsightsView()
                 .tabItem { Label("insights.tab", systemImage: "chart.bar.fill") }
+
+            SettingsView()
+                .tabItem { Label("settings.tab", systemImage: "gear") }
         }
     }
 }

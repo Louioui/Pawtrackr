@@ -1,5 +1,6 @@
 "clients.tab" = "Clientes";
 "insights.tab" = "Estadísticas";
+"settings.tab" = "Ajustes";
 
 "clients.title" = "Centro de clientes";
 "client_details.title" = "Detalles del cliente";
@@ -41,6 +42,7 @@
 "common.ok" = "OK";
 "common.no" = "No";
 "common.yes" = "Sí";
+"common.error" = "Error";
 "common.save_failed" = "Error al guardar. Inténtalo de nuevo.\n\n%@";
 
 // New Client Sheet
@@ -191,3 +193,20 @@
 "checkout.duration_fmt" = "Duración: %@";
 "checkout.started_time_fmt" = "Inicio: %@";
 "checkout.payment_method_fmt" = "Método de pago: %@";
+
+"photobox.before" = "Antes";
+"photobox.after" = "Después";
+"sharelink.accessibility.hint.no_data_to_export" = "No hay datos para exportar";
+"sharelink.accessibility.hint.export_visit" = "Comparte un resumen CSV de esta visita";
+"status.paid" = "Pagado";
+"status.completed" = "Completado";
+
+// Settings
+"settings.title" = "Ajustes";
+"settings.data_management.title" = "Gestión de datos";
+"settings.data_management.footer" = "Para ahorrar espacio, los registros de visitas antiguos se pueden eliminar permanentemente. Esta acción no se puede deshacer.";
+"settings.data_management.prune_after" = "Eliminar visitas anteriores a";
+"settings.data_management.prune_now" = "Eliminar ahora";
+"settings.data_management.confirm.title" = "¿Estás seguro?";
+"settings.data_management.confirm.message" = "Esto eliminará permanentemente todos los registros de visitas anteriores al umbral seleccionado. Esta acción no se puede deshacer.";
+"settings.data_management.confirm.delete" = "Eliminar";

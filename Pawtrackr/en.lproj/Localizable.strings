@@ -1,5 +1,6 @@
 "clients.tab" = "Clients";
 "insights.tab" = "Insights";
+"settings.tab" = "Settings";
 
 "clients.title" = "Client Center";
 "client_details.title" = "Client Details";
@@ -41,6 +42,7 @@
 "common.ok" = "OK";
 "common.no" = "No";
 "common.yes" = "Yes";
+"common.error" = "Error";
 "common.save_failed" = "Save failed. Please try again.\n\n%@";
 
 // New Client Sheet
@@ -191,3 +193,20 @@
 "checkout.duration_fmt" = "Duration: %@";
 "checkout.started_time_fmt" = "Started: %@";
 "checkout.payment_method_fmt" = "Payment Method: %@";
+
+"photobox.before" = "Before";
+"photobox.after" = "After";
+"sharelink.accessibility.hint.no_data_to_export" = "No data to export";
+"sharelink.accessibility.hint.export_visit" = "Shares a CSV summary of this visit";
+"status.paid" = "Paid";
+"status.completed" = "Completed";
+
+// Settings
+"settings.title" = "Settings";
+"settings.data_management.title" = "Data Management";
+"settings.data_management.footer" = "To save space, old visit records can be permanently deleted. This action cannot be undone.";
+"settings.data_management.prune_after" = "Delete visits older than";
+"settings.data_management.prune_now" = "Delete Now";
+"settings.data_management.confirm.title" = "Are you sure?";
+"settings.data_management.confirm.message" = "This will permanently delete all visit records older than the selected threshold. This action cannot be undone.";
+"settings.data_management.confirm.delete" = "Delete";

@@ -39,7 +39,7 @@ final class PetHistoryViewModel: ObservableObject {
     @Published private(set) var averageDuration: TimeInterval = 0
 
     var totalSpentString: String { totalSpent.moneyString }
-    var averageDurationString: String { Self.durationString(averageDuration) }
+    var averageDurationString: String { Formatters.durationString(from: Date(), to: Date().addingTimeInterval(averageDuration)) }
 
     // MARK: - Init
     init(pet: Pet, modelContext: ModelContext) {
@@ -66,7 +66,7 @@ final class PetHistoryViewModel: ObservableObject {
         let rows: [[String]] = filtered.map { v in
             let date = v.startedAt.formatted(date: .abbreviated, time: .omitted)
             let services = v.items.map { $0.name }.joined(separator: ", ")
-            let duration = Self.durationString(max(0, (v.endedAt ?? .now).timeIntervalSince(v.startedAt)))
+            let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
             let amount = (v.isCompleted ? v.total : v.servicesSubtotal).moneyString
             return [date, services, duration, amount]
         }
@@ -77,7 +77,7 @@ final class PetHistoryViewModel: ObservableObject {
         var out = ""
         for v in filtered {
             let date = v.startedAt.formatted(date: .abbreviated, time: .shortened)
-            let duration = Self.durationString(max(0, (v.endedAt ?? .now).timeIntervalSince(v.startedAt)))
+            let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
             let amount = (v.isCompleted ? v.total : v.servicesSubtotal).moneyString
             let services = v.items.map { $0.name }.joined(separator: ", ")
             out += "\n• \(date) — \(services) — \(duration) — \(amount)"
@@ -156,13 +156,7 @@ final class PetHistoryViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Utilities
-    static func durationString(_ interval: TimeInterval) -> String {
-        let mins = max(0, Int(interval / 60))
-        let h = mins / 60
-        let m = mins % 60
-        return h > 0 ? "\(h)h \(m)m" : "\(m)m"
-    }
+    
 
     static func makeCSV(with rows: [[String]]) -> Data {
         let esc: (String) -> String = { s in

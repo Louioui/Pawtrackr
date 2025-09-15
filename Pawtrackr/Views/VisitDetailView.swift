@@ -51,7 +51,7 @@ struct VisitDetailView: View {
                         Label("common.export", systemImage: "square.and.arrow.up")
                     }
                     .disabled(csv.isEmpty)
-                    .accessibilityHint(csv.isEmpty ? "No data to export" : "Shares a CSV summary of this visit")
+                    .accessibilityHint(csv.isEmpty ? NSLocalizedString("sharelink.accessibility.hint.no_data_to_export", comment: "") : NSLocalizedString("sharelink.accessibility.hint.export_visit", comment: ""))
                 }
                 // New: Check Out / Resume Checkout action available until payment is attached
                 ToolbarItem(placement: .bottomBar) {
@@ -76,11 +76,11 @@ struct VisitDetailView: View {
                 CheckoutView(pet: visit.pet)
             }
             .fullScreenCover(item: Binding(
-                get: {
-                    previewData.map { PreviewItem(data: $0, title: previewTitle) }
+                get: { 
+                    previewData.map { PreviewItem(data: $0, title: previewTitle) } 
                 },
-                set: { newValue in
-                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" }
+                set: { newValue in 
+                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" } 
                 }
             )) { item in
                 PhotoPreview(imageData: item.data, title: item.title)
@@ -91,7 +91,7 @@ struct VisitDetailView: View {
         }
     }
     
-    // MARK: - Header (pet summary)
+    // MARK: - Header (pet summary) 
     
     private var header: some View {
         Card(accent: .top(.color(DS.ColorToken.gender(visit.pet.gender)))) {
@@ -309,7 +309,7 @@ struct VisitDetailView: View {
         }
     }
     
-    // MARK: - Photos (Before / After)
+    // MARK: - Photos (Before / After) 
     
     private var photosCard: some View {
         Group {
@@ -321,8 +321,8 @@ struct VisitDetailView: View {
                         Text(NSLocalizedString("visit.photos", comment: ""))
                             .font(.subheadline.weight(.semibold))
                         HStack(spacing: 12) {
-                            photoBox(title: "Before", data: visit.beforePhotoData)
-                            photoBox(title: "After", data: visit.afterPhotoData)
+                            photoBox(title: NSLocalizedString("photobox.before", comment: ""), data: visit.beforePhotoData)
+                            photoBox(title: NSLocalizedString("photobox.after", comment: ""), data: visit.afterPhotoData)
                         }
                     }
                 }
@@ -419,33 +419,34 @@ struct VisitDetailView: View {
         // MARK: - Export (CSV)
         
         private func exportCSVForVisit() -> String {
-            // Header + single row for this Visit
-            var lines: [String] = ["startedAt,endedAt,pet,owner,services,amount,payment,notes"]
-            let started = Formatters.iso8601.string(from: visit.startedAt)
-            let ended = visit.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
+            let header = "startedAt,endedAt,pet,owner,services,amount,payment,notes"
+
+            func escape(_ text: String) -> String {
+                let escaped = text.replacingOccurrences(of: "\"", with: "\"\"")
+                return "\"\(escaped)\""
+            }
+
+            let started = visit.startedAt.ISO8601Format()
+            let ended = visit.endedAt?.ISO8601Format() ?? ""
+            let petName = visit.pet.name
+            let ownerName = visit.pet.owner.map { "\($0.firstName) \($0.lastName)" } ?? ""
+            let services = visit.items.map { $0.displayName }.joined(separator: "; ")
+            let amount = visit.totalCurrencyString
+            let payment = visit.payment?.method.displayName ?? ""
+            let notes = (visit.note ?? "").replacingOccurrences(of: "\n", with: " ")
+
+            let row: [String] = [
+                started,
+                ended,
+                petName,
+                ownerName,
+                services,
+                amount,
+                payment,
+                notes
+            ].map(escape)
             
-            let petName = visit.pet.name.replacingOccurrences(of: "\"", with: "\"\"")
-            let ownerName: String = {
-                if let o = visit.pet.owner {
-                    return "\(o.firstName) \(o.lastName)".replacingOccurrences(of: "\"", with: "\"\"")
-                }
-                return ""
-            }()
-            
-            // Use SNAPSHOT names from VisitItem to ensure historical integrity
-            let services = visit.items
-                .map { $0.displayName.replacingOccurrences(of: "\"", with: "\"\"") }
-                .joined(separator: "; ")
-            
-            let amount = Formatters.currency.string(from: NSDecimalNumber(decimal: visit.total)) ?? "$0.00"
-            let payment = (visit.payment?.method.displayName ?? "").replacingOccurrences(of: "\"", with: "\"\"")
-            let notes = (visit.note ?? "")
-                .replacingOccurrences(of: "\n", with: " ")
-                .replacingOccurrences(of: "\r", with: " ")
-                .replacingOccurrences(of: "\"", with: "\"\"")
-            
-            lines.append("\(started),\(ended),\"\(petName)\",\"\(ownerName)\",\"\(services)\",\(amount),\"\(payment)\",\"\(notes)\"")
-            return lines.joined(separator: "\n")
+            return header + "\n" + row.joined(separator: ",")
         }
     }
     

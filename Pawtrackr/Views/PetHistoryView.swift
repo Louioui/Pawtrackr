@@ -116,17 +116,30 @@ struct PetHistoryView: View {
     @ToolbarContentBuilder
     private func toolbarContent(_ vm: PetHistoryViewModel) -> some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("Done") { dismiss() }
+            Button(NSLocalizedString("common.done", comment: "")) { dismiss() }
         }
         ToolbarItem(placement: .primaryAction) {
-            let data = vm.exportCSV()
-            ShareLink(
-                item: CSVDoc(data: data, filename: "\(vm.pet.name)_History.csv"),
-                preview: SharePreview("Pet History", icon: Image(systemName: "doc.text.fill"))
-            ) {
+            Menu {
+                let csvData = vm.exportCSV()
+                ShareLink(
+                    item: CSVDoc(data: csvData, filename: "\(vm.pet.name)_History.csv"),
+                    preview: SharePreview("Pet History", icon: Image(systemName: "doc.text.fill"))
+                ) {
+                    Label("common.export", systemImage: "tablecells")
+                }
+                .disabled(vm.filtered.isEmpty)
+
+                let textData = vm.exportPlainText()
+                ShareLink(
+                    item: textData,
+                    preview: SharePreview("Pet History", icon: Image(systemName: "doc.text"))
+                ) {
+                    Label("common.export_text", systemImage: "doc.text")
+                }
+                .disabled(vm.filtered.isEmpty)
+            } label: {
                 Label("common.export", systemImage: "square.and.arrow.up")
             }
-            .disabled(vm.filtered.isEmpty)
         }
     }
 }
