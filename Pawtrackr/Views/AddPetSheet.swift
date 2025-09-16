@@ -44,50 +44,7 @@ struct AddPetSheet: View {
         NavigationStack {
             Form {
                 Section("Profile Photo") {
-                    HStack(spacing: 16) {
-                        ImagePicker(imageData: $avatarImageData,
-                                    allowsEditing: true,
-                                    maxDimension: nil,
-                                    jpegQuality: nil) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.gray.opacity(0.1))
-                                    .frame(width: 84, height: 84)
-
-                                if let data = avatarImageData {
-                                    #if canImport(UIKit)
-                                    if let image = UIImage(data: data) {
-                                        Image(uiImage: image)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 84, height: 84)
-                                            .clipShape(Circle())
-                                            .overlay(Circle().stroke(.white, lineWidth: 2))
-                                            .overlay(Circle().stroke(DS.ColorToken.gender(selectedGender), lineWidth: 2))
-                                    }
-                                    #elseif canImport(AppKit)
-                                    if let image = NSImage(data: data) {
-                                        Image(nsImage: image)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 84, height: 84)
-                                            .clipShape(Circle())
-                                            .overlay(Circle().stroke(.white, lineWidth: 2))
-                                            .overlay(Circle().stroke(DS.ColorToken.gender(selectedGender), lineWidth: 2))
-                                    }
-                                    #endif
-                                } else {
-                                    Image(systemName: "camera")
-                                        .font(.title2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .accessibilityLabel("Add pet photo")
-                        Text("Tap photo to choose image")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    PhotoWell(imageData: $avatarImageData, title: "Avatar")
                 }
 
                 Section("Pet Info") {

@@ -37,6 +37,7 @@ struct CSVDoc: Transferable {
 struct InsightsView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: InsightsViewModel?
+    @State private var selectedRevenueDate: Date?
 
     var body: some View {
         NavigationStack {
@@ -140,6 +141,17 @@ struct InsightsView: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("insights.revenue_trend").font(.subheadline.weight(.semibold))
+                if let date = selectedRevenueDate,
+                   let amount = vm.revenueSeries.first(where: { Calendar.current.isDate($0.date, inSameDayAs: date) })?.amount {
+                    Text(date, format: .dateTime.year().month().day())
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(amount.moneyString)
+                        .font(.title3.bold())
+                } else {
+                    Text(vm.kpis.revenueString)
+                        .font(.title3.bold())
+                }
                 if vm.revenueSeries.isEmpty {
                     ContentUnavailableView(NSLocalizedString("insights.no_revenue", comment: ""), systemImage: "chart.bar.xaxis")
                         .frame(height: 180)
@@ -153,6 +165,21 @@ struct InsightsView: View {
                     }
                     .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) }
                     .frame(height: 180)
+                    .chartOverlay { proxy in
+                        GeometryReader { g in
+                            Rectangle().fill(.clear).contentShape(Rectangle())
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { value in
+                                            let x = value.location.x - g[proxy.plotAreaFrame].origin.x
+                                            if let date: Date = proxy.value(atX: x) {
+                                                selectedRevenueDate = date
+                                            }
+                                        }
+                                        .onEnded { _ in selectedRevenueDate = nil }
+                                )
+                        }
+                    }
                     // Subtle animation on data changes (scope/timeframe updates)
                     .animation(.easeOut(duration: 0.35), value: vm.scope)
                     // Encourage a small re-layout when scope changes to replay the animation
@@ -172,7 +199,10 @@ struct InsightsView: View {
                 } else {
                     VStack(spacing: 6) {
                         ForEach(Array(vm.serviceLeaders.enumerated()), id: \.element.id) { index, row in
-                            LeaderRow(title: row.name, trailing: row.countString, rank: index + 1)
+                            NavigationLink(destination: ServiceTrendView(serviceName: row.name)) {
+                                LeaderRow(title: row.name, trailing: row.countString, rank: index + 1)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -345,34 +375,4 @@ private struct RibbonCard: View {
     }
 }
 
-// IMPROVEMENT: A dedicated search field component.
-private struct SearchField: View {
-    @Binding var text: String
-    let placeholder: String
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            
-            TextField(placeholder, text: $text)
-                .disableAutocorrection(true)
-            
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(
-            Capsule(style: .circular)
-                .fill(DS.ColorToken.surface)
-        )
-    }
-}
+

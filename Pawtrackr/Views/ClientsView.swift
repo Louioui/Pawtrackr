@@ -81,25 +81,9 @@ struct ClientsView: View {
     @ViewBuilder
     private var searchBar: some View {
         if let viewModel {
-        HStack {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField(
-                NSLocalizedString("clients.search_placeholder", comment: ""),
-                text: Binding(
-                    get: { viewModel.searchText },
-                    set: { viewModel.searchText = $0 }
-                )
-            )
-            #if canImport(UIKit)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .submitLabel(.search)
-            #endif
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 14)
-        .background(DS.ColorToken.surface, in: .capsule)
-        .padding(.horizontal)
+            SearchField(text: Binding(get: { viewModel.searchText }, set: { viewModel.searchText = $0 }),
+                        placeholder: NSLocalizedString("clients.search_placeholder", comment: ""))
+                .padding(.horizontal)
         }
     }
     

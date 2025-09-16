@@ -227,28 +227,14 @@ struct CheckoutView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("checkout.before_after_photos").font(.subheadline.weight(.semibold))
                 HStack(spacing: 12) {
-                    ImagePicker(imageData: Binding(get: { viewModel.beforePhotoData }, set: { viewModel.beforePhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: nil, jpegQuality: nil) {
-                        // FIX: Use the correct 'AddPhotoPlaceholder' view.
-                        // We also create a small helper to display the image once chosen.
-                        PhotoWell(imageData: viewModel.beforePhotoData, title: "Before")
-                            .contextMenu {
-                                if viewModel.beforePhotoData != nil {
-                                    Button(role: .destructive) { viewModel.beforePhotoData = nil } label: {
-                                        Label("Remove Photo", systemImage: "trash")
-                                    }
-                                }
-                            }
-                    }
-                    ImagePicker(imageData: Binding(get: { viewModel.afterPhotoData }, set: { viewModel.afterPhotoData = $0 }), source: .prompt, allowsEditing: true, maxDimension: nil, jpegQuality: nil) {
-                        PhotoWell(imageData: viewModel.afterPhotoData, title: "After")
-                            .contextMenu {
-                                if viewModel.afterPhotoData != nil {
-                                    Button(role: .destructive) { viewModel.afterPhotoData = nil } label: {
-                                        Label("Remove Photo", systemImage: "trash")
-                                    }
-                                }
-                            }
-                    }
+                    PhotoWell(imageData: Binding(
+                        get: { viewModel.beforePhotoData },
+                        set: { viewModel.beforePhotoData = $0 }
+                    ), title: "Before")
+                    PhotoWell(imageData: Binding(
+                        get: { viewModel.afterPhotoData },
+                        set: { viewModel.afterPhotoData = $0 }
+                    ), title: "After")
                 }
             }
         }
@@ -556,25 +542,7 @@ fileprivate func hideKeyboard() {
     #endif
 }
 
-// Helper to avoid duplicating the image/placeholder logic
-fileprivate struct PhotoWell: View {
-    let imageData: Data?
-    let title: String
-    
-    var body: some View {
-        ZStack {
-            if let data = imageData, let image = cachedImage(data) {
-                image
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                AddPhotoPlaceholder(title: title, subtitle: "Tap to add")
-            }
-        }
-        .frame(maxWidth: .infinity, idealHeight: 160)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
+
 
 // Data → SwiftUI Image helper (module-wide safe)
 fileprivate func cachedImage(_ data: Data) -> Image? {

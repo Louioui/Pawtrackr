@@ -50,10 +50,7 @@ struct RecentHistoryView: View {
                 }
             }
         }
-        .searchable(text: Binding(
-            get: { viewModel?.query ?? "" },
-            set: { newValue in viewModel?.query = newValue }
-        ), prompt: Text(NSLocalizedString("history.search_placeholder", comment: "")))
+        
     }
     
     private func header(@Bindable _ viewModel: RecentHistoryViewModel) -> some View {
@@ -129,21 +126,7 @@ private struct ScopePicker: View {
     }
 }
 
-private struct SearchField: View {
-    @Binding var text: String
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search owner, pet, or service...", text: $text)
-            if !text.isEmpty {
-                Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 8).padding(.horizontal, 12)
-        .background(DS.ColorToken.surface, in: .capsule)
-    }
-}
+
 
 private struct SectionHeader: View {
     let date: Date

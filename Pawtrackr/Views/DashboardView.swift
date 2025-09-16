@@ -207,7 +207,7 @@ import Charts
               Image(uiImage: uiImage).resizable().scaledToFill()
                 .frame(height: 120).clipped().cornerRadius(8)
             } else {
-              AddPhotoPlaceholder(size: .md)
+              LabelContent(title: "No Photo", systemImage: "photo")
             }
           }
         }

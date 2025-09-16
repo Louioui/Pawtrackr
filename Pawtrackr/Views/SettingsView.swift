@@ -10,6 +10,7 @@ import SwiftData
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var appSettings: AppSettings
     @StateObject private var viewModel = SettingsViewModel()
     @State private var showingConfirmation = false
     @State private var showError = false
@@ -18,7 +19,13 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("settings.data_management.title"), footer: Text("settings.data_management.footer")) {
+                                Section("Security") {
+                    Toggle(isOn: $appSettings.isBiometricLockEnabled) {
+                        Text("Enable Biometric Lock")
+                    }
+                }
+
+                Section("Data Management") {
                     Picker("settings.data_management.prune_after", selection: $viewModel.pruningThreshold) {
                         ForEach(SettingsViewModel.PruningThreshold.allCases) { threshold in
                             Text(threshold.rawValue).tag(threshold)

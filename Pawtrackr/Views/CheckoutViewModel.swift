@@ -204,22 +204,14 @@ final class CheckoutViewModel {
                 guard let serviceID = item.service?.persistentModelID else { return false }
                 return !selectedServiceIDs.contains(serviceID)
             }
-            // Add new items with zeroed unit price; total will be set from the user's input
+            // Add new items, snapshotting their price from the service catalog.
             for service in servicesToSnapshot where !existingServiceIDs.contains(service.persistentModelID) {
-                visit.addItem(title: service.name, unitPrice: 0, quantity: 1, service: service)
+                visit.addItem(title: service.name, unitPrice: service.effectiveBasePrice, quantity: 1, service: service)
             }
 
-            // 1a. Add selected extras as line items
+            // Add selected extras as line items with a zero price. Their cost is assumed
+            // to be included in the final manual total if one was provided.
             for extra in selectedExtras {
-                // Price is zero because the final total is manually entered by the user.
-                // This just records that the service was performed.
-                visit.addItem(title: extra, unitPrice: 0, quantity: 1, service: nil)
-            }
-
-            // 1a. Add selected extras as line items
-            for extra in selectedExtras {
-                // Price is zero because the final total is manually entered by the user.
-                // This just records that the service was performed.
                 visit.addItem(title: extra, unitPrice: 0, quantity: 1, service: nil)
             }
             

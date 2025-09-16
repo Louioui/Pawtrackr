@@ -37,6 +37,8 @@ public struct PinLockGate<Content: View>: View {
 
 // MARK: - Lock Screen (4 digits; default PIN 1994)
 public struct PinLockView: View {
+    @EnvironmentObject private var appSettings: AppSettings
+    @State private var authenticator = BiometricAuthenticator()
     @Binding var isUnlocked: Bool
     @State private var digits: [Int] = []
     @State private var shakeOffset: CGFloat = 0
