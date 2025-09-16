@@ -36,8 +36,21 @@ final class RecentHistoryViewModel {
             forName: .visitDidComplete,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            self?.fetchVisits()
+        ) { [weak self] note in
+            guard let self else { return }
+            guard let metadata = note.visitDidCompleteMetadata else {
+                self.fetchVisits()
+                return
+            }
+
+            if let ended = metadata.endedAt, !self.scope.contains(date: ended) {
+                return
+            }
+            if !metadata.matchesSearchQuery(self.query) {
+                return
+            }
+
+            self.fetchVisits()
         }
         fetchVisits()
     }
@@ -66,74 +79,39 @@ final class RecentHistoryViewModel {
         }
     }
     
-    func fetchVisits() {
+    func fetchVisits(focusingOn _: Set<UUID> = []) {
         self.isLoading = true
         #if DEBUG
         let t0 = Date()
         #endif
         let currentSeq = { workSeq &+= 1; return workSeq }()
 
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Compute date bounds for the selected scope and push them into the store predicate
-        let cal = Calendar.current
-        let now = Date()
-        let (start, end): (Date?, Date?) = {
-            switch scope {
-            case .all:
-                return (nil, nil)
-            case .today:
-                let s = cal.startOfDay(for: now)
-                guard let e = cal.date(byAdding: .day, value: 1, to: s) else { return (s, nil) }
-                return (s, e)
-            case .thisWeek:
-                guard let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)),
-                      let e = cal.date(byAdding: .day, value: 7, to: s) else {
-                    return (nil, nil)
-                }
-                return (s, e)
-            }
-        }()
-        // SwiftData predicate with date bounds only (text search remains in-memory)
-        let predicate = #Predicate<Visit> { visit in
-            visit.endedAt != nil &&
-            (start == nil || visit.endedAt! >= start!) &&
-            (end == nil || visit.endedAt! < end!)
-        }
-
         do {
-            let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
+            let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            let tokens = Self.tokens(for: trimmedQuery)
+            let bounds = scope.dateBounds()
+            var filter = VisitHistoryFilter(startDate: bounds.start, endDate: bounds.end, searchTokens: tokens)
+            filter.fetchLimit = scope.preferredFetchLimit
+            let descriptor = VisitHistoryFetchDescriptorBuilder.makeDescriptor(using: filter)
             let fetchedVisits = try modelContext.fetch(descriptor)
 
-            // Snapshot minimal data for off-main filtering and summary
-            let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in
-                HistoryVisitSnap(
-                    id: v.uuid,
-                    startedAt: v.startedAt,
-                    endedAt: v.endedAt,
-                    petName: v.pet.name,
-                    ownerFirst: v.pet.owner?.firstName ?? "",
-                    ownerLast: v.pet.owner?.lastName ?? "",
-                    itemNames: v.items.map { $0.name },
-                    total: (v.total as NSDecimalNumber).doubleValue
-                )
-            }
-
-            Task.detached(priority: .utility) { [currentSeq] in
-                let result = RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
+            Task.detached(priority: .utility) { [currentSeq, fetchedVisits] in
+                let calendar = Calendar.current
+                let grouped = Dictionary(grouping: fetchedVisits, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
+                let sortedDays = grouped.keys.sorted(by: >)
+                let totalRevenue = fetchedVisits.reduce(Decimal.zero) { partial, visit in
+                    partial +~ visit.total
+                }
                 await MainActor.run {
                     guard currentSeq == self.workSeq else { return }
-
-                    // Apply filtered IDs to concrete visits
-                    let filtered = fetchedVisits.filter { result.filteredIDs.contains($0.uuid) }
-                    let calendar = Calendar.current
-                    self.summaryVisitCount = filtered.count
-                    self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
-                    self.groupedVisits = Dictionary(grouping: filtered, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
-                    self.sortedDays = self.groupedVisits.keys.sorted(by: >)
+                    self.summaryVisitCount = fetchedVisits.count
+                    self.summaryRevenueString = totalRevenue.moneyString
+                    self.groupedVisits = grouped
+                    self.sortedDays = sortedDays
                     self.isLoading = false
                     #if DEBUG
                     let dt = Date().timeIntervalSince(t0)
-                    print("History filter+apply in \(String(format: "%.2f", dt))s for \(snaps.count) visits")
+                    print("History fetch+group in \(String(format: "%.2f", dt))s for \(fetchedVisits.count) visits")
                     #endif
                 }
             }
@@ -167,45 +145,52 @@ final class RecentHistoryViewModel {
 
 extension RecentHistoryViewModel {
     enum Scope: String, CaseIterable, Identifiable {
-        case all = "All", today = "Today", thisWeek = "This Week"
+        case all = "All"
+        case today = "Today"
+        case thisWeek = "This Week"
+
         var id: String { rawValue }
-    }
-}
 
-// MARK: - Background Compute Helpers
-fileprivate struct HistoryVisitSnap: Sendable {
-    let id: UUID
-    let startedAt: Date
-    let endedAt: Date?
-    let petName: String
-    let ownerFirst: String
-    let ownerLast: String
-    let itemNames: [String]
-    let total: Double
-}
-
-fileprivate enum RecentHistoryComputer {
-    static func filterAndSummarize(snaps: [HistoryVisitSnap], query: String) -> (filteredIDs: Set<UUID>, totalRevenue: Double) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            let total = snaps.reduce(0.0) { $0 + $1.total }
-            return (Set(snaps.map { $0.id }), total)
-        }
-        let needle = trimmed.folding(options: .diacriticInsensitive, locale: .current).lowercased()
-        var ids: Set<UUID> = []
-        var total: Double = 0
-        for s in snaps {
-            let fields: [String] = [
-                s.petName,
-                s.ownerFirst,
-                s.ownerLast
-            ] + s.itemNames
-            let match = fields.contains { $0.folding(options: .diacriticInsensitive, locale: .current).lowercased().contains(needle) }
-            if match {
-                ids.insert(s.id)
-                total += s.total
+        func dateBounds(referenceDate: Date = .now, calendar: Calendar = .current) -> (start: Date?, end: Date?) {
+            switch self {
+            case .all:
+                return (nil, nil)
+            case .today:
+                let start = calendar.startOfDay(for: referenceDate)
+                let end = calendar.date(byAdding: .day, value: 1, to: start)
+                return (start, end)
+            case .thisWeek:
+                guard let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: referenceDate)) else {
+                    return (nil, nil)
+                }
+                let end = calendar.date(byAdding: .day, value: 7, to: weekStart)
+                return (weekStart, end)
             }
         }
-        return (ids, total)
+
+        func contains(date: Date, referenceDate: Date = .now, calendar: Calendar = .current) -> Bool {
+            if self == .all { return true }
+            let bounds = dateBounds(referenceDate: referenceDate, calendar: calendar)
+            if let start = bounds.start, date < start { return false }
+            if let end = bounds.end, date >= end { return false }
+            return true
+        }
+
+        var preferredFetchLimit: Int? {
+            switch self {
+            case .all:
+                return 2000
+            case .thisWeek:
+                return 750
+            case .today:
+                return nil
+            }
+        }
+    }
+
+    static func tokens(for query: String) -> [String] {
+        query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { String($0) }
     }
 }

@@ -62,7 +62,7 @@ final class PetDetailViewModel {
         
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleVisitCompletion),
+            selector: #selector(handleVisitCompletion(_:)),
             name: .visitDidComplete,
             object: nil
         )
@@ -100,8 +100,15 @@ final class PetDetailViewModel {
         sheetDestination = .history(pet)
     }
     
-    @objc private func handleVisitCompletion() {
-        updateTimer()
+    @objc private func handleVisitCompletion(_ notification: Notification) {
+        guard let metadata = notification.visitDidCompleteMetadata else {
+            updateTimer()
+            return
+        }
+        let matches = (metadata.petUUID == pet.uuid) || (metadata.petPersistentID == pet.persistentModelID)
+        if matches {
+            updateTimer()
+        }
     }
     
     enum SheetDestination: Identifiable {

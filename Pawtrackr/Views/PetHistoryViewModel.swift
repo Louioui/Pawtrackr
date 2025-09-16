@@ -45,9 +45,20 @@ final class PetHistoryViewModel: ObservableObject {
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
         self.modelContext = modelContext
-        NotificationCenter.default.addObserver(forName: .visitDidComplete, object: nil, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .visitDidComplete, object: nil, queue: .main) { [weak self] note in
             guard let self else { return }
-            Task { await self.refresh() }
+            guard let metadata = note.visitDidCompleteMetadata else {
+                Task { await self.refresh() }
+                return
+            }
+
+            if let endedAt = metadata.endedAt, !self.scope.contains(date: endedAt) {
+                return
+            }
+
+            if metadata.petUUID == self.pet.uuid || metadata.petPersistentID == self.pet.persistentModelID {
+                Task { await self.refresh() }
+            }
         }
         Task { await refresh() }
     }
@@ -87,22 +98,12 @@ final class PetHistoryViewModel: ObservableObject {
 
     // MARK: - Private
     private func fetchVisits() async {
-        let (start, end) = dateBounds(for: scope)
-        // Push date bounds into the store-level predicate for performance
-        let predicate = #Predicate<Visit> { v in
-            (start == nil || v.startedAt >= start!) &&
-            (end == nil || v.startedAt < end!)
-        }
-        let descriptor = FetchDescriptor<Visit>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
+        let bounds = scope.dateBounds()
+        var filter = VisitHistoryFilter(startDate: bounds.start, endDate: bounds.end, searchTokens: [])
+        filter.petUUIDs = Set([pet.uuid])
+        let descriptor = VisitHistoryFetchDescriptorBuilder.makeDescriptor(using: filter)
         do {
-            var fetched = try modelContext.fetch(descriptor)
-            // Filter by pet identity in-memory (relationship compare varies by store)
-            let petID = pet.persistentModelID
-            fetched = fetched.filter { $0.pet.persistentModelID == petID }
-            visits = fetched
+            visits = try modelContext.fetch(descriptor)
         } catch {
             visits = []
         }
@@ -134,34 +135,6 @@ final class PetHistoryViewModel: ObservableObject {
         averageDuration = totalVisits > 0 ? totalDur / Double(max(1, totalVisits)) : 0
     }
 
-    private func dateBounds(for scope: Scope) -> (Date?, Date?) {
-        let cal = Calendar.current
-        let now = Date()
-        switch scope {
-        case .all:
-            return (nil, nil)
-        case .today:
-            let start = cal.startOfDay(for: now)
-            guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return (start, nil) }
-            return (start, end)
-        case .thisWeek:
-            guard let start = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)),
-                  let end = cal.date(byAdding: .day, value: 7, to: start) else {
-                return (nil, nil)
-            }
-            return (start, end)
-        case .thisMonth:
-            let comps = cal.dateComponents([.year, .month], from: now)
-            guard let start = cal.date(from: comps),
-                  let end = cal.date(byAdding: .month, value: 1, to: start) else {
-                return (nil, nil)
-            }
-            return (start, end)
-        }
-    }
-
-    
-
     static func makeCSV(with rows: [[String]]) -> Data {
         let esc: (String) -> String = { s in
             var v = s.replacingOccurrences(of: "\"", with: "\"\"")
@@ -186,4 +159,39 @@ struct PetHistoryText: Transferable {
         DataRepresentation(exportedContentType: .plainText) { Data($0.text.utf8) }
     }
     let text: String
+}
+
+// MARK: - Scope helpers
+extension PetHistoryViewModel.Scope {
+    func dateBounds(referenceDate: Date = .now, calendar: Calendar = .current) -> (start: Date?, end: Date?) {
+        switch self {
+        case .all:
+            return (nil, nil)
+        case .today:
+            let start = calendar.startOfDay(for: referenceDate)
+            let end = calendar.date(byAdding: .day, value: 1, to: start)
+            return (start, end)
+        case .thisWeek:
+            guard let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: referenceDate)) else {
+                return (nil, nil)
+            }
+            let end = calendar.date(byAdding: .day, value: 7, to: weekStart)
+            return (weekStart, end)
+        case .thisMonth:
+            let comps = calendar.dateComponents([.year, .month], from: referenceDate)
+            guard let start = calendar.date(from: comps) else {
+                return (nil, nil)
+            }
+            let end = calendar.date(byAdding: .month, value: 1, to: start)
+            return (start, end)
+        }
+    }
+
+    func contains(date: Date, referenceDate: Date = .now, calendar: Calendar = .current) -> Bool {
+        if self == .all { return true }
+        let bounds = dateBounds(referenceDate: referenceDate, calendar: calendar)
+        if let start = bounds.start, date < start { return false }
+        if let end = bounds.end, date >= end { return false }
+        return true
+    }
 }
