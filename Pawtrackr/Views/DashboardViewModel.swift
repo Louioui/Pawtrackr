@@ -120,10 +120,12 @@ final class DashboardViewModel: ObservableObject {
 
   private func fetchRecentClients() async {
     do {
-      // Simple heuristic: alphabetic; replace with “by last visit” if you track it
-      recentClients = try modelContext.fetch(FetchDescriptor<Client>(
-        sortBy: [SortDescriptor(\.lastName, order: .forward)]
-      ))
+      // Fetch the 5 most recently active clients.
+      var descriptor = FetchDescriptor<Client>(
+        sortBy: [SortDescriptor(\.lastVisitDate, order: .reverse)]
+      )
+      descriptor.fetchLimit = 5
+      recentClients = try modelContext.fetch(descriptor)
     } catch {
       recentClients = []
     }

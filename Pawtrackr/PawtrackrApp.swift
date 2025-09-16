@@ -12,10 +12,32 @@ import OSLog
 
 @main
 struct PawtrackrApp: App {
+    let container: ModelContainer
+
+    init() {
+        do {
+            let schema = Schema(PawtrackrSchema.models)
+
+            // Create the container first as a local constant.
+            let localContainer = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self)
+
+            // Now create the task, capturing only the local constant.
+            Task { @MainActor in
+                DataMigrations.seedServicesIfNeeded(in: localContainer.mainContext)
+            }
+            
+            // Finally, assign the container to the instance property.
+            self.container = localContainer
+
+        } catch {
+            fatalError("Failed to create ModelContainer: \(error)")
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
-                .modelContainer(for: [Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self])
+                .modelContainer(container)
         }
     }
 }

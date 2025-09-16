@@ -40,8 +40,7 @@
 "common.create" = "Crear";
 "common.export" = "Exportar";
 "common.ok" = "OK";
-"common.no" = "No";
-"common.yes" = "Sí";
+"common.delete" = "Eliminar";
 "common.error" = "Error";
 "common.save_failed" = "Error al guardar. Inténtalo de nuevo.\n\n%@";
 

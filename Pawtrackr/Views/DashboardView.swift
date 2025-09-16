@@ -52,8 +52,8 @@ import Charts
           set: { if !$0 { clientPendingDeletion = nil } }
         )
       ) {
-        Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { clientPendingDeletion = nil }
-        Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) {
+        Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { clientPendingDeletion = nil }
+        Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) {
           if let vm { deletePendingClient(vm) }
         }
       } message: {

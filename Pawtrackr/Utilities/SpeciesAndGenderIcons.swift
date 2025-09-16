@@ -105,8 +105,12 @@ struct SpeciesAndGenderIcons {
         }
     }
 
-    private static func accessibilityLabel(for species: Species, gender: PetGender) -> Text {
-        Text("\(species.rawValue.capitalized), \(gender.displayName.lowercased())")
+    private static func accessibilityLabel(for species: Species, gender: PetGender?) -> Text {
+        if let gender {
+            return Text("\(species.rawValue.capitalized), \(gender.displayName.lowercased())")
+        } else {
+            return Text("\(species.rawValue.capitalized)")
+        }
     }
 
     fileprivate struct _BadgeAX: ViewModifier {

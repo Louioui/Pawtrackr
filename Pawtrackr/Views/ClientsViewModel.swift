@@ -45,8 +45,15 @@ final class ClientsViewModel {
     func fetchClients() {
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Keep DB predicate simple (no nested closures) and filter text in-memory
-        let predicate: Predicate<Client>? = nil
+        var predicate: Predicate<Client>?
+        if !trimmedSearch.isEmpty {
+            predicate = #Predicate<Client> { client in
+                client.firstName.localizedStandardContains(trimmedSearch) ||
+                client.lastName.localizedStandardContains(trimmedSearch) ||
+                (client.phone != nil && client.phone!.localizedStandardContains(trimmedSearch)) ||
+                client.pets.contains { $0.name.localizedStandardContains(trimmedSearch) }
+            }
+        }
 
         do {
             let sortDescriptors: [SortDescriptor<Client>] = [
@@ -55,22 +62,11 @@ final class ClientsViewModel {
             ]
             
             var descriptor = FetchDescriptor<Client>(predicate: predicate, sortBy: sortDescriptors)
-            descriptor.fetchLimit = 2000
-            var filteredClients = try modelContext.fetch(descriptor)
+            // The fetch limit can be removed or adjusted, as the filtering is now much more efficient.
+            // descriptor.fetchLimit = 2000 
+            let filteredClients = try modelContext.fetch(descriptor)
 
-            if !trimmedSearch.isEmpty {
-                filteredClients = filteredClients.filter { client in
-                    if client.firstName.localizedStandardContains(trimmedSearch) { return true }
-                    if client.lastName.localizedStandardContains(trimmedSearch) { return true }
-                    if let phone = client.phone, phone.localizedStandardContains(trimmedSearch) { return true }
-                    if client.pets.contains(where: { $0.name.localizedStandardContains(trimmedSearch) }) { return true }
-                    return false
-                }
-            }
-
-            // Partition into in-progress vs. other clients using the centralized extension properties.
-            // This assumes `hasActiveVisit` and `sortKeyMostRecentVisit`
-            // have been moved to a `Client+Extensions.swift` file.
+            // Partitioning is now done on a much smaller, pre-filtered array.
             self.inProgressClients = filteredClients
                 .filter { $0.hasActiveVisit }
                 .sorted { $0.sortKeyMostRecentVisit > $1.sortKeyMostRecentVisit }

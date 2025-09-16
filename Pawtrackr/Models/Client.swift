@@ -29,6 +29,7 @@ final class Client {
     var notes: String?
     var emergencyContactName: String?
     var emergencyContactPhone: String?
+    var lastVisitDate: Date?
 
     // MARK: - Relationships
     @Relationship(deleteRule: .cascade) var pets: [Pet] = []

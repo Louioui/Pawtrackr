@@ -51,8 +51,8 @@ struct ClientsView: View {
                     set: { if !$0 { clientPendingDeletion = nil } }
                 )
             ) {
-                Button(NSLocalizedString("common.no", comment: ""), role: .cancel) { clientPendingDeletion = nil }
-                Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { deletePendingClient() }
+                Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { clientPendingDeletion = nil }
+                Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) { deletePendingClient() }
             } message: {
                 Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
             }

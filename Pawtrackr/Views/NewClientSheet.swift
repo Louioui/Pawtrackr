@@ -257,7 +257,7 @@ struct NewClientSheet: View {
     }
 
     private var hasAtLeastOneValidPet: Bool {
-        pets.contains { !$0.name.trimmed.isEmpty }
+        pets.contains { !$0.name.trimmed.isEmpty && $0.gender != nil }
     }
 
     // MARK: - Actions
@@ -305,9 +305,9 @@ struct NewClientSheet: View {
 
         // Create Pets
         pets.forEach { tp in
-            guard !tp.name.trimmed.isEmpty else { return }
+            guard !tp.name.trimmed.isEmpty, let gender = tp.gender else { return }
             let pet = Pet(name: tp.name.trimmed, species: tp.species)
-            pet.gender = tp.gender
+            pet.gender = gender
             if !tp.breed.trimmed.isEmpty { pet.breed = tp.breed.trimmed }
             if !tp.color.trimmed.isEmpty { pet.color = tp.color.trimmed }
             if let data = tp.photoData { pet.photoData = data }
@@ -348,7 +348,7 @@ private struct TempPet: Identifiable {
     var index: Int
     var name = ""
     var species: Species = .dog
-    var gender: PetGender = .male
+    var gender: PetGender? = .male
     var breed = ""
     var color = ""
     var health = ""          // free-text, stored later when Pet has this property
@@ -360,7 +360,7 @@ private struct TempPet: Identifiable {
 private struct PetAvatar: View {
     var photoData: Data?
     var species: Species
-    var gender: PetGender
+    var gender: PetGender?
     var size: CGFloat = 56
 
     var body: some View {
@@ -373,8 +373,8 @@ private struct PetAvatar: View {
                 .accessibilityLabel("Pet photo")
                 .accessibilityAddTraits(.isImage)
         } else {
-            SpeciesAndGenderIcons.badge(for: species, gender: gender, size: size)
-                .accessibilityLabel("\(species == .dog ? "Dog" : "Cat"), \(gender == .male ? "Male" : "Female")")
+            SpeciesAndGenderIcons.badge(for: species, gender: gender ?? .male, size: size)
+                .accessibilityLabel(gender.map { "\(species.displayName), \($0.displayName)" } ?? species.displayName)
         }
         #else
         if let data = photoData, let image = UIImage(data: data) {
@@ -385,8 +385,8 @@ private struct PetAvatar: View {
                 .accessibilityLabel("Pet photo")
                 .accessibilityAddTraits(.isImage)
         } else {
-            SpeciesAndGenderIcons.badge(for: species, gender: gender, size: size)
-                .accessibilityLabel("\(species == .dog ? "Dog" : "Cat"), \(gender == .male ? "Male" : "Female")")
+            SpeciesAndGenderIcons.badge(for: species, gender: gender ?? .male, size: size)
+                .accessibilityLabel(gender.map { "\(species.displayName), \($0.displayName)" } ?? species.displayName)
         }
         #endif
     }
@@ -413,3 +413,4 @@ private func canonicalPersonName(_ raw: String) -> String {
 // MARK: - PhoneUtils shims (reference)
 // Phone display/normalization are centralized in PhoneUtils.
 // Here we only reference PhoneUtils to keep validation consistent app-wide.
+// ep validation consistent app-wide.

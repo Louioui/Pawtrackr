@@ -185,5 +185,9 @@ final class Visit {
         didUpdate()
     }
 
-    private func didUpdate() { updatedAt = .now }
+    private func didUpdate() { 
+        updatedAt = .now
+        // Also update the client's last visit date to reflect the most recent activity.
+        pet.owner?.lastVisitDate = sortKeyDate
+    }
 }

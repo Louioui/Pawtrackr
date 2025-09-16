@@ -2,12 +2,41 @@
 //  Migrations.swift
 //  Pawtrackr
 //
-//  One-time, best-effort data coercions for narrowed enums.
+//  Schema migration plan and one-time data seeding/coercion.
 //
 
 import Foundation
 import SwiftData
 import OSLog
+
+// MARK: - Schema Migration Plan
+
+enum PawtrackrSchema: VersionedSchema {
+    static var versionIdentifier: Schema.Version = .init(1, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, DaySummary.self]
+    }
+    
+    // Define V1 (initial) and V2 (adds lastVisitDate) as needed.
+    // For this case, a single schema definition is sufficient as we'll use a lightweight migration.
+}
+
+
+enum PawtrackrMigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] {
+        [PawtrackrSchema.self]
+    }
+
+    static var stages: [MigrationStage] {
+        // For now, we only have lightweight migrations (adding optional properties).
+        // If a more complex migration is needed in the future, we would define a custom stage here.
+        []
+    }
+}
+
+
+// MARK: - Data Seeding & Coercion
 
 enum DataMigrations {
     static func coercePets(in context: ModelContext) {
@@ -109,7 +138,7 @@ enum DataMigrations {
             }
 
             // Fetch existing summaries to upsert
-            let existing = try context.fetch(FetchDescriptor<DaySummary>())
+            let existing = try context.fetch(FetchDescriptor<DaySummary>()) 
             var index: [Date: DaySummary] = [:]
             for s in existing { index[s.day] = s }
 

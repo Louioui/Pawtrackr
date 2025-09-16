@@ -15,12 +15,18 @@ enum SummaryUpdater {
         let start = cal.startOfDay(for: date)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return }
         do {
-            let desc = FetchDescriptor<Visit>(
+            // Calculate revenue from payments
+            let paymentDesc = FetchDescriptor<Payment>(
+                predicate: #Predicate { $0.paidAt >= start && $0.paidAt < end }
+            )
+            let payments = try context.fetch(paymentDesc)
+            let revenue = payments.reduce(Decimal.zero) { $0 + $1.amount }
+
+            // Calculate visit count and get visits for service/category counts
+            let visitDesc = FetchDescriptor<Visit>(
                 predicate: #Predicate { $0.endedAt != nil && $0.endedAt! >= start && $0.endedAt! < end }
             )
-            let visits = try context.fetch(desc)
-            var revenue: Decimal = .zero
-            for v in visits { revenue += v.total }
+            let visits = try context.fetch(visitDesc)
             let count = visits.count
 
             // Upsert DaySummary
