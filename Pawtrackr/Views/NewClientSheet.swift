@@ -25,8 +25,6 @@ struct NewClientSheet: View {
     @State private var phone = ""
     @State private var email = ""
     @State private var address = ""
-    @State private var emergencyName = ""
-    @State private var emergencyPhone = ""
 
     // Pets buffer (at least one)
     @State private var pets: [TempPet] = [TempPet(index: 1)]
@@ -88,21 +86,6 @@ struct NewClientSheet: View {
                     #if os(iOS)
                         .textContentType(.fullStreetAddress)
                         .submitLabel(.next)
-                    #endif
-                    TextField("new_client.emergency_name_optional", text: $emergencyName)
-                    #if os(iOS)
-                        .textInputAutocapitalization(.words)
-                        .submitLabel(.next)
-                    #endif
-                    TextField("new_client.emergency_phone_optional", text: $emergencyPhone)
-                        .autocorrectionDisabled()
-                        .onChange(of: emergencyPhone) { _, newValue in
-                            if !newValue.isEmpty { emergencyPhone = PhoneUtils.formatAsYouType(newValue) }
-                        }
-                    #if os(iOS)
-                        .keyboardType(.phonePad)
-                        .textContentType(.telephoneNumber)
-                        .submitLabel(.done)
                     #endif
                 }
 
@@ -267,16 +250,6 @@ struct NewClientSheet: View {
             return false
         }
 
-        // Optional: normalize emergency contact if present
-        var emergencyE164: String? = nil
-        if !emergencyPhone.trimmed.isEmpty {
-            emergencyE164 = PhoneUtils.toE164(emergencyPhone)
-            if emergencyE164 == nil {
-                alertText = NSLocalizedString("new_client.error.emergency_invalid", comment: "")
-                return false
-            }
-        }
-
         // Prevent duplicate client by primary phone
         do {
             let desc = FetchDescriptor<Client>(
@@ -294,10 +267,6 @@ struct NewClientSheet: View {
                             phone: e164)
         if !email.trimmed.isEmpty { client.email = email.trimmed.lowercased() }
         if !address.trimmed.isEmpty { client.address = address.trimmed }
-        if emergencyE164 != nil || !emergencyName.trimmed.isEmpty {
-            client.setEmergencyContact(name: emergencyName.trimmed.isEmpty ? nil : emergencyName.trimmed,
-                                       phone: emergencyE164)
-        }
 
         // Create Pets
         pets.forEach { tp in

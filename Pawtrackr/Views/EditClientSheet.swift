@@ -20,8 +20,6 @@ struct EditClientSheet: View {
     @State private var phone: String = ""
     @State private var email: String = ""
     @State private var address: String = ""
-    @State private var emergencyName: String = ""
-    @State private var emergencyPhone: String = ""
 
     // Alerts
     @State private var showAlert = false
@@ -69,22 +67,6 @@ struct EditClientSheet: View {
                     #endif
                 }
 
-                Section("Emergency Contact (optional)") {
-                    TextField("Name", text: $emergencyName)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.words)
-                    #endif
-                    TextField("Phone", text: $emergencyPhone)
-                        .autocorrectionDisabled()
-                        .onChange(of: emergencyPhone) { _, newValue in
-                            if let pretty = PhoneUtils.display(newValue) { emergencyPhone = pretty }
-                        }
-                    #if os(iOS)
-                    .keyboardType(.phonePad)
-                    .textContentType(.telephoneNumber)
-                    #endif
-                }
-
                 // Notes intentionally omitted from client edit per requirements.
             }
             .navigationTitle("Edit Client")
@@ -115,8 +97,6 @@ struct EditClientSheet: View {
         phone = client.phone.flatMap { PhoneUtils.display($0) } ?? ""
         email = client.email ?? ""
         address = client.address ?? ""
-        emergencyName = client.emergencyContactName ?? ""
-        emergencyPhone = client.emergencyContactPhone.flatMap { PhoneUtils.display($0) } ?? ""
         // Notes not editable here.
     }
 
@@ -124,8 +104,7 @@ struct EditClientSheet: View {
         !firstName.trimmed.isEmpty &&
         !lastName.trimmed.isEmpty &&
         (PhoneUtils.toE164(phone) != nil) &&
-        (email.trimmed.isEmpty || isValidEmail(email)) &&
-        (emergencyPhone.trimmed.isEmpty || PhoneUtils.toE164(emergencyPhone) != nil)
+        (email.trimmed.isEmpty || isValidEmail(email))
     }
 
     private func save() {
@@ -147,15 +126,6 @@ struct EditClientSheet: View {
         client.setEmail(email.trimmed.isEmpty ? nil : email.trimmed)
         client.setAddress(address.trimmed.isEmpty ? nil : address.trimmed)
         // Notes not modified here.
-
-        let emergencyE164 = emergencyPhone.trimmed.isEmpty ? nil : PhoneUtils.toE164(emergencyPhone)
-        if emergencyE164 == nil && !emergencyPhone.trimmed.isEmpty {
-            alertText = "Emergency contact phone must be a valid US number."
-            showAlert = true
-            return
-        }
-        client.setEmergencyContact(name: emergencyName.trimmed.isEmpty ? nil : emergencyName.trimmed,
-                                    phone: emergencyE164)
 
         do {
             try ctx.save()

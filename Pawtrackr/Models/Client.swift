@@ -27,8 +27,6 @@ final class Client {
     
     // MARK: - Notes & Emergency Contact
     var notes: String?
-    var emergencyContactName: String?
-    var emergencyContactPhone: String?
     var lastVisitDate: Date?
 
     // MARK: - Relationships
@@ -89,11 +87,6 @@ final class Client {
     }
     func setNotes(_ value: String?) {
         notes = value
-        didUpdate()
-    }
-    func setEmergencyContact(name: String?, phone: String?) {
-        emergencyContactName = name?.trimmed
-        emergencyContactPhone = phone?.trimmed
         didUpdate()
     }
     func addPet(_ pet: Pet) {

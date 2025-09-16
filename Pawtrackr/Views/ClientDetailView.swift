@@ -175,15 +175,6 @@ struct ClientDetailView: View {
                     if let address = client.address, !address.trimmed.isEmpty {
                         Label(address, systemImage: "house.fill")
                     }
-                    if client.emergencyContactName?.trimmed.isEmpty == false || client.emergencyContactPhone?.trimmed.isEmpty == false {
-                        let name = client.emergencyContactName?.trimmed ?? "Emergency Contact"
-                        let phoneDisplay = client.emergencyContactPhone.flatMap { PhoneUtils.display($0) } ?? client.emergencyContactPhone
-                        let composed: String = {
-                            if let phoneDisplay, !phoneDisplay.isEmpty { return "\(name): \(phoneDisplay)" }
-                            return name
-                        }()
-                        Label(composed, systemImage: "person.badge.key.fill")
-                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
