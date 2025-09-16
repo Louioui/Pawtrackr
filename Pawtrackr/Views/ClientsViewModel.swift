@@ -29,6 +29,19 @@ final class ClientsViewModel {
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         fetchClients() // Initial fetch
+        
+        // Observe changes to the ModelContext to refresh client list
+        NotificationCenter.default.addObserver(
+            forName: ModelContext.didSave,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.fetchClients()
+        }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - Data Fetching

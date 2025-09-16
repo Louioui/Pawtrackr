@@ -1,3 +1,4 @@
+
 //
 //  NewClientSheet.swift
 //  Pawtrackr
@@ -62,8 +63,7 @@ struct NewClientSheet: View {
                     TextField("new_client.phone_required", text: $phone)
                         .autocorrectionDisabled()
                         .onChange(of: phone) { _, newValue in
-                            // Normalize live display using PhoneUtils; if unavailable, keep user input
-                            if let pretty = PhoneUtils.display(newValue) { phone = pretty }
+                            if !newValue.isEmpty { phone = PhoneUtils.formatAsYouType(newValue) }
                         }
                     #if os(iOS)
                         .keyboardType(.phonePad)
@@ -97,7 +97,7 @@ struct NewClientSheet: View {
                     TextField("new_client.emergency_phone_optional", text: $emergencyPhone)
                         .autocorrectionDisabled()
                         .onChange(of: emergencyPhone) { _, newValue in
-                            if let pretty = PhoneUtils.display(newValue) { emergencyPhone = pretty }
+                            if !newValue.isEmpty { emergencyPhone = PhoneUtils.formatAsYouType(newValue) }
                         }
                     #if os(iOS)
                         .keyboardType(.phonePad)
@@ -181,12 +181,21 @@ struct NewClientSheet: View {
                             .textInputAutocapitalization(.sentences)
                             .submitLabel(.next)
                         #endif
-                        TextField("new_client.behavior_optional", text: $p.behaviorCSV)
-                        #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled(true)
-                            .submitLabel(.next)
-                        #endif
+                        // Behavior Tags
+                        Text("Behavior Tags").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        FlowLayout(spacing: 6) {
+                            ForEach(Pet.BehaviorTag.allCases) { tag in
+                                Chip.selectable(
+                                    tag.displayName,
+                                    isSelected: Binding(
+                                        get: { p.behaviorTags.contains(tag.rawValue) },
+                                        set: { isSelected, _ in
+                                            if isSelected { p.behaviorTags.insert(tag.rawValue) } else { p.behaviorTags.remove(tag.rawValue) }
+                                        }
+                                    )
+                                )
+                            }
+                        }
 
                         // Notes removed per request
                     } label: {
@@ -197,19 +206,6 @@ struct NewClientSheet: View {
                                 .accessibilityLabel(p.name.isEmpty ? "Pet number \(p.index)" : p.name)
                             Spacer()
                         }
-                    }
-                }
-                .onDelete { indexSet in
-                    var indices = Array(indexSet)
-                    indices.sort(by: >)
-                    for i in indices {
-                        if pets.count > 1 {
-                            pets.remove(at: i)
-                        }
-                    }
-                    // Re-number remaining pet indices
-                    for (i, _) in pets.enumerated() {
-                        pets[i].index = i + 1
                     }
                 }
 
@@ -314,8 +310,7 @@ struct NewClientSheet: View {
 
             // Store structured fields directly on the model
             if !tp.health.trimmed.isEmpty { pet.setHealth(tp.health.trimmed) }
-            let parsedTags = FormValidators.parseBehaviorTagsCSV(tp.behaviorCSV)
-            if !parsedTags.isEmpty { pet.setBehaviorTags(parsedTags) }
+            if !tp.behaviorTags.isEmpty { pet.setBehaviorTags(Array(tp.behaviorTags)) }
             // Notes removed per request
 
             pet.owner = client
@@ -352,7 +347,7 @@ private struct TempPet: Identifiable {
     var breed = ""
     var color = ""
     var health = ""          // free-text, stored later when Pet has this property
-    var behaviorCSV = ""     // “Calm, Cooperative”, stored later when Pet has tags
+    var behaviorTags: Set<String> = []     // Set of tags
     var photoData: Data? = nil
 }
 
@@ -384,7 +379,8 @@ private struct PetAvatar: View {
                 .clipShape(Circle())
                 .accessibilityLabel("Pet photo")
                 .accessibilityAddTraits(.isImage)
-        } else {
+        }
+        else {
             SpeciesAndGenderIcons.badge(for: species, gender: gender ?? .male, size: size)
                 .accessibilityLabel(gender.map { "\(species.displayName), \($0.displayName)" } ?? species.displayName)
         }
