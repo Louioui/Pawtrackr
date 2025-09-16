@@ -19,6 +19,11 @@ import Charts
     @State private var showDeleteErrorAlert = false
     @State private var deleteErrorMessage: String = ""
     @State private var showContent = false
+    private let clientsCoordinator: ClientsCoordinator
+
+    init() {
+        clientsCoordinator = ClientsCoordinator(navigationController: UINavigationController())
+    }
 
   var body: some View {
     NavigationStack {
@@ -126,7 +131,7 @@ import Charts
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 12) {
           actionCard(title: NSLocalizedString("dashboard.new_client", comment: ""), symbol: "person.crop.circle.badge.plus") { showNewClient = true }
-          NavigationLink { ClientsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") }
+          NavigationLink { ClientsView(coordinator: clientsCoordinator) } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") }
           NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
           NavigationLink { InsightsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "doc.chart") }
         }
@@ -155,7 +160,7 @@ import Charts
       }
       LazyVStack(spacing: 10) {
         ForEach(vm.recentClients.prefix(5)) { client in
-          NavigationLink { ClientDetailView(client: client) } label: { ClientRow(client: client) }
+          NavigationLink { ClientDetailView(client: client, coordinator: clientsCoordinator, namespace: Namespace().wrappedValue) } label: { ClientRow(client: client) }
             .buttonStyle(.plain)
             .contextMenu {
               Button(role: .destructive) {

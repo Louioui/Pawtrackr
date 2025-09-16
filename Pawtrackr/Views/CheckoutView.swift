@@ -159,7 +159,7 @@ struct CheckoutView: View {
 }
 
 private struct ServiceSelectionView: View {
-    @ObservedObject var viewModel: CheckoutViewModel
+    @State var viewModel: CheckoutViewModel
 
     var body: some View {
         ScrollView {
@@ -322,7 +322,7 @@ private struct ServiceSelectionView: View {
 }
 
 private struct AddPhotosView: View {
-    @ObservedObject var viewModel: CheckoutViewModel
+    @State var viewModel: CheckoutViewModel
 
     var body: some View {
         ScrollView {
@@ -349,7 +349,7 @@ private struct AddPhotosView: View {
 }
 
 private struct PaymentView: View {
-    @ObservedObject var viewModel: CheckoutViewModel
+    @State var viewModel: CheckoutViewModel
     @State private var baseAmountString: String = ""
     @State private var selectedTipPercent: Int? = nil
     @State private var customTipString: String = ""
@@ -375,7 +375,7 @@ private struct PaymentView: View {
                     TextField("0.00", text: $baseAmountString)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
-                        .onChange(of: baseAmountString) { _ in syncManualAmount() }
+                        .onChange(of: baseAmountString) { syncManualAmount() }
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("checkout.tip_amount").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
@@ -395,7 +395,7 @@ private struct PaymentView: View {
                     }
                     TextField(NSLocalizedString("checkout.custom_tip", comment: ""), text: $customTipString)
                         .keyboardType(.decimalPad)
-                        .onChange(of: customTipString) { _ in
+                        .onChange(of: customTipString) { 
                             selectedTipPercent = nil
                             syncManualAmount()
                         }

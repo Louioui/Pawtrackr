@@ -37,9 +37,9 @@ final class RecentHistoryViewModel {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.fetchVisits()
+            Task { await self?.fetchVisits() }
         }
-        fetchVisits()
+        Task { await fetchVisits() }
     }
 
     // Note: For simplicity and to avoid actor‑isolation issues in deinit,

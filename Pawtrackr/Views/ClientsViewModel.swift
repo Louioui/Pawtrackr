@@ -28,7 +28,7 @@ final class ClientsViewModel {
     // MARK: - Lifecycle
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
-        fetchClients() // Initial fetch
+        Task { await fetchClients() } // Initial fetch
         
         // Observe changes to the ModelContext to refresh client list
         NotificationCenter.default.addObserver(

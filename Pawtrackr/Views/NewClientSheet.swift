@@ -118,7 +118,7 @@ struct NewClientSheet: View {
                         .padding(.horizontal, 2)
                 }
 
-                ForEach($pets) { $p in
+                ForEach($pets) { p in
                     DisclosureGroup {
                         // Photo picker (optional) – replaces the icon when present
                         HStack(spacing: 12) {

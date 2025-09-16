@@ -157,18 +157,18 @@ struct PetCard: View {
         .leftAccentRail(isActive ? DS.ColorToken.session : .clear)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { oldPhase, newPhase in
             // When returning to foreground, snap any durations to now so the timer text is fresh
-            if phase == .active && isActive {
+            if newPhase == .active && isActive {
                 visitTimer.sceneBecameActive()
             }
         }
         .onAppear { syncTimer() }
-        .onChange(of: activeVisit?.startedAt) { _ in syncTimer() }
-        .onChange(of: activeVisit?.endedAt) { _ in syncTimer() }
-        .onChange(of: isActive) { _, nowActive in
+        .onChange(of: activeVisit?.startedAt) { syncTimer() }
+        .onChange(of: activeVisit?.endedAt) { syncTimer() }
+        .onChange(of: isActive) { 
             // Start/stop pulse when the session toggles
-            if nowActive {
+            if isActive {
                 pulse = true
             } else {
                 pulse = false

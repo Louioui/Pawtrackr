@@ -61,7 +61,6 @@ struct PetHistoryView: View {
     private func visitList(_ vm: PetHistoryViewModel) -> some View {
         let groups = Dictionary(grouping: vm.visits, by: { Calendar.current.startOfDay(for: $0.sortKeyDate) })
         let sortedDays = groups.keys.sorted(by: >)
-        let lastVisitID = vm.visits.last?.id
 
         return LazyVStack(spacing: 16, pinnedViews: .sectionHeaders) {
             ForEach(sortedDays, id: \.self) { day in
