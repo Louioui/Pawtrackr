@@ -19,6 +19,9 @@ struct MainTabView: View {
             ClientsView(coordinator: clientsCoordinator)
                 .tabItem { Label("clients.tab", systemImage: "person.3.fill") }
 
+            AppointmentsView()
+                .tabItem { Label("Appointments", systemImage: "calendar") }
+
             InsightsView()
                 .tabItem { Label("insights.tab", systemImage: "chart.bar.fill") }
 

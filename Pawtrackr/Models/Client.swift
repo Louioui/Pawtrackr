@@ -31,6 +31,7 @@ final class Client {
 
     // MARK: - Relationships
     @Relationship(deleteRule: .cascade) var pets: [Pet] = []
+    var user: User?
 
     // MARK: - Init
     init(firstName: String, lastName: String, phone: String? = nil, email: String? = nil) {

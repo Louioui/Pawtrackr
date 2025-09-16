@@ -35,6 +35,7 @@ final class Visit {
 
     @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
     var payment: Payment?
+    var user: User?
 
     // MARK: - Init
     init(pet: Pet, startedAt: Date = .now) {

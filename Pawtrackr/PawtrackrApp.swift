@@ -18,9 +18,10 @@ struct PawtrackrApp: App {
     init() {
         do {
             let schema = Schema(PawtrackrSchema.models)
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false, cloudKitDatabase: .automatic)
             
             // Create the container first as a local constant.
-            let localContainer = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self)
+            let localContainer = try ModelContainer(for: schema, configurations: [config], migrationPlan: PawtrackrMigrationPlan.self)
             
             // Now create the task, capturing only the local constant.
             Task { @MainActor in
@@ -38,11 +39,43 @@ struct PawtrackrApp: App {
     }
     
     @StateObject private var appSettings = AppSettings()
+    @StateObject private var authViewModel: AuthenticationViewModel
+
+    init() {
+        do {
+            let schema = Schema(PawtrackrSchema.models)
+            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false, cloudKitDatabase: .automatic)
+            
+            // Create the container first as a local constant.
+            let localContainer = try ModelContainer(for: schema, configurations: [config], migrationPlan: PawtrackrMigrationPlan.self)
+            
+            // Now create the task, capturing only the local constant.
+            Task { @MainActor in
+                DataMigrations.seedServicesIfNeeded(in: localContainer.mainContext)
+            }
+            
+            // Finally, assign the container to the instance property.
+            self.container = localContainer
+            self.scheduledTasks = ScheduledTasks(modelContainer: localContainer)
+            self.scheduledTasks.start()
+
+            _authViewModel = StateObject(wrappedValue: AuthenticationViewModel(modelContext: localContainer.mainContext))
+            
+        } catch {
+            fatalError("Failed to create ModelContainer: \(error)")
+        }
+    }
     
     var body: some Scene {
         WindowGroup {
-            CoordinatorView()
-                .environmentObject(appSettings)
+            if authViewModel.isAuthenticated {
+                CoordinatorView()
+                    .environmentObject(appSettings)
+                    .environmentObject(authViewModel)
+            } else {
+                LoginView()
+                    .environmentObject(authViewModel)
+            }
         }
     }
 }
