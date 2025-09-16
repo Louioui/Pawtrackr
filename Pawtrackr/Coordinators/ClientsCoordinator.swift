@@ -13,6 +13,7 @@ class ClientsCoordinator: Coordinator {
         navigationController.pushViewController(UIHostingController(rootView: clientsView), animated: false)
     }
 
+    @MainActor
     func showClientDetail(client: Client, namespace: Namespace.ID) {
         let clientDetailView = ClientDetailView(client: client, coordinator: self, namespace: namespace)
         navigationController.pushViewController(UIHostingController(rootView: clientDetailView), animated: true)
