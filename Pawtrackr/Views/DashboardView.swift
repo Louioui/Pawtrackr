@@ -19,6 +19,7 @@ import Charts
     @State private var showDeleteErrorAlert = false
     @State private var deleteErrorMessage: String = ""
     @State private var showContent = false
+    @Namespace var namespace
     private let clientsCoordinator: ClientsCoordinator
 
     init() {
@@ -160,7 +161,7 @@ import Charts
       }
       LazyVStack(spacing: 10) {
         ForEach(vm.recentClients.prefix(5)) { client in
-          NavigationLink { ClientDetailView(client: client, coordinator: clientsCoordinator, namespace: Namespace().wrappedValue) } label: { ClientRow(client: client) }
+          NavigationLink { ClientDetailView(client: client, coordinator: clientsCoordinator, namespace: namespace) } label: { ClientRow(client: client) }
             .buttonStyle(.plain)
             .contextMenu {
               Button(role: .destructive) {

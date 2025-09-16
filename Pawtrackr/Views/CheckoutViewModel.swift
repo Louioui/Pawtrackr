@@ -12,6 +12,7 @@ import SwiftUI
 import SwiftData
 import OSLog
 
+@MainActor
 final class CheckoutViewModel: ObservableObject {
     enum CheckoutState {
         case selectingServices
@@ -94,7 +95,6 @@ final class CheckoutViewModel: ObservableObject {
         self.allServices = []
     }
     
-    @MainActor
     func loadServices(modelContext: ModelContext) {
         self.modelContext = modelContext
         let descriptor = FetchDescriptor<Service>(
