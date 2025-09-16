@@ -12,6 +12,7 @@ import SwiftUI
 import SwiftData
 import OSLog
 
+@MainActor
 final class CheckoutViewModel: ObservableObject {
     enum CheckoutState {
         case selectingServices
@@ -87,7 +88,6 @@ final class CheckoutViewModel: ObservableObject {
     /// The captured end timestamp used for the checkout summary (not persisted until confirm).
     var sessionEndedAt: Date { visit.endedAt ?? checkoutEndsAt ?? Date() }
 
-    @MainActor
     init(pet: Pet) {
         self.pet = pet
         self.visit = Visit(pet: pet)
@@ -95,7 +95,6 @@ final class CheckoutViewModel: ObservableObject {
         self.allServices = []
     }
     
-    @MainActor
     func loadServices(modelContext: ModelContext) {
         self.modelContext = modelContext
         let descriptor = FetchDescriptor<Service>(
@@ -204,7 +203,6 @@ final class CheckoutViewModel: ObservableObject {
         }
     }
     
-    @MainActor
     func processPayment() async {
         guard !isSaving else { return }
         guard let modelContext = modelContext else { return }
