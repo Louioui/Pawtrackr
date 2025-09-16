@@ -15,7 +15,7 @@ struct CheckoutView: View {
     @StateObject private var viewModel: CheckoutViewModel
 
     init(pet: Pet) {
-        _viewModel = StateObject(wrappedValue: { CheckoutViewModel(pet: pet) }())
+        _viewModel = StateObject(wrappedValue: CheckoutViewModel(pet: pet))
     }
     
     var body: some View {
@@ -51,7 +51,7 @@ struct CheckoutView: View {
             .overlay { successOverlay(viewModel) }
         }
         .onAppear {
-            viewModel.modelContext = modelContext
+            viewModel.loadServices(modelContext: modelContext)
         }
     }
     

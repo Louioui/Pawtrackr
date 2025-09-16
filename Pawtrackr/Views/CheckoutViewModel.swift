@@ -23,11 +23,11 @@ final class CheckoutViewModel: ObservableObject {
     }
 
     // MARK: Dependencies
-    private var modelContext: ModelContext
+    var modelContext: ModelContext?
     
     // MARK: Models
-    var pet: Pet
-    var visit: Visit // This will now be the active visit, or a new one created upon confirmation.
+    @Published var pet: Pet
+    @Published var visit: Visit // This will now be the active visit, or a new one created upon confirmation.
     
     // MARK: UI State
     @Published var notes: String = ""
@@ -87,33 +87,21 @@ final class CheckoutViewModel: ObservableObject {
     /// The captured end timestamp used for the checkout summary (not persisted until confirm).
     var sessionEndedAt: Date { visit.endedAt ?? checkoutEndsAt ?? Date() }
 
-    init(pet: Pet, modelContext: ModelContext) {
+    init(pet: Pet) {
         self.pet = pet
+        self.visit = Visit(pet: pet)
+        self.checkoutEndsAt = Date()
+        self.allServices = []
+    }
+    
+    @MainActor
+    func loadServices(modelContext: ModelContext) {
         self.modelContext = modelContext
-
-        // Fetch services ONCE on initialization for performance.
         let descriptor = FetchDescriptor<Service>(
             predicate: #Predicate { $0.isEnabled == true },
             sortBy: [SortDescriptor(\.name)]
         )
         self.allServices = (try? modelContext.fetch(descriptor)) ?? []
-
-        // Choose the most recent visit (active if present; otherwise the latest ended visit).
-        let visitCandidate: Visit
-        if let recent = pet.visits.sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
-            visitCandidate = recent
-        } else {
-            // Create a temporary visit for the UI, but DON'T insert it yet.
-            // It will only be inserted upon confirmation.
-            visitCandidate = Visit(pet: pet)
-            Logger.main.info("Staging new visit for pet \(pet.name).")
-        }
-        self.visit = visitCandidate
-
-        // Capture a local end timestamp for display, but do not persist.
-        // If the user cancels, the session resumes. If they confirm, we persist this value.
-        self.checkoutEndsAt = (visitCandidate.endedAt == nil) ? Date() : nil
-
         hydrateStateFromVisit()
     }
 
@@ -217,6 +205,7 @@ final class CheckoutViewModel: ObservableObject {
     
     func processPayment() async {
         guard !isSaving else { return }
+        guard let modelContext = modelContext else { return }
         isSaving = true
         state = .processing
         
