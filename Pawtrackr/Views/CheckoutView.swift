@@ -12,31 +12,28 @@ import SwiftData
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    private let pet: Pet
-    @State private var viewModel: CheckoutViewModel?
+    @StateObject private var viewModel: CheckoutViewModel
 
-    init(pet: Pet) { self.pet = pet }
+    init(pet: Pet) {
+        _viewModel = StateObject(wrappedValue: { CheckoutViewModel(pet: pet) }())
+    }
     
     var body: some View {
         NavigationStack {
             Group {
-                if let viewModel = viewModel {
-                    switch viewModel.state {
-                    case .selectingServices:
-                        ServiceSelectionView(viewModel: viewModel)
-                    case .addingPhotos:
-                        AddPhotosView(viewModel: viewModel)
-                    case .choosingPayment:
-                        PaymentView(viewModel: viewModel)
-                    case .processing:
-                        ProgressView("Processing...")
-                    case .confirmed:
-                        SuccessView()
-                    case .failed(let error):
-                        ErrorView(error: error, onRetry: { viewModel.previousStep() })
-                    }
-                } else {
-                    ProgressView()
+                switch viewModel.state {
+                case .selectingServices:
+                    ServiceSelectionView(viewModel: viewModel)
+                case .addingPhotos:
+                    AddPhotosView(viewModel: viewModel)
+                case .choosingPayment:
+                    PaymentView(viewModel: viewModel)
+                case .processing:
+                    ProgressView("Processing...")
+                case .confirmed:
+                    SuccessView()
+                case .failed(let error):
+                    ErrorView(error: error, onRetry: { viewModel.previousStep() })
                 }
             }
             .navigationTitle("checkout.title")
@@ -45,23 +42,17 @@ struct CheckoutView: View {
             #endif
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom, content: bottomCta)
-            .alert("Checkout Error", isPresented: Binding(get: { viewModel?.showAlert ?? false }, set: { if !$0 { viewModel?.showAlert = false } })) {
+            .alert("Checkout Error", isPresented: $viewModel.showAlert) {
                 Button("OK") {}
             } message: {
-                Text(viewModel?.alertMessage ?? "")
+                Text(viewModel.alertMessage)
             }
-            .overlay { if let vm = viewModel { processingOverlay(vm) } }
-            .overlay { if let vm = viewModel { successOverlay(vm) } }
-            .overlay {
-                if viewModel == nil {
-                    ZStack {
-                        Color.clear
-                        ProgressView()
-                    }
-                }
-            }
+            .overlay { processingOverlay(viewModel) }
+            .overlay { successOverlay(viewModel) }
         }
-        .task { if viewModel == nil { viewModel = CheckoutViewModel(pet: pet, modelContext: modelContext) } }
+        .onAppear {
+            viewModel.modelContext = modelContext
+        }
     }
     
     @ToolbarContentBuilder
@@ -72,29 +63,29 @@ struct CheckoutView: View {
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
             Button("Confirm") {
-                viewModel?.formatAmountInput()
+                viewModel.formatAmountInput()
                 hideKeyboard()
             }
         }
     }
 
     private func bottomCta() -> some View {
-        Button(action: { viewModel?.nextStep() }) {
+        Button(action: { viewModel.nextStep() }) {
             HStack {
-                if viewModel?.isSaving ?? false {
+                if viewModel.isSaving {
                     ProgressView().tint(.white)
                 } else {
                     Text(ctaButtonTitle)
                         .fontWeight(.semibold)
                     Spacer()
-                    Text(viewModel?.finalTotalString ?? "")
+                    Text(viewModel.finalTotalString)
                         .monospacedDigit()
                 }
             }
             .font(.headline)
             .frame(maxWidth: .infinity)
         }
-        .disabled(!(viewModel?.isConfirmEnabled ?? false) || (viewModel?.isSaving ?? false))
+        .disabled(!viewModel.isConfirmEnabled || viewModel.isSaving)
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .padding()
@@ -102,8 +93,7 @@ struct CheckoutView: View {
     }
 
     private var ctaButtonTitle: String {
-        guard let state = viewModel?.state else { return "" }
-        switch state {
+        switch viewModel.state {
         case .selectingServices, .addingPhotos:
             return "Next"
         case .choosingPayment:
@@ -159,7 +149,7 @@ struct CheckoutView: View {
 }
 
 private struct ServiceSelectionView: View {
-    @State var viewModel: CheckoutViewModel
+    @ObservedObject var viewModel: CheckoutViewModel
 
     var body: some View {
         ScrollView {
@@ -322,7 +312,7 @@ private struct ServiceSelectionView: View {
 }
 
 private struct AddPhotosView: View {
-    @State var viewModel: CheckoutViewModel
+    @ObservedObject var viewModel: CheckoutViewModel
 
     var body: some View {
         ScrollView {
@@ -349,7 +339,7 @@ private struct AddPhotosView: View {
 }
 
 private struct PaymentView: View {
-    @State var viewModel: CheckoutViewModel
+    @ObservedObject var viewModel: CheckoutViewModel
     @State private var baseAmountString: String = ""
     @State private var selectedTipPercent: Int? = nil
     @State private var customTipString: String = ""

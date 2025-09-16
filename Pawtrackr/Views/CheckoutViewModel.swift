@@ -12,9 +12,7 @@ import SwiftUI
 import SwiftData
 import OSLog
 
-@Observable
-@MainActor
-final class CheckoutViewModel {
+final class CheckoutViewModel: ObservableObject {
     enum CheckoutState {
         case selectingServices
         case addingPhotos
@@ -32,22 +30,22 @@ final class CheckoutViewModel {
     var visit: Visit // This will now be the active visit, or a new one created upon confirmation.
     
     // MARK: UI State
-    var notes: String = ""
-    var amountString: String = ""
+    @Published var notes: String = ""
+    @Published var amountString: String = ""
     private var amountWasManuallySet: Bool = false
-    var selectedServiceIDs: Set<PersistentIdentifier> = []
-    var selectedPaymentMethod: Payment.Method = .creditCard
-    var beforePhotoData: Data?
-    var afterPhotoData: Data?
-    var externalReference: String = ""
-    var tags: Set<String> = []
-    var selectedExtras: Set<String> = []
+    @Published var selectedServiceIDs: Set<PersistentIdentifier> = []
+    @Published var selectedPaymentMethod: Payment.Method = .creditCard
+    @Published var beforePhotoData: Data?
+    @Published var afterPhotoData: Data?
+    @Published var externalReference: String = ""
+    @Published var tags: Set<String> = []
+    @Published var selectedExtras: Set<String> = []
 
     // MARK: Published State
-    private(set) var isSaving: Bool = false
-    var showAlert: Bool = false
-    private(set) var alertMessage: String = ""
-    var state: CheckoutState = .selectingServices
+    @Published private(set) var isSaving: Bool = false
+    @Published var showAlert: Bool = false
+    @Published private(set) var alertMessage: String = ""
+    @Published var state: CheckoutState = .selectingServices
     
     // MARK: Private State
     let allServices: [Service] // Fetched once for performance; exposed for view rendering.

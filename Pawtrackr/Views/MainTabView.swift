@@ -8,9 +8,15 @@
 import SwiftUI
 
 struct MainTabView: View {
+    private let clientsCoordinator: ClientsCoordinator
+
+    init() {
+        clientsCoordinator = ClientsCoordinator(navigationController: UINavigationController())
+    }
+
     var body: some View {
         TabView {
-            ClientsView()
+            ClientsView(coordinator: clientsCoordinator)
                 .tabItem { Label("clients.tab", systemImage: "person.3.fill") }
 
             InsightsView()
