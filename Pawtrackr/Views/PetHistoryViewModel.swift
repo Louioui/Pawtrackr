@@ -45,9 +45,24 @@ final class PetHistoryViewModel: ObservableObject {
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
         self.modelContext = modelContext
-        NotificationCenter.default.addObserver(forName: .visitDidComplete, object: nil, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .visitDidComplete, object: nil, queue: .main) { [weak self] note in
             guard let self else { return }
-            Task { await self.refresh() }
+            guard let payload = note.visitDidCompletePayload else {
+                Task { [weak self] in await self?.refresh() }
+                return
+            }
+
+            if let petID = payload.petID, petID != self.pet.persistentModelID {
+                return
+            }
+
+            if let endedAt = payload.endedAt {
+                let (start, end) = self.dateBounds(for: self.scope)
+                if let start, endedAt < start { return }
+                if let end, endedAt >= end { return }
+            }
+
+            Task { [weak self] in await self?.refresh() }
         }
         Task { await refresh() }
     }

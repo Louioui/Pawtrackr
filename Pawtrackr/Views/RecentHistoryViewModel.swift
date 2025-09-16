@@ -36,8 +36,13 @@ final class RecentHistoryViewModel {
             forName: .visitDidComplete,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            self?.fetchVisits()
+        ) { [weak self] notification in
+            guard let self else { return }
+            if let payload = notification.visitDidCompletePayload,
+               self.shouldIgnore(payload: payload) {
+                return
+            }
+            self.fetchVisits()
         }
         fetchVisits()
     }
@@ -56,7 +61,77 @@ final class RecentHistoryViewModel {
             fetchVisits()
         }
     }
-    
+
+    private func dateBounds(for scope: Scope, reference: Date = Date()) -> (Date?, Date?) {
+        let cal = Calendar.current
+        switch scope {
+        case .all:
+            return (nil, nil)
+        case .today:
+            let start = cal.startOfDay(for: reference)
+            let end = cal.date(byAdding: .day, value: 1, to: start)
+            return (start, end)
+        case .thisWeek:
+            guard let start = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: reference)) else {
+                return (nil, nil)
+            }
+            let end = cal.date(byAdding: .day, value: 7, to: start)
+            return (start, end)
+        }
+    }
+
+    private func shouldIgnore(payload: VisitDidCompleteNotification.Payload) -> Bool {
+        guard scope != .all, let endedAt = payload.endedAt else { return false }
+        let (start, end) = dateBounds(for: scope)
+        if let start, endedAt < start { return true }
+        if let end, endedAt >= end { return true }
+        return false
+    }
+
+    private func makeDatePredicate(start: Date?, end: Date?) -> Predicate<Visit> {
+        let lower = start
+        let upper = end
+        return #Predicate<Visit> { visit in
+            guard let ended = visit.endedAt else { return false }
+            if let lower, ended < lower { return false }
+            if let upper, ended >= upper { return false }
+            return true
+        }
+    }
+
+    private func makeTokenPredicate(_ token: String, start: Date?, end: Date?) -> Predicate<Visit> {
+        let lower = start
+        let upper = end
+        let q = token
+        return #Predicate<Visit> { visit in
+            guard let ended = visit.endedAt else { return false }
+            if let lower, ended < lower { return false }
+            if let upper, ended >= upper { return false }
+
+            if visit.pet.name.localizedCaseInsensitiveContains(q) { return true }
+            if let owner = visit.pet.owner {
+                if owner.firstName.localizedCaseInsensitiveContains(q) { return true }
+                if owner.lastName.localizedCaseInsensitiveContains(q) { return true }
+            }
+            if let note = visit.note, note.localizedCaseInsensitiveContains(q) { return true }
+            if let reference = visit.payment?.externalReference,
+               reference.localizedCaseInsensitiveContains(q) { return true }
+            return false
+        }
+    }
+
+    private func makeItemPredicate(_ token: String, start: Date?, end: Date?) -> Predicate<VisitItem> {
+        let lower = start
+        let upper = end
+        let q = token
+        return #Predicate<VisitItem> { item in
+            guard let ended = item.visit.endedAt else { return false }
+            if let lower, ended < lower { return false }
+            if let upper, ended >= upper { return false }
+            return item.name.localizedCaseInsensitiveContains(q)
+        }
+    }
+
     private func scheduleFetch() {
         searchTask?.cancel()
         searchTask = Task {
@@ -74,35 +149,55 @@ final class RecentHistoryViewModel {
         let currentSeq = { workSeq &+= 1; return workSeq }()
 
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Compute date bounds for the selected scope and push them into the store predicate
-        let cal = Calendar.current
         let now = Date()
-        let (start, end): (Date?, Date?) = {
-            switch scope {
-            case .all:
-                return (nil, nil)
-            case .today:
-                let s = cal.startOfDay(for: now)
-                guard let e = cal.date(byAdding: .day, value: 1, to: s) else { return (s, nil) }
-                return (s, e)
-            case .thisWeek:
-                guard let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)),
-                      let e = cal.date(byAdding: .day, value: 7, to: s) else {
-                    return (nil, nil)
-                }
-                return (s, e)
-            }
-        }()
-        // SwiftData predicate with date bounds only (text search remains in-memory)
-        let predicate = #Predicate<Visit> { visit in
-            visit.endedAt != nil &&
-            (start == nil || visit.endedAt! >= start!) &&
-            (end == nil || visit.endedAt! < end!)
-        }
-
+        let (start, end) = dateBounds(for: scope, reference: now)
         do {
-            let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
-            let fetchedVisits = try modelContext.fetch(descriptor)
+            let sortDescriptors = [SortDescriptor(\.endedAt, order: .reverse)]
+
+            let searchTokens: [String] = {
+                guard !trimmedQuery.isEmpty else { return [] }
+                var seen: Set<String> = []
+                var ordered: [String] = []
+                let rawParts = trimmedQuery.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
+                for part in rawParts {
+                    let normalized = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !normalized.isEmpty else { continue }
+                    let key = normalized.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                    if seen.insert(key).inserted {
+                        ordered.append(normalized)
+                    }
+                }
+                return ordered
+            }()
+
+            let fetchedVisits: [Visit]
+            if searchTokens.isEmpty {
+                let descriptor = FetchDescriptor<Visit>(
+                    predicate: makeDatePredicate(start: start, end: end),
+                    sortBy: sortDescriptors
+                )
+                fetchedVisits = try modelContext.fetch(descriptor)
+            } else {
+                var visitMap: [UUID: Visit] = [:]
+                for token in searchTokens {
+                    let visitDescriptor = FetchDescriptor<Visit>(
+                        predicate: makeTokenPredicate(token, start: start, end: end),
+                        sortBy: sortDescriptors
+                    )
+                    let textMatches = try modelContext.fetch(visitDescriptor)
+                    for visit in textMatches { visitMap[visit.uuid] = visit }
+
+                    let itemDescriptor = FetchDescriptor<VisitItem>(predicate: makeItemPredicate(token, start: start, end: end))
+                    let itemMatches = try modelContext.fetch(itemDescriptor)
+                    for item in itemMatches {
+                        let visit = item.visit
+                        if visit.endedAt != nil {
+                            visitMap[visit.uuid] = visit
+                        }
+                    }
+                }
+                fetchedVisits = visitMap.values.sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
+            }
 
             // Snapshot minimal data for off-main filtering and summary
             let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in
@@ -114,6 +209,8 @@ final class RecentHistoryViewModel {
                     ownerFirst: v.pet.owner?.firstName ?? "",
                     ownerLast: v.pet.owner?.lastName ?? "",
                     itemNames: v.items.map { $0.name },
+                    note: v.note,
+                    paymentReference: v.payment?.externalReference,
                     total: (v.total as NSDecimalNumber).doubleValue
                 )
             }
@@ -181,6 +278,8 @@ fileprivate struct HistoryVisitSnap: Sendable {
     let ownerFirst: String
     let ownerLast: String
     let itemNames: [String]
+    let note: String?
+    let paymentReference: String?
     let total: Double
 }
 
@@ -191,19 +290,38 @@ fileprivate enum RecentHistoryComputer {
             let total = snaps.reduce(0.0) { $0 + $1.total }
             return (Set(snaps.map { $0.id }), total)
         }
-        let needle = trimmed.folding(options: .diacriticInsensitive, locale: .current).lowercased()
+
+        let normalizedTokens: [String] = {
+            var seen: Set<String> = []
+            var ordered: [String] = []
+            let rawParts = trimmed.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
+            for part in rawParts {
+                let normalized = part
+                    .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !normalized.isEmpty else { continue }
+                if seen.insert(normalized).inserted {
+                    ordered.append(normalized)
+                }
+            }
+            return ordered
+        }()
+
+        if normalizedTokens.isEmpty {
+            let total = snaps.reduce(0.0) { $0 + $1.total }
+            return (Set(snaps.map { $0.id }), total)
+        }
+
         var ids: Set<UUID> = []
         var total: Double = 0
-        for s in snaps {
-            let fields: [String] = [
-                s.petName,
-                s.ownerFirst,
-                s.ownerLast
-            ] + s.itemNames
-            let match = fields.contains { $0.folding(options: .diacriticInsensitive, locale: .current).lowercased().contains(needle) }
-            if match {
-                ids.insert(s.id)
-                total += s.total
+        for snap in snaps {
+            let haystack = ([snap.petName, snap.ownerFirst, snap.ownerLast, snap.note ?? "", snap.paymentReference ?? ""] + snap.itemNames)
+                .joined(separator: " ")
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            let matchesAllTokens = normalizedTokens.allSatisfy { haystack.contains($0) }
+            if matchesAllTokens {
+                ids.insert(snap.id)
+                total += snap.total
             }
         }
         return (ids, total)

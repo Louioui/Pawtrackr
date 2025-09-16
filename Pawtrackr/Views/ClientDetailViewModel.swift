@@ -141,7 +141,7 @@ final class ClientDetailViewModel: ObservableObject {
             Logger.main.error("Failed to check out: \(String(describing: error))")
         }
         refreshRecentVisits()
-        NotificationCenter.default.post(name: .visitDidComplete, object: visit)
+        NotificationCenter.default.postVisitDidComplete(payload: .init(visit: visit))
     }
 
     /// Freezes the active visit's timer by setting `endedAt` to the provided date.

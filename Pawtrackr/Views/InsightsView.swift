@@ -98,7 +98,29 @@ struct InsightsView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(bvm.customDraftEnd < bvm.customDraftStart)
                 }
-                // Search removed per request: Insights should not expose a search UI.
+                Menu {
+                    ForEach(InsightsViewModel.Metric.allCases) { metric in
+                        Button {
+                            vm.toggleMetric(metric)
+                        } label: {
+                            Label {
+                                Text(metric.titleKey)
+                            } icon: {
+                                Image(systemName: vm.configuration.isMetricEnabled(metric) ? "checkmark.square.fill" : "square")
+                            }
+                        }
+                    }
+                } label: {
+                    Label("insights.metrics_customize", systemImage: "slider.horizontal.3")
+                }
+                .labelStyle(.titleAndIcon)
+
+                if !vm.configuration.orderedMetrics.isEmpty {
+                    Text(vm.configuration.orderedMetrics.map { metric in metric.displayTitle }.joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(Text("insights.metrics_customize"))
+                }
             }
         }
     }
@@ -118,19 +140,15 @@ struct InsightsView: View {
 
     // A more visual ribbon to echo the sample UI style
     private func kpiRibbon(_ vm: InsightsViewModel) -> some View {
-        HStack(spacing: 12) {
-            RibbonCard(
-                icon: "dollarsign",
-                title: "insights.revenue",
-                value: vm.kpis.revenueString,
-                tint: .green
-            )
-            RibbonCard(
-                icon: "checkmark.circle",
-                title: "insights.visits",
-                value: "\(vm.kpis.count)",
-                tint: .blue
-            )
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
+            ForEach(vm.metricTiles) { tile in
+                RibbonCard(
+                    icon: tile.metric.iconName,
+                    title: tile.metric.titleKey,
+                    value: tile.value,
+                    tint: tile.metric.tintColor
+                )
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -338,7 +356,7 @@ private struct LeaderRow: View {
 // Small ribbon card to echo the sample KPI style
 private struct RibbonCard: View {
     let icon: String
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let tint: Color
     let delta: String? = nil
@@ -371,6 +389,39 @@ private struct RibbonCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private extension InsightsViewModel.Metric {
+    var localizationKey: String {
+        switch self {
+        case .revenue: return "insights.revenue"
+        case .visitCount: return "insights.visits"
+        case .averageOrderValue: return "insights.aov"
+        case .averageDuration: return "insights.avg_duration"
+        }
+    }
+
+    var titleKey: LocalizedStringKey { LocalizedStringKey(localizationKey) }
+
+    var displayTitle: String { NSLocalizedString(localizationKey, comment: "") }
+
+    var iconName: String {
+        switch self {
+        case .revenue: return "dollarsign"
+        case .visitCount: return "pawprint"
+        case .averageOrderValue: return "chart.bar.doc.horizontal"
+        case .averageDuration: return "clock.arrow.circlepath"
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .revenue: return .green
+        case .visitCount: return .blue
+        case .averageOrderValue: return .orange
+        case .averageDuration: return .purple
         }
     }
 }

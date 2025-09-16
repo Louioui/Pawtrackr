@@ -239,7 +239,7 @@ final class CheckoutViewModel {
             try modelContext.save()
             // Update daily summaries for Insights immediately
             SummaryUpdater.rebuildDay(for: finalEndedAt, in: modelContext)
-            NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: ["petID": pet.persistentModelID])
+            NotificationCenter.default.postVisitDidComplete(payload: .init(visit: visit))
             
             isSaving = false
             return true

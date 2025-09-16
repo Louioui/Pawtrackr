@@ -9,6 +9,7 @@
 
 "insights.title" = "Insights";
 "insights.filters" = "Filters";
+"insights.metrics_customize" = "Customize Metrics";
 "insights.revenue" = "Revenue";
 "insights.total_visits" = "Total Visits";
 "insights.aov" = "Avg. Sale (AOV)";
