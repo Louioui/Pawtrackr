@@ -111,32 +111,40 @@ enum Formatters {
 
     /// "Jan 2, 2025 · 10:00 AM – 11:15 AM" (same day)
     /// "Jan 2, 2025 10:00 AM – Jan 3, 2025 9:40 AM" (spans days)
-    static func dateRangeString(from start: Date, to end: Date) -> String {
+    static func dateRangeString(from start: Date, to end: Date?) -> String {
         let cal = Calendar.current
-        if cal.isDate(start, inSameDayAs: end) {
-            return "\(dateOnly.string(from: start)) · \(timeOnly.string(from: start)) – \(timeOnly.string(from: end))"
+        if let end {
+            if cal.isDate(start, inSameDayAs: end) {
+                return "\(dateOnly.string(from: start)) · \(timeOnly.string(from: start)) – \(timeOnly.string(from: end))"
+            } else {
+                return "\(dateTime.string(from: start)) – \(dateTime.string(from: end))"
+            }
         } else {
-            return "\(dateTime.string(from: start)) – \(dateTime.string(from: end))"
+            return "\(dateTime.string(from: start)) – now"
         }
     }
 
     /// Human duration like "1h 32m" or abbreviated "1h32m".
     static func durationString(from start: Date, to end: Date, abbreviated: Bool = false) -> String {
         let seconds = max(0, Int(end.timeIntervalSince(start)))
+        return durationString(seconds: seconds, abbreviated: abbreviated)
+    }
+
+    static func durationString(seconds: Int, abbreviated: Bool = false) -> String {
         let h = seconds / 3600
         let m = (seconds % 3600) / 60
         let s = seconds % 60
 
         func part(_ value: Int, _ unit: String) -> String? {
             guard value > 0 else { return nil }
-            return abbreviated ? "\(value)\(unit.first!)" : "\(value)\(unit)"
+            return abbreviated ? "\(value)\(unit.first!)" : "\(value) \(unit)"
         }
 
         // Prioritize hours/minutes; show seconds only if < 1m total.
         if h > 0 {
             return [part(h, "h"), part(m, "m")].compactMap { $0 }.joined(separator: abbreviated ? "" : " ")
         } else if m > 0 {
-            return [part(m, "m")].compactMap { $0 }.joined()
+            return [part(m, "m"), part(s, "s")].compactMap { $0 }.joined(separator: abbreviated ? "" : " ")
         } else {
             // Under a minute
             return abbreviated ? "\(s)s" : "\(s)s"

@@ -83,11 +83,13 @@ final class RecentHistoryViewModel {
                 return (nil, nil)
             case .today:
                 let s = cal.startOfDay(for: now)
-                let e = cal.date(byAdding: .day, value: 1, to: s)!
+                guard let e = cal.date(byAdding: .day, value: 1, to: s) else { return (s, nil) }
                 return (s, e)
             case .thisWeek:
-                let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now))!
-                let e = cal.date(byAdding: .day, value: 7, to: s)!
+                guard let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)),
+                      let e = cal.date(byAdding: .day, value: 7, to: s) else {
+                    return (nil, nil)
+                }
                 return (s, e)
             }
         }()

@@ -142,16 +142,20 @@ final class PetHistoryViewModel: ObservableObject {
             return (nil, nil)
         case .today:
             let start = cal.startOfDay(for: now)
-            let end = cal.date(byAdding: .day, value: 1, to: start)!
+            guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return (start, nil) }
             return (start, end)
         case .thisWeek:
-            let start = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now))!
-            let end = cal.date(byAdding: .day, value: 7, to: start)!
+            guard let start = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)),
+                  let end = cal.date(byAdding: .day, value: 7, to: start) else {
+                return (nil, nil)
+            }
             return (start, end)
         case .thisMonth:
             let comps = cal.dateComponents([.year, .month], from: now)
-            let start = cal.date(from: comps)!
-            let end = cal.date(byAdding: .month, value: 1, to: start)!
+            guard let start = cal.date(from: comps),
+                  let end = cal.date(byAdding: .month, value: 1, to: start) else {
+                return (nil, nil)
+            }
             return (start, end)
         }
     }

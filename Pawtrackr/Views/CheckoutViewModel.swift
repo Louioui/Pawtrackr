@@ -215,6 +215,13 @@ final class CheckoutViewModel {
                 // This just records that the service was performed.
                 visit.addItem(title: extra, unitPrice: 0, quantity: 1, service: nil)
             }
+
+            // 1a. Add selected extras as line items
+            for extra in selectedExtras {
+                // Price is zero because the final total is manually entered by the user.
+                // This just records that the service was performed.
+                visit.addItem(title: extra, unitPrice: 0, quantity: 1, service: nil)
+            }
             
             // 2. Apply notes, tags, and photos.
             visit.note = notes.trimmed.isEmpty ? nil : notes.trimmed

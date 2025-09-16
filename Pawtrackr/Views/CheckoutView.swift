@@ -19,7 +19,6 @@ struct CheckoutView: View {
     @State private var selectedTipPercent: Int? = nil
     @State private var customTipString: String = ""
     @State private var showSuccessModal = false
-    @State private var selectedExtras: Set<String> = []
 
     init(pet: Pet) { self.pet = pet }
     
@@ -170,7 +169,7 @@ struct CheckoutView: View {
             if isSel { viewModel?.selectedExtras.remove(title) } else { viewModel?.selectedExtras.insert(title) }
         } label: {
             HStack(alignment: .center, spacing: 12) {
-                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) } 
+                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) }
                     .frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
@@ -294,7 +293,7 @@ struct CheckoutView: View {
                         }
                 }
                 
-                Divider() 
+                Divider()
                 
                 VStack(spacing: 8) {
                     HStack { Text("checkout.total").fontWeight(.semibold); Spacer(); Text(viewModel.finalTotalString).fontWeight(.semibold) }
@@ -385,7 +384,7 @@ struct CheckoutView: View {
             viewModel?.choosePayment(method)
         } label: {
             VStack(spacing: 8) {
-                ZStack { Circle().fill(tint.opacity(0.12)); Image(systemName: icon).foregroundStyle(tint) } 
+                ZStack { Circle().fill(tint.opacity(0.12)); Image(systemName: icon).foregroundStyle(tint) }
                     .frame(width: 48, height: 48)
                 Text(method.displayName).font(.caption.weight(.medium)).foregroundStyle(.primary)
             }
@@ -451,7 +450,7 @@ struct CheckoutView: View {
             syncManualAmount()
         } label: {
             VStack(spacing: 6) {
-                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) } 
+                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) }
                     .frame(width: 36, height: 36)
                 Text(service.name).font(.caption.weight(.medium)).foregroundStyle(.primary)
                 // Hide per-service price; user will input amount manually
@@ -474,7 +473,7 @@ struct CheckoutView: View {
             ZStack {
                 Color.black.opacity(0.4).ignoresSafeArea()
                 VStack(spacing: 12) {
-                    ZStack { Circle().fill(Color.accentColor.opacity(0.12)); ProgressView().tint(.accentColor) } 
+                    ZStack { Circle().fill(Color.accentColor.opacity(0.12)); ProgressView().tint(.accentColor) }
                         .frame(width: 64, height: 64)
                     Text("checkout.processing").font(.headline)
                     Text("checkout.processing_desc")
@@ -493,7 +492,7 @@ struct CheckoutView: View {
             ZStack {
                 Color.black.opacity(0.4).ignoresSafeArea()
                 VStack(spacing: 16) {
-                    ZStack { Circle().fill(Color.green.opacity(0.15)); Image(systemName: "checkmark").foregroundStyle(.green) } 
+                    ZStack { Circle().fill(Color.green.opacity(0.15)); Image(systemName: "checkmark").foregroundStyle(.green) }
                         .frame(width: 64, height: 64)
                     Text("checkout.complete_title").font(.headline)
                     Text(String(format: NSLocalizedString("checkout.complete_desc_fmt", comment: ""), viewModel.finalTotalString))

@@ -128,23 +128,7 @@ import Charts
       Text(NSLocalizedString("dashboard.active_sessions", comment: "")).font(.headline)
       LazyVStack(spacing: 10) {
         ForEach(vm.activeVisits) { visit in
-          Card {
-            HStack(spacing: 12) {
-              AvatarView(.pet(species: visit.pet.species, gender: visit.pet.gender,
-                              name: visit.pet.name, imageData: visit.pet.photoData), size: .md)
-              VStack(alignment: .leading) {
-                Text(visit.pet.name).font(.headline)
-                Text(visit.pet.owner?.fullName ?? "").font(.footnote).foregroundStyle(.secondary)
-              }
-              Spacer()
-              Chip.info("In Progress")
-              NavigationLink(destination: CheckoutView(pet: visit.pet)) {
-                Image(systemName: "ellipsis.circle").font(.title3)
-              }
-              .buttonStyle(.plain)
-              .accessibilityLabel("Session options")
-            }
-          }
+          ActiveVisitRow(visit: visit)
         }
       }
     }

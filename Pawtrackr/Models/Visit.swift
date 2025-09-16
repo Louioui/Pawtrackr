@@ -64,64 +64,14 @@ final class Visit {
     }
     
     /// Human-readable duration like "1h 23m" or "45m"
+    @MainActor
     var durationString: String {
-        let totalSeconds = Int(duration)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        } else {
-            return "\(minutes)m"
-        }
+        Formatters.durationString(from: startedAt, to: endedAt ?? .now)
     }
 
-    /// Human‑readable date/time range for timeline rows.
-    /// Examples:
-    ///  - "Sep 5, 1:10 PM–2:30 PM" (same day, completed)
-    ///  - "Sep 5, 1:10 PM–now"     (same day, active)
-    ///  - "Sep 4, 11:50 PM – Sep 5, 12:15 AM" (spans days)
+    @MainActor
     var dateRangeString: String {
-        let cal = Calendar.current
-        let start = startedAt
-        let end = endedAt
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = .current
-        dateFormatter.timeZone = .current
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .none
-        
-        let timeFormatter = DateFormatter()
-        timeFormatter.locale = .current
-        timeFormatter.timeZone = .current
-        timeFormatter.dateStyle = .none
-        timeFormatter.timeStyle = .short
-        
-        // If start & end are the same calendar day, show: "Sep 5, 1:10 PM–2:30 PM"
-        if let end, cal.isDate(start, inSameDayAs: end) {
-            let day = dateFormatter.string(from: start)
-            let startTime = timeFormatter.string(from: start)
-            let endTime = timeFormatter.string(from: end)
-            return "\(day), \(startTime)–\(endTime)"
-        }
-        
-        // If still active, show "...–now"
-        if endedAt == nil {
-            let day = dateFormatter.string(from: start)
-            let startTime = timeFormatter.string(from: start)
-            return "\(day), \(startTime)–now"
-        }
-        
-        // Spans multiple days; show full short date+time on both sides.
-        let dtFormatter = DateFormatter()
-        dtFormatter.locale = .current
-        dtFormatter.timeZone = .current
-        dtFormatter.dateStyle = .medium
-        dtFormatter.timeStyle = .short
-        
-        let left = dtFormatter.string(from: start)
-        let right = dtFormatter.string(from: endedAt!)
-        return "\(left) – \(right)"
+        Formatters.dateRangeString(from: startedAt, to: endedAt)
     }
 
     /// Sum of line items (snapshot math). Coalesces optional unitPrice to 0.

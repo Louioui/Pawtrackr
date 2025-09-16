@@ -186,9 +186,6 @@
 "checkout.total" = "Total";
 "checkout.payment_method" = "Método de pago";
 "checkout.payment_summary" = "Resumen de pago";
-"checkout.custom_tip" = "Monto de propina personalizado";
-"checkout.reference" = "ID de referencia";
-"checkout.transaction_reference" = "Referencia de transacción";
 "checkout.base_charge" = "Total de servicios";
 "checkout.total_amount" = "Importe total";
 "checkout.session_summary" = "Resumen de la sesión";
@@ -212,3 +209,9 @@
 "settings.data_management.confirm.title" = "¿Estás seguro?";
 "settings.data_management.confirm.message" = "Esto eliminará permanentemente todos los registros de visitas anteriores al umbral seleccionado. Esta acción no se puede deshacer.";
 "settings.data_management.confirm.delete" = "Eliminar";
+
+"common.no" = "No";
+"common.yes" = "Sí";
+"checkout.custom_tip" = "Monto de propina personalizado";
+"checkout.reference" = "ID de referencia";
+"checkout.transaction_reference" = "Referencia de transacción";

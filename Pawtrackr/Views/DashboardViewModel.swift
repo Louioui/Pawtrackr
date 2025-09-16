@@ -166,7 +166,7 @@ final class DashboardViewModel: ObservableObject {
   private func buildGallery(days: Int) async {
     let cal = Calendar.current
     let end = cal.startOfDay(for: .now)
-    let start = cal.date(byAdding: .day, value: -days, to: end)!
+    guard let start = cal.date(byAdding: .day, value: -days, to: end) else { return }
 
     do {
       let desc = FetchDescriptor<Visit>(
@@ -181,3 +181,4 @@ final class DashboardViewModel: ObservableObject {
     }
   }
 }
+

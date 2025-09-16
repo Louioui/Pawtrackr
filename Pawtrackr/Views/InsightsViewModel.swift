@@ -115,16 +115,27 @@ final class InsightsViewModel {
         let now = Date(); let cal = Calendar.current
         switch scope {
         case .today:
-            let s = cal.startOfDay(for: now); return (s, cal.date(byAdding: .day, value: 1, to: s))
+            let s = cal.startOfDay(for: now)
+            guard let end = cal.date(byAdding: .day, value: 1, to: s) else { return (s, nil) }
+            return (s, end)
         case .week:
-            let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear,.weekOfYear], from: now))!; return (s, cal.date(byAdding: .day, value: 7, to: s))
+            guard let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear,.weekOfYear], from: now)),
+                  let end = cal.date(byAdding: .day, value: 7, to: s) else {
+                return (nil, nil)
+            }
+            return (s, end)
         case .month:
-            let s = cal.date(from: cal.dateComponents([.year,.month], from: now))!; return (s, cal.date(byAdding: .month, value: 1, to: s))
+            guard let s = cal.date(from: cal.dateComponents([.year,.month], from: now)),
+                  let end = cal.date(byAdding: .month, value: 1, to: s) else {
+                return (nil, nil)
+            }
+            return (s, end)
         case .all:
             return (nil,nil)
         case .custom:
             let s = cal.startOfDay(for: customStartDate)
-            return (s, cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: customEndDate)))
+            guard let end = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: customEndDate)) else { return (s, nil) }
+            return (s, end)
         }
     }
 }

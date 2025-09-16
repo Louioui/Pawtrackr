@@ -186,9 +186,6 @@
 "checkout.total" = "Total";
 "checkout.payment_method" = "Payment Method";
 "checkout.payment_summary" = "Payment Summary";
-"checkout.custom_tip" = "Custom Tip Amount";
-"checkout.reference" = "Reference ID";
-"checkout.transaction_reference" = "Transaction Reference";
 "checkout.base_charge" = "Service Total";
 "checkout.total_amount" = "Total Amount";
 "checkout.session_summary" = "Session Summary";
@@ -212,3 +209,9 @@
 "settings.data_management.confirm.title" = "Are you sure?";
 "settings.data_management.confirm.message" = "This will permanently delete all visit records older than the selected threshold. This action cannot be undone.";
 "settings.data_management.confirm.delete" = "Delete";
+
+"common.no" = "No";
+"common.yes" = "Yes";
+"checkout.custom_tip" = "Custom Tip Amount";
+"checkout.reference" = "Reference ID";
+"checkout.transaction_reference" = "Transaction Reference";
