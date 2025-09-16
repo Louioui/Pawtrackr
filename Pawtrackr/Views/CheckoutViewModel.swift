@@ -78,6 +78,7 @@ final class CheckoutViewModel: ObservableObject {
     static let tagOptions: [String] = Pet.BehaviorTag.allCases.map { $0.displayName }
 
     /// Duration string captured at checkout: check-in starts timer, checkout stops it.
+    @MainActor
     var sessionDurationString: String {
         let start = visit.startedAt
         let end = visit.endedAt ?? checkoutEndsAt ?? Date()
@@ -310,6 +311,7 @@ final class CheckoutViewModel: ObservableObject {
             .reduce(Decimal.zero) { $0 +~ $1.effectiveBasePrice }
     }
     
+    @MainActor
     var servicesTotalDecimal: Decimal {
         if amountWasManuallySet {
             return Formatters.parseCurrency(amountString) ?? .zero
