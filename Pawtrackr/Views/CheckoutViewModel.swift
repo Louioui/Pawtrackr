@@ -47,7 +47,7 @@ final class CheckoutViewModel {
     private(set) var isSaving: Bool = false
     var showAlert: Bool = false
     private(set) var alertMessage: String = ""
-    @Published var state: CheckoutState = .selectingServices
+    var state: CheckoutState = .selectingServices
     
     // MARK: Private State
     let allServices: [Service] // Fetched once for performance; exposed for view rendering.

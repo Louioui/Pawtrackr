@@ -155,7 +155,7 @@ import Charts
       HStack {
         Text(NSLocalizedString("dashboard.recent_clients", comment: "")).font(.headline)
         Spacer()
-        NavigationLink(NSLocalizedString("dashboard.view_all", comment: ""), destination: ClientsView())
+        NavigationLink(NSLocalizedString("dashboard.view_all", comment: ""), destination: ClientsView(coordinator: clientsCoordinator))
           .font(.footnote)
       }
       LazyVStack(spacing: 10) {
