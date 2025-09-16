@@ -15,6 +15,15 @@ import OSLog
 @Observable
 @MainActor
 final class CheckoutViewModel {
+    enum CheckoutState {
+        case selectingServices
+        case addingPhotos
+        case choosingPayment
+        case processing
+        case confirmed
+        case failed(Error)
+    }
+
     // MARK: Dependencies
     private var modelContext: ModelContext
     
@@ -38,6 +47,7 @@ final class CheckoutViewModel {
     private(set) var isSaving: Bool = false
     var showAlert: Bool = false
     private(set) var alertMessage: String = ""
+    @Published var state: CheckoutState = .selectingServices
     
     // MARK: Private State
     let allServices: [Service] // Fetched once for performance; exposed for view rendering.
@@ -182,10 +192,35 @@ final class CheckoutViewModel {
             amountWasManuallySet = true
         }
     }
+
+    func nextStep() {
+        switch state {
+        case .selectingServices:
+            state = .addingPhotos
+        case .addingPhotos:
+            state = .choosingPayment
+        case .choosingPayment:
+            Task { await processPayment() }
+        default:
+            break
+        }
+    }
+
+    func previousStep() {
+        switch state {
+        case .addingPhotos:
+            state = .selectingServices
+        case .choosingPayment:
+            state = .addingPhotos
+        default:
+            break
+        }
+    }
     
-    func confirmCheckout() async -> Bool {
-        guard !isSaving else { return false }
+    func processPayment() async {
+        guard !isSaving else { return }
         isSaving = true
+        state = .processing
         
         do {
             try validate()
@@ -239,22 +274,24 @@ final class CheckoutViewModel {
             try modelContext.save()
             // Update daily summaries for Insights immediately
             SummaryUpdater.rebuildDay(for: finalEndedAt, in: modelContext)
-            NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: ["petID": pet.persistentModelID])
+            NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: ["visitID": visit.persistentModelID])
             
             isSaving = false
-            return true
+            state = .confirmed
             
         } catch let error as ValidationError {
+            state = .failed(error)
             alertMessage = error.localizedDescription
             showAlert = true
         } catch {
-            alertMessage = "An unexpected error occurred while saving. Please try again."
+            let error = ValidationError.custom(message: "An unexpected error occurred while saving. Please try again.")
+            state = .failed(error)
+            alertMessage = error.localizedDescription
             Logger.main.error("Checkout save failed: \(error.localizedDescription)")
             showAlert = true
         }
         
         isSaving = false
-        return false
     }
     
     private func validate() throws {

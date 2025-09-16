@@ -123,8 +123,11 @@ final class PetDetailViewModel {
         @State private var viewModel: PetDetailViewModel?
         @State private var confirmCheckIn: Bool = false
         private let initialPet: Pet
-        init(pet: Pet) {
+        var namespace: Namespace.ID
+
+        init(pet: Pet, namespace: Namespace.ID) {
             self.initialPet = pet
+            self.namespace = namespace
             _viewModel = State(initialValue: nil)
         }
         
@@ -187,6 +190,7 @@ final class PetDetailViewModel {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 16) {
                         AvatarView(.pet(species: vm.pet.species, gender: vm.pet.gender, name: vm.pet.name, imageData: vm.pet.photoData), size: .lg)
+                            .matchedGeometryEffect(id: vm.pet.id, in: namespace)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(vm.pet.name).font(.title2.weight(.semibold))
                             Text(vm.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)

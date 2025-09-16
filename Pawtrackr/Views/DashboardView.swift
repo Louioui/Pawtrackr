@@ -18,6 +18,7 @@ import Charts
     @State private var clientPendingDeletion: Client? = nil
     @State private var showDeleteErrorAlert = false
     @State private var deleteErrorMessage: String = ""
+    @State private var showContent = false
 
   var body: some View {
     NavigationStack {
@@ -71,15 +72,25 @@ import Charts
   private func content(_ vm: DashboardViewModel) -> some View {
     ScrollView {
       LazyVStack(spacing: 16) {
-        kpiSection(vm)
-        quickActionsSection
-        if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
-        if !vm.recentClients.isEmpty { recentClientsSection(vm) }
-        revenueSection(vm)
-        if !vm.gallery.isEmpty { gallerySection(vm) }
+        if showContent {
+            kpiSection(vm)
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            quickActionsSection
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            if !vm.activeVisits.isEmpty { activeSessionsSection(vm).transition(.move(edge: .leading).combined(with: .opacity)) }
+            if !vm.recentClients.isEmpty { recentClientsSection(vm).transition(.move(edge: .trailing).combined(with: .opacity)) }
+            revenueSection(vm)
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            if !vm.gallery.isEmpty { gallerySection(vm).transition(.move(edge: .trailing).combined(with: .opacity)) }
+        }
       }
       .padding(.horizontal, 16)
       .padding(.bottom, 24)
+    }
+    .onAppear {
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            showContent = true
+        }
     }
     .refreshable { await vm.refresh() }
   }

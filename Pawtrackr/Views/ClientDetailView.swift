@@ -62,9 +62,18 @@ struct ClientDetailView: View {
 
     @State private var alertDestination: AlertDestination?
 
+    weak var coordinator: ClientsCoordinator?
+    var namespace: Namespace.ID
+    private var petsCoordinator: PetsCoordinator
+
     // MARK: - Init
     private let client: Client
-    init(client: Client) { self.client = client }
+    init(client: Client, coordinator: ClientsCoordinator?, namespace: Namespace.ID) {
+        self.client = client
+        self.coordinator = coordinator
+        self.namespace = namespace
+        self.petsCoordinator = PetsCoordinator(navigationController: coordinator!.navigationController)
+    }
 
     // MARK: - Body
     var body: some View {
@@ -86,63 +95,61 @@ struct ClientDetailView: View {
     }
 
     private var navigationContent: some View {
-        NavigationStack {
-            content
-            .navigationTitle("client_details.title")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar { toolbarContent(vm) }
-            .fabOverlay {
-                FAB(systemImage: "pawprint.fill", accessibilityLabel: "Add New Pet") {
-                    sheetDestination = .addPet
-                }
+        content
+        .navigationTitle("client_details.title")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar { toolbarContent(vm) }
+        .fabOverlay {
+            FAB(systemImage: "pawprint.fill", accessibilityLabel: "Add New Pet") {
+                sheetDestination = .addPet
             }
-            .sheet(item: $sheetDestination) { destination in
-                switch destination {
-                case .addPet:
-                    AddPetSheet(client: vm.client)
-                case .editClient:
-                    EditClientSheet(client: vm.client)
-                case .checkout:
-                    EmptyView()
-                case .history(let pet):
-                    PetHistoryView(pet: pet)
-                }
-            }
-            .fullScreenCover(item: $checkoutPet) { pet in
-                CheckoutView(pet: pet)
-            }
-            .alert(item: $alertDestination) { destination in
-                switch destination {
-                case .checkIn(let pet):
-                    Alert(
-                        title: Text(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name)),
-                        message: Text(NSLocalizedString("client_details.checkin_confirm_message", comment: "")),
-                        primaryButton: .default(Text(NSLocalizedString("common.yes", comment: ""))) {
-                            vm.checkIn(pet: pet)
-                        },
-                        secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
-                    )
-                case .deleteClient:
-                    Alert(
-                        title: Text(String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName)),
-                        message: Text(NSLocalizedString("clients.delete_confirm_message", comment: "")),
-                        primaryButton: .destructive(Text(NSLocalizedString("common.yes", comment: ""))) {
-                            deleteClient()
-                        },
-                        secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
-                    )
-                case .deleteError(let message):
-                    Alert(
-                        title: Text(NSLocalizedString("clients.delete_failed", comment: "")),
-                        message: Text(message),
-                        dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
-                    )
-                }
-            }
-            .task { vm.refreshRecentVisits() }
         }
+        .sheet(item: $sheetDestination) { destination in
+            switch destination {
+            case .addPet:
+                AddPetSheet(client: vm.client)
+            case .editClient:
+                EditClientSheet(client: vm.client)
+            case .checkout:
+                EmptyView()
+            case .history(let pet):
+                PetHistoryView(pet: pet)
+            }
+        }
+        .fullScreenCover(item: $checkoutPet) { pet in
+            CheckoutView(pet: pet)
+        }
+        .alert(item: $alertDestination) { destination in
+            switch destination {
+            case .checkIn(let pet):
+                Alert(
+                    title: Text(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name)),
+                    message: Text(NSLocalizedString("client_details.checkin_confirm_message", comment: "")),
+                    primaryButton: .default(Text(NSLocalizedString("common.yes", comment: ""))) {
+                        vm.checkIn(pet: pet)
+                    },
+                    secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
+                )
+            case .deleteClient:
+                Alert(
+                    title: Text(String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName)),
+                    message: Text(NSLocalizedString("clients.delete_confirm_message", comment: "")),
+                    primaryButton: .destructive(Text(NSLocalizedString("common.yes", comment: ""))) {
+                        deleteClient()
+                    },
+                    secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
+                )
+            case .deleteError(let message):
+                Alert(
+                    title: Text(NSLocalizedString("clients.delete_failed", comment: "")),
+                    message: Text(message),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+                )
+            }
+        }
+        .task { vm.refreshRecentVisits() }
     }
 
     private var content: some View {
@@ -160,26 +167,15 @@ struct ClientDetailView: View {
     // MARK: - Subviews
     private func ownerHeader(client: Client) -> some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(client.fullName)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    if let phone = client.phone, !phone.isEmpty {
-                        Label(PhoneUtils.display(phone) ?? phone, systemImage: "phone.fill")
-                    }
-                    if let email = client.email, !email.isEmpty {
-                        Label(email, systemImage: "envelope.fill")
-                    }
-                    if let address = client.address, !address.trimmed.isEmpty {
-                        Label(address, systemImage: "house.fill")
-                    }
+            HStack(spacing: 12) {
+                AvatarView(.pet(species: client.pets.first?.species ?? .dog, gender: client.pets.first?.gender ?? .male, name: client.pets.first?.name ?? "", imageData: client.pets.first?.photoData), size: .lg, ringWidth: 4)
+                    .matchedGeometryEffect(id: client.id, in: namespace)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(client.fullName).font(.headline)
+                    Text(client.primaryContact).font(.subheadline).foregroundStyle(.secondary)
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
     }
@@ -204,7 +200,8 @@ struct ClientDetailView: View {
             let columns: [GridItem] = [GridItem(.adaptive(minimum: 320, maximum: 400), spacing: 16)]
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(vm.pets) { pet in
-                        PetCard(
+                    Button(action: { petsCoordinator.showPetDetail(pet: pet, namespace: namespace) }) {
+                        CardFactory.makePetCard(
                             pet: pet,
                             activeVisit: vm.activeVisit(for: pet),
                             onViewDetails: { sheetDestination = .history(pet) },
@@ -214,6 +211,9 @@ struct ClientDetailView: View {
                                 checkoutPet = pet
                             }
                         )
+                        .matchedGeometryEffect(id: pet.id, in: namespace)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal)
@@ -243,16 +243,16 @@ struct ClientDetailView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(vm.recentVisits.prefix(5)) { visit in
-                        NavigationLink(destination: VisitDetailView(visit: visit)) {
-                            VisitTimelineRow(visit: visit)
+                        Button(action: { coordinator?.showVisitDetail(visit: visit) }) {
+                            CardFactory.makeVisitTimelineRow(visit: visit)
                         }
                         .buttonStyle(.plain)
                     }
                     if vm.recentVisits.count > 5 {
                         // Show the rest (up to current page)
                         ForEach(vm.recentVisits.dropFirst(5)) { visit in
-                            NavigationLink(destination: VisitDetailView(visit: visit)) {
-                                VisitTimelineRow(visit: visit)
+                            Button(action: { coordinator?.showVisitDetail(visit: visit) }) {
+                                CardFactory.makeVisitTimelineRow(visit: visit)
                             }
                             .buttonStyle(.plain)
                         }

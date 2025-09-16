@@ -34,6 +34,7 @@ struct NewClientSheet: View {
     @State private var alertText = ""
     @State private var attemptedSubmit = false
     @State private var showInlineErrors = false
+    @State private var invalidFields: [String] = []
 
     var body: some View {
         NavigationStack {
@@ -41,6 +42,7 @@ struct NewClientSheet: View {
                 // MARK: Owner Info
                 Section(NSLocalizedString("new_client.owner_section", comment: "")) {
                     TextField("new_client.first_name_required", text: $first)
+                        .modifier(Shake(animatableData: CGFloat(invalidFields.contains("first") ? 1 : 0)))
                     #if os(iOS)
                         .textContentType(.givenName)
                         .textInputAutocapitalization(.words)
@@ -50,6 +52,7 @@ struct NewClientSheet: View {
                         Text(NSLocalizedString("new_client.error.first_required", comment: "")).font(.caption).foregroundStyle(.red)
                     }
                     TextField("new_client.last_name_required", text: $last)
+                        .modifier(Shake(animatableData: CGFloat(invalidFields.contains("last") ? 1 : 0)))
                     #if os(iOS)
                         .textContentType(.familyName)
                         .textInputAutocapitalization(.words)
@@ -59,6 +62,7 @@ struct NewClientSheet: View {
                         Text(NSLocalizedString("new_client.error.last_required", comment: "")).font(.caption).foregroundStyle(.red)
                     }
                     TextField("new_client.phone_required", text: $phone)
+                        .modifier(Shake(animatableData: CGFloat(invalidFields.contains("phone") ? 1 : 0)))
                         .autocorrectionDisabled()
                         .onChange(of: phone) { _, newValue in
                             if !newValue.isEmpty { phone = PhoneUtils.formatAsYouType(newValue) }
@@ -72,6 +76,7 @@ struct NewClientSheet: View {
                         Text(NSLocalizedString("new_client.error.phone_invalid", comment: "")).font(.caption).foregroundStyle(.red)
                     }
                     TextField("new_client.email_optional", text: $email)
+                        .modifier(Shake(animatableData: CGFloat(invalidFields.contains("email") ? 1 : 0)))
                     #if os(iOS)
                         .keyboardType(.emailAddress)
                         .textContentType(.emailAddress)
@@ -241,6 +246,28 @@ struct NewClientSheet: View {
 
     // MARK: - Actions
     private func createClient() -> Bool {
+        invalidFields.removeAll()
+
+        if first.trimmed.isEmpty {
+            invalidFields.append("first")
+        }
+        if last.trimmed.isEmpty {
+            invalidFields.append("last")
+        }
+        if PhoneUtils.toE164(phone) == nil {
+            invalidFields.append("phone")
+        }
+        if !email.trimmed.isEmpty && !isValidEmail(email) {
+            invalidFields.append("email")
+        }
+
+        if !invalidFields.isEmpty {
+            withAnimation(.default) {
+                self.attemptedSubmit = true
+            }
+            return false
+        }
+
         guard let e164 = PhoneUtils.toE164(phone) else {
             alertText = NSLocalizedString("new_client.error.phone_invalid_long", comment: "")
             return false

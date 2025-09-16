@@ -26,6 +26,13 @@ struct ClientCard: View {
                 petsInfo
             }
         }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                onDelete?()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .contextMenu {

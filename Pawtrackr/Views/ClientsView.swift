@@ -12,70 +12,72 @@ import SwiftData
 
 struct ClientsView: View {
     @Environment(\.modelContext) private var modelContext
+    weak var coordinator: ClientsCoordinator?
+    @Namespace var namespace
     
-    // Initialize with the app's environment ModelContext to avoid schema/store mismatches.
+
     @State private var viewModel: ClientsViewModel?
     @State private var showingNewClientSheet = false
     @State private var clientPendingDeletion: Client? = nil
     @State private var showDeleteErrorAlert = false
     @State private var deleteErrorMessage: String = ""
 
-    init() { _viewModel = State(initialValue: nil) }
+    init(coordinator: ClientsCoordinator?) {
+        self.coordinator = coordinator
+        _viewModel = State(initialValue: nil)
+    }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    if let viewModel {
-                        searchBar
-                        if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
-                            emptyState(viewModel)
-                        } else {
-                            clientSections(viewModel)
-                        }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                if let viewModel {
+                    searchBar
+                    if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
+                        emptyState(viewModel)
+                    } else {
+                        clientSections(viewModel)
                     }
                 }
-                .padding(.vertical, 8)
-                .padding(.bottom, 80) // Padding to avoid the FAB
             }
-            .navigationTitle("clients.title")
-            .fabOverlay {
-                FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
-                    showingNewClientSheet = true
-                }
+            .padding(.vertical, 8)
+            .padding(.bottom, 80) // Padding to avoid the FAB
+        }
+        .navigationTitle("clients.title")
+        .fabOverlay {
+            FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
+                showingNewClientSheet = true
             }
-            .alert(
-                clientPendingDeletion.map { String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), $0.fullName) } ?? "",
-                isPresented: Binding(
-                    get: { clientPendingDeletion != nil },
-                    set: { if !$0 { clientPendingDeletion = nil } }
-                )
-            ) {
-                Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { clientPendingDeletion = nil }
-                Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) { deletePendingClient() }
-            } message: {
-                Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
-            }
-            .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
-                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-            } message: {
-                Text(deleteErrorMessage)
-            }
-            .sheet(isPresented: $showingNewClientSheet) {
-                // When the sheet is dismissed, trigger a refresh to show the new client.
-                viewModel?.fetchClients()
-            } content: {
-                // FIX: Pass the model context to the sheet.
-                NewClientSheet()
-                    .environment(\.modelContext, modelContext)
-            }
-            .onAppear {
-                // Also fetch on appear to catch changes made in other parts of the app.
-                if viewModel == nil { viewModel = ClientsViewModel(modelContext: modelContext) }
-                viewModel?.fetchClients()
-            }
-            }
-        // Keep only the in-view search bar to avoid duplicate search UIs.
+        }
+        .alert(
+            clientPendingDeletion.map { String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), $0.fullName) } ?? "",
+            isPresented: Binding(
+                get: { clientPendingDeletion != nil },
+                set: { if !$0 { clientPendingDeletion = nil } }
+            )
+        ) {
+            Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { clientPendingDeletion = nil }
+            Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) { deletePendingClient() }
+        } message: {
+            Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
+        }
+        .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
+        } message: {
+            Text(deleteErrorMessage)
+        }
+        .sheet(isPresented: $showingNewClientSheet) {
+            // When the sheet is dismissed, trigger a refresh to show the new client.
+            viewModel?.fetchClients()
+        } content: {
+            // FIX: Pass the model context to the sheet.
+            NewClientSheet()
+                .environment(\.modelContext, modelContext)
+        }
+        .onAppear {
+            // Also fetch on appear to catch changes made in other parts of the app.
+            if viewModel == nil { viewModel = ClientsViewModel(modelContext: modelContext) }
+            viewModel?.fetchClients()
+        }
     }
 
     @ViewBuilder
@@ -101,8 +103,9 @@ struct ClientsView: View {
     private func clientList(for clients: [Client]) -> some View {
         LazyVStack(spacing: 10) {
             ForEach(clients) { client in
-                NavigationLink(destination: ClientDetailView(client: client)) {
-                    ClientCard(client: client, onDelete: { clientPendingDeletion = client })
+                Button(action: { coordinator?.showClientDetail(client: client, namespace: namespace) }) {
+                    CardFactory.makeClientCard(client: client, onDelete: { clientPendingDeletion = client })
+                        .matchedGeometryEffect(id: client.id, in: namespace)
                 }
                 .buttonStyle(.plain)
             }

@@ -13,6 +13,7 @@ import OSLog
 @main
 struct PawtrackrApp: App {
     let container: ModelContainer
+    private let scheduledTasks: ScheduledTasks
     
     init() {
         do {
@@ -28,6 +29,8 @@ struct PawtrackrApp: App {
             
             // Finally, assign the container to the instance property.
             self.container = localContainer
+            self.scheduledTasks = ScheduledTasks(modelContainer: localContainer)
+            self.scheduledTasks.start()
             
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
@@ -38,7 +41,7 @@ struct PawtrackrApp: App {
     
     var body: some Scene {
         WindowGroup {
-            RootView()
+            CoordinatorView()
                 .environmentObject(appSettings)
         }
     }
