@@ -186,7 +186,10 @@
 "checkout.total" = "Total";
 "checkout.payment_method" = "Payment Method";
 "checkout.payment_summary" = "Payment Summary";
-"checkout.base_charge" = "Base Charge";
+"checkout.custom_tip" = "Custom Tip Amount";
+"checkout.reference" = "Reference ID";
+"checkout.transaction_reference" = "Transaction Reference";
+"checkout.base_charge" = "Service Total";
 "checkout.total_amount" = "Total Amount";
 "checkout.session_summary" = "Session Summary";
 "checkout.duration_fmt" = "Duration: %@";

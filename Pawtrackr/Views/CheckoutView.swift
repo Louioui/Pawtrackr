@@ -142,14 +142,14 @@ struct CheckoutView: View {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("checkout.selected_services").font(.subheadline.weight(.semibold))
-                    if selectedServices.isEmpty && selectedExtras.isEmpty {
+                    if selectedServices.isEmpty && (viewModel.selectedExtras.isEmpty) {
                         Text("checkout.none_selected").font(.subheadline).foregroundStyle(.secondary)
                     } else {
                         FlowLayout(spacing: 6) {
                             ForEach(selectedServices, id: \.persistentModelID) { svc in
                                 Chip("\(svc.name)", style: .tinted, size: .sm)
                             }
-                            ForEach(Array(selectedExtras), id: \.self) { extra in
+                            ForEach(Array(viewModel.selectedExtras), id: \.self) { extra in
                                 Chip(extra, style: .tinted, size: .sm)
                             }
                         }
@@ -165,12 +165,12 @@ struct CheckoutView: View {
     }
 
     private func additionalServiceRow(title: String, subtitle: String, icon: String) -> some View {
-        let isSel = selectedExtras.contains(title)
+        let isSel = viewModel?.selectedExtras.contains(title) ?? false
         return Button {
-            if isSel { selectedExtras.remove(title) } else { selectedExtras.insert(title) }
+            if isSel { viewModel?.selectedExtras.remove(title) } else { viewModel?.selectedExtras.insert(title) }
         } label: {
             HStack(alignment: .center, spacing: 12) {
-                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) }
+                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) } 
                     .frame(width: 32, height: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
@@ -262,7 +262,7 @@ struct CheckoutView: View {
         Card {
             VStack(alignment: .leading, spacing: 16) {
                 Text("checkout.service_charge").font(.subheadline.weight(.semibold))
-                labeledContent(NSLocalizedString("checkout.base_amount", comment: "")) {
+                labeledContent(NSLocalizedString("checkout.base_charge", comment: "")) {
                     TextField("0.00", text: $baseAmountString)
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
@@ -293,17 +293,8 @@ struct CheckoutView: View {
                             syncManualAmount()
                         }
                 }
-
-                if viewModel.requiresExternalReference {
-                    labeledContent(NSLocalizedString("checkout.reference", comment: "")) {
-                        TextField(viewModel.referencePlaceholder, text: Binding(get: { viewModel.externalReference }, set: { viewModel.externalReference = $0 }))
-                            .textFieldStyle(.plain)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
-                }
                 
-                Divider()
+                Divider() 
                 
                 VStack(spacing: 8) {
                     HStack { Text("checkout.total").fontWeight(.semibold); Spacer(); Text(viewModel.finalTotalString).fontWeight(.semibold) }
@@ -332,7 +323,7 @@ struct CheckoutView: View {
         // Removed top-right confirm button; use bottom CTA only
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
-            Button("Done") {
+            Button("Confirm") {
                 viewModel?.formatAmountInput()
                 hideKeyboard()
             }
@@ -394,7 +385,7 @@ struct CheckoutView: View {
             viewModel?.choosePayment(method)
         } label: {
             VStack(spacing: 8) {
-                ZStack { Circle().fill(tint.opacity(0.12)); Image(systemName: icon).foregroundStyle(tint) }
+                ZStack { Circle().fill(tint.opacity(0.12)); Image(systemName: icon).foregroundStyle(tint) } 
                     .frame(width: 48, height: 48)
                 Text(method.displayName).font(.caption.weight(.medium)).foregroundStyle(.primary)
             }
@@ -460,7 +451,7 @@ struct CheckoutView: View {
             syncManualAmount()
         } label: {
             VStack(spacing: 6) {
-                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) }
+                ZStack { Circle().fill(Color.accentColor.opacity(0.12)); Image(systemName: icon).foregroundStyle(Color.accentColor) } 
                     .frame(width: 36, height: 36)
                 Text(service.name).font(.caption.weight(.medium)).foregroundStyle(.primary)
                 // Hide per-service price; user will input amount manually
@@ -483,7 +474,7 @@ struct CheckoutView: View {
             ZStack {
                 Color.black.opacity(0.4).ignoresSafeArea()
                 VStack(spacing: 12) {
-                    ZStack { Circle().fill(Color.accentColor.opacity(0.12)); ProgressView().tint(.accentColor) }
+                    ZStack { Circle().fill(Color.accentColor.opacity(0.12)); ProgressView().tint(.accentColor) } 
                         .frame(width: 64, height: 64)
                     Text("checkout.processing").font(.headline)
                     Text("checkout.processing_desc")
@@ -502,7 +493,7 @@ struct CheckoutView: View {
             ZStack {
                 Color.black.opacity(0.4).ignoresSafeArea()
                 VStack(spacing: 16) {
-                    ZStack { Circle().fill(Color.green.opacity(0.15)); Image(systemName: "checkmark").foregroundStyle(.green) }
+                    ZStack { Circle().fill(Color.green.opacity(0.15)); Image(systemName: "checkmark").foregroundStyle(.green) } 
                         .frame(width: 64, height: 64)
                     Text("checkout.complete_title").font(.headline)
                     Text(String(format: NSLocalizedString("checkout.complete_desc_fmt", comment: ""), viewModel.finalTotalString))

@@ -32,6 +32,7 @@ final class CheckoutViewModel {
     var afterPhotoData: Data?
     var externalReference: String = ""
     var tags: Set<String> = []
+    var selectedExtras: Set<String> = []
 
     // MARK: Published State
     private(set) var isSaving: Bool = false
@@ -206,6 +207,13 @@ final class CheckoutViewModel {
             // Add new items with zeroed unit price; total will be set from the user's input
             for service in servicesToSnapshot where !existingServiceIDs.contains(service.persistentModelID) {
                 visit.addItem(title: service.name, unitPrice: 0, quantity: 1, service: service)
+            }
+
+            // 1a. Add selected extras as line items
+            for extra in selectedExtras {
+                // Price is zero because the final total is manually entered by the user.
+                // This just records that the service was performed.
+                visit.addItem(title: extra, unitPrice: 0, quantity: 1, service: nil)
             }
             
             // 2. Apply notes, tags, and photos.

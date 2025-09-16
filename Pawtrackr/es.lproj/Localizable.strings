@@ -186,7 +186,10 @@
 "checkout.total" = "Total";
 "checkout.payment_method" = "Método de pago";
 "checkout.payment_summary" = "Resumen de pago";
-"checkout.base_charge" = "Cargo base";
+"checkout.custom_tip" = "Monto de propina personalizado";
+"checkout.reference" = "ID de referencia";
+"checkout.transaction_reference" = "Referencia de transacción";
+"checkout.base_charge" = "Total de servicios";
 "checkout.total_amount" = "Importe total";
 "checkout.session_summary" = "Resumen de la sesión";
 "checkout.duration_fmt" = "Duración: %@";
