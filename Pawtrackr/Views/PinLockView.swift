@@ -74,7 +74,14 @@ public struct PinLockView: View {
                 keyRow([4,5,6])
                 keyRow([7,8,9])
                 HStack(spacing: 12) {
-                    KeypadSpacer()
+                    if authenticator.biometricType() != .none {
+                        KeyButton(systemName: authenticator.biometricType() == .faceID ? "faceid" : "touchid") {
+                            authenticateWithBiometrics()
+                        }
+                        .accessibilityLabel("Authenticate with Biometrics")
+                    } else {
+                        KeypadSpacer()
+                    }
                     KeyButton(label: "0") { tapDigit(0) }
                     KeyButton(systemName: "delete.left.fill") { deleteDigit() }
                         .accessibilityLabel("Delete")
@@ -91,7 +98,18 @@ public struct PinLockView: View {
         .padding(24)
         .frame(maxWidth: 420)
         .onChange(of: digits) { validateIfComplete() }
+        .onAppear(perform: authenticateWithBiometrics)
         .accessibilityElement(children: .contain)
+    }
+
+    private func authenticateWithBiometrics() {
+        if authenticator.biometricType() != .none {
+            authenticator.authenticate { success, error in
+                if success {
+                    isUnlocked = true
+                }
+            }
+        }
     }
 
     // MARK: - Rows
