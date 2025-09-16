@@ -69,6 +69,7 @@ final class CheckoutViewModel: ObservableObject {
         }
     }
     
+    @MainActor
     var isConfirmEnabled: Bool {
         let ref = externalReference.trimmed
         let hasValidAmount = servicesTotalDecimal > 0
@@ -285,6 +286,7 @@ final class CheckoutViewModel: ObservableObject {
         isSaving = false
     }
     
+    @MainActor
     private func validate() throws {
         let total = servicesTotalDecimal
         guard total > 0 else {
