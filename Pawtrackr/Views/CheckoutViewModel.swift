@@ -322,6 +322,7 @@ final class CheckoutViewModel: ObservableObject {
         }
     }
     
+    @MainActor
     var finalTotalString: String {
         servicesTotalDecimal.moneyString
     }
