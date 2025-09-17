@@ -36,7 +36,10 @@ struct ClientRow: View {
 
     var body: some View {
         let primaryPet = client.pets.sorted(by: { $0.name < $1.name }).first
-        Card(accent: primaryPet.map { Card.Accent.top(.color(DS.ColorToken.gender($0.gender))) }) {
+        Card(
+            elevation: .regular,
+            accent: inProgress ? .leading(.color(DS.ColorToken.success), thickness: 4) : nil
+        ) {
             HStack(spacing: 12) {
                 // Avatars (up to 3 pets)
                 HStack(spacing: -8) {
@@ -56,23 +59,23 @@ struct ClientRow: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         // Phone actions (Call + SMS) with graceful fallback to plain text
                         if let phone = formattedPhone {
                             if let tel = PhoneUtils.telURLString(phone), let sms = PhoneUtils.smsURLString(phone),
                                let telURL = URL(string: tel), let smsURL = URL(string: sms) {
                                 HStack(spacing: 10) {
                                     Link(destination: telURL) {
-                                        Label(phone, systemImage: "phone")
+                                        Image(systemName: "phone.fill")
                                     }
-                                    .font(.caption)
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                     .accessibilityLabel("Call \(phone)")
 
                                     Link(destination: smsURL) {
-                                        Image(systemName: "message")
+                                        Image(systemName: "message.fill")
                                     }
-                                    .font(.caption)
+                                    .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                     .accessibilityLabel("Text \(phone)")
                                 }
@@ -87,29 +90,13 @@ struct ClientRow: View {
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(DS.ColorToken.success.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-                                .foregroundStyle(DS.ColorToken.success)
+                                .background(DS.ColorToken.success, in: Capsule())
+                                .foregroundStyle(.white)
                                 .accessibilityLabel(Text(NSLocalizedString("a11y.in_session", comment: "")))
                         }
                     }
                 }
                 Spacer()
-            }
-        }
-        .overlay(alignment: .leading) {
-            if inProgress {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(DS.ColorToken.success.opacity(0.001))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(
-                        Rectangle()
-                            .fill(DS.ColorToken.success.opacity(0.6))
-                            .frame(width: 3)
-                            .padding(.vertical, 6),
-                        alignment: .leading
-                    )
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
             }
         }
         .onTapGesture { onTap?() }

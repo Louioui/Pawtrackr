@@ -34,7 +34,7 @@ struct PetCard: View {
 
     // MARK: - View
     var body: some View {
-        Card(accent: .top(.color(DS.ColorToken.gender(pet.gender)))) {
+        Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(pet.gender)), thickness: 4)) {
             HStack(alignment: .top, spacing: 12) {
                 AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md)
 
@@ -154,7 +154,7 @@ struct PetCard: View {
                 Spacer(minLength: 0)
             }
         }
-        .leftAccentRail(isActive ? DS.ColorToken.session : .clear)
+        // Leading accent covers session identity; additional rail not needed.
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .onChange(of: scenePhase) { oldPhase, newPhase in

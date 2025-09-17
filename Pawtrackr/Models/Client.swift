@@ -31,6 +31,7 @@ final class Client {
 
     // MARK: - Relationships
     @Relationship(deleteRule: .cascade) var pets: [Pet] = []
+    @Relationship(deleteRule: .cascade) var emergencyContacts: [EmergencyContact] = []
     var user: User?
 
     // MARK: - Init
@@ -108,4 +109,3 @@ final class Client {
         updatedAt = .now
     }
 }
-

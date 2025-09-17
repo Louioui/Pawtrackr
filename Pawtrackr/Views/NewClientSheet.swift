@@ -26,8 +26,9 @@ struct NewClientSheet: View {
     @State private var email = ""
     @State private var address = ""
 
-    // Pets buffer (at least one)
-    @State private var pets: [TempPet] = [TempPet(index: 1)]
+    // Emergency Contacts and Pets (pets optional at creation)
+    @State private var contacts: [TempContact] = [TempContact(index: 1)]
+    @State private var pets: [TempPet] = []
 
     // Alerts
     @State private var showAlert = false
@@ -35,13 +36,18 @@ struct NewClientSheet: View {
     @State private var attemptedSubmit = false
     @State private var showInlineErrors = false
     @State private var invalidFields: [String] = []
+    @State private var isSaving: Bool = false
+    @State private var showDuplicateAlert: Bool = false
+    @State private var duplicateClientID: PersistentIdentifier? = nil
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             List {
                 // MARK: Owner Info
-                Section(NSLocalizedString("new_client.owner_section", comment: "")) {
+                Section {
                     TextField("new_client.first_name_required", text: $first)
+                        .id("first")
                         .modifier(Shake(animatableData: CGFloat(invalidFields.contains("first") ? 1 : 0)))
                     #if os(iOS)
                         .textContentType(.givenName)
@@ -52,6 +58,7 @@ struct NewClientSheet: View {
                         Text(NSLocalizedString("new_client.error.first_required", comment: "")).font(.caption).foregroundStyle(.red)
                     }
                     TextField("new_client.last_name_required", text: $last)
+                        .id("last")
                         .modifier(Shake(animatableData: CGFloat(invalidFields.contains("last") ? 1 : 0)))
                     #if os(iOS)
                         .textContentType(.familyName)
@@ -62,10 +69,13 @@ struct NewClientSheet: View {
                         Text(NSLocalizedString("new_client.error.last_required", comment: "")).font(.caption).foregroundStyle(.red)
                     }
                     TextField("new_client.phone_required", text: $phone)
+                        .id("phone")
                         .modifier(Shake(animatableData: CGFloat(invalidFields.contains("phone") ? 1 : 0)))
                         .autocorrectionDisabled()
                         .onChange(of: phone) { _, newValue in
-                            if !newValue.isEmpty { phone = PhoneUtils.formatAsYouType(newValue) }
+                            guard !newValue.isEmpty else { return }
+                            let formatted = PhoneUtils.formatAsYouType(newValue)
+                            if formatted != newValue { phone = formatted }
                         }
                     #if os(iOS)
                         .keyboardType(.phonePad)
@@ -76,6 +86,7 @@ struct NewClientSheet: View {
                         Text(NSLocalizedString("new_client.error.phone_invalid", comment: "")).font(.caption).foregroundStyle(.red)
                     }
                     TextField("new_client.email_optional", text: $email)
+                        .id("email")
                         .modifier(Shake(animatableData: CGFloat(invalidFields.contains("email") ? 1 : 0)))
                     #if os(iOS)
                         .keyboardType(.emailAddress)
@@ -92,6 +103,44 @@ struct NewClientSheet: View {
                         .textContentType(.fullStreetAddress)
                         .submitLabel(.next)
                     #endif
+                } header: {
+                    Text(NSLocalizedString("new_client.owner_section", comment: ""))
+                }
+
+                // MARK: Emergency Contacts
+                Section {
+                    HStack {
+                        Text("Emergency Contacts").font(.headline)
+                        Spacer()
+                        Button {
+                            contacts.append(TempContact(index: contacts.count + 1))
+                        } label: {
+                            Image(systemName: "plus.circle.fill").font(.headline)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add emergency contact")
+                    }
+                    HStack {
+                        Text("Add at least one contact we can reach during visits.")
+                            .foregroundStyle(.secondary).font(.footnote)
+                        Spacer()
+                    }
+                    ForEach($contacts) { $c in
+                        HStack(spacing: 10) {
+                            TextField("Name", text: $c.name)
+                            TextField("Relation", text: $c.relation)
+                            TextField("Phone", text: $c.phone)
+                                .onChange(of: c.phone) { _, newValue in
+                                    guard !newValue.isEmpty else { return }
+                                    let formatted = PhoneUtils.formatAsYouType(newValue)
+                                    if formatted != newValue { c.phone = formatted }
+                                }
+                            #if os(iOS)
+                                .keyboardType(.phonePad)
+                                .textContentType(.telephoneNumber)
+                            #endif
+                        }
+                    }
                 }
 
                 // MARK: Pet Info
@@ -113,24 +162,28 @@ struct NewClientSheet: View {
                         Spacer()
                     }
                 }
-                if attemptedSubmit && !hasAtLeastOneValidPet {
-                    Text(NSLocalizedString("new_client.error.pet_required", comment: "")).font(.caption).foregroundStyle(.red)
+                if attemptedSubmit && !hasAtLeastOneValidPetWithPhoto {
+                    Text("At least one pet with a photo is required").font(.caption).foregroundStyle(.red)
                         .padding(.horizontal, 2)
                 }
 
                 ForEach($pets) { $p in
                     DisclosureGroup {
-                        // Photo picker (optional) – replaces the icon when present
+                        // Photo picker – photo required
                         HStack(spacing: 12) {
                             ImagePicker(imageData: $p.photoData, allowsEditing: true, maxDimension: 2048, jpegQuality: 0.8) {
                                 PetAvatar(photoData: p.photoData, species: p.species, gender: p.gender)
                             }
+                            .id("pet_photo_\(p.index)")
                             VStack(alignment: .leading) {
                         Text(NSLocalizedString("new_client.photo_hint", comment: "")).font(.caption).foregroundStyle(.secondary)
                         Text(NSLocalizedString("new_client.photo_subhint", comment: "")).font(.caption2).foregroundStyle(.tertiary)
                             }
                         }
                         .padding(.vertical, 4)
+                        if attemptedSubmit && p.photoData == nil {
+                            Text("Pet photo required").font(.caption).foregroundStyle(.red)
+                        }
 
                         TextField("new_client.pet_name_required", text: $p.name)
                         #if os(iOS)
@@ -197,7 +250,7 @@ struct NewClientSheet: View {
                     }
                 }
 
-                Button { pets.append(TempPet(index: pets.count + 1)) } label: { Label(NSLocalizedString("new_client.add_pet", comment: ""), systemImage: "plus") }
+                Button { pets.append(TempPet(index: pets.count + 1)) } label: { Label(NSLocalizedString("new_client.add_pet", comment: ""), systemImage: "pawprint.fill") }
                 .buttonStyle(.borderedProminent)
                 .tint(.accentColor)
                 .accessibilityHint(NSLocalizedString("new_client.add_pet_a11y", comment: ""))
@@ -211,14 +264,18 @@ struct NewClientSheet: View {
                     Button("common.cancel", role: .cancel) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("common.create") {
+                    Button(action: {
                         attemptedSubmit = true
+                        guard !isSaving else { return }
                         if !createClient() {
                             if alertText.isEmpty { alertText = NSLocalizedString("new_client.error.double_check", comment: "") }
                             showAlert = true
                         }
+                    }) {
+                        if isSaving { ProgressView() } else { Text("common.create") }
                     }
-                    .disabled(!isValid)
+                    .disabled(!isValid || isSaving)
+                    .tint(.accentColor)
                     .accessibilityLabel("Create client")
                     .accessibilityHint("Saves the owner and pet information")
                 }
@@ -228,23 +285,47 @@ struct NewClientSheet: View {
             } message: {
                 Text(alertText)
             }
+            .alert("Client exists", isPresented: $showDuplicateAlert) {
+                Button("Open", role: .none) {
+                    if let id = duplicateClientID {
+                        NotificationCenter.default.post(name: .clientOpenRequested, object: nil, userInfo: [ClientOpenKey.clientID.rawValue: id])
+                    }
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("A client with this phone already exists. Open that client?")
+            }
+            .onChange(of: scrollTarget) { _, target in
+                if let t = target {
+                    withAnimation(.easeInOut) { proxy.scrollTo(t, anchor: .center) }
+                    DispatchQueue.main.async { scrollTarget = nil }
+                }
+            }
+            }
         }
     }
 
     // MARK: - Validation
     private var isValid: Bool {
-        !first.trimmed.isEmpty &&
-        !last.trimmed.isEmpty &&
-        (PhoneUtils.toE164(phone) != nil) &&
-        (email.trimmed.isEmpty || isValidEmail(email)) &&
-        hasAtLeastOneValidPet
+        let phoneOK = phone.trimmed.isEmpty || (PhoneUtils.toE164(phone) != nil)
+        return !first.trimmed.isEmpty &&
+               !last.trimmed.isEmpty &&
+               phoneOK &&
+               (email.trimmed.isEmpty || isValidEmail(email))
     }
 
-    private var hasAtLeastOneValidPet: Bool {
+    private var hasAtLeastOneValidPet: Bool { // no longer required, kept for UI hints
         pets.contains { !$0.name.trimmed.isEmpty && $0.gender != nil }
     }
 
+    private var hasAtLeastOneValidPetWithPhoto: Bool {
+        pets.contains { !$0.name.trimmed.isEmpty && $0.gender != nil && $0.photoData != nil }
+    }
+
     // MARK: - Actions
+    @State private var scrollTarget: String? = nil
+
     private func createClient() -> Bool {
         invalidFields.removeAll()
 
@@ -261,31 +342,29 @@ struct NewClientSheet: View {
             invalidFields.append("email")
         }
 
+        if !hasAtLeastOneValidPetWithPhoto {
+            invalidFields.append("pet_photo_1") // Assuming the first pet's photo is the target for scrolling
+        }
+
         if !invalidFields.isEmpty {
             withAnimation(.default) {
                 self.attemptedSubmit = true
             }
+            scrollTarget = invalidFields.first
             return false
         }
 
-        guard let e164 = PhoneUtils.toE164(phone) else {
-            alertText = NSLocalizedString("new_client.error.phone_invalid_long", comment: "")
-            return false
-        }
+        let e164 = PhoneUtils.toE164(phone)
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             alertText = NSLocalizedString("new_client.error.email_invalid_long", comment: "")
             return false
         }
 
-        // Prevent duplicate client by primary phone
-        do {
-            let desc = FetchDescriptor<Client>(
-                predicate: #Predicate { $0.phone == e164 }
-            )
-            if let existing = try? ctx.fetch(desc), !existing.isEmpty {
-                alertText = NSLocalizedString("new_client.error.duplicate_phone", comment: "")
-                return false
-            }
+        // Offer to open existing client if a valid phone matches
+        if let e164, let matches = try? ctx.fetch(FetchDescriptor<Client>(predicate: #Predicate { $0.phone == e164 })), let existing = matches.first {
+            duplicateClientID = existing.persistentModelID
+            showDuplicateAlert = true
+            return false
         }
 
         // Create Client
@@ -295,7 +374,7 @@ struct NewClientSheet: View {
         if !email.trimmed.isEmpty { client.email = email.trimmed.lowercased() }
         if !address.trimmed.isEmpty { client.address = address.trimmed }
 
-        // Create Pets
+        // Create Pets (optional)
         pets.forEach { tp in
             guard !tp.name.trimmed.isEmpty, let gender = tp.gender else { return }
             let pet = Pet(name: tp.name.trimmed, species: tp.species)
@@ -312,14 +391,61 @@ struct NewClientSheet: View {
             pet.owner = client
         }
 
+        // Create Emergency Contacts (optional)
+        for c in contacts {
+            let name = c.name.trimmed
+            let relation = c.relation.trimmed
+            let ph = c.phone.trimmed
+            let anyEntered = !name.isEmpty || !relation.isEmpty || !ph.isEmpty
+            guard anyEntered else { continue }
+            guard let e164c = PhoneUtils.toE164(ph), !name.isEmpty else { continue }
+            let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
+            ec.owner = client
+            client.emergencyContacts.append(ec)
+        }
+
         // Persist
         ctx.insert(client)
         do {
+            isSaving = true
             try ctx.save()
+            // Round‑trip verify by refetching the inserted client; prefer phone lookup if present, else best-effort by name
+            var saved: Client? = nil
+            if let e164 {
+                let checkDesc = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == e164 })
+                saved = try (ctx.fetch(checkDesc)).first
+            } else {
+                let expectedFirst = canonicalPersonName(first)
+                let expectedLast = canonicalPersonName(last)
+                let checkDesc = FetchDescriptor<Client>(predicate: #Predicate { $0.firstName == expectedFirst && $0.lastName == expectedLast })
+                saved = try (ctx.fetch(checkDesc)).first
+            }
+            if let saved {
+                // Ensure canonical values persisted; if not, correct them and save again (strict enforcement)
+                let expectedFirst = canonicalPersonName(first)
+                let expectedLast = canonicalPersonName(last)
+                var changed = false
+                if saved.firstName != expectedFirst { saved.setFirstName(expectedFirst); changed = true }
+                if saved.lastName != expectedLast { saved.setLastName(expectedLast); changed = true }
+                if saved.phone != e164 { saved.setPhone(e164); changed = true }
+                if !email.trimmed.isEmpty {
+                    let expectedEmail = email.trimmed.lowercased()
+                    if saved.email != expectedEmail { saved.setEmail(expectedEmail); changed = true }
+                }
+                if changed { try ctx.save() }
+            }
+            // Notify observers to auto-open this client in Client Center
+            NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
+                ClientDidCreateKey.clientID.rawValue: client.persistentModelID,
+                ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.created.rawValue
+            ])
+            HapticManager.notify(.success)
             dismiss()
+            isSaving = false
             return true
         } catch {
             alertText = String(format: NSLocalizedString("common.save_failed", comment: ""), error.localizedDescription)
+            isSaving = false
             return false
         }
     }
@@ -347,6 +473,14 @@ private struct TempPet: Identifiable {
     var photoData: Data? = nil
 }
 
+private struct TempContact: Identifiable {
+    let id = UUID()
+    var index: Int
+    var name: String = ""
+    var relation: String = ""
+    var phone: String = ""
+}
+
 // MARK: - Small helpers
 private struct PetAvatar: View {
     var photoData: Data?
@@ -361,6 +495,9 @@ private struct PetAvatar: View {
                 .resizable().scaledToFill()
                 .frame(width: size, height: size)
                 .clipShape(Circle())
+                .overlay(
+                    Group { if let g = gender { Circle().stroke(DS.ColorToken.gender(g), lineWidth: 3) } }
+                )
                 .accessibilityLabel("Pet photo")
                 .accessibilityAddTraits(.isImage)
         } else {
@@ -373,6 +510,9 @@ private struct PetAvatar: View {
                 .resizable().scaledToFill()
                 .frame(width: size, height: size)
                 .clipShape(Circle())
+                .overlay(
+                    Group { if let g = gender { Circle().stroke(DS.ColorToken.gender(g), lineWidth: 3) } }
+                )
                 .accessibilityLabel("Pet photo")
                 .accessibilityAddTraits(.isImage)
         }

@@ -61,6 +61,20 @@ struct ClientDetailView: View {
     }
 
     @State private var alertDestination: AlertDestination?
+    @State private var showContactEditor = false
+    @State private var editingContact: EmergencyContact? = nil
+    @State private var newContactName: String = ""
+    @State private var newContactRelation: String = ""
+    @State private var newContactPhone: String = ""
+    @State private var contactPendingDelete: EmergencyContact? = nil
+    @FocusState private var contactNameFocused: Bool
+
+    // Inline client edit state
+    @State private var isEditingClientInline = false
+    @State private var editFirst: String = ""
+    @State private var editLast: String = ""
+    @State private var editPhone: String = ""
+    @State private var editEmail: String = ""
 
     weak var coordinator: ClientsCoordinator?
     var namespace: Namespace.ID
@@ -118,6 +132,41 @@ struct ClientDetailView: View {
                 PetHistoryView(pet: pet)
             }
         }
+        .sheet(isPresented: $showContactEditor) {
+            NavigationStack {
+                Form {
+                    Section(editingContact == nil ? "New Emergency Contact" : "Edit Emergency Contact") {
+                        TextField("Name", text: $newContactName)
+                            .focused($contactNameFocused)
+                        TextField("Relation", text: $newContactRelation)
+                        TextField("Phone", text: $newContactPhone)
+                            .onChange(of: newContactPhone) { _, v in
+                                guard !v.isEmpty else { return }
+                                let formatted = PhoneUtils.formatAsYouType(v)
+                                if formatted != v { newContactPhone = formatted }
+                            }
+                        #if os(iOS)
+                            .keyboardType(.phonePad)
+                            .textContentType(.telephoneNumber)
+                        #endif
+                    }
+                }
+                .navigationTitle(editingContact == nil ? "Add Contact" : "Edit Contact")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showContactEditor = false } }
+                    ToolbarItem(placement: .confirmationAction) { Button("Save") { addOrUpdateContact() } }
+                }
+                .task { contactNameFocused = true }
+            }
+        }
+        .alert(item: $contactPendingDelete) { c in
+            Alert(
+                title: Text("Delete Contact?"),
+                message: Text("This cannot be undone."),
+                primaryButton: .destructive(Text("Delete")) { confirmDeleteContact(c) },
+                secondaryButton: .cancel()
+            )
+        }
         .fullScreenCover(item: $checkoutPet) { pet in
             CheckoutView(pet: pet)
         }
@@ -156,6 +205,7 @@ struct ClientDetailView: View {
         ScrollView {
             VStack(spacing: 16) {
                 ownerHeader(client: vm.client)
+                emergencyContactsCard(client: vm.client)
                 notesCard(client: vm.client)
                 petsSection
                 recentHistorySection
@@ -167,14 +217,46 @@ struct ClientDetailView: View {
     // MARK: - Subviews
     private func ownerHeader(client: Client) -> some View {
         Card {
-            HStack(spacing: 12) {
-                AvatarView(.pet(species: client.pets.first?.species ?? .dog, gender: client.pets.first?.gender ?? .male, name: client.pets.first?.name ?? "", imageData: client.pets.first?.photoData), size: .lg, ringWidth: 4)
-                    .matchedGeometryEffect(id: client.id, in: namespace)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(client.fullName).font(.headline)
-                    Text(client.primaryContact).font(.subheadline).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    AvatarView(.pet(species: client.pets.first?.species ?? .dog, gender: client.pets.first?.gender ?? .male, name: client.pets.first?.name ?? "", imageData: client.pets.first?.photoData), size: .lg, ringWidth: 4)
+                        .matchedGeometryEffect(id: client.id, in: namespace)
+                    if isEditingClientInline {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack { TextField("First Name", text: $editFirst).textFieldStyle(.roundedBorder); TextField("Last Name", text: $editLast).textFieldStyle(.roundedBorder) }
+                            HStack { TextField("Phone", text: $editPhone).textFieldStyle(.roundedBorder).onChange(of: editPhone) { _, v in
+                                    guard !v.isEmpty else { return }
+                                    let formatted = PhoneUtils.formatAsYouType(v)
+                                    if formatted != v { editPhone = formatted }
+                                }
+                                #if os(iOS)
+                                .keyboardType(.phonePad)
+                                .textContentType(.telephoneNumber)
+                                #endif
+                                    TextField("Email", text: $editEmail).textFieldStyle(.roundedBorder) }
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(client.fullName).font(.headline)
+                            Text(client.primaryContact).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if isEditingClientInline {
+                        HStack(spacing: 8) {
+                            Button { cancelInlineEdit(client) } label: { Image(systemName: "xmark.circle.fill") }
+                            Button { saveInlineEdit(client) } label: { Image(systemName: "checkmark.circle.fill") }
+                                .disabled(editFirst.trimmed.isEmpty || editLast.trimmed.isEmpty || PhoneUtils.toE164(editPhone) == nil)
+                        }
+                        .font(.title3)
+                    } else {
+                        Button {
+                            beginInlineEdit(client)
+                        } label: { Image(systemName: "pencil") }
+                        .font(.title3)
+                        .accessibilityLabel("Edit client")
+                    }
                 }
-                Spacer()
             }
         }
         .padding(.horizontal)
@@ -191,6 +273,85 @@ struct ClientDetailView: View {
             }
             .padding(.horizontal)
         }
+    }
+
+    @ViewBuilder
+    private func emergencyContactsCard(client: Client) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Emergency Contacts").font(.headline)
+                    Spacer()
+                    Button {
+                        editingContact = nil
+                        newContactName = ""; newContactRelation = ""; newContactPhone = ""
+                        showContactEditor = true
+                    } label: { Image(systemName: "plus.circle.fill").font(.headline) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add emergency contact")
+                }
+                if client.emergencyContacts.isEmpty {
+                    Text("No emergency contacts yet").font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    ForEach(client.emergencyContacts) { c in
+                        HStack(spacing: 10) {
+                            Image(systemName: "phone.fill").foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(c.name).font(.subheadline.weight(.semibold))
+                                HStack(spacing: 6) {
+                                    if let rel = c.relation, !rel.isEmpty { Text(rel).font(.caption).foregroundStyle(.secondary) }
+                                    Text(PhoneUtils.display(c.phone) ?? c.phone).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            #if canImport(UIKit)
+                            if let tel = PhoneUtils.telURLString(c.phone), let url = URL(string: tel) {
+                                Link(destination: url) { Image(systemName: "phone.arrow.up.right").font(.body) }
+                            }
+                            #endif
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button { beginEditContact(c) } label: { Label("Edit", systemImage: "pencil") }
+                            Button(role: .destructive) { contactPendingDelete = c } label: { Label("Delete", systemImage: "trash") }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private func confirmDeleteContact(_ contact: EmergencyContact) {
+        modelContext.delete(contact)
+        try? modelContext.save()
+        viewModel?.refreshRecentVisits()
+    }
+
+    private func addOrUpdateContact() {
+        let name = newContactName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let relation = newContactRelation.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phone = newContactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let e164 = PhoneUtils.toE164(phone) else { return }
+        if let editing = editingContact {
+            editing.name = name
+            editing.relation = relation.isEmpty ? nil : relation
+            editing.phone = e164
+        } else {
+            let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164)
+            ec.owner = vm.client
+            vm.client.emergencyContacts.append(ec)
+        }
+        try? modelContext.save()
+        showContactEditor = false
+        newContactName = ""; newContactRelation = ""; newContactPhone = ""
+    }
+
+    private func beginEditContact(_ c: EmergencyContact) {
+        editingContact = c
+        newContactName = c.name
+        newContactRelation = c.relation ?? ""
+        newContactPhone = PhoneUtils.display(c.phone) ?? c.phone
+        showContactEditor = true
     }
 
     private var petsSection: some View {
@@ -278,6 +439,22 @@ struct ClientDetailView: View {
             }
         }
         .padding(.bottom, 80) // space for FAB
+        .overlay(alignment: .top) {
+            if showSavedToast {
+                SavedToast()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .padding(.top, 8)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { notif in
+            guard let id = notif.createdClientID, notif.clientCreatePhase == .navigated else { return }
+            if id == vm.client.persistentModelID {
+                withAnimation(Animations.fastEaseOut) { showSavedToast = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation(Animations.fastEaseOut) { showSavedToast = false }
+                }
+            }
+        }
     }
 
     // MARK: - Toolbar
@@ -303,6 +480,49 @@ struct ClientDetailView: View {
             dismiss()
         } catch {
             alertDestination = .deleteError(error.localizedDescription)
+        }
+    }
+
+    private func beginInlineEdit(_ client: Client) {
+        editFirst = client.firstName
+        editLast = client.lastName
+        editPhone = PhoneUtils.display(client.phone ?? "") ?? (client.phone ?? "")
+        editEmail = client.email ?? ""
+        withAnimation(Animations.fastEaseOut) { isEditingClientInline = true }
+    }
+
+    private func cancelInlineEdit(_ client: Client) {
+        withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }
+    }
+
+    private func saveInlineEdit(_ client: Client) {
+        guard let e164 = PhoneUtils.toE164(editPhone) else { return }
+        client.setFirstName(editFirst)
+        client.setLastName(editLast)
+        client.setPhone(e164)
+        client.setEmail(editEmail)
+        try? modelContext.save()
+        withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }
+        // Optional: show a small saved toast for inline edits
+        withAnimation(Animations.fastEaseOut) { showSavedToast = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(Animations.fastEaseOut) { showSavedToast = false }
+        }
+    }
+
+    @State private var showSavedToast = false
+
+    private struct SavedToast: View {
+        var body: some View {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.white)
+                Text("Saved successfully").foregroundStyle(.white)
+            }
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(Color.green.opacity(0.9)))
+            .shadow(radius: 6)
         }
     }
 }

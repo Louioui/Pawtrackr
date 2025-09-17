@@ -15,6 +15,8 @@ import SwiftUI
 public struct PinLockGate<Content: View>: View {
     @State private var isUnlocked = false
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var appSettings: AppSettings
+    @State private var inactivityTimer: Timer? = nil
     private let content: Content
 
     public init(@ViewBuilder content: () -> Content) {
@@ -23,14 +25,24 @@ public struct PinLockGate<Content: View>: View {
 
     public var body: some View {
         Group {
-            if isUnlocked {
+            if isUnlocked || !appSettings.isBiometricLockEnabled {
                 content
             } else {
                 PinLockView(isUnlocked: $isUnlocked)
             }
         }
         .onChange(of: scenePhase) {
-            if scenePhase != .active { isUnlocked = false }
+            if appSettings.autoLockOnBackground, scenePhase != .active { isUnlocked = false }
+        }
+        .onAppear { scheduleInactivityLock() }
+        .onDisappear { inactivityTimer?.invalidate(); inactivityTimer = nil }
+    }
+
+    private func scheduleInactivityLock() {
+        inactivityTimer?.invalidate()
+        guard appSettings.autoLockAfterInactivity, appSettings.isBiometricLockEnabled else { return }
+        inactivityTimer = Timer.scheduledTimer(withTimeInterval: Double(appSettings.idleLockMinutes * 60), repeats: true) { _ in
+            isUnlocked = false
         }
     }
 }
@@ -43,8 +55,7 @@ public struct PinLockView: View {
     @State private var digits: [Int] = []
     @State private var shakeOffset: CGFloat = 0
 
-    // You can swap this to @AppStorage("appPIN") for a changeable PIN.
-    private let correctPIN = "1994"
+    // Uses AppSettings.appPIN for a changeable PIN.
 
     public init(isUnlocked: Binding<Bool>) {
         self._isUnlocked = isUnlocked
@@ -107,9 +118,7 @@ public struct PinLockView: View {
     private func authenticateWithBiometrics() {
         if authenticator.biometricType() != .none {
             authenticator.authenticate { success, error in
-                if success {
-                    isUnlocked = true
-                }
+                if success { isUnlocked = true }
             }
         }
     }
@@ -138,7 +147,7 @@ public struct PinLockView: View {
     private func validateIfComplete() {
         guard digits.count == 4 else { return }
         let entered = digits.map(String.init).joined()
-        if entered == correctPIN {
+        if entered == appSettings.appPIN {
             isUnlocked = true
         } else {
             performShake()

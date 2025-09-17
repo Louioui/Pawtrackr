@@ -22,6 +22,18 @@ final class CheckoutViewModel: ObservableObject {
         case failed(Error)
     }
 
+    /// Lightweight state machine to centralize allowed transitions.
+    private func canTransition(from: CheckoutState, to: CheckoutState) -> Bool {
+        switch (from, to) {
+        case (.selectingServices, .addingPhotos): return true
+        case (.addingPhotos, .choosingPayment): return true
+        case (.choosingPayment, .processing): return true
+        case (.processing, .confirmed), (.processing, .failed(_)): return true
+        case (.failed(_), .selectingServices), (.failed(_), .addingPhotos), (.failed(_), .choosingPayment): return true
+        default: return false
+        }
+    }
+
     // MARK: Dependencies
     var modelContext: ModelContext?
     
@@ -186,9 +198,9 @@ final class CheckoutViewModel: ObservableObject {
     func nextStep() {
         switch state {
         case .selectingServices:
-            state = .addingPhotos
+            if canTransition(from: state, to: .addingPhotos) { state = .addingPhotos }
         case .addingPhotos:
-            state = .choosingPayment
+            if canTransition(from: state, to: .choosingPayment) { state = .choosingPayment }
         case .choosingPayment:
             Task { await processPayment() }
         default:
@@ -199,9 +211,11 @@ final class CheckoutViewModel: ObservableObject {
     func previousStep() {
         switch state {
         case .addingPhotos:
-            state = .selectingServices
+            if canTransition(from: .addingPhotos, to: .selectingServices) { state = .selectingServices }
+            else { state = .selectingServices }
         case .choosingPayment:
-            state = .addingPhotos
+            if canTransition(from: .choosingPayment, to: .addingPhotos) { state = .addingPhotos }
+            else { state = .addingPhotos }
         default:
             break
         }
@@ -212,7 +226,7 @@ final class CheckoutViewModel: ObservableObject {
         guard !isSaving else { return }
         guard let modelContext = modelContext else { return }
         isSaving = true
-        state = .processing
+        if canTransition(from: state, to: .processing) { state = .processing }
         
         do {
             try validate()
@@ -266,18 +280,28 @@ final class CheckoutViewModel: ObservableObject {
             try modelContext.save()
             // Update daily summaries for Insights immediately
             SummaryUpdater.rebuildDay(for: finalEndedAt, in: modelContext)
-            NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: ["visitID": visit.persistentModelID])
+            NotificationCenter.default.post(
+                name: .visitDidComplete,
+                object: nil,
+                userInfo: [
+                    VisitDidCompleteKey.visitID.rawValue: visit.persistentModelID,
+                    VisitDidCompleteKey.petID.rawValue: visit.pet.persistentModelID,
+                    VisitDidCompleteKey.clientID.rawValue: visit.pet.owner?.persistentModelID as Any,
+                    VisitDidCompleteKey.endedAt.rawValue: finalEndedAt,
+                    VisitDidCompleteKey.total.rawValue: servicesTotalDecimal
+                ].compactMapValues { $0 }
+            )
             
             isSaving = false
-            state = .confirmed
+            if canTransition(from: .processing, to: .confirmed) { state = .confirmed }
             
         } catch let error as ValidationError {
-            state = .failed(error)
+            if canTransition(from: .processing, to: .failed(error)) { state = .failed(error) } else { state = .failed(error) }
             alertMessage = error.localizedDescription
             showAlert = true
         } catch {
             let error = ValidationError.custom(message: "An unexpected error occurred while saving. Please try again.")
-            state = .failed(error)
+            if canTransition(from: .processing, to: .failed(error)) { state = .failed(error) } else { state = .failed(error) }
             alertMessage = error.localizedDescription
             Logger.main.error("Checkout save failed: \(error.localizedDescription)")
             showAlert = true

@@ -85,9 +85,7 @@ public struct Chip: View {
     }
     
     private func handleTap() {
-        #if os(iOS)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        #endif
+        HapticManager.impact(.light)
         if let onTap {
             onTap()
         } else {

@@ -26,15 +26,17 @@ enum DS {
         static let shadow     = Color.black.opacity(0.08)
 
         // Accents
-        static let primary    = Color.blue
-        static let success    = Color.green
-        static let warning    = Color.orange
-        static let danger     = Color.red
+        // Tailwind-inspired palette
+        static let primary    = Color(red: 99/255,  green: 102/255, blue: 241/255) // #6366F1
+        static let success    = Color(red: 16/255,  green: 185/255, blue: 129/255) // #10B981
+        static let warning    = Color(red: 245/255, green: 158/255, blue: 11/255)  // #F59E0B
+        static let danger     = Color(red: 239/255, green: 68/255,  blue: 68/255)  // #EF4444
+        static let info       = Color(red: 59/255,  green: 130/255, blue: 246/255) // #3B82F6
 
         // Session (active visit) accent tokens
-        static let session           = Color.green                       // primary accent (rails, icons)
-        static let sessionBackground = Color.green.opacity(0.12)         // chips / soft fills
-        static let sessionText       = Color.green                       // text on the soft chip
+        static let session           = success                           // primary accent (rails, icons)
+        static let sessionBackground = success.opacity(0.12)             // chips / soft fills
+        static let sessionText       = success                           // text on the soft chip
 
         // Gender
         static func gender(_ g: PetGender) -> Color { g == .male ? .blue : .pink }

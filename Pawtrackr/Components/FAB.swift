@@ -156,11 +156,7 @@ public struct FAB: View {
 
     private func tap() {
         guard !isLoading, !isDisabled else { return }
-        #if os(iOS)
-        if enableHaptics {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        }
-        #endif
+        if enableHaptics { HapticManager.impact(.light) }
         action()
     }
 }
@@ -170,7 +166,7 @@ private struct PressedScaleStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : Animations.interactiveSpring, value: configuration.isPressed)
     }
 }
 

@@ -161,19 +161,13 @@ struct IconCircle: View {
         switch content {
         case .remote(let url, _):
             return AnyView(
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else if phase.error != nil {
-                        // On failure, render a neutral fallback symbol (avoid recursive opaque returns)
-                        Image(systemName: "pawprint.fill")
-                            .resizable()
-                            .scaledToFit()
-                            .foregroundStyle(tints.fg)
-                    } else {
-                        // Placeholder while loading
-                        ProgressView()
-                    }
+                CachedAsyncImage(url: url, maxDimension: dim * 2) {
+                    ZStack { Circle().fill(tints.bg); ProgressView() }
+                } failure: {
+                    Image(systemName: "pawprint.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(tints.fg)
                 }
                 .frame(width: dim, height: dim)
                 .clipShape(Circle())

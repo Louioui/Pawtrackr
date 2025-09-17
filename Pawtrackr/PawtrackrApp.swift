@@ -50,6 +50,7 @@ struct PawtrackrApp: App {
                     .environmentObject(authViewModel)
             } else {
                 LoginView()
+                    .environmentObject(appSettings)
                     .environmentObject(authViewModel)
             }
         }

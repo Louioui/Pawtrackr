@@ -94,7 +94,7 @@ struct VisitDetailView: View {
     // MARK: - Header (pet summary) 
     
     private var header: some View {
-        Card(accent: .top(.color(DS.ColorToken.gender(visit.pet.gender)))) {
+        Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(visit.pet.gender)), thickness: 4)) {
             HStack(spacing: 12) {
                 if let data = visit.pet.photoData {
 #if canImport(UIKit)

@@ -91,7 +91,7 @@ struct PetHistoryView: View {
     }
 
     private func headerCard(_ vm: PetHistoryViewModel) -> some View {
-        Card(accent: .top(.color(DS.ColorToken.gender(vm.pet.gender)))) {
+        Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(vm.pet.gender)), thickness: 4)) {
             HStack(alignment: .top, spacing: 12) {
                 AvatarView(.pet(species: vm.pet.species, gender: vm.pet.gender, name: vm.pet.name, imageData: vm.pet.photoData), size: .lg)
 

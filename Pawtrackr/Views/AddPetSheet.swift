@@ -140,9 +140,7 @@ struct AddPetSheet: View {
 
         do {
             try modelContext.save()
-            #if os(iOS)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            #endif
+            HapticManager.notify(.success)
             dismiss()
         } catch {
             alertMessage = "We couldn't save this pet. Please try again.\n\(error.localizedDescription)"

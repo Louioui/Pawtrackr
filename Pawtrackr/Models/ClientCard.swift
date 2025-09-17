@@ -19,7 +19,7 @@ struct ClientCard: View {
 
     var body: some View {
         // FIX: Use the correct Card initializer with a Card.Accent struct.
-        Card(accent: isInProgress ? .top(.color(DS.ColorToken.success)) : nil) {
+        Card(elevation: .regular, accent: isInProgress ? .leading(.color(DS.ColorToken.success), thickness: 4) : nil) {
             VStack(alignment: .leading, spacing: 10) {
                 header
                 phoneInfo

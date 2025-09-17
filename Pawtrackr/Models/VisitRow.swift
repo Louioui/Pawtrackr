@@ -12,7 +12,10 @@ struct VisitRow: View {
 
     var body: some View {
         // FIX: Use the correct Card initializer.
-        Card(accent: .top(.color(DS.ColorToken.gender(visit.pet.gender)))) {
+        Card(
+            elevation: .regular,
+            accent: .leading(.color(DS.ColorToken.gender(visit.pet.gender)), thickness: 4)
+        ) {
             HStack(alignment: .top, spacing: 12) {
                 VStack {
                     AvatarView(.pet(species: visit.pet.species, gender: visit.pet.gender, name: visit.pet.name), size: .md)

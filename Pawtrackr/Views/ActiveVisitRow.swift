@@ -6,7 +6,7 @@ struct ActiveVisitRow: View {
     @StateObject private var timer = VisitTimer()
 
     var body: some View {
-        Card {
+        Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.session), thickness: 4)) {
             HStack(spacing: 12) {
                 AvatarView(.pet(species: visit.pet.species, gender: visit.pet.gender,
                                 name: visit.pet.name, imageData: visit.pet.photoData), size: .md)

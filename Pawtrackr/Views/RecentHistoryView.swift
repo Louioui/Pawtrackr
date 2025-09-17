@@ -8,6 +8,9 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct RecentHistoryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -32,7 +35,7 @@ struct RecentHistoryView: View {
                             visitList(viewModel)
                         }
                         .padding(.top, 8)
-                        .animation(.default, value: viewModel.scope)
+                        .animated(Animations.fastEaseOut, value: viewModel.scope)
                     }
                 } else {
                     ProgressView("Loading…")
@@ -53,6 +56,16 @@ struct RecentHistoryView: View {
         
     }
     
+    private func deleteVisit(_ visit: Visit) {
+        do {
+            try modelContext.delete(visit)
+            try modelContext.save()
+            HapticManager.notify(.success)
+            viewModel?.fetchVisits()
+        } catch {
+            HapticManager.notify(.error)
+        }
+    }
     private func header(@Bindable _ viewModel: RecentHistoryViewModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SearchField(text: $viewModel.query)
@@ -73,7 +86,23 @@ struct RecentHistoryView: View {
     @ViewBuilder
     private func visitList(_ viewModel: RecentHistoryViewModel) -> some View {
         if viewModel.isLoading {
-            ProgressView().padding(.top, 40)
+            VStack(spacing: 12) {
+                ForEach(0..<4, id: \.self) { _ in
+                    Card(elevation: .regular) {
+                        HStack(spacing: 12) {
+                            Circle().fill(Color.secondary.opacity(0.15)).frame(width: 40, height: 40)
+                            VStack(alignment: .leading, spacing: 6) {
+                                RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.15)).frame(width: 180, height: 12)
+                                RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)).frame(width: 120, height: 10)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .redacted(reason: .placeholder)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 20)
         } else if viewModel.sortedDays.isEmpty {
             let message = viewModel.query.isEmpty ? NSLocalizedString("history.empty_desc", comment: "") : NSLocalizedString("history.no_results_desc", comment: "")
             ContentUnavailableView(viewModel.query.isEmpty ? NSLocalizedString("history.empty_title", comment: "") : NSLocalizedString("history.no_results_title", comment: ""), systemImage: "clock.badge.questionmark", description: Text(message))
@@ -88,6 +117,11 @@ struct RecentHistoryView: View {
                                     VisitRow(visit: visit)
                                 }
                                 .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        deleteVisit(visit)
+                                    } label: { Label("Delete", systemImage: "trash") }
+                                }
                             }
                         }
                     } header: {

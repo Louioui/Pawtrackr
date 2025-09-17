@@ -15,7 +15,7 @@ enum PawtrackrSchema: VersionedSchema {
     static var versionIdentifier: Schema.Version = .init(1, 0, 0)
 
     static var models: [any PersistentModel.Type] {
-        [Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, DaySummary.self]
+        [Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, DaySummary.self, EmergencyContact.self]
     }
     
     // Define V1 (initial) and V2 (adds lastVisitDate) as needed.
