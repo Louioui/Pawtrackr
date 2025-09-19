@@ -69,6 +69,10 @@ final class PetDetailViewModel {
         
         updateTimer()
     }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
     
     func updateTimer() {
         if let v = activeVisit {

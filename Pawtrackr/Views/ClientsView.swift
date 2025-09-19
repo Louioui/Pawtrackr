@@ -61,20 +61,6 @@ struct ClientsView: View {
             guard let id = notification.createdClientID, notification.clientCreatePhase == .created else { return }
             // Refresh list then navigate to the new client
             viewModel?.fetchClients()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                guard let vm = viewModel else { return }
-                let all = vm.inProgressClients + vm.otherClients
-                if let client = all.first(where: { $0.persistentModelID == id }) {
-                    withAnimation(Animations.gentleSpring) {
-                        coordinator?.showClientDetail(client: client, namespace: namespace)
-                    }
-                    // Notify detail to show success toast
-                    NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
-                        ClientDidCreateKey.clientID.rawValue: id,
-                        ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.navigated.rawValue
-                    ])
-                }
-            }
         }
         .fabOverlay {
             FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
@@ -156,13 +142,30 @@ struct ClientsView: View {
             clientList(for: viewModel.inProgressClients)
         }
         sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: viewModel.inProgressClients.isEmpty ? 0 : 16)
-        clientList(for: viewModel.otherClients)
+        VStack(spacing: 10) {
+            clientList(for: viewModel.otherClients, enableInfiniteScroll: true)
+            if viewModel.canLoadMore {
+                Button(action: { viewModel.loadMore() }) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(NSLocalizedString("common.load_more", comment: "Load More"))
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                    .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .padding(.top, 4)
+            }
+        }
     }
     
     @ViewBuilder
-    private func clientList(for clients: [Client]) -> some View {
+    private func clientList(for clients: [Client], enableInfiniteScroll: Bool = false) -> some View {
         LazyVStack(spacing: 10) {
-            ForEach(clients) { client in
+            ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { coordinator?.showClientDetail(client: client, namespace: namespace) }) {
                     CardFactory.makeClientCard(client: client, onDelete: { clientPendingDeletion = client })
                         .matchedGeometryEffect(id: client.id, in: namespace)
@@ -179,6 +182,14 @@ struct ClientsView: View {
                     Button(role: .destructive) {
                         clientPendingDeletion = client
                     } label: { Label("Delete", systemImage: "trash") }
+                }
+                .onAppear {
+                    guard enableInfiniteScroll,
+                          let vm = viewModel,
+                          vm.canLoadMore,
+                          !vm.isLoadingMore,
+                          idx >= max(0, clients.count - 5) else { return }
+                    vm.loadMore()
                 }
             }
         }

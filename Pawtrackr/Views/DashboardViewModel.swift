@@ -8,6 +8,7 @@
 import Foundation
 import SwiftData
 import UIKit
+import Combine
 
 @MainActor
 final class DashboardViewModel: ObservableObject {
@@ -48,18 +49,17 @@ final class DashboardViewModel: ObservableObject {
   @Published var gallery: [GalleryItem] = []
 
   private let modelContext: ModelContext
-  private var notificationToken: NSObjectProtocol? = nil
+  private var cancellables: Set<AnyCancellable> = []
   init(modelContext: ModelContext) {
     self.modelContext = modelContext
     // Auto-refresh dashboard when a checkout completes
-    notificationToken = NotificationCenter.default.addObserver(
-      forName: .visitDidComplete,
-      object: nil,
-      queue: .main
-    ) { [weak self] _ in
-      guard let self else { return }
-      Task { await self.refresh() }
-    }
+    NotificationCenter.default.publisher(for: .visitDidComplete)
+      .receive(on: RunLoop.main)
+      .sink { [weak self] _ in
+        guard let self else { return }
+        Task { await self.refresh() }
+      }
+      .store(in: &cancellables)
   }
 
   // See note in RecentHistoryViewModel about deinit and actor isolation.
@@ -181,4 +181,3 @@ final class DashboardViewModel: ObservableObject {
     }
   }
 }
-

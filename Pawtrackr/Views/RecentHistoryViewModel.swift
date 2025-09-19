@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Combine
 
 @Observable
 @MainActor
@@ -25,27 +26,21 @@ final class RecentHistoryViewModel {
     
     // MARK: - Private Properties
     private var modelContext: ModelContext
-    private var notificationToken: NSObjectProtocol? = nil
     private var searchTask: Task<Void, Never>? = nil
+    private var cancellables: Set<AnyCancellable> = []
     private var workSeq: Int = 0 // guards async filtering application
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
-        // Auto-refresh when a checkout completes
-        notificationToken = NotificationCenter.default.addObserver(
-            forName: .visitDidComplete,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { await self?.fetchVisits() }
-        }
+        // Auto-refresh when a checkout completes (Combine)
+        NotificationCenter.default.publisher(for: .visitDidComplete)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.fetchVisits() }
+            .store(in: &cancellables)
         Task { await fetchVisits() }
     }
 
-    // Note: For simplicity and to avoid actor‑isolation issues in deinit,
-    // we are not explicitly removing the observer token. The VM is short‑lived
-    // and the token will be released with it. If needed, refactor to selector-based
-    // observers on NSObject and call removeObserver(self) in deinit on main.
+    // Combine cancellables auto-cancel on deinit.
 
     /// Allows the view to provide a real ModelContext from the environment
     /// after initializing with a temporary one. Triggers a refresh when changed.

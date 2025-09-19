@@ -246,7 +246,11 @@ struct ClientDetailView: View {
                         HStack(spacing: 8) {
                             Button { cancelInlineEdit(client) } label: { Image(systemName: "xmark.circle.fill") }
                             Button { saveInlineEdit(client) } label: { Image(systemName: "checkmark.circle.fill") }
-                                .disabled(editFirst.trimmed.isEmpty || editLast.trimmed.isEmpty || PhoneUtils.toE164(editPhone) == nil)
+                                .disabled(
+                                    editFirst.trimmed.isEmpty ||
+                                    editLast.trimmed.isEmpty ||
+                                    (!editPhone.trimmed.isEmpty && PhoneUtils.toE164(editPhone) == nil)
+                                )
                         }
                         .font(.title3)
                     } else {
@@ -496,10 +500,15 @@ struct ClientDetailView: View {
     }
 
     private func saveInlineEdit(_ client: Client) {
-        guard let e164 = PhoneUtils.toE164(editPhone) else { return }
         client.setFirstName(editFirst)
         client.setLastName(editLast)
-        client.setPhone(e164)
+        if editPhone.trimmed.isEmpty {
+            client.setPhone(nil)
+        } else if let e164 = PhoneUtils.toE164(editPhone) {
+            client.setPhone(e164)
+        } else {
+            return
+        }
         client.setEmail(editEmail)
         try? modelContext.save()
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }

@@ -41,7 +41,8 @@ import Charts
       }
       .navigationTitle("Dashboard")
       .sheet(isPresented: $showNewClient) {
-        NewClientSheet() // you already have this
+        NewClientSheet()
+          .environment(\.modelContext, modelContext)
       }
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {

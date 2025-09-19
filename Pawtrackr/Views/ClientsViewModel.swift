@@ -8,6 +8,7 @@
 
 import SwiftUI
 import SwiftData
+import Combine
 
 @Observable
 @MainActor
@@ -20,29 +21,29 @@ final class ClientsViewModel {
     }
     
     var inProgressCount: Int { inProgressClients.count }
+    var canLoadMore: Bool = false
+    var isLoadingMore: Bool = false
     
     // MARK: - Private Properties
     private var modelContext: ModelContext
     private var searchTask: Task<Void, Never>? = nil
+    private var cancellables: Set<AnyCancellable> = []
+    private var pageSize: Int = 100
+    private var fetchOffset: Int = 0
     
     // MARK: - Lifecycle
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
-        Task { await fetchClients() } // Initial fetch
+        fetchClients() // Initial fetch
         
         // Observe changes to the ModelContext to refresh client list
-        NotificationCenter.default.addObserver(
-            forName: ModelContext.didSave,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.fetchClients()
-        }
+        NotificationCenter.default.publisher(for: ModelContext.didSave)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.fetchClients() }
+            .store(in: &cancellables)
     }
     
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
+    deinit { /* Combine cancellables auto-cancel on deinit */ }
     
     // MARK: - Data Fetching
     
@@ -56,15 +57,29 @@ final class ClientsViewModel {
     }
     
     func fetchClients() {
+        // Reset pagination and fetch first page
+        fetchOffset = 0
+        canLoadMore = false
+        inProgressClients = []
+        otherClients = []
+        loadMore()
+    }
+
+    func loadMore() {
+        // Prevent overlapping loads; allow first page even if canLoadMore is false
+        if isLoadingMore { return }
+        if fetchOffset > 0 && !canLoadMore { return }
+        isLoadingMore = true
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         var predicate: Predicate<Client>?
         if !trimmedSearch.isEmpty {
+            let query = trimmedSearch
             predicate = #Predicate<Client> { client in
-                client.firstName.localizedStandardContains(trimmedSearch) ||
-                client.lastName.localizedStandardContains(trimmedSearch) ||
-                (client.phone != nil && client.phone!.localizedStandardContains(trimmedSearch)) ||
-                client.pets.contains { $0.name.localizedStandardContains(trimmedSearch) }
+                client.firstName.localizedStandardContains(query) ||
+                client.lastName.localizedStandardContains(query) ||
+                (client.phone != nil && client.phone!.localizedStandardContains(query)) ||
+                client.pets.contains { $0.name.localizedStandardContains(query) }
             }
         }
 
@@ -73,24 +88,28 @@ final class ClientsViewModel {
                 SortDescriptor(\.lastName, order: .forward),
                 SortDescriptor(\.firstName, order: .forward)
             ]
-            
+
             var descriptor = FetchDescriptor<Client>(predicate: predicate, sortBy: sortDescriptors)
-            // The fetch limit can be removed or adjusted, as the filtering is now much more efficient.
-            // descriptor.fetchLimit = 2000 
-            let filteredClients = try modelContext.fetch(descriptor)
+            descriptor.fetchLimit = pageSize
+            descriptor.fetchOffset = fetchOffset
 
-            // Partitioning is now done on a much smaller, pre-filtered array.
-            self.inProgressClients = filteredClients
-                .filter { $0.hasActiveVisit }
+            let page = try modelContext.fetch(descriptor)
+
+            // Append and re-partition
+            let newInProgress = page.filter { $0.hasActiveVisit }
                 .sorted { $0.sortKeyMostRecentVisit > $1.sortKeyMostRecentVisit }
+            let newOthers = page.filter { !$0.hasActiveVisit }
 
-            self.otherClients = filteredClients
-                .filter { !$0.hasActiveVisit }
-            
+            self.inProgressClients += newInProgress
+            self.otherClients += newOthers
+
+            fetchOffset += page.count
+            canLoadMore = page.count == pageSize
+            isLoadingMore = false
         } catch {
             print("Failed to fetch clients: \(error.localizedDescription)")
-            self.inProgressClients = []
-            self.otherClients = []
+            canLoadMore = false
+            isLoadingMore = false
         }
     }
 }

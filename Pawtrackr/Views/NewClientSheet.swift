@@ -82,7 +82,7 @@ struct NewClientSheet: View {
                         .textContentType(.telephoneNumber)
                         .submitLabel(.next)
                     #endif
-                    if (attemptedSubmit && PhoneUtils.toE164(phone) == nil) {
+                    if (attemptedSubmit && !phone.trimmed.isEmpty && PhoneUtils.toE164(phone) == nil) {
                         Text(NSLocalizedString("new_client.error.phone_invalid", comment: "")).font(.caption).foregroundStyle(.red)
                     }
                     TextField("new_client.email_optional", text: $email)
@@ -162,14 +162,11 @@ struct NewClientSheet: View {
                         Spacer()
                     }
                 }
-                if attemptedSubmit && !hasAtLeastOneValidPetWithPhoto {
-                    Text("At least one pet with a photo is required").font(.caption).foregroundStyle(.red)
-                        .padding(.horizontal, 2)
-                }
+                // Pets are optional at creation; no blocking error here.
 
                 ForEach($pets) { $p in
                     DisclosureGroup {
-                        // Photo picker – photo required
+                        // Photo picker – optional
                         HStack(spacing: 12) {
                             ImagePicker(imageData: $p.photoData, allowsEditing: true, maxDimension: 2048, jpegQuality: 0.8) {
                                 PetAvatar(photoData: p.photoData, species: p.species, gender: p.gender)
@@ -181,9 +178,7 @@ struct NewClientSheet: View {
                             }
                         }
                         .padding(.vertical, 4)
-                        if attemptedSubmit && p.photoData == nil {
-                            Text("Pet photo required").font(.caption).foregroundStyle(.red)
-                        }
+                        // No photo required at creation time
 
                         TextField("new_client.pet_name_required", text: $p.name)
                         #if os(iOS)
@@ -315,13 +310,7 @@ struct NewClientSheet: View {
                (email.trimmed.isEmpty || isValidEmail(email))
     }
 
-    private var hasAtLeastOneValidPet: Bool { // no longer required, kept for UI hints
-        pets.contains { !$0.name.trimmed.isEmpty && $0.gender != nil }
-    }
-
-    private var hasAtLeastOneValidPetWithPhoto: Bool {
-        pets.contains { !$0.name.trimmed.isEmpty && $0.gender != nil && $0.photoData != nil }
-    }
+    // Pets are optional at creation time; no blocking validation needed.
 
     // MARK: - Actions
     @State private var scrollTarget: String? = nil
@@ -335,16 +324,15 @@ struct NewClientSheet: View {
         if last.trimmed.isEmpty {
             invalidFields.append("last")
         }
-        if PhoneUtils.toE164(phone) == nil {
+        // Phone is optional; only flag if provided but invalid
+        if !phone.trimmed.isEmpty && PhoneUtils.toE164(phone) == nil {
             invalidFields.append("phone")
         }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             invalidFields.append("email")
         }
 
-        if !hasAtLeastOneValidPetWithPhoto {
-            invalidFields.append("pet_photo_1") // Assuming the first pet's photo is the target for scrolling
-        }
+        // Pets (and photos) are optional at creation time
 
         if !invalidFields.isEmpty {
             withAnimation(.default) {
@@ -409,31 +397,6 @@ struct NewClientSheet: View {
         do {
             isSaving = true
             try ctx.save()
-            // Round‑trip verify by refetching the inserted client; prefer phone lookup if present, else best-effort by name
-            var saved: Client? = nil
-            if let e164 {
-                let checkDesc = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == e164 })
-                saved = try (ctx.fetch(checkDesc)).first
-            } else {
-                let expectedFirst = canonicalPersonName(first)
-                let expectedLast = canonicalPersonName(last)
-                let checkDesc = FetchDescriptor<Client>(predicate: #Predicate { $0.firstName == expectedFirst && $0.lastName == expectedLast })
-                saved = try (ctx.fetch(checkDesc)).first
-            }
-            if let saved {
-                // Ensure canonical values persisted; if not, correct them and save again (strict enforcement)
-                let expectedFirst = canonicalPersonName(first)
-                let expectedLast = canonicalPersonName(last)
-                var changed = false
-                if saved.firstName != expectedFirst { saved.setFirstName(expectedFirst); changed = true }
-                if saved.lastName != expectedLast { saved.setLastName(expectedLast); changed = true }
-                if saved.phone != e164 { saved.setPhone(e164); changed = true }
-                if !email.trimmed.isEmpty {
-                    let expectedEmail = email.trimmed.lowercased()
-                    if saved.email != expectedEmail { saved.setEmail(expectedEmail); changed = true }
-                }
-                if changed { try ctx.save() }
-            }
             // Notify observers to auto-open this client in Client Center
             NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
                 ClientDidCreateKey.clientID.rawValue: client.persistentModelID,

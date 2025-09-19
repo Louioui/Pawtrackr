@@ -103,15 +103,19 @@ struct EditClientSheet: View {
     private var isValid: Bool {
         !firstName.trimmed.isEmpty &&
         !lastName.trimmed.isEmpty &&
-        (PhoneUtils.toE164(phone) != nil) &&
+        (phone.trimmed.isEmpty || PhoneUtils.toE164(phone) != nil) &&
         (email.trimmed.isEmpty || isValidEmail(email))
     }
 
     private func save() {
-        guard let e164 = PhoneUtils.toE164(phone) else {
-            alertText = "Phone number must be a valid US number (10 digits)."
-            showAlert = true
-            return
+        var e164: String? = nil
+        if !phone.trimmed.isEmpty {
+            guard let valid = PhoneUtils.toE164(phone) else {
+                alertText = "Phone number looks invalid."
+                showAlert = true
+                return
+            }
+            e164 = valid
         }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             alertText = "Email address looks invalid."

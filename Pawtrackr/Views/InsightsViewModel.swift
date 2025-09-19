@@ -1,6 +1,7 @@
 
 import SwiftUI
 import SwiftData
+import Combine
 #if canImport(Charts)
 import Charts
 #endif
@@ -27,13 +28,15 @@ final class InsightsViewModel {
 
     // Internal
     private let modelContext: ModelContext
+    private var cancellables: Set<AnyCancellable> = []
     private var workSeq = 0
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
-        NotificationCenter.default.addObserver(forName: .visitDidComplete, object: nil, queue: .main) { [weak self] _ in
-            self?.fetchAndProcessData()
-        }
+        NotificationCenter.default.publisher(for: .visitDidComplete)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.fetchAndProcessData() }
+            .store(in: &cancellables)
         fetchAndProcessData()
     }
 
