@@ -74,7 +74,8 @@ struct NewClientSheet: View {
                         .autocorrectionDisabled()
                         .onChange(of: phone) { _, newValue in
                             guard !newValue.isEmpty else { return }
-                            let formatted = PhoneUtils.formatAsYouType(newValue)
+                            // Clamp to core 10 digits; do not allow extensions in this field.
+                            let formatted = PhoneUtils.formatAsYouType(newValue, includeExtension: false)
                             if formatted != newValue { phone = formatted }
                         }
                     #if os(iOS)
@@ -132,7 +133,8 @@ struct NewClientSheet: View {
                             TextField("Phone", text: $c.phone)
                                 .onChange(of: c.phone) { _, newValue in
                                     guard !newValue.isEmpty else { return }
-                                    let formatted = PhoneUtils.formatAsYouType(newValue)
+                                    // Clamp to core 10 digits; do not allow extensions in this field.
+                                    let formatted = PhoneUtils.formatAsYouType(newValue, includeExtension: false)
                                     if formatted != newValue { c.phone = formatted }
                                 }
                             #if os(iOS)
@@ -401,6 +403,10 @@ struct NewClientSheet: View {
             NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
                 ClientDidCreateKey.clientID.rawValue: client.persistentModelID,
                 ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.created.rawValue
+            ])
+            // Also request navigation to the just-created client.
+            NotificationCenter.default.post(name: .clientOpenRequested, object: nil, userInfo: [
+                ClientOpenKey.clientID.rawValue: client.persistentModelID
             ])
             HapticManager.notify(.success)
             dismiss()

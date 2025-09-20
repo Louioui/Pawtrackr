@@ -48,10 +48,13 @@ struct PawtrackrApp: App {
                 CoordinatorView()
                     .environmentObject(appSettings)
                     .environmentObject(authViewModel)
+                    // Inject the shared SwiftData container so all views read/write the same store.
+                    .modelContainer(container)
             } else {
                 LoginView()
                     .environmentObject(appSettings)
                     .environmentObject(authViewModel)
+                    .modelContainer(container)
             }
         }
     }

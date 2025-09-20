@@ -142,7 +142,8 @@ struct ClientDetailView: View {
                         TextField("Phone", text: $newContactPhone)
                             .onChange(of: newContactPhone) { _, v in
                                 guard !v.isEmpty else { return }
-                                let formatted = PhoneUtils.formatAsYouType(v)
+                                // Clamp to core 10 digits; do not allow extensions in this field.
+                                let formatted = PhoneUtils.formatAsYouType(v, includeExtension: false)
                                 if formatted != v { newContactPhone = formatted }
                             }
                         #if os(iOS)
@@ -226,7 +227,8 @@ struct ClientDetailView: View {
                             HStack { TextField("First Name", text: $editFirst).textFieldStyle(.roundedBorder); TextField("Last Name", text: $editLast).textFieldStyle(.roundedBorder) }
                             HStack { TextField("Phone", text: $editPhone).textFieldStyle(.roundedBorder).onChange(of: editPhone) { _, v in
                                     guard !v.isEmpty else { return }
-                                    let formatted = PhoneUtils.formatAsYouType(v)
+                                    // Clamp to core 10 digits for client primary phone (no ext)
+                                    let formatted = PhoneUtils.formatAsYouType(v, includeExtension: false)
                                     if formatted != v { editPhone = formatted }
                                 }
                                 #if os(iOS)

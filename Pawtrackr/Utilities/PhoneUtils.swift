@@ -80,8 +80,11 @@ public enum PhoneUtils {
     }
 
     /// Formats a phone number string progressively as a user types.
-    /// Treats any digits beyond 10 as part of the extension.
-    public static func formatAsYouType(_ input: String) -> String {
+    /// - Parameters:
+    ///   - input: Raw user input which may include spaces, punctuation, letters.
+    ///   - includeExtension: When true, digits beyond 10 are appended as an "x123" extension.
+    ///                        When false, the formatted output is clamped to the core 10 digits only.
+    public static func formatAsYouType(_ input: String, includeExtension: Bool = true) -> String {
         let digits = normalize(input)
         if digits.isEmpty { return "" }
         
@@ -97,10 +100,10 @@ public enum PhoneUtils {
         }
         
         let ext = String(digits.dropFirst(10))
-        if !ext.isEmpty {
+        if includeExtension, !ext.isEmpty {
             formatted += " x\(ext)"
         }
-        
+
         return formatted
     }
 

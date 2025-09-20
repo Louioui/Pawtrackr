@@ -56,12 +56,7 @@ struct ClientsView: View {
         }
         .navigationTitle("clients.title")
         .overlay(alignment: .bottom) { undoToast }
-        // Auto-open a newly created client
-        .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { notification in
-            guard let id = notification.createdClientID, notification.clientCreatePhase == .created else { return }
-            // Refresh list then navigate to the new client
-            viewModel?.fetchClients()
-        }
+
         .fabOverlay {
             FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
                 showingNewClientSheet = true
@@ -77,6 +72,11 @@ struct ClientsView: View {
                     withAnimation(Animations.gentleSpring) {
                         coordinator?.showClientDetail(client: client, namespace: namespace)
                     }
+                    // Broadcast the second phase so detail can show a toast if desired.
+                    NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
+                        ClientDidCreateKey.clientID.rawValue: id,
+                        ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.navigated.rawValue
+                    ])
                 }
             }
         }
