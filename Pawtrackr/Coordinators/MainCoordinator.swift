@@ -13,7 +13,8 @@ class MainCoordinator: Coordinator {
     }
 
     func start() {
-        let mainTabView = MainTabView()
+        let clientsCoordinator = ClientsCoordinator(navigationController: navigationController)
+        let mainTabView = MainTabView(clientsCoordinator: clientsCoordinator)
             .environmentObject(appSettings)
             .environmentObject(authViewModel)
         navigationController.pushViewController(UIHostingController(rootView: mainTabView), animated: false)
