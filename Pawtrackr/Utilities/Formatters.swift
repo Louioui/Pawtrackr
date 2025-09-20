@@ -98,6 +98,14 @@ enum Formatters {
         return f
     }()
 
+    /// Month + Year, e.g., "Mar 2023".
+    static let monthYear: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = .current
+        f.dateFormat = "LLL yyyy"
+        return f
+    }()
+
     /// Short time only.
     static let timeOnly: DateFormatter = {
         let f = DateFormatter()

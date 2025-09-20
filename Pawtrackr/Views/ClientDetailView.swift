@@ -218,30 +218,17 @@ struct ClientDetailView: View {
     // MARK: - Subviews
     private func ownerHeader(client: Client) -> some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    AvatarView(.pet(species: client.pets.first?.species ?? .dog, gender: client.pets.first?.gender ?? .male, name: client.pets.first?.name ?? "", imageData: client.pets.first?.photoData), size: .lg, ringWidth: 4)
+                    InitialsCircle(initials: clientInitials(client))
+                        .frame(width: 48, height: 48)
                         .matchedGeometryEffect(id: client.id, in: namespace)
-                    if isEditingClientInline {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack { TextField("First Name", text: $editFirst).textFieldStyle(.roundedBorder); TextField("Last Name", text: $editLast).textFieldStyle(.roundedBorder) }
-                            HStack { TextField("Phone", text: $editPhone).textFieldStyle(.roundedBorder).onChange(of: editPhone) { _, v in
-                                    guard !v.isEmpty else { return }
-                                    // Clamp to core 10 digits for client primary phone (no ext)
-                                    let formatted = PhoneUtils.formatAsYouType(v, includeExtension: false)
-                                    if formatted != v { editPhone = formatted }
-                                }
-                                #if os(iOS)
-                                .keyboardType(.phonePad)
-                                .textContentType(.telephoneNumber)
-                                #endif
-                                    TextField("Email", text: $editEmail).textFieldStyle(.roundedBorder) }
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(client.fullName).font(.headline)
-                            Text(client.primaryContact).font(.subheadline).foregroundStyle(.secondary)
-                        }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(client.fullName)
+                            .font(.title3.weight(.semibold))
+                        Text("Client since \(Formatters.monthYear.string(from: client.createdAt))")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
                     if isEditingClientInline {
@@ -256,11 +243,66 @@ struct ClientDetailView: View {
                         }
                         .font(.title3)
                     } else {
-                        Button {
-                            beginInlineEdit(client)
-                        } label: { Image(systemName: "pencil") }
-                        .font(.title3)
-                        .accessibilityLabel("Edit client")
+                        Button { beginInlineEdit(client) } label: { Image(systemName: "ellipsis.circle") }
+                            .font(.title3)
+                            .accessibilityLabel("More actions")
+                    }
+                }
+
+                if isEditingClientInline {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack { TextField("First Name", text: $editFirst).textFieldStyle(.roundedBorder); TextField("Last Name", text: $editLast).textFieldStyle(.roundedBorder) }
+                        HStack {
+                            TextField("Phone", text: $editPhone)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: editPhone) { _, v in
+                                    guard !v.isEmpty else { return }
+                                    let f = PhoneUtils.formatAsYouType(v, includeExtension: false)
+                                    if f != v { editPhone = f }
+                                }
+                            #if os(iOS)
+                                .keyboardType(.phonePad)
+                                .textContentType(.telephoneNumber)
+                            #endif
+                            TextField("Email", text: $editEmail).textFieldStyle(.roundedBorder)
+                        }
+                    }
+                } else {
+                    VStack(spacing: 10) {
+                        contactRow(icon: "phone.fill", text: PhoneUtils.display(client.phone ?? "") ?? "—") {
+                            #if canImport(UIKit)
+                            if let tel = PhoneUtils.telURLString(client.phone ?? ""), let url = URL(string: tel) { UIApplication.shared.open(url) }
+                            #endif
+                        } trailing: {
+                            HStack(spacing: 8) {
+                                #if canImport(UIKit)
+                                if let sms = PhoneUtils.smsURLString(client.phone ?? ""), let smsURL = URL(string: sms) {
+                                    Button { UIApplication.shared.open(smsURL) } label: { Image(systemName: "message.fill") }
+                                }
+                                if let tel = PhoneUtils.telURLString(client.phone ?? ""), let telURL = URL(string: tel) {
+                                    Button { UIApplication.shared.open(telURL) } label: { Image(systemName: "phone.fill") }
+                                }
+                                #endif
+                            }
+                        }
+                        contactRow(icon: "envelope.fill", text: (client.email ?? "—")) {
+                            #if canImport(UIKit)
+                            if let email = client.email, let url = URL(string: "mailto:\(email)") { UIApplication.shared.open(url) }
+                            #endif
+                        } trailing: {
+                            #if canImport(UIKit)
+                            if let email = client.email, let url = URL(string: "mailto:\(email)") {
+                                Button { UIApplication.shared.open(url) } label: { Image(systemName: "envelope.fill") }
+                            }
+                            #endif
+                        }
+                        contactRow(icon: "mappin.and.ellipse", text: (client.address ?? "—")) {} trailing: {
+                            #if canImport(UIKit)
+                            if let addr = client.address?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed), let url = URL(string: "http://maps.apple.com/?q=\(addr)") {
+                                Button { UIApplication.shared.open(url) } label: { Image(systemName: "map.fill") }
+                            }
+                            #endif
+                        }
                     }
                 }
             }
@@ -271,12 +313,23 @@ struct ClientDetailView: View {
     @ViewBuilder
     private func notesCard(client: Client) -> some View {
         if let notes = client.notes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            Card {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(NSLocalizedString("client_details.notes_title", comment: "")).font(.headline)
-                    Text(notes.trimmingCharacters(in: .whitespacesAndNewlines)).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "note.text").foregroundStyle(.yellow)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Notes").font(.headline)
+                    Text(notes.trimmingCharacters(in: .whitespacesAndNewlines)).font(.subheadline).foregroundStyle(.secondary)
                 }
+                Spacer()
             }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.yellow.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                    )
+            )
             .padding(.horizontal)
         }
     }
@@ -362,23 +415,28 @@ struct ClientDetailView: View {
 
     private var petsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(NSLocalizedString("client_details.pets_title", comment: "")).font(.headline).padding(.horizontal)
-
-            let columns: [GridItem] = [GridItem(.adaptive(minimum: 320, maximum: 400), spacing: 16)]
-            LazyVGrid(columns: columns, spacing: 16) {
+            Text("Pets (\(vm.pets.count))").font(.headline).padding(.horizontal)
+            VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
-                    Button(action: { petsCoordinator.showPetDetail(pet: pet, namespace: namespace) }) {
-                        CardFactory.makePetCard(
-                            pet: pet,
-                            activeVisit: vm.activeVisit(for: pet),
-                            onViewDetails: { sheetDestination = .history(pet) },
-                            onCheckIn: { alertDestination = .checkIn(pet) },
-                            onCheckOut: {
-                                // Present checkout; keep timer live until confirmation
-                                checkoutPet = pet
+                    Card {
+                        HStack(alignment: .top, spacing: 12) {
+                            AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md, ringWidth: 3)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(pet.name).font(.headline)
+                                        Text(pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    petStatusPill(pet)
+                                }
+                                HStack(spacing: 8) {
+                                    actionButton(title: "Check In", systemImage: "arrow.down.right.circle.fill", tint: .blue) { vm.checkIn(pet: pet) }
+                                    actionButton(title: "Checkout", systemImage: "creditcard.fill", tint: .green) { checkoutPet = pet }
+                                    actionButton(title: "History", systemImage: "clock.arrow.circlepath", borderOnly: true) { sheetDestination = .history(pet) }
+                                }
                             }
-                        )
-                        .matchedGeometryEffect(id: pet.id, in: namespace)
+                        }
                     }
                     .buttonStyle(.plain)
                 }
@@ -408,16 +466,23 @@ struct ClientDetailView: View {
                 ContentUnavailableView("No History Yet", systemImage: "clock.badge.questionmark")
                     .padding(.vertical, 20)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(vm.recentVisits.prefix(5)) { visit in
-                        Button(action: { coordinator?.showVisitDetail(visit: visit) }) {
-                            CardFactory.makeVisitTimelineRow(visit: visit)
+                // Group by day to mirror the sample design
+                let grouped = Dictionary(grouping: vm.recentVisits) { Calendar.current.startOfDay(for: $0.sortKeyDate) }
+                let orderedDays = grouped.keys.sorted(by: >)
+                VStack(spacing: 14) {
+                    ForEach(orderedDays, id: \.self) { day in
+                        let visits = grouped[day]!.sorted(by: { $0.sortKeyDate > $1.sortKeyDate })
+                        HStack(spacing: 6) {
+                            Text(Formatters.dateOnly.string(from: day)).font(.subheadline.weight(.semibold))
+                            Text("\(visits.count) visits")
+                                .font(.caption.weight(.bold))
+                                .padding(.vertical, 2)
+                                .padding(.horizontal, 6)
+                                .background(Capsule().fill(Color.gray.opacity(0.15)))
+                                .foregroundStyle(.secondary)
+                            Spacer()
                         }
-                        .buttonStyle(.plain)
-                    }
-                    if vm.recentVisits.count > 5 {
-                        // Show the rest (up to current page)
-                        ForEach(vm.recentVisits.dropFirst(5)) { visit in
+                        ForEach(visits) { visit in
                             Button(action: { coordinator?.showVisitDetail(visit: visit) }) {
                                 CardFactory.makeVisitTimelineRow(visit: visit)
                             }
@@ -536,4 +601,84 @@ struct ClientDetailView: View {
             .shadow(radius: 6)
         }
     }
+}
+
+// MARK: - Local UI building blocks
+private func clientInitials(_ client: Client) -> String {
+    let f = client.firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let l = client.lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let fi = f.first.map { String($0) } ?? ""
+    let li = l.first.map { String($0) } ?? ""
+    return (fi + li).uppercased()
+}
+
+private struct InitialsCircle: View {
+    let initials: String
+    var gradient: Gradient = Gradient(colors: [Color.blue, Color.blue.opacity(0.85)])
+    var body: some View {
+        ZStack {
+            Circle().fill(LinearGradient(gradient: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+            Text(initials).font(.headline.weight(.semibold)).foregroundStyle(.white)
+        }
+    }
+}
+
+@ViewBuilder private func contactRow(icon: String, text: String, onTap: @escaping () -> Void, @ViewBuilder trailing: () -> some View) -> some View {
+    HStack(spacing: 10) {
+        Circle().fill(Color.gray.opacity(0.12)).frame(width: 28, height: 28).overlay(Image(systemName: icon).foregroundStyle(.secondary).font(.subheadline))
+        Text(text).font(.subheadline.weight(.medium))
+        Spacer()
+        HStack(spacing: 8) { trailing() }
+    }
+    .contentShape(Rectangle())
+    .onTapGesture(perform: onTap)
+}
+
+@ViewBuilder private func petStatusPill(_ pet: Pet) -> some View {
+    if let v = pet.activeVisit {
+        HStack(spacing: 6) {
+            Circle().fill(Color.green).frame(width: 6, height: 6)
+            TimelineView(.periodic(from: .now, by: 60)) { _ in
+                let secs = max(0, Int(Date().timeIntervalSince(v.startedAt)))
+                Text("In Session • \(humanDuration(secs))")
+            }
+        }
+        .font(.caption.weight(.bold))
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.12)))
+        .foregroundStyle(.green)
+    } else {
+        Text("Available")
+            .font(.caption.weight(.bold))
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.12)))
+            .foregroundStyle(.secondary)
+    }
+}
+
+@ViewBuilder private func actionButton(title: String, systemImage: String, tint: Color = .blue, borderOnly: Bool = false, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        HStack { Image(systemName: systemImage); Text(title) }.font(.caption.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+    }
+    .buttonStyle(.borderedProminent)
+    .tint(borderOnly ? .clear : tint)
+    .foregroundStyle(borderOnly ? Color.primary : Color.white)
+    .overlay(
+        RoundedRectangle(cornerRadius: 8).stroke(borderOnly ? Color.gray.opacity(0.3) : .clear, lineWidth: 1)
+    )
+}
+
+// Nonisolated small helper for duration string to use inside TimelineView
+private func humanDuration(_ seconds: Int) -> String {
+    let h = seconds / 3600
+    let m = (seconds % 3600) / 60
+    let s = seconds % 60
+    if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
+    if m > 0 { return s > 0 ? "\(m)m \(s)s" : "\(m)m" }
+    return "\(s)s"
 }
