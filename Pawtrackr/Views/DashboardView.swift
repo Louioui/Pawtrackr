@@ -201,17 +201,25 @@ import Charts
     #endif
   }
 
+  @State private var isDeleting = false
+  
   // MARK: - Delete
+  @MainActor
   private func deletePendingClient(_ vm: DashboardViewModel) {
     guard let client = clientPendingDeletion else { return }
-    modelContext.delete(client)
+    isDeleting = true
+
     do {
-      try modelContext.save()
-      clientPendingDeletion = nil
-      Task { await vm.refresh() }
+        modelContext.delete(client)
+        try modelContext.save()
+
+        isDeleting = false
+        clientPendingDeletion = nil
+        Task { await vm.refresh() }
     } catch {
-      deleteErrorMessage = error.localizedDescription
-      showDeleteErrorAlert = true
+        isDeleting = false
+        deleteErrorMessage = error.localizedDescription
+        showDeleteErrorAlert = true
     }
   }
 

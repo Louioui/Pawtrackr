@@ -423,32 +423,41 @@ struct ClientsView: View {
     }
 
     // MARK: - Delete
-  private func deletePendingClient() {
-    guard let client = clientPendingDeletion else { return }
-    // Snapshot for undo
-    lastDeleted = DeletedClientSnapshot(
-        firstName: client.firstName,
-        lastName: client.lastName,
-        phone: client.phone,
-        email: client.email,
-        address: client.address,
-        pets: client.pets.map { PetSnap(name: $0.name, species: $0.species, gender: $0.gender, breed: $0.breed, color: $0.color, photoData: $0.photoData) },
-        contacts: client.emergencyContacts.map { ContactSnap(name: $0.name, relation: $0.relation, phone: $0.phone) }
-    )
-    modelContext.delete(client)
-    do {
-      try modelContext.save()
-      clientPendingDeletion = nil
-      // Refresh list + show undo toast
-      viewModel?.fetchClients()
-      withAnimation(Animations.fastEaseOut) { showUndoToast = true }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-        withAnimation(Animations.fastEaseOut) { showUndoToast = false }
-        lastDeleted = nil
-      }
-    } catch {
-      deleteErrorMessage = error.localizedDescription
-      showDeleteErrorAlert = true
+    @State private var isDeleting = false
+    
+    @MainActor
+    private func deletePendingClient() {
+        guard let client = clientPendingDeletion else { return }
+        isDeleting = true
+        
+        // Snapshot for undo
+        lastDeleted = DeletedClientSnapshot(
+            firstName: client.firstName,
+            lastName: client.lastName,
+            phone: client.phone,
+            email: client.email,
+            address: client.address,
+            pets: client.pets.map { PetSnap(name: $0.name, species: $0.species, gender: $0.gender, breed: $0.breed, color: $0.color, photoData: $0.photoData) },
+            contacts: client.emergencyContacts.map { ContactSnap(name: $0.name, relation: $0.relation, phone: $0.phone) }
+        )
+        
+        do {
+            modelContext.delete(client)
+            try modelContext.save()
+
+            isDeleting = false
+            clientPendingDeletion = nil
+            viewModel?.fetchClients()
+
+            withAnimation(Animations.fastEaseOut) { showUndoToast = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                withAnimation(Animations.fastEaseOut) { showUndoToast = false }
+                lastDeleted = nil
+            }
+        } catch {
+            isDeleting = false
+            deleteErrorMessage = error.localizedDescription
+            showDeleteErrorAlert = true
+        }
     }
-  }
 }

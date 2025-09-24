@@ -550,6 +550,8 @@ struct ClientDetailView: View {
     }
 
     // MARK: - Toolbar
+    @State private var isDeleting = false
+    
     @ToolbarContentBuilder
     private func toolbarContent(_ vm: ClientDetailViewModel) -> some ToolbarContent {
         // Rely on the system-provided back button to avoid duplicates
@@ -557,8 +559,13 @@ struct ClientDetailView: View {
             Button(role: .destructive) {
                 alertDestination = .deleteClient
             } label: {
-                Image(systemName: "trash")
+                if isDeleting {
+                    ProgressView()
+                } else {
+                    Image(systemName: "trash")
+                }
             }
+            .disabled(isDeleting)
             .accessibilityLabel(NSLocalizedString("client_details.delete", comment: ""))
             .tint(.red)
         }
@@ -566,12 +573,15 @@ struct ClientDetailView: View {
 
     // MARK: - Actions
     private func deleteClient() {
-        let client = vm.client
-        modelContext.delete(client)
+        isDeleting = true
         do {
+            modelContext.delete(vm.client)
             try modelContext.save()
+
+            isDeleting = false
             dismiss()
         } catch {
+            isDeleting = false
             alertDestination = .deleteError(error.localizedDescription)
         }
     }

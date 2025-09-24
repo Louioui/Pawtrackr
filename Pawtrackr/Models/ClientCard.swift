@@ -94,35 +94,8 @@ struct ClientCard: View {
                 .padding(.leading, 16)
             
             Spacer()
-            timeBadge
         }
     }
 
-    @ViewBuilder
-    private var timeBadge: some View {
-        // PERFORMANCE: TimelineView efficiently updates the timer without re-rendering the whole list.
-        if let activeVisit = client.mostRecentActiveVisit {
-            TimelineView(.everyMinute) { context in
-                let duration = Formatters.durationString(from: activeVisit.startedAt, to: context.date)
-                HStack(spacing: 6) {
-                    Image(systemName: "clock").font(.caption.weight(.semibold))
-                    Text(duration).font(.caption.monospacedDigit().weight(.semibold))
-                }
-                .foregroundStyle(DS.ColorToken.success)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(DS.ColorToken.success.opacity(0.12), in: Capsule())
-                .overlay(Capsule().stroke(DS.ColorToken.success.opacity(0.2)))
-                .scaleEffect(pulse ? 1.03 : 1.0)
-                .animation(.easeOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-                .onAppear { pulse = true }
-                .onDisappear { pulse = false }
-            }
-        } else if let lastEnded = client.mostRecentEndedAt {
-            let rel = lastEnded.formatted(.relative(presentation: .named))
-            Text(String(format: NSLocalizedString("client.last_visit_relative_fmt", comment: ""), rel))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-    }
+
 }
