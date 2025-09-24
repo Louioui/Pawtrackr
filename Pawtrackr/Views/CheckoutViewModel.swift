@@ -102,11 +102,17 @@ final class CheckoutViewModel: ObservableObject {
     var sessionEndedAt: Date { visit.endedAt ?? checkoutEndsAt ?? Date() }
 
     @MainActor
-    init(pet: Pet) {
+    init(pet: Pet, visit: Visit?) {
         self.pet = pet
-        self.visit = Visit(pet: pet)
+        self.visit = visit ?? Visit(pet: pet)
         self.checkoutEndsAt = Date()
         self.allServices = []
+    }
+
+    /// Backwards-compatible initializer: creates a new Visit if none provided.
+    @MainActor
+    convenience init(pet: Pet) {
+        self.init(pet: pet, visit: nil)
     }
     
     @MainActor

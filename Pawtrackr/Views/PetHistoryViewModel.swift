@@ -99,9 +99,9 @@ final class PetHistoryViewModel: ObservableObject {
         )
         do {
             var fetched = try modelContext.fetch(descriptor)
-            // Filter by pet identity in-memory (relationship compare varies by store)
+            // Filter by pet identity and require fully completed checkouts (paid visits only)
             let petID = pet.persistentModelID
-            fetched = fetched.filter { $0.pet.persistentModelID == petID }
+            fetched = fetched.filter { $0.pet.persistentModelID == petID && $0.isCompleted && $0.isPaid }
             visits = fetched
         } catch {
             visits = []

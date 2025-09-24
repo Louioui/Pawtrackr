@@ -73,7 +73,7 @@ struct VisitDetailView: View {
                 }
             }
             .fullScreenCover(isPresented: $showCheckout) {
-                CheckoutView(pet: visit.pet)
+                CheckoutView(pet: visit.pet, visit: visit)
             }
             .fullScreenCover(item: Binding(
                 get: { 
@@ -166,41 +166,9 @@ struct VisitDetailView: View {
         visit.total > 0 ? visit.totalCurrencyString : nil
     }
     
-    // MARK: - Meta: timestamps, duration, payment
-    
+    // MARK: - Meta: payment (timer removed by design)
     private var metaCards: some View {
         VStack(spacing: 12) {
-            Card {
-                VStack(alignment: .leading, spacing: 8) {
-                    let range = Formatters.dateRangeString(from: visit.startedAt, to: visit.endedAt ?? visit.startedAt)
-                    HStack {
-                        Label(NSLocalizedString("visit.when", comment: ""), systemImage: "calendar")
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Text(range)
-                            .font(.subheadline)
-                    }
-                    Divider().opacity(0.1)
-                    HStack {
-                        Label(NSLocalizedString("visit.duration", comment: ""), systemImage: "hourglass")
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Group {
-                            if visit.endedAt == nil {
-                                Text(visitTimer.formattedElapsed)
-                                    .font(.subheadline)
-                                    .monospacedDigit()
-                                    .accessibilityLabel(visitTimer.accessibilityElapsedLabel)
-                            } else {
-                                Text(Formatters.durationString(from: visit.startedAt, to: visit.endedAt ?? visit.startedAt))
-                                    .font(.subheadline)
-                                    .monospacedDigit()
-                            }
-                        }
-                    }
-                }
-            }
-            
             if let payment = visit.payment {
                 Card {
                     HStack(alignment: .firstTextBaseline) {

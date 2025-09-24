@@ -43,7 +43,7 @@ final class Pet {
 
     // MARK: - Relationships
     @Relationship(inverse: \Client.pets) var owner: Client?
-    @Relationship(deleteRule: .cascade) var visits: [Visit] = []
+    @Relationship(deleteRule: .cascade, inverse: \Visit.pet) var visits: [Visit] = []
     var user: User?
 
     // MARK: - Init

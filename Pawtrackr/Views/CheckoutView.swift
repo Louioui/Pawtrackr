@@ -14,8 +14,8 @@ struct CheckoutView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel: CheckoutViewModel
 
-    init(pet: Pet) {
-        _viewModel = StateObject(wrappedValue: CheckoutViewModel(pet: pet))
+    init(pet: Pet, visit: Visit? = nil) {
+        _viewModel = StateObject(wrappedValue: CheckoutViewModel(pet: pet, visit: visit))
     }
     
     var body: some View {

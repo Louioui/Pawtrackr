@@ -168,7 +168,7 @@ final class PetDetailViewModel {
                         .sheet(item: $bvm.sheetDestination) { destination in
                             switch destination {
                             case .checkout(let petForCheckout):
-                                CheckoutView(pet: petForCheckout)
+                                CheckoutView(pet: petForCheckout, visit: vm.activeVisit)
                             case .history(let petForHistory):
                                 PetHistoryView(pet: petForHistory)
                             }

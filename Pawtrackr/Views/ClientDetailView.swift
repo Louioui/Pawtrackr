@@ -169,7 +169,7 @@ struct ClientDetailView: View {
             )
         }
         .fullScreenCover(item: $checkoutPet) { pet in
-            CheckoutView(pet: pet)
+            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
         }
         .alert(item: $alertDestination) { destination in
             switch destination {
@@ -431,9 +431,24 @@ struct ClientDetailView: View {
                                     petStatusPill(pet)
                                 }
                                 HStack(spacing: 8) {
-                                    actionButton(title: "Check In", systemImage: "arrow.down.right.circle.fill", tint: .blue) { vm.checkIn(pet: pet) }
-                                    actionButton(title: "Checkout", systemImage: "creditcard.fill", tint: .green) { checkoutPet = pet }
-                                    actionButton(title: "History", systemImage: "clock.arrow.circlepath", borderOnly: true) { sheetDestination = .history(pet) }
+                                    actionButton(title: "Check In", systemImage: "arrow.down.right.circle.fill", tint: .blue) {
+                                        vm.checkIn(pet: pet)
+                                        withAnimation(Animations.fastEaseOut) { showSessionStartedToast = true }
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                            withAnimation(Animations.fastEaseOut) { showSessionStartedToast = false }
+                                        }
+                                    }
+                                    .disabled(pet.activeVisit != nil)
+
+                                    actionButton(title: "Check Out", systemImage: "creditcard.fill", tint: .green) {
+                                        // Open checkout; pass active visit so it finalizes the ongoing session
+                                        checkoutPet = pet
+                                    }
+                                    .disabled(pet.activeVisit == nil)
+
+                                    actionButton(title: "History", systemImage: "clock.arrow.circlepath", borderOnly: true) {
+                                        sheetDestination = .history(pet)
+                                    }
                                 }
                             }
                         }
@@ -511,11 +526,17 @@ struct ClientDetailView: View {
         }
         .padding(.bottom, 80) // space for FAB
         .overlay(alignment: .top) {
-            if showSavedToast {
-                SavedToast()
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .padding(.top, 8)
+            VStack(spacing: 6) {
+                if showSessionStartedToast {
+                    SessionToast(text: "Session started", tint: .blue)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                if showSavedToast {
+                    SavedToast()
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
+            .padding(.top, 8)
         }
         .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { notif in
             guard let id = notif.createdClientID, notif.clientCreatePhase == .navigated else { return }
@@ -533,12 +554,13 @@ struct ClientDetailView: View {
     private func toolbarContent(_ vm: ClientDetailViewModel) -> some ToolbarContent {
         // Rely on the system-provided back button to avoid duplicates
         ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Button { sheetDestination = .editClient } label: { Label("client_details.edit", systemImage: "pencil") }
-                Button(role: .destructive) { alertDestination = .deleteClient } label: { Label("client_details.delete", systemImage: "trash") }
+            Button(role: .destructive) {
+                alertDestination = .deleteClient
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "trash")
             }
+            .accessibilityLabel(NSLocalizedString("client_details.delete", comment: ""))
+            .tint(.red)
         }
     }
 
@@ -587,6 +609,7 @@ struct ClientDetailView: View {
     }
 
     @State private var showSavedToast = false
+    @State private var showSessionStartedToast = false
 
     private struct SavedToast: View {
         var body: some View {
@@ -598,6 +621,22 @@ struct ClientDetailView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(Capsule().fill(Color.green.opacity(0.9)))
+            .shadow(radius: 6)
+        }
+    }
+
+    private struct SessionToast: View {
+        let text: String
+        let tint: Color
+        var body: some View {
+            HStack(spacing: 8) {
+                Image(systemName: "clock").foregroundStyle(.white)
+                Text(text).foregroundStyle(.white)
+            }
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(tint.opacity(0.9)))
             .shadow(radius: 6)
         }
     }
@@ -637,17 +676,17 @@ private struct InitialsCircle: View {
 @ViewBuilder private func petStatusPill(_ pet: Pet) -> some View {
     if let v = pet.activeVisit {
         HStack(spacing: 6) {
-            Circle().fill(Color.green).frame(width: 6, height: 6)
-            TimelineView(.periodic(from: .now, by: 60)) { _ in
+            Image(systemName: "clock")
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let secs = max(0, Int(Date().timeIntervalSince(v.startedAt)))
-                Text("In Session • \(humanDuration(secs))")
+                Text(hms(secs)).monospacedDigit()
             }
         }
         .font(.caption.weight(.bold))
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.12)))
-        .foregroundStyle(.green)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.blue.opacity(0.12)))
+        .foregroundStyle(.blue)
     } else {
         Text("Available")
             .font(.caption.weight(.bold))
@@ -681,4 +720,12 @@ private func humanDuration(_ seconds: Int) -> String {
     if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
     if m > 0 { return s > 0 ? "\(m)m \(s)s" : "\(m)m" }
     return "\(s)s"
+}
+
+// Format as H:MM:SS with monospaced digits for stable layout
+private func hms(_ seconds: Int) -> String {
+    let h = seconds / 3600
+    let m = (seconds % 3600) / 60
+    let s = seconds % 60
+    return String(format: "%d:%02d:%02d", h, m, s)
 }

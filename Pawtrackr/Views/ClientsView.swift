@@ -172,6 +172,7 @@ struct ClientsView: View {
                 }
                 .buttonStyle(.plain)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    #if canImport(UIKit)
                     if let phone = client.phone, let tel = PhoneUtils.telURLString(phone), let url = URL(string: tel) {
                         Button {
                             UIApplication.shared.open(url)
@@ -179,6 +180,7 @@ struct ClientsView: View {
                         } label: { Label("Call", systemImage: "phone") }
                         .tint(.green)
                     }
+                    #endif
                     Button(role: .destructive) {
                         clientPendingDeletion = client
                     } label: { Label("Delete", systemImage: "trash") }
