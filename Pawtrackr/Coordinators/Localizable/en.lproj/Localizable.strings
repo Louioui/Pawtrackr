@@ -192,6 +192,16 @@
 "checkout.duration_fmt" = "Duration: %@";
 "checkout.started_time_fmt" = "Started: %@";
 "checkout.payment_method_fmt" = "Payment Method: %@";
+"checkout.add_ons" = "Add-ons";
+"checkout.additional_notes" = "Additional Notes";
+"checkout.reset_total" = "Reset to service total";
+"checkout.notes_placeholder" = "Add notes about the session, behavior, or anything notable...";
+"checkout.additional_placeholder" = "Any additional notes for the owner or future reference...";
+"checkout.summary.check_in" = "Check-in Time";
+"checkout.summary.duration" = "Session Duration";
+"checkout.summary.services" = "Services";
+"checkout.service_charge_hint" = "Enter the total amount for services provided";
+"checkout.no_services_hint" = "No services found. Add services from Settings → Services.";
 
 "photobox.before" = "Before";
 "photobox.after" = "After";

@@ -42,7 +42,8 @@ final class CheckoutViewModel: ObservableObject {
     var visit: Visit // This will now be the active visit, or a new one created upon confirmation.
     
     // MARK: UI State
-    @Published var notes: String = ""
+    @Published var sessionNotes: String = ""
+    @Published var additionalNotes: String = ""
     @Published var amountString: String = ""
     private var amountWasManuallySet: Bool = false
     @Published var selectedServiceIDs: Set<PersistentIdentifier> = []
@@ -129,7 +130,7 @@ final class CheckoutViewModel: ObservableObject {
     // No deinit work needed.
     
     private func hydrateStateFromVisit() {
-        notes = visit.note ?? ""
+        hydrateNotes()
         tags = Set(pet.behaviorTags)
         beforePhotoData = visit.beforePhotoData
         afterPhotoData  = visit.afterPhotoData
@@ -145,6 +146,47 @@ final class CheckoutViewModel: ObservableObject {
         }
         
         // Timer is frozen at checkout entry; no live ticking needed here.
+    }
+
+    private func hydrateNotes() {
+        let existing = visit.note?.trimmed ?? ""
+        guard !existing.isEmpty else {
+            sessionNotes = ""
+            additionalNotes = ""
+            return
+        }
+
+        if let additionalRange = existing.range(of: "\n\nAdditional Notes:\n") {
+            let sessionPart = String(existing[..<additionalRange.lowerBound])
+            let additionalPart = String(existing[additionalRange.upperBound...])
+            sessionNotes = sessionPart.replacingOccurrences(of: "Session Notes:\n", with: "").trimmed
+            additionalNotes = additionalPart.trimmed
+        } else if existing.hasPrefix("Session Notes:\n") {
+            sessionNotes = existing.replacingOccurrences(of: "Session Notes:\n", with: "").trimmed
+            additionalNotes = ""
+        } else if existing.hasPrefix("Additional Notes:\n") {
+            sessionNotes = ""
+            additionalNotes = existing.replacingOccurrences(of: "Additional Notes:\n", with: "").trimmed
+        } else {
+            sessionNotes = existing
+            additionalNotes = ""
+        }
+    }
+
+    private func composeVisitNote() -> String? {
+        let session = sessionNotes.trimmed
+        let additional = additionalNotes.trimmed
+
+        switch (session.isEmpty, additional.isEmpty) {
+        case (true, true):
+            return nil
+        case (false, true):
+            return session
+        case (true, false):
+            return "Additional Notes:\n\(additional)"
+        case (false, false):
+            return "Session Notes:\n\(session)\n\nAdditional Notes:\n\(additional)"
+        }
     }
     
     // MARK: - Intents
@@ -263,7 +305,7 @@ final class CheckoutViewModel: ObservableObject {
             }
             
             // 2. Apply notes, tags, and photos.
-            visit.note = notes.trimmed.isEmpty ? nil : notes.trimmed
+            visit.note = composeVisitNote()
             pet.setBehaviorTags(Array(tags))
             visit.applyPhotos(before: beforePhotoData, after: afterPhotoData)
             
