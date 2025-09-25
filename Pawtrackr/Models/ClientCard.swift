@@ -11,7 +11,6 @@ import SwiftUI
 
 struct ClientCard: View {
     let client: Client
-    var onDelete: (() -> Void)? = nil
     
     // IMPROVEMENT: Logic is self-contained within the card.
     private var isInProgress: Bool { client.hasActiveVisit }
@@ -24,13 +23,6 @@ struct ClientCard: View {
                 header
                 phoneInfo
                 petsInfo
-            }
-        }
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                onDelete?()
-            } label: {
-                Label("Delete", systemImage: "trash")
             }
         }
         .accessibilityElement(children: .combine)
@@ -50,9 +42,6 @@ struct ClientCard: View {
                     }
                 }
                 #endif
-            }
-            Button(role: .destructive) { onDelete?() } label: {
-                Label(NSLocalizedString("client_details.delete", comment: ""), systemImage: "trash")
             }
         }
     }

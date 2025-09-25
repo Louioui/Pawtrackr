@@ -15,9 +15,6 @@ import Charts
     @Environment(\.modelContext) private var modelContext
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
-    @State private var clientPendingDeletion: Client? = nil
-    @State private var showDeleteErrorAlert = false
-    @State private var deleteErrorMessage: String = ""
     @State private var showContent = false
     @Namespace var namespace
     private let clientsCoordinator: ClientsCoordinator
@@ -51,26 +48,6 @@ import Charts
           }
           .accessibilityLabel("Open Insights")
         }
-      }
-      // Confirm delete client
-      .alert(
-        clientPendingDeletion.map { String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), $0.fullName) } ?? "",
-        isPresented: Binding(
-          get: { clientPendingDeletion != nil },
-          set: { if !$0 { clientPendingDeletion = nil } }
-        )
-      ) {
-        Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { clientPendingDeletion = nil }
-        Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) {
-          if let vm { deletePendingClient(vm) }
-        }
-      } message: {
-        Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
-      }
-      .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
-        Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-      } message: {
-        Text(deleteErrorMessage)
       }
     }
   }
@@ -164,13 +141,6 @@ import Charts
         ForEach(vm.recentClients.prefix(5)) { client in
           NavigationLink { ClientDetailView(client: client, coordinator: clientsCoordinator, namespace: namespace) } label: { ClientRow(client: client) }
             .buttonStyle(.plain)
-            .contextMenu {
-              Button(role: .destructive) {
-                clientPendingDeletion = client
-              } label: {
-                Label(NSLocalizedString("client_details.delete", comment: ""), systemImage: "trash")
-              }
-            }
         }
       }
     }
@@ -199,28 +169,6 @@ import Charts
     #else
     EmptyView()
     #endif
-  }
-
-  @State private var isDeleting = false
-  
-  // MARK: - Delete
-  @MainActor
-  private func deletePendingClient(_ vm: DashboardViewModel) {
-    guard let client = clientPendingDeletion else { return }
-    isDeleting = true
-
-    do {
-        modelContext.delete(client)
-        try modelContext.save()
-
-        isDeleting = false
-        clientPendingDeletion = nil
-        Task { await vm.refresh() }
-    } catch {
-        isDeleting = false
-        deleteErrorMessage = error.localizedDescription
-        showDeleteErrorAlert = true
-    }
   }
 
   private func gallerySection(_ vm: DashboardViewModel) -> some View {

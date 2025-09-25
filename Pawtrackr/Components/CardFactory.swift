@@ -3,8 +3,8 @@ import SwiftUI
 
 struct CardFactory {
     @ViewBuilder
-    static func makeClientCard(client: Client, onDelete: @escaping () -> Void) -> some View {
-        ClientCard(client: client, onDelete: onDelete)
+    static func makeClientCard(client: Client) -> some View {
+        ClientCard(client: client)
     }
 
     @ViewBuilder

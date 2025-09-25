@@ -574,9 +574,38 @@ struct ClientDetailView: View {
     // MARK: - Actions
     private func deleteClient() {
         isDeleting = true
+
+        let client = vm.client
+        let pets = client.pets
+        let visits = pets.flatMap { $0.visits }
+        let payments = visits.compactMap { $0.payment }
+        let paymentDates = payments.map { $0.paidAt }
+        let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
+
+        for pet in pets {
+            for appointment in pet.appointments {
+                modelContext.delete(appointment)
+            }
+        }
+
+        for visit in visits {
+            if let payment = visit.payment {
+                payment.visit = nil
+                visit.payment = nil
+            }
+        }
+
         do {
-            modelContext.delete(vm.client)
+            modelContext.delete(client)
             try modelContext.save()
+
+            let cal = Calendar.current
+            var affectedDays: Set<Date> = []
+            for date in paymentDates { affectedDays.insert(cal.startOfDay(for: date)) }
+            for date in visitActivityDates { affectedDays.insert(cal.startOfDay(for: date)) }
+            for day in affectedDays {
+                SummaryUpdater.rebuildDay(for: day, in: modelContext)
+            }
 
             isDeleting = false
             dismiss()

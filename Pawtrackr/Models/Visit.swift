@@ -33,7 +33,7 @@ final class Visit {
     @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit)
     var items: [VisitItem] = []
 
-    @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
+    @Relationship(deleteRule: .nullify, inverse: \Payment.visit)
     var payment: Payment?
     var user: User?
 

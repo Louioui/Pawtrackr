@@ -24,9 +24,6 @@ struct ClientsView: View {
     @State private var showingNewClientSheet = false
     @State private var showNotifications = false
     @State private var storedNotifications: [NotificationItem] = []
-    @State private var clientPendingDeletion: Client? = nil
-    @State private var showDeleteErrorAlert = false
-    @State private var deleteErrorMessage: String = ""
 
     init(coordinator: ClientsCoordinator?) {
         self.coordinator = coordinator
@@ -55,7 +52,7 @@ struct ClientsView: View {
             .padding(.bottom, 80) // Padding to avoid the FAB
         }
         .navigationTitle("clients.title")
-        .overlay(alignment: .bottom) { undoToast }
+
 
         .fabOverlay {
             FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
@@ -79,23 +76,6 @@ struct ClientsView: View {
                     ])
                 }
             }
-        }
-        .alert(
-            clientPendingDeletion.map { String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), $0.fullName) } ?? "",
-            isPresented: Binding(
-                get: { clientPendingDeletion != nil },
-                set: { if !$0 { clientPendingDeletion = nil } }
-            )
-        ) {
-            Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { clientPendingDeletion = nil }
-            Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) { deletePendingClient() }
-        } message: {
-            Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
-        }
-        .alert(NSLocalizedString("clients.delete_failed", comment: ""), isPresented: $showDeleteErrorAlert) {
-            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-        } message: {
-            Text(deleteErrorMessage)
         }
         .sheet(isPresented: $showingNewClientSheet) {
             // When the sheet is dismissed, trigger a refresh to show the new client.
@@ -167,7 +147,7 @@ struct ClientsView: View {
         LazyVStack(spacing: 10) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { coordinator?.showClientDetail(client: client, namespace: namespace) }) {
-                    CardFactory.makeClientCard(client: client, onDelete: { clientPendingDeletion = client })
+                    CardFactory.makeClientCard(client: client)
                         .matchedGeometryEffect(id: client.id, in: namespace)
                 }
                 .buttonStyle(.plain)
@@ -181,9 +161,6 @@ struct ClientsView: View {
                         .tint(.green)
                     }
                     #endif
-                    Button(role: .destructive) {
-                        clientPendingDeletion = client
-                    } label: { Label("Delete", systemImage: "trash") }
                 }
                 .onAppear {
                     guard enableInfiniteScroll,
@@ -309,76 +286,7 @@ struct ClientsView: View {
         }
     }
 
-    // MARK: - Undo Toast
-    @State private var showUndoToast = false
-    @State private var lastDeleted: DeletedClientSnapshot? = nil
-    private var undoToast: some View {
-        Group {
-            if showUndoToast {
-                HStack(spacing: 12) {
-                    Image(systemName: "trash.fill").foregroundStyle(.white)
-                    Text("Client deleted").foregroundStyle(.white)
-                    Spacer()
-                    Button("Undo") { undoDelete() }.buttonStyle(.plain).foregroundStyle(.white)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Capsule().fill(Color.black.opacity(0.85)))
-                .padding(.bottom, 20)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-    }
 
-    private func undoDelete() {
-        guard let snap = lastDeleted else { return }
-        let c = Client(firstName: snap.firstName, lastName: snap.lastName, phone: snap.phone)
-        c.email = snap.email
-        c.address = snap.address
-        // Recreate pets (basic fields)
-        for p in snap.pets {
-            let pet = Pet(name: p.name, species: p.species)
-            pet.gender = p.gender
-            pet.breed = p.breed
-            pet.color = p.color
-            pet.photoData = p.photoData
-            pet.owner = c
-        }
-        // Recreate contacts
-        for ec in snap.contacts {
-            let e = EmergencyContact(name: ec.name, relation: ec.relation, phone: ec.phone)
-            e.owner = c
-        }
-        modelContext.insert(c)
-        try? modelContext.save()
-        withAnimation(Animations.fastEaseOut) { showUndoToast = false }
-        viewModel?.fetchClients()
-    }
-
-    private struct DeletedClientSnapshot {
-        let firstName: String
-        let lastName: String
-        let phone: String?
-        let email: String?
-        let address: String?
-        let pets: [PetSnap]
-        let contacts: [ContactSnap]
-    }
-
-    private struct PetSnap {
-        let name: String
-        let species: Species
-        let gender: PetGender
-        let breed: String?
-        let color: String?
-        let photoData: Data?
-    }
-
-    private struct ContactSnap {
-        let name: String
-        let relation: String?
-        let phone: String
-    }
 
     // MARK: - Notifications UI
     private struct NotificationItem: Identifiable {
@@ -423,41 +331,4 @@ struct ClientsView: View {
     }
 
     // MARK: - Delete
-    @State private var isDeleting = false
-    
-    @MainActor
-    private func deletePendingClient() {
-        guard let client = clientPendingDeletion else { return }
-        isDeleting = true
-        
-        // Snapshot for undo
-        lastDeleted = DeletedClientSnapshot(
-            firstName: client.firstName,
-            lastName: client.lastName,
-            phone: client.phone,
-            email: client.email,
-            address: client.address,
-            pets: client.pets.map { PetSnap(name: $0.name, species: $0.species, gender: $0.gender, breed: $0.breed, color: $0.color, photoData: $0.photoData) },
-            contacts: client.emergencyContacts.map { ContactSnap(name: $0.name, relation: $0.relation, phone: $0.phone) }
-        )
-        
-        do {
-            modelContext.delete(client)
-            try modelContext.save()
-
-            isDeleting = false
-            clientPendingDeletion = nil
-            viewModel?.fetchClients()
-
-            withAnimation(Animations.fastEaseOut) { showUndoToast = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                withAnimation(Animations.fastEaseOut) { showUndoToast = false }
-                lastDeleted = nil
-            }
-        } catch {
-            isDeleting = false
-            deleteErrorMessage = error.localizedDescription
-            showDeleteErrorAlert = true
-        }
-    }
 }
