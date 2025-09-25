@@ -576,11 +576,19 @@ struct ClientDetailView: View {
         isDeleting = true
 
         let client = vm.client
-        let pets = client.pets
-        let visits = pets.flatMap { $0.visits }
+        let pets = Array(client.pets)
+        let contacts = Array(client.emergencyContacts)
+        let visits = pets.flatMap { pet in Array(pet.visits) }
+        let visitItems = visits.flatMap { visit in Array(visit.items) }
         let payments = visits.compactMap { $0.payment }
+
         let paymentDates = payments.map { $0.paidAt }
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
+
+        // Remove auxiliary records first to avoid delete-rule surprises.
+        for contact in contacts {
+            modelContext.delete(contact)
+        }
 
         for pet in pets {
             for appointment in pet.appointments {
@@ -593,6 +601,18 @@ struct ClientDetailView: View {
                 payment.visit = nil
                 visit.payment = nil
             }
+        }
+
+        for item in visitItems {
+            modelContext.delete(item)
+        }
+
+        for visit in visits {
+            modelContext.delete(visit)
+        }
+
+        for pet in pets {
+            modelContext.delete(pet)
         }
 
         do {
@@ -611,7 +631,9 @@ struct ClientDetailView: View {
             dismiss()
         } catch {
             isDeleting = false
-            alertDestination = .deleteError(error.localizedDescription)
+            let message = String(describing: error)
+            Logger.main.error("Failed to delete client: \(message, privacy: .public)")
+            alertDestination = .deleteError(message)
         }
     }
 
