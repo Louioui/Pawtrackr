@@ -299,10 +299,7 @@ private extension CheckoutView {
             VStack(alignment: .leading, spacing: 12) {
                 sectionTitle("checkout.service_charge")
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
-                    Text("$")
-                        .font(.largeTitle).fontWeight(.bold)
-                        .foregroundStyle(Color(.label))
-                    TextField("0.00", text: amountBinding)
+                    TextField("$0.00", text: amountBinding)
                         .keyboardType(.decimalPad)
                         .focused($amountFieldFocused)
                         .font(.system(size: 32, weight: .semibold, design: .rounded))
@@ -544,7 +541,10 @@ private extension CheckoutView {
     var amountBinding: Binding<String> {
         Binding(
             get: { viewModel.amountString },
-            set: { newValue in viewModel.setAmountDirectly(newValue) }
+            set: { newValue in
+                let filtered = newValue.filter { "0123456789.".contains($0) }
+                viewModel.setAmountDirectly("$" + filtered)
+            }
         )
     }
 
@@ -567,16 +567,15 @@ private extension CheckoutView {
             PaymentOption(method: .cash, icon: "banknote", tint: .green),
             PaymentOption(method: .creditCard, icon: "creditcard", tint: .blue),
             PaymentOption(method: .debitCard, icon: "creditcard", tint: .purple),
-            PaymentOption(method: .zelle, icon: "dollarsign.circle", tint: .yellow),
-            PaymentOption(method: .other, icon: "questionmark.circle", tint: .gray)
+            PaymentOption(method: .zelle, icon: "dollarsign.circle", tint: .yellow)
         ]
     }
 
     var addOnOptions: [AddOnOption] {
         [
-            AddOnOption(title: "Knots & Matting Fee", subtitle: "$5–10+ (varies by severity)", icon: "scissors"),
-            AddOnOption(title: "Flea & Tick Treatment", subtitle: "$5–10", icon: "ant.fill"),
-            AddOnOption(title: "Hair Dye", subtitle: "$80–1,000 (varies by complexity)", icon: "paintpalette.fill")
+            AddOnOption(title: "Knots & Matting Fee", subtitle: "(varies by severity)", icon: "scissors"),
+            AddOnOption(title: "Flea & Tick Treatment", subtitle: "", icon: "ant.fill"),
+            AddOnOption(title: "Hair Dye", subtitle: "(varies by complexity)", icon: "paintpalette.fill")
         ]
     }
 }

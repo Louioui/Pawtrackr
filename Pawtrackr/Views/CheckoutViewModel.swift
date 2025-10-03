@@ -199,8 +199,7 @@ final class CheckoutViewModel: ObservableObject {
 
     /// Clears manual override and recomputes from selected services.
     func resetManualAmount() {
-        amountWasManuallySet = false
-        recomputeAmountFromServices()
+        // No-op: User will always manually enter the amount.
     }
     
     func isServiceSelected(_ service: Service) -> Bool {
@@ -213,9 +212,6 @@ final class CheckoutViewModel: ObservableObject {
             selectedServiceIDs.remove(id)
         } else {
             selectedServiceIDs.insert(id)
-        }
-        if !amountWasManuallySet {
-            recomputeAmountFromServices()
         }
     }
     
@@ -373,8 +369,7 @@ final class CheckoutViewModel: ObservableObject {
     // MARK: - Private Helpers
     
     private func recomputeAmountFromServices() {
-        let sum = selectedServicesTotal
-        amountString = sum > 0 ? sum.moneyString : ""
+        amountString = ""
     }
     
     // MARK: - Derived Totals
@@ -387,11 +382,7 @@ final class CheckoutViewModel: ObservableObject {
     
     @MainActor
     var servicesTotalDecimal: Decimal {
-        if amountWasManuallySet {
-            return Formatters.parseCurrency(amountString) ?? .zero
-        } else {
-            return selectedServicesTotal
-        }
+        return Formatters.parseCurrency(amountString) ?? .zero
     }
     
     @MainActor
