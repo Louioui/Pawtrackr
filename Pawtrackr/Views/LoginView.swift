@@ -20,8 +20,8 @@ struct LoginView: View {
                 .padding(.bottom, 8)
 
                 PinLockView(isUnlocked: $unlocked)
-                    .onChange(of: unlocked) { value in
-                        if value { authViewModel.signInAfterUnlock() }
+                    .onChange(of: unlocked) { _, newValue in
+                        if newValue { authViewModel.signInAfterUnlock() }
                     }
             }
             .padding(24)

@@ -101,7 +101,6 @@ struct SpeciesAndGenderIcons {
         switch species {
         case .dog: return "dog.fill"
         case .cat: return "cat.fill"
-        default:   return "pawprint.fill"
         }
     }
 

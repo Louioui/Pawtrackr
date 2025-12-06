@@ -43,6 +43,8 @@ public struct Chip: View {
     private let tint: Color
     private let onTap: (() -> Void)?
     @Binding private var isSelected: Bool
+    private let semantic: Semantic?
+
 
     // MARK: - Initializer
     
@@ -63,12 +65,37 @@ public struct Chip: View {
         self.tint = tint
         self._isSelected = isSelected
         self.onTap = onTap
+        self.semantic = nil
     }
     
+    private init(
+        semantic text: String,
+        systemImage: String? = nil,
+        type: Semantic,
+        size: Size = .md
+    ) {
+        self.text = text
+        self.systemImage = systemImage
+        self.style = .filled // default, will be overridden by semantic logic
+        self.size = size
+        self.tint = .accentColor // default, will be overridden by semantic logic
+        self._isSelected = .constant(false)
+        self.onTap = nil
+        self.semantic = type
+    }
+
     // MARK: - Body
     public var body: some View {
         let metrics = self.metrics(for: size)
-        let colors = self.colors(for: style, isSelected: isSelected)
+        
+        let (finalStyle, finalTint) = {
+            if let semantic = semantic {
+                return Appearance(colorScheme: colorScheme).style(for: semantic)
+            }
+            return (style, tint)
+        }()
+        
+        let colors = self.colors(for: finalStyle, isSelected: isSelected, tint: finalTint)
 
         Button(action: handleTap) {
             label(metrics: metrics, colors: colors)
@@ -128,9 +155,7 @@ public extension Chip {
     
     /// Creates a chip with a predefined semantic style.
     static func semantic(_ text: String, systemImage: String? = nil, semantic: Semantic, size: Size = .md) -> Chip {
-        let appearance = Appearance(colorScheme: .light)
-        let (style, tint) = appearance.style(for: semantic)
-        return Chip(text, systemImage: systemImage, style: style, size: size, tint: tint)
+        Chip(semantic: text, systemImage: systemImage, type: semantic, size: size)
     }
     
     // Semantic helpers
@@ -164,7 +189,7 @@ private extension Chip {
         }
     }
 
-    func colors(for style: Style, isSelected: Bool) -> ChipColors {
+    func colors(for style: Style, isSelected: Bool, tint: Color) -> ChipColors {
         let appearance = Appearance(colorScheme: colorScheme)
         
         switch style {

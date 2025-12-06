@@ -219,9 +219,82 @@
 "settings.data_management.confirm.title" = "Are you sure?";
 "settings.data_management.confirm.message" = "This will permanently delete all visit records older than the selected threshold. This action cannot be undone.";
 "settings.data_management.confirm.delete" = "Delete";
+"common.success" = "Success";
+"settings.data_management.prune_success_fmt" = "Successfully pruned data older than %@.";
+
 
 "common.no" = "No";
 "common.yes" = "Yes";
 "checkout.custom_tip" = "Custom Tip Amount";
 "checkout.reference" = "Reference ID";
 "checkout.transaction_reference" = "Transaction Reference";
+
+// MARK: Settings Screen
+
+"settings.security.title" = "Security Settings";
+"settings.security.status.active_title" = "Security Active";
+"settings.security.status.inactive_title" = "Security Disabled";
+"settings.security.status.active_subtitle" = "PIN lock is enabled and protecting your data.";
+"settings.security.status.inactive_subtitle" = "PIN lock is currently disabled.";
+"settings.security.question_a11y" = "Learn more about security settings.";
+
+// PIN Management
+"settings.pin.title" = "PIN Lock Settings";
+"settings.pin.subtitle" = "Manage your 4-digit security PIN.";
+"settings.pin.status" = "PIN Status";
+"settings.pin.status.changed_relative_fmt" = "Last changed %@";
+"settings.pin.status.never_changed" = "Never changed";
+"settings.pin.status.enabled" = "Enabled";
+"settings.pin.status.disabled" = "Disabled";
+"settings.pin.change" = "Change PIN";
+"settings.pin.disable" = "Disable PIN Lock";
+"settings.pin.enable" = "Enable PIN Lock";
+
+// Auto-Lock
+"settings.autolock.title" = "Auto-Lock Behavior";
+"settings.autolock.subtitle" = "When the PIN lock activates automatically.";
+"settings.autolock.on_background.title" = "Lock on app background";
+"settings.autolock.on_background.subtitle" = "Activate PIN when switching apps.";
+"settings.autolock.on_idle.title" = "Lock after inactivity";
+"settings.autolock.on_idle.subtitle" = "Auto-lock after 5 minutes idle.";
+"settings.autolock.on_sensitive.title" = "Require PIN for sensitive data";
+"settings.autolock.on_sensitive.subtitle" = "Extra security for payments & client info.";
+
+// Security Tips
+"settings.tips.title" = "Security Tips";
+"settings.tips.tip1" = "• Use a unique PIN that's not easily guessed.";
+"settings.tips.tip2" = "• Change your PIN regularly for better security.";
+"settings.tips.tip3" = "• Keep your device updated with latest security patches.";
+"settings.tips.tip4" = "• Don't share your PIN with unauthorized users.";
+
+// Data Management - Already partly localized, adding more
+"settings.data_management.prune_picker_title" = "Prune Data Older Than";
+"settings.data_management.prune_button" = "Prune Now";
+"settings.data_management.prune.1y" = "1 Year";
+"settings.data_management.prune.3y" = "3 Years";
+"settings.data_management.prune.5y" = "5 Years";
+"settings.data_management.prune.never" = "Never";
+
+
+// Change PIN Sheet
+"settings.pin.change.title" = "Change PIN";
+"settings.pin.change.subtitle" = "Enter your current PIN, then set a new one.";
+"settings.pin.change.current" = "Current PIN";
+"settings.pin.change.new" = "New PIN";
+"settings.pin.change.confirm" = "Confirm New PIN";
+"settings.pin.change.update" = "Update PIN";
+"settings.pin.change.error.incomplete" = "Enter all 4 digits for each PIN.";
+"settings.pin.change.error.incorrect" = "Current PIN is incorrect.";
+"settings.pin.change.error.mismatch" = "New PIN entries do not match.";
+
+// Business Settings
+"settings.business.title" = "Business Settings";
+"settings.business.services_title" = "Service Menu";
+"settings.business.services_subtitle" = "Manage your services, prices, and categories.";
+
+// Insights Comparison
+"insights.compare.title" = "Compare to Previous Period";
+"insights.compare.scope" = "Comparison Scope";
+"insights.compare.start_date" = "Comparison Start";
+"insights.compare.end_date" = "Comparison End";
+"insights.compare.apply" = "Apply Range";

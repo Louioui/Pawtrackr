@@ -4,6 +4,7 @@ import SwiftData
 
 struct AppointmentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var authViewModel: AuthenticationViewModel
     @Query private var appointments: [Appointment]
     @State private var newAppointmentDate = Date()
     @State private var selectedPet: Pet?
@@ -27,21 +28,12 @@ struct AppointmentsView: View {
                     }
                 }
             }
-            .sheet(isPresented: .constant(true)) {
-                VStack {
-                    DatePicker("Date", selection: $newAppointmentDate)
-                    PetSelectionView(selectedPet: $selectedPet)
-                    Button("Save") {
-                        addAppointment()
-                    }
-                }
-            }
         }
     }
 
     private func addAppointment() {
         guard let pet = selectedPet else { return }
-        let newAppointment = Appointment(date: newAppointmentDate, pet: pet, user: User(name: "", email: ""))
+        let newAppointment = Appointment(date: newAppointmentDate, pet: pet, user: authViewModel.currentUser)
         modelContext.insert(newAppointment)
     }
 

@@ -35,7 +35,7 @@ final class VisitItem {
     /// The `Visit` this line item belongs to. If the visit is deleted, this item is also deleted.
     // FIX: The inverse side of a relationship is a plain property with NO @Relationship macro.
     // This resolves the "circular reference" build error.
-    var visit: Visit
+    var visit: Visit?
     
     /// An optional link to the original `Service` in the catalog.
     /// If the `Service` is deleted, this link becomes `nil` but the historical record remains.

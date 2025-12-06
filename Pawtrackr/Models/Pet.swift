@@ -41,11 +41,16 @@ final class Pet {
     var veterinarianName: String?
     var veterinarianPhoneE164: String?
 
+    // MARK: - Caching
+    private var _cachedAgeString: String?
+    private var _ageLastCalculated: Date?
+
     // MARK: - Relationships
     @Relationship(inverse: \Client.pets) var owner: Client?
     @Relationship(deleteRule: .cascade, inverse: \Visit.pet) var visits: [Visit] = []
     @Relationship(deleteRule: .cascade, inverse: \Appointment.pet) var appointments: [Appointment] = []
     var user: User?
+    var activeVisit: Visit?
 
     // MARK: - Init
     init(name: String, species: Species, gender: PetGender = .male) {
@@ -59,11 +64,6 @@ final class Pet {
 
     // MARK: - Derived Properties
 
-    /// The pet's currently active visit, if one exists.
-    var activeVisit: Visit? {
-        visits.first { $0.isActive }
-    }
-
     /// A boolean indicating if the pet is currently checked in.
     var isCheckedIn: Bool {
         activeVisit != nil
@@ -71,21 +71,33 @@ final class Pet {
 
     /// A user-friendly string describing the pet's age (e.g., "3yr 6mo", "9mo").
     var ageString: String? {
-        guard let birthdate else { return nil }
         let now = Date()
+        if let lastCalculated = _ageLastCalculated,
+           let cached = _cachedAgeString,
+           Calendar.current.isDate(now, inSameDayAs: lastCalculated) {
+            return cached
+        }
+
+        guard let birthdate = self.birthdate else { return nil }
         let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month], from: birthdate, to: now)
-        
+
+        let newAgeString: String?
         if let year = components.year, year > 0 {
             if let month = components.month, month > 0 {
-                return "\(year)yr \(month)mo"
+                newAgeString = "\(year)yr \(month)mo"
+            } else {
+                newAgeString = "\(year)yr"
             }
-            return "\(year)yr"
         } else if let month = components.month, month > 0 {
-            return "\(month)mo"
+            newAgeString = "\(month)mo"
+        } else {
+            newAgeString = nil
         }
-        return nil // For pets less than a month old
-    }
 
+        _cachedAgeString = newAgeString
+        _ageLastCalculated = now
+        return newAgeString
+    }
     /// A short, descriptive string for UI display (e.g., "Golden Retriever • Dog").
     var shortDescriptor: String {
         if let breed = breed, !breed.trimmed.isEmpty {

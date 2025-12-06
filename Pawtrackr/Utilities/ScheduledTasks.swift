@@ -29,6 +29,10 @@ class ScheduledTasks {
         timer = nil
     }
 
+    deinit {
+        stop()
+    }
+
     private func runBackfill() {
         Task {
             await MainActor.run {

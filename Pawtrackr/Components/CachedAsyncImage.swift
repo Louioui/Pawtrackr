@@ -9,36 +9,28 @@
 import SwiftUI
 import Combine
 
+@MainActor
 final class ImageRemoteLoader: ObservableObject {
     @Published var data: Data? = nil
     @Published var error: Error? = nil
-    private var task: URLSessionDataTask?
-    private static let mem = NSCache<NSURL, NSData>()
+    
+    private var cancellable: AnyCancellable?
 
     func load(_ url: URL) {
-        let nsurl = url as NSURL
-        if let cached = Self.mem.object(forKey: nsurl) {
-            self.data = cached as Data
-            return
-        }
-        let req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 30)
-        task = URLSession.shared.dataTask(with: req) { [weak self] data, response, error in
-            DispatchQueue.main.async {
-                if let error = error {
+        cancellable = ImageLoaderService.shared.publisher(for: url)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] completion in
+                if case .failure(let error) = completion {
                     self?.error = error
-                    return
                 }
-                if let data = data {
-                    Self.mem.setObject(data as NSData, forKey: nsurl)
-                    self?.data = data
-                }
-            }
-        }
-        task?.priority = URLSessionTask.lowPriority
-        task?.resume()
+            }, receiveValue: { [weak self] data in
+                self?.data = data
+            })
     }
 
-    func cancel() { task?.cancel() }
+    func cancel() {
+        cancellable?.cancel()
+    }
 }
 
 struct CachedAsyncImage<Placeholder: View, Failure: View>: View {

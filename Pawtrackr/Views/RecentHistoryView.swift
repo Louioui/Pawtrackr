@@ -58,7 +58,7 @@ struct RecentHistoryView: View {
     
     private func deleteVisit(_ visit: Visit) {
         do {
-            try modelContext.delete(visit)
+            modelContext.delete(visit)
             try modelContext.save()
             HapticManager.notify(.success)
             viewModel?.fetchVisits()

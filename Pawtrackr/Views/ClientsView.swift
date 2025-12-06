@@ -18,24 +18,38 @@ struct ClientsView: View {
     weak var coordinator: ClientsCoordinator?
     @Namespace var namespace
     
-
     @State private var viewModel: ClientsViewModel?
     @State private var dashVM: DashboardViewModel?
     @State private var showingNewClientSheet = false
     @State private var showNotifications = false
     @State private var storedNotifications: [NotificationItem] = []
+    @State private var clientToDelete: Client?
 
     init(coordinator: ClientsCoordinator?) {
         self.coordinator = coordinator
         _viewModel = State(initialValue: nil)
     }
 
+    private var showErrorAlert: Binding<Bool> {
+        Binding {
+            viewModel?.errorMessage != nil
+        } set: { _ in
+            if viewModel != nil {
+                viewModel?.errorMessage = nil
+            }
+        }
+    }
+
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
-                // Header + Quick stats
+            VStack(spacing: 16) {
                 headerBar
-                if let dvm = dashVM { quickStats(dvm) } else { quickStatsSkeleton }
+                
+                if let dvm = dashVM {
+                    quickStats(dvm)
+                } else {
+                    quickStatsSkeleton
+                }
 
                 if let viewModel {
                     searchBar
@@ -48,12 +62,26 @@ struct ClientsView: View {
                     clientsSkeleton
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.top, 20)
             .padding(.bottom, 80) // Padding to avoid the FAB
         }
-        .navigationTitle("clients.title")
-
-
+        .background(DS.ColorToken.background)
+        .ignoresSafeArea(edges: .top)
+        .alert("common.error", isPresented: showErrorAlert) {
+            Button("common.ok") {}
+        } message: {
+            Text(viewModel?.errorMessage ?? NSLocalizedString("errors.unknown", comment: "Unknown error message"))
+        }
+        .alert(item: $clientToDelete) { client in
+            Alert(
+                title: Text("Delete Client"),
+                message: Text("Are you sure you want to delete \(client.fullName)? This will also delete all their pets and visit history."),
+                primaryButton: .destructive(Text("Delete")) {
+                    viewModel?.deleteClient(client)
+                },
+                secondaryButton: .cancel()
+            )
+        }
         .fabOverlay {
             FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
                 showingNewClientSheet = true
@@ -69,7 +97,6 @@ struct ClientsView: View {
                     withAnimation(Animations.gentleSpring) {
                         coordinator?.showClientDetail(client: client, namespace: namespace)
                     }
-                    // Broadcast the second phase so detail can show a toast if desired.
                     NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
                         ClientDidCreateKey.clientID.rawValue: id,
                         ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.navigated.rawValue
@@ -78,24 +105,19 @@ struct ClientsView: View {
             }
         }
         .sheet(isPresented: $showingNewClientSheet) {
-            // When the sheet is dismissed, trigger a refresh to show the new client.
             viewModel?.fetchClients()
         } content: {
-            // FIX: Pass the model context to the sheet.
-            NewClientSheet()
-                .environment(\.modelContext, modelContext)
+            NewClientSheet(modelContext: modelContext)
         }
         .sheet(isPresented: $showNotifications) {
             NotificationsSheet(notifications: $storedNotifications)
         }
         .onAppear {
-            // Also fetch on appear to catch changes made in other parts of the app.
             if viewModel == nil { viewModel = ClientsViewModel(modelContext: modelContext) }
             if dashVM == nil { dashVM = DashboardViewModel(modelContext: modelContext) }
             viewModel?.fetchClients()
             Task { await dashVM?.refresh() }
         }
-        // Collect app events into notifications list
         .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
             if let id = note.createdClientID, note.clientCreatePhase == .created {
                 storedNotifications.insert(NotificationItem(title: "Client Created", message: "A new client was added.", date: Date(), relatedID: id), at: 0)
@@ -152,6 +174,12 @@ struct ClientsView: View {
                 }
                 .buttonStyle(.plain)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        clientToDelete = client
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    
                     #if canImport(UIKit)
                     if let phone = client.phone, let tel = PhoneUtils.telURLString(phone), let url = URL(string: tel) {
                         Button {
@@ -204,67 +232,68 @@ struct ClientsView: View {
         .padding(.top, topPadding)
     }
 
-    // MARK: - Header + Quick Stats (Tailwind-like styling)
+    // MARK: - Header + Quick Stats (Refined UI)
     private var headerBar: some View {
         HStack {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.accentColor)
-                    .frame(width: 32, height: 32)
-                    .overlay(Image(systemName: "pawprint.fill").foregroundStyle(.white))
-                Text("Pawtrackr").font(.headline)
+            VStack(alignment: .leading) {
+                Text("Welcome Back!").font(.subheadline).foregroundStyle(.secondary)
+                Text("Pawtrackr").font(.largeTitle.weight(.bold))
             }
             Spacer()
-            HStack(spacing: 8) {
-                Button { showNotifications = true } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "bell.fill").foregroundStyle(.secondary)
-                        if notificationsCount > 0 {
-                            Circle().fill(Color.red).frame(width: 16, height: 16)
-                                .overlay(Text("\(min(notificationsCount, 99))").font(.caption2.weight(.bold)).foregroundStyle(.white))
-                                .offset(x: 6, y: -6)
-                        }
+            Button { showNotifications = true } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "bell.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    if notificationsCount > 0 {
+                        Text("\(min(notificationsCount, 9))")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(5)
+                            .background(Color.red)
+                            .clipShape(Circle())
+                            .offset(x: 8, y: -8)
                     }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Notifications")
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Notifications")
         }
         .padding(.horizontal)
+        .padding(.top, 20)
     }
 
     private var notificationsCount: Int { storedNotifications.count }
 
     private func quickStats(_ vm: DashboardViewModel) -> some View {
-        ZStack {
-            LinearGradient(colors: [Color.green, Color.green.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Visits Today").font(.caption).foregroundStyle(.white.opacity(0.9))
-                    Text("\(vm.kpi.appointmentsToday)").font(.title2.weight(.bold)).foregroundStyle(.white)
-                }
-                Spacer()
-                Image(systemName: "calendar.badge.checkmark").font(.title2).foregroundStyle(.white.opacity(0.9))
-            }
-            .padding(14)
+        HStack(spacing: 12) {
+            QuickStatCard(
+                title: "Visits Today",
+                value: vm.kpi.appointmentsTodayText,
+                icon: "calendar.badge.checkmark",
+                color: .blue
+            )
+            QuickStatCard(
+                title: "Revenue Today",
+                value: vm.kpi.revenueTodayString,
+                icon: "dollarsign.circle.fill",
+                color: .green
+            )
         }
-        .frame(height: 76)
         .padding(.horizontal)
     }
 
     private var quickStatsSkeleton: some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.secondary.opacity(0.12))
-                .frame(height: 76)
-                .redacted(reason: .placeholder)
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.secondary.opacity(0.12))
-                .frame(height: 76)
-                .redacted(reason: .placeholder)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.secondary.opacity(0.1))
+                .frame(height: 88)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.secondary.opacity(0.1))
+                .frame(height: 88)
         }
         .padding(.horizontal)
+        .redacted(reason: .placeholder)
     }
 
     private var clientsSkeleton: some View {
@@ -285,8 +314,6 @@ struct ClientsView: View {
             }
         }
     }
-
-
 
     // MARK: - Notifications UI
     private struct NotificationItem: Identifiable {
@@ -329,6 +356,32 @@ struct ClientsView: View {
             }
         }
     }
+}
 
-    // MARK: - Delete
+private struct QuickStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        Card(elevation: .flat, showBorder: false) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundStyle(color)
+                    Spacer()
+                }
+                Text(value)
+                    .font(.title.weight(.bold))
+                    .contentTransition(.numericText())
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .background(color.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
 }

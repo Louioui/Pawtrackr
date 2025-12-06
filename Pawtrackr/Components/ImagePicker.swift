@@ -142,11 +142,11 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
             guard let result = results.first else { return }
             
             Task {
-                if let data = await loadImageData(from: result.itemProvider) {
+                if let image = await loadImage(from: result.itemProvider) {
                     let md = parent.maxDimension ?? DeviceConfig.imageMaxDimension
                     let jq = parent.jpegQuality ?? DeviceConfig.jpegQuality
                     let processor = ImageProcessor(maxDimension: md, jpegQuality: jq)
-                    parent.imageData = await processor.process(data: data)
+                    parent.imageData = await processor.process(image: image)
                 }
             }
         }
@@ -168,12 +168,11 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
             picker.dismiss(animated: true)
         }
         
-        private func loadImageData(from provider: NSItemProvider) async -> Data? {
+        private func loadImage(from provider: NSItemProvider) async -> UIImage? {
             // Prefer UIImage for correct color profiles; fall back to raw data.
             if provider.canLoadObject(ofClass: UIImage.self) {
                 do {
-                    let image = try await loadUIImage(from: provider)
-                    return image.jpegData(compressionQuality: 1.0)
+                    return try await loadUIImage(from: provider)
                 } catch {
                     print("Failed to load UIImage from provider: \(error.localizedDescription)")
                 }
@@ -182,7 +181,7 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
             if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
                 do {
                     let data = try await loadData(from: provider, typeIdentifier: UTType.image.identifier)
-                    return data
+                    return UIImage(data: data)
                 } catch {
                     print("Failed to load image Data from provider: \(error.localizedDescription)")
                 }

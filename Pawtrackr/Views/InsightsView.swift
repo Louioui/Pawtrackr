@@ -39,6 +39,14 @@ struct InsightsView: View {
     @State private var viewModel: InsightsViewModel?
     @State private var selectedRevenueDate: Date?
 
+    private var showErrorAlert: Binding<Bool> {
+        Binding {
+            viewModel?.errorMessage != nil
+        } set: { _ in
+            viewModel?.clearErrorMessage()
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -57,6 +65,9 @@ struct InsightsView: View {
                         .padding(.top, 8)
                         .padding(.bottom, 24)
                     }
+                    .refreshable {
+                        await MainActor.run { vm.refresh() }
+                    }
                     .toolbar { toolbar(vm) }
                     .animation(.default, value: bvm.scope)
                     .overlay {
@@ -72,6 +83,31 @@ struct InsightsView: View {
             }
             .navigationTitle("insights.title")
             .task { if viewModel == nil { viewModel = InsightsViewModel(modelContext: modelContext) } }
+        }
+        .alert("common.error", isPresented: showErrorAlert) {
+            Button("common.ok") {}
+        } message: {
+            Text(viewModel?.errorMessage ?? NSLocalizedString("errors.unknown", comment: "Unknown error message"))
+        }
+    }
+
+    @ViewBuilder
+    private func content(_ vm: InsightsViewModel) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                filtersSection(vm)
+                kpiRibbon(vm)
+                kpiGrid(vm)
+                revenueChart(vm)
+                topServices(vm)
+                visitsByPackage(vm)
+                packageMix(vm)
+            }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 16)
+        }
+        .refreshable {
+            await MainActor.run { vm.refresh() }
         }
     }
 
@@ -92,44 +128,94 @@ struct InsightsView: View {
                     DatePicker("Start Date", selection: $bvm.customDraftStart, in: ...Date(), displayedComponents: .date)
                     DatePicker("End Date", selection: $bvm.customDraftEnd, in: bvm.customDraftStart..., displayedComponents: .date)
                     Button(action: { vm.applyCustomDates() }) {
-                        Label("Apply Range", systemImage: "checkmark.circle.fill")
+                        Label("insights.compare.apply", systemImage: "checkmark.circle.fill")
                             .labelStyle(.titleAndIcon)
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(bvm.customDraftEnd < bvm.customDraftStart)
                 }
-                // Search removed per request: Insights should not expose a search UI.
+
+                Divider()
+
+                Toggle("insights.compare.title", isOn: $bvm.enableComparison.animation())
+
+                if bvm.enableComparison {
+                    Picker("insights.compare.scope", selection: $bvm.comparisonScope) {
+                        ForEach(InsightsViewModel.Scope.allCases) { s in Text(s.title).tag(s) }
+                    }
+                    .pickerStyle(.segmented)
+
+                    if vm.comparisonScope == .custom {
+                        DatePicker("insights.compare.start_date", selection: $bvm.comparisonCustomDraftStart, in: ...Date(), displayedComponents: .date)
+                        DatePicker("insights.compare.end_date", selection: $bvm.comparisonCustomDraftEnd, in: bvm.comparisonCustomDraftStart..., displayedComponents: .date)
+                        Button(action: { vm.applyComparisonCustomDates() }) {
+                            Label("insights.compare.apply", systemImage: "checkmark.circle.fill")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(bvm.comparisonCustomDraftEnd < bvm.comparisonCustomDraftStart)
+                    }
+                }
             }
         }
     }
 
     private func kpiGrid(_ vm: InsightsViewModel) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
+        let avgDurationString = Formatters.durationString(seconds: Int(vm.kpis.averageDurationSeconds.rounded()), abbreviated: false)
+        return Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
             GridRow {
                 KPI(title: "insights.revenue", value: vm.kpis.revenueString)
                 KPI(title: "insights.total_visits", value: "\(vm.kpis.count)")
             }
             GridRow {
                 KPI(title: "insights.aov", value: vm.kpis.aovString)
-                KPI(title: "insights.avg_duration", value: vm.kpis.avgDurationString)
+                KPI(title: "insights.avg_duration", value: avgDurationString)
             }
         }
     }
 
     // A more visual ribbon to echo the sample UI style
     private func kpiRibbon(_ vm: InsightsViewModel) -> some View {
-        HStack(spacing: 12) {
+        let revenueDelta: String?
+        let revenueTrendUp: Bool?
+        let visitsDelta: String?
+        let visitsTrendUp: Bool?
+
+        if vm.enableComparison && vm.comparisonKpis.revenue > 0 {
+            let change = (vm.kpis.revenue - vm.comparisonKpis.revenue) / vm.comparisonKpis.revenue
+            let changeAsDouble = NSDecimalNumber(decimal: change).doubleValue
+            revenueTrendUp = changeAsDouble >= 0
+            revenueDelta = String(format: "%.1f%%", abs(changeAsDouble * 100))
+        } else {
+            revenueDelta = nil
+            revenueTrendUp = nil
+        }
+        
+        if vm.enableComparison && vm.comparisonKpis.count > 0 {
+            let change = Double(vm.kpis.count - vm.comparisonKpis.count) / Double(vm.comparisonKpis.count)
+            visitsTrendUp = change >= 0
+            visitsDelta = String(format: "%.1f%%", abs(change * 100))
+        } else {
+            visitsDelta = nil
+            visitsTrendUp = nil
+        }
+
+        return HStack(spacing: 12) {
             RibbonCard(
                 icon: "dollarsign",
                 title: "insights.revenue",
                 value: vm.kpis.revenueString,
-                tint: .green
+                tint: .green,
+                delta: revenueDelta,
+                trendUp: revenueTrendUp
             )
             RibbonCard(
                 icon: "checkmark.circle",
                 title: "insights.visits",
                 value: "\(vm.kpis.count)",
-                tint: .blue
+                tint: .blue,
+                delta: visitsDelta,
+                trendUp: visitsTrendUp
             )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -156,12 +242,24 @@ struct InsightsView: View {
                     ContentUnavailableView(NSLocalizedString("insights.no_revenue", comment: ""), systemImage: "chart.bar.xaxis")
                         .frame(height: 180)
                 } else {
-                    Chart(vm.revenueSeries) { point in
-                        BarMark(
-                            x: .value("Date", point.date, unit: .day),
-                            y: .value("Revenue", point.amount)
-                        )
-                        .foregroundStyle(DS.ColorToken.primary.gradient)
+                    Chart {
+                        ForEach(vm.revenueSeries) { point in
+                            BarMark(
+                                x: .value("Date", point.date, unit: .day),
+                                y: .value("Revenue", point.amountDouble)
+                            )
+                            .foregroundStyle(DS.ColorToken.primary.gradient)
+                        }
+                        if vm.enableComparison {
+                            ForEach(vm.comparisonRevenueSeries) { point in
+                                LineMark(
+                                    x: .value("Comparison Date", point.date, unit: .day),
+                                    y: .value("Comparison Revenue", point.amountDouble)
+                                )
+                                .foregroundStyle(.gray)
+                                .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                            }
+                        }
                     }
                     .chartXAxis { AxisMarks(values: .automatic(desiredCount: 5)) }
                     .frame(height: 180)
@@ -171,7 +269,7 @@ struct InsightsView: View {
                                 .gesture(
                                     DragGesture(minimumDistance: 0)
                                         .onChanged { value in
-                                            let x = value.location.x - g[proxy.plotAreaFrame].origin.x
+                                            let x = value.location.x - g[proxy.plotFrame!].origin.x
                                             if let date: Date = proxy.value(atX: x) {
                                                 selectedRevenueDate = date
                                             }
@@ -230,9 +328,11 @@ struct InsightsView: View {
                         )
                         .foregroundStyle(.blue.gradient)
                     }
-                    .frame(height: max(160, CGFloat(vm.packageLeaders.count) * 24 + 40))
+                    .chartYAxis {
+                        AxisMarks(position: .leading)
+                    }
+                    .frame(height: max(160, CGFloat(vm.packageLeaders.count) * 32 + 40))
                     .animation(.easeOut(duration: 0.35), value: vm.scope)
-                    // keep identity stable to avoid heavy view rebuilds
                 }
             }
         }
@@ -245,19 +345,18 @@ struct InsightsView: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 Text("insights.package_mix").font(.subheadline.weight(.semibold))
-                if vm.categoryTotals.isEmpty {
-                    ContentUnavailableView(NSLocalizedString("insights.no_category", comment: ""), systemImage: "chart.pie")
+                if vm.packageMix.isEmpty {
+                    ContentUnavailableView(NSLocalizedString("insights.no_package_data", comment: ""), systemImage: "chart.pie")
                         .frame(height: 160)
                 } else {
-                    Chart(vm.categoryTotals) { row in
+                    Chart(vm.packageMix) { row in
                         SectorMark(
                             angle: .value("Count", row.count)
                         )
-                        .foregroundStyle(by: .value("Category", row.name))
+                        .foregroundStyle(by: .value("Name", row.name))
                     }
                     .frame(height: 180)
                     .animation(.easeOut(duration: 0.35), value: vm.scope)
-                    // keep identity stable to avoid heavy view rebuilds
                 }
             }
         }
@@ -338,11 +437,20 @@ private struct LeaderRow: View {
 // Small ribbon card to echo the sample KPI style
 private struct RibbonCard: View {
     let icon: String
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let tint: Color
-    let delta: String? = nil
-    let trendUp: Bool? = nil
+    let delta: String?
+    let trendUp: Bool?
+
+    init(icon: String, title: LocalizedStringKey, value: String, tint: Color, delta: String? = nil, trendUp: Bool? = nil) {
+        self.icon = icon
+        self.title = title
+        self.value = value
+        self.tint = tint
+        self.delta = delta
+        self.trendUp = trendUp
+    }
 
     var body: some View {
         Card(padding: EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12), elevation: .raised, showBorder: false) {
@@ -374,5 +482,3 @@ private struct RibbonCard: View {
         }
     }
 }
-
-

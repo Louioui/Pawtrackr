@@ -38,13 +38,17 @@ final class Service {
     /// If `false`, this service will not appear in selection lists for new visits.
     var isEnabled: Bool
 
+    /// If `true`, this service is considered a package deal.
+    var isPackage: Bool
+
     // MARK: - Init
     init(name: String,
          category: Category? = nil,
          systemIcon: String? = nil,
          basePrice: Decimal? = nil,
          defaultDurationMinutes: Int? = nil,
-         isEnabled: Bool = true)
+         isEnabled: Bool = true,
+         isPackage: Bool = false)
     {
         self.uuid = UUID()
         self.createdAt = .now
@@ -55,6 +59,7 @@ final class Service {
         self.basePrice = basePrice?.roundedMoney()
         self.defaultDurationMinutes = defaultDurationMinutes.map { max(0, $0) }
         self.isEnabled = isEnabled
+        self.isPackage = isPackage
     }
 
     // MARK: - Derived
@@ -106,6 +111,7 @@ extension Service {
         case groom = "Grooming"
         case addOn = "Add-on"
         case care = "Special Care"
+        case package = "Package"
         
         var id: String { rawValue }
     }
@@ -120,4 +126,5 @@ extension Service {
     static let ears   = Service(name: "Ears",    category: .addOn, systemIcon: "ear.and.waveform",   basePrice: 12, defaultDurationMinutes: 10)
     static let teeth  = Service(name: "Teeth",   category: .addOn, systemIcon: "mouth.fill",         basePrice: 10, defaultDurationMinutes: 10)
     static let deshed = Service(name: "De-shed", category: .care,  systemIcon: "line.3.crossed.swirl.circle.fill", basePrice: 25, defaultDurationMinutes: 25)
+    static let fullGroom = Service(name: "Full Groom", category: .package, systemIcon: "sparkles", basePrice: 75, defaultDurationMinutes: 90, isPackage: true)
 }

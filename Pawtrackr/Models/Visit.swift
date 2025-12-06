@@ -49,6 +49,7 @@ final class Visit {
         self.afterPhotoData = nil
         self.total = .zero
         self.pet = pet
+        pet.activeVisit = self
     }
 
     // MARK: - Derived State
@@ -65,13 +66,11 @@ final class Visit {
     }
     
     /// Human-readable duration like "1h 23m" or "45m"
-    @MainActor
-    var durationString: String {
+    @MainActor var durationString: String {
         Formatters.durationString(from: startedAt, to: endedAt ?? .now)
     }
 
-    @MainActor
-    var dateRangeString: String {
+    @MainActor var dateRangeString: String {
         Formatters.dateRangeString(from: startedAt, to: endedAt)
     }
 
@@ -98,12 +97,14 @@ final class Visit {
     func markCheckedIn(now: Date = .now) {
         if startedAt > now { startedAt = now }
         endedAt = nil
+        pet.activeVisit = self
         didUpdate()
     }
 
     func markCheckedOut(total customTotal: Decimal? = nil, now: Date = .now) {
         if let custom = customTotal { total = custom.roundedMoney() } else { recalcTotal() }
         if endedAt == nil { endedAt = now }
+        pet.activeVisit = nil
         didUpdate()
     }
 

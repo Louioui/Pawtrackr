@@ -20,6 +20,7 @@ class DataPruner {
     func pruneVisits(olderThan date: Date) throws {
         let predicate = #Predicate<Visit> { visit in visit.startedAt < date }
         try modelContext.delete(model: Visit.self, where: predicate)
+        try modelContext.save()
     }
 
     /// Drops large media blobs from older visits while keeping the Visit rows for analytics.

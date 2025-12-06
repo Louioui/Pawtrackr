@@ -23,6 +23,7 @@ final class ClientsViewModel {
     var inProgressCount: Int { inProgressClients.count }
     var canLoadMore: Bool = false
     var isLoadingMore: Bool = false
+    var errorMessage: String? = nil
     
     // MARK: - Private Properties
     private var modelContext: ModelContext
@@ -62,6 +63,7 @@ final class ClientsViewModel {
         canLoadMore = false
         inProgressClients = []
         otherClients = []
+        errorMessage = nil
         loadMore()
     }
 
@@ -107,9 +109,18 @@ final class ClientsViewModel {
             canLoadMore = page.count == pageSize
             isLoadingMore = false
         } catch {
-            print("Failed to fetch clients: \(error.localizedDescription)")
+            errorMessage = "Failed to fetch clients: \(error.localizedDescription)"
             canLoadMore = false
             isLoadingMore = false
+        }
+    }
+
+    func deleteClient(_ client: Client) {
+        modelContext.delete(client)
+        do {
+            try modelContext.save()
+        } catch {
+            errorMessage = "Failed to delete client: \(error.localizedDescription)"
         }
     }
 }

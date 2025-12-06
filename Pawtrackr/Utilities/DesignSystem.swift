@@ -33,20 +33,22 @@ enum DS {
         static let danger     = Color(red: 239/255, green: 68/255,  blue: 68/255)  // #EF4444
         static let info       = Color(red: 59/255,  green: 130/255, blue: 246/255) // #3B82F6
 
+        static let genderMale = info
+        static let genderFemale = Color(red: 236/255, green: 72/255, blue: 153/255) // #EC4899
+
         // Session (active visit) accent tokens
         static let session           = success                           // primary accent (rails, icons)
         static let sessionBackground = success.opacity(0.12)             // chips / soft fills
         static let sessionText       = success                           // text on the soft chip
 
         // Gender
-        static func gender(_ g: PetGender) -> Color { g == .male ? .blue : .pink }
+        static func gender(_ g: PetGender) -> Color { g == .male ? genderMale : genderFemale }
 
         // Species (soft tints used behind paw/badges)
         static func species(_ s: Species) -> Color {
             switch s {
             case .dog: return .brown
             case .cat: return .orange
-            default:   return .gray
             }
         }
 
@@ -54,7 +56,9 @@ enum DS {
         /// We bias the tint by gender for clarity, and keep it soft for backgrounds.
         static func avatarTint(species: Species, gender: PetGender) -> Color {
             let base = DS.ColorToken.gender(gender)
-            switch species { case .dog, .cat: return base.opacity(0.22) }
+            switch species {
+            case .dog, .cat: return base.opacity(0.22)
+            }
         }
 
         /// Top-bar gradient for cards based on gender.

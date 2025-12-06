@@ -24,6 +24,7 @@ final class Client {
     var phone: String?
     var email: String?
     var address: String?
+    var primaryContactInfo: String?
     
     // MARK: - Notes & Emergency Contact
     var notes: String?
@@ -56,8 +57,18 @@ final class Client {
     
     /// Best-effort single-line contact summary.
     var primaryContact: String {
-        let parts = [phone?.trimmed, email?.trimmed].compactMap { $0 }.filter { !$0.isEmpty }
-        return parts.first ?? ""
+        get {
+            if let info = primaryContactInfo, !info.isEmpty {
+                return info
+            }
+            let parts = [phone?.trimmed, email?.trimmed].compactMap { $0 }.filter { !$0.isEmpty }
+            let newInfo = parts.first ?? ""
+            primaryContactInfo = newInfo
+            return newInfo
+        }
+        set {
+            primaryContactInfo = newValue
+        }
     }
 
     // MARK: - Mutating API (keeps timestamps correct without property observers)
@@ -76,11 +87,13 @@ final class Client {
         } else {
             phone = nil
         }
+        updatePrimaryContact()
         didUpdate()
     }
     func setEmail(_ value: String?) {
         let trimmed = value?.trimmed
         email = trimmed?.lowercased()
+        updatePrimaryContact()
         didUpdate()
     }
     func setAddress(_ value: String?) {
@@ -107,5 +120,10 @@ final class Client {
     // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
+    }
+
+    private func updatePrimaryContact() {
+        let parts = [phone?.trimmed, email?.trimmed].compactMap { $0 }.filter { !$0.isEmpty }
+        primaryContactInfo = parts.first ?? ""
     }
 }

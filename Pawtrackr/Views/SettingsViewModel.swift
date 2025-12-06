@@ -14,12 +14,22 @@ class SettingsViewModel: ObservableObject {
     @AppStorage("pruningThreshold") var pruningThreshold: PruningThreshold = .never
 
     enum PruningThreshold: String, CaseIterable, Identifiable {
-        case oneYear = "1 Year"
-        case threeYears = "3 Years"
-        case fiveYears = "5 Years"
-        case never = "Never"
+        case oneYear, threeYears, fiveYears, never
 
         var id: Self { self }
+
+        var title: LocalizedStringKey {
+            switch self {
+            case .oneYear:
+                return "settings.data_management.prune.1y"
+            case .threeYears:
+                return "settings.data_management.prune.3y"
+            case .fiveYears:
+                return "settings.data_management.prune.5y"
+            case .never:
+                return "settings.data_management.prune.never"
+            }
+        }
 
         var date: Date? {
             switch self {

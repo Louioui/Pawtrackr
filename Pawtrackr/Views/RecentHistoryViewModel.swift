@@ -37,7 +37,7 @@ final class RecentHistoryViewModel {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.fetchVisits() }
             .store(in: &cancellables)
-        Task { await fetchVisits() }
+        Task { fetchVisits() }
     }
 
     // Combine cancellables auto-cancel on deinit.

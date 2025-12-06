@@ -55,8 +55,8 @@ struct CheckoutView: View {
         .onAppear {
             viewModel.loadServices(modelContext: modelContext)
         }
-        .onChange(of: amountFieldFocused) { focused in
-            if !focused { viewModel.formatAmountInput() }
+        .onChange(of: amountFieldFocused) {
+            if !amountFieldFocused { viewModel.formatAmountInput() }
         }
     }
 
@@ -248,13 +248,15 @@ private extension CheckoutView {
                 }
             }
 
-            Card {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(NSLocalizedString("checkout.add_ons", comment: ""))
-                        .font(.subheadline.weight(.semibold))
-                    VStack(spacing: 10) {
-                        ForEach(addOnOptions, id: \.title) { option in
-                            addOnRow(option)
+            if !viewModel.addOnServices.isEmpty {
+                Card {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(NSLocalizedString("checkout.add_ons", comment: ""))
+                            .font(.subheadline.weight(.semibold))
+                        VStack(spacing: 10) {
+                            ForEach(viewModel.addOnServices) { service in
+                                addOnRow(service)
+                            }
                         }
                     }
                 }
@@ -413,30 +415,28 @@ private extension CheckoutView {
         .buttonStyle(.plain)
     }
 
-    func addOnRow(_ option: AddOnOption) -> some View {
-        let isSelected = viewModel.selectedExtras.contains(option.title)
+    func addOnRow(_ service: Service) -> some View {
+        let isSelected = viewModel.isAddOnSelected(service)
         return Button {
-            if isSelected {
-                viewModel.selectedExtras.remove(option.title)
-            } else {
-                viewModel.selectedExtras.insert(option.title)
-            }
+            viewModel.toggleAddOn(service)
         } label: {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
                         .fill(Color.accentColor.opacity(0.12))
-                    Image(systemName: option.icon)
+                    Image(systemName: service.systemIcon ?? "sparkles")
                         .foregroundStyle(Color.accentColor)
                 }
                 .frame(width: 36, height: 36)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(option.title)
+                    Text(service.name)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color(.label))
-                    Text(option.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if let price = service.basePrice, price > 0 {
+                        Text(price.moneyString)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -552,8 +552,10 @@ private extension CheckoutView {
         let serviceNames = viewModel.allServices
             .filter { viewModel.selectedServiceIDs.contains($0.persistentModelID) }
             .map(\.name)
-        let extraNames = Array(viewModel.selectedExtras)
-        return (serviceNames + extraNames).sorted()
+        let addOnNames = viewModel.addOnServices
+            .filter { viewModel.selectedAddOnIDs.contains($0.persistentModelID) }
+            .map(\.name)
+        return (serviceNames + addOnNames).sorted()
     }
 
     var selectedServicesSummary: String {
@@ -570,14 +572,6 @@ private extension CheckoutView {
             PaymentOption(method: .zelle, icon: "dollarsign.circle", tint: .yellow)
         ]
     }
-
-    var addOnOptions: [AddOnOption] {
-        [
-            AddOnOption(title: "Knots & Matting Fee", subtitle: "(varies by severity)", icon: "scissors"),
-            AddOnOption(title: "Flea & Tick Treatment", subtitle: "", icon: "ant.fill"),
-            AddOnOption(title: "Hair Dye", subtitle: "(varies by complexity)", icon: "paintpalette.fill")
-        ]
-    }
 }
 
 private extension CheckoutView {
@@ -588,12 +582,6 @@ private extension CheckoutView {
         let tint: Color
 
         var label: String { method.displayName }
-    }
-
-    struct AddOnOption {
-        let title: String
-        let subtitle: String
-        let icon: String
     }
 }
 

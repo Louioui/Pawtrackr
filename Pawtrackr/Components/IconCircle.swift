@@ -18,42 +18,8 @@ import AppKit
 
 struct IconCircle: View {
     // MARK: - Types
-    enum SizeToken: Equatable {
-        case xs
-        case sm
-        case md
-        case lg
-        case custom(CGFloat)
-
-        var dimension: CGFloat {
-            switch self {
-            case .xs: return 24
-            case .sm: return 32
-            case .md: return 40
-            case .lg: return 56
-            case .custom(let v): return max(16, v)
-            }
-        }
-
-        /// Relative glyph scale inside the circle. Tuned so small sizes look legible.
-        var iconScale: CGFloat {
-            switch self {
-            case .xs: return 0.46
-            case .sm: return 0.44
-            case .md: return 0.42
-            case .lg: return 0.40
-            case .custom(let v):
-                // Interpolate between 24→0.46 and 56→0.40
-                let clamped = max(16, min(v, 80))
-                let t = (clamped - 24) / (56 - 24)
-                return max(0.36, min(0.50, 0.46 - t * 0.06))
-            }
-        }
-
-        var fontWeight: Font.Weight {
-            dimension >= 56 ? .semibold : .medium
-        }
-    }
+    typealias SizeToken = IconSizeToken
+    
     enum Style: Equatable {
         case solid(bg: Color, fg: Color)
         case tinted(Color) // bg; fg will default to white
@@ -132,7 +98,7 @@ struct IconCircle: View {
 
     // MARK: - Body
     var body: some View {
-        let dim = sizeToken.dimension
+        let dim = sizeToken.diameter
         let tints = self.tints(for: style)
 
         ZStack(alignment: .bottomTrailing) {
@@ -155,78 +121,69 @@ struct IconCircle: View {
 
     // MARK: - Subviews
     
-    private func glyphView(content: GlyphContent, tints: (bg: Color, fg: Color, ring: Color)) -> AnyView {
-        let dim = sizeToken.dimension
+    @ViewBuilder
+    private func glyphView(content: GlyphContent, tints: (bg: Color, fg: Color, ring: Color)) -> some View {
+        let dim = sizeToken.diameter
         
         switch content {
         case .remote(let url, _):
-            return AnyView(
-                CachedAsyncImage(url: url, maxDimension: dim * 2) {
-                    ZStack { Circle().fill(tints.bg); ProgressView() }
-                } failure: {
-                    Image(systemName: "pawprint.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(tints.fg)
-                }
-                .frame(width: dim, height: dim)
-                .clipShape(Circle())
-            )
+            CachedAsyncImage(url: url, maxDimension: dim * 2) {
+                ZStack { Circle().fill(tints.bg); ProgressView() }
+            } failure: {
+                Image(systemName: "pawprint.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(tints.fg)
+            }
+            .frame(width: dim, height: dim)
+            .clipShape(Circle())
 
         case .local(let data):
             #if canImport(UIKit)
             if let ui = ImageCache.shared.image(data: data, maxDimension: dim * 2) {
-                return AnyView(
-                    Image(uiImage: ui)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: dim, height: dim)
-                        .clipShape(Circle())
-                )
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: dim, height: dim)
+                    .clipShape(Circle())
+            } else {
+                fallbackSymbol(tints: tints)
             }
             #else
             if let image = Image(platformImage: data) {
-                return AnyView(
-                    image.resizable().scaledToFill()
-                        .frame(width: dim, height: dim)
-                        .clipShape(Circle())
-                )
+                image.resizable().scaledToFill()
+                    .frame(width: dim, height: dim)
+                    .clipShape(Circle())
+            } else {
+                fallbackSymbol(tints: tints)
             }
             #endif
-            return AnyView(
-                Image(systemName: "pawprint.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: dim * sizeToken.iconScale, height: dim * sizeToken.iconScale)
-                    .foregroundStyle(tints.fg)
-            )
 
         case .initials(let text):
-            return AnyView(
-                Text(text)
-                    .font(.system(size: dim * sizeToken.iconScale, weight: sizeToken.fontWeight, design: .rounded))
-                    .foregroundStyle(tints.fg)
-            )
+            Text(text)
+                .font(.system(size: dim * sizeToken.iconScale, weight: sizeToken.fontWeight, design: .rounded))
+                .foregroundStyle(tints.fg)
 
         case .symbol(let name):
-            return AnyView(
-                Image(systemName: name)
-                    .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
-                    .foregroundStyle(tints.fg)
-            )
+            Image(systemName: name)
+                .font(.system(size: dim * sizeToken.iconScale, weight: sizeToken.fontWeight))
+                .foregroundStyle(tints.fg)
 
         case .fallback:
-            return AnyView(
-                Image(systemName: "pawprint.fill")
-                    .font(.system(size: dim * sizeToken.iconScale, weight: .semibold))
-                    .foregroundStyle(tints.fg)
-            )
+            fallbackSymbol(tints: tints)
         }
+    }
+
+    private func fallbackSymbol(tints: (bg: Color, fg: Color, ring: Color)) -> some View {
+        let dim = sizeToken.diameter
+        return Image(systemName: "pawprint.fill")
+            .font(.system(size: dim * sizeToken.iconScale, weight: sizeToken.fontWeight))
+            .foregroundStyle(tints.fg)
     }
     
     @ViewBuilder
     private func badgeView(tints: (bg: Color, fg: Color, ring: Color)) -> some View {
-        let dim = sizeToken.dimension
+        let dim = sizeToken.diameter
         let badgeOffset = dim * 0.08
         
         if let badgeSystemImage {
@@ -261,16 +218,13 @@ struct IconCircle: View {
             return (bg, .white, .white.opacity(0.9))
 
         case .auto(_, let gender):
-            let base: Color
-            switch gender {
-            case .some(.male):
-                base = Color(red: 0.23, green: 0.51, blue: 0.96) // ~#3B82F6
-            case .some(.female):
-                base = Color(red: 0.92, green: 0.28, blue: 0.60) // ~#EC4899
-            default:
-                base = Color.secondary.opacity(0.55)
+            if let gender {
+                let base = DS.ColorToken.gender(gender)
+                return (base.opacity(0.15), .white, .white.opacity(0.9))
+            } else {
+                let base = Color.secondary.opacity(0.55)
+                return (base.opacity(0.15), .white, .white.opacity(0.9))
             }
-            return (base.opacity(0.15), .white, .white.opacity(0.9))
         }
     }
 

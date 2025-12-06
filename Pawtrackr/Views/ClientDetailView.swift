@@ -577,46 +577,29 @@ struct ClientDetailView: View {
 
         let client = vm.client
         let pets = Array(client.pets)
-        let contacts = Array(client.emergencyContacts)
         let visits = pets.flatMap { pet in Array(pet.visits) }
-        let visitItems = visits.flatMap { visit in Array(visit.items) }
-        let payments = visits.compactMap { $0.payment }
-
-        let paymentDates = payments.map { $0.paidAt }
+        // Track activity dates before deletion so summaries can be rebuilt.
+        let paymentDates = visits.compactMap { $0.payment?.paidAt }
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
 
-        // Remove auxiliary records first to avoid delete-rule surprises.
-        for contact in contacts {
-            modelContext.delete(contact)
-        }
-
-        for pet in pets {
-            for appointment in pet.appointments {
-                modelContext.delete(appointment)
+        // Manually delete visit items to work around a potential SwiftData cascade bug
+        for visit in visits {
+            for item in visit.items {
+                modelContext.delete(item)
             }
         }
-
+        
+        // Clean up payments explicitly to avoid orphaned revenue rows.
         for visit in visits {
             if let payment = visit.payment {
-                payment.visit = nil
-                visit.payment = nil
+                modelContext.delete(payment)
             }
         }
 
-        for item in visitItems {
-            modelContext.delete(item)
-        }
-
-        for visit in visits {
-            modelContext.delete(visit)
-        }
-
-        for pet in pets {
-            modelContext.delete(pet)
-        }
+        // Rely on delete rules: pets/visits/appointments/items/emergencyContacts cascade from client.
+        modelContext.delete(client)
 
         do {
-            modelContext.delete(client)
             try modelContext.save()
 
             let cal = Calendar.current

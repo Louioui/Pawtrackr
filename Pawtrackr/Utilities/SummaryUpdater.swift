@@ -7,6 +7,8 @@
 
 import Foundation
 import SwiftData
+import OSLog
+import OSLog
 
 enum SummaryUpdater {
     /// Recalculate the DaySummary for the calendar day that contains `date`.
@@ -20,11 +22,13 @@ enum SummaryUpdater {
                 predicate: #Predicate { $0.paidAt >= start && $0.paidAt < end }
             )
             let payments = try context.fetch(paymentDesc)
-            let revenue = payments.reduce(Decimal.zero) { $0 + $1.amount }
+            let revenue = payments.reduce(Decimal.zero) { $0 +~ $1.amount }
 
             // Calculate visit count and get visits for service/category counts
             let visitDesc = FetchDescriptor<Visit>(
-                predicate: #Predicate { $0.endedAt != nil && $0.endedAt! >= start && $0.endedAt! < end }
+                predicate: #Predicate { visit in
+                    visit.endedAt != nil ? (visit.endedAt! >= start && visit.endedAt! < end) : false
+                }
             )
             let visits = try context.fetch(visitDesc)
             let count = visits.count
@@ -38,17 +42,28 @@ enum SummaryUpdater {
                 context.insert(DaySummary(day: start, revenue: revenue, visitCount: count))
             }
             // Rebuild per-service counts
-            let existingSvc = try context.fetch(FetchDescriptor<ServiceDaySummary>(predicate: #Predicate { $0.day == start }))
-            for s in existingSvc { context.delete(s) }
             var svcCounts: [String: Int] = [:]
             for v in visits {
                 for item in v.items { svcCounts[item.displayName, default: 0] += 1 }
             }
-            for (name, c) in svcCounts { context.insert(ServiceDaySummary(day: start, serviceName: name, count: c)) }
+            
+            let existingSvc = try context.fetch(FetchDescriptor<ServiceDaySummary>(predicate: #Predicate { $0.day == start }))
+            var existingSvcDict = existingSvc.reduce(into: [String: ServiceDaySummary]()) { $0[$1.serviceName] = $1 }
+            
+            for (name, count) in svcCounts {
+                if let summary = existingSvcDict[name] {
+                    summary.count = count
+                    existingSvcDict.removeValue(forKey: name)
+                } else {
+                    context.insert(ServiceDaySummary(day: start, serviceName: name, count: count))
+                }
+            }
+            
+            for summary in existingSvcDict.values {
+                context.delete(summary)
+            }
 
             // Rebuild per-category counts
-            let existingCat = try context.fetch(FetchDescriptor<CategoryDaySummary>(predicate: #Predicate { $0.day == start }))
-            for s in existingCat { context.delete(s) }
             var catCounts: [String: Int] = [:]
             for v in visits {
                 for item in v.items {
@@ -57,11 +72,30 @@ enum SummaryUpdater {
                     }
                 }
             }
-            for (raw, c) in catCounts { context.insert(CategoryDaySummary(day: start, categoryRaw: raw, count: c)) }
+            
+            let existingCat = try context.fetch(FetchDescriptor<CategoryDaySummary>(predicate: #Predicate { $0.day == start }))
+            var existingCatDict = existingCat.reduce(into: [String: CategoryDaySummary]()) { $0[$1.categoryRaw] = $1 }
+            
+            for (raw, count) in catCounts {
+                if let summary = existingCatDict[raw] {
+                    summary.count = count
+                    existingCatDict.removeValue(forKey: raw)
+                } else {
+                    context.insert(CategoryDaySummary(day: start, categoryRaw: raw, count: count))
+                }
+            }
+            
+            for summary in existingCatDict.values {
+                context.delete(summary)
+            }
 
             try context.save()
         } catch {
-            // Best-effort; do not crash if summaries fail to update.
+            Logger.summaries.error("Summary rebuild failed for \(start, privacy: .public): \(String(describing: error))")
         }
     }
+}
+
+private extension Logger {
+    static let summaries = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "summaries")
 }

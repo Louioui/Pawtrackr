@@ -19,6 +19,7 @@ final class DashboardViewModel: ObservableObject {
     var completedToday: Int = 0
 
     var appointmentsTodayText: String { "\(appointmentsToday)" }
+    @MainActor
     var revenueTodayString: String { revenueToday.moneyString }
   }
 

@@ -45,7 +45,7 @@ struct PhotoPreview: View {
 
                 Spacer(minLength: 0)
 
-                if let image = cachedImage(imageData) {
+                if let image = Image(fromData: imageData, maxDimension: maxDisplayDimension() * 2) {
                     image
                         .resizable()
                         .scaledToFit()
@@ -59,7 +59,8 @@ struct PhotoPreview: View {
                         .accessibilityLabel(Text("\(title) photo preview"))
                         .accessibilityHint(Text("Pinch with two fingers to zoom"))
                 } else {
-                    Text(NSLocalizedString("photo_preview.unable_to_load", comment: "")).foregroundStyle(.white)
+                    Text(NSLocalizedString("photo_preview.unable_to_load", comment: ""))
+                        .foregroundStyle(.white)
                 }
 
                 Spacer(minLength: 0)
@@ -67,59 +68,73 @@ struct PhotoPreview: View {
         }
     }
 
+    // MARK: - Gestures
+
     private var magnifyGesture: some Gesture {
-        MagnifyGesture()
+        MagnificationGesture()
             .onChanged { value in
-                scale = clampScale(lastScale * value.magnification)
+                let delta = value / lastScale
+                scale = min(max(scale * delta, 1.0), 4.0)
+                lastScale = value
             }
-            .onEnded { value in
-                lastScale = clampScale(lastScale * value.magnification)
-                if lastScale <= 1 { // reset pan if fully zoomed out
-                    lastScale = 1
-                    scale = 1
-                    lastOffset = .zero
-                    offset = .zero
-                }
+            .onEnded { _ in
+                lastScale = 1.0
+                clampOffset()
             }
     }
 
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { value in
-                guard scale > 1 else { return }
-                offset = CGSize(width: lastOffset.width + value.translation.width,
-                                height: lastOffset.height + value.translation.height)
+                offset = CGSize(
+                    width: lastOffset.width + value.translation.width,
+                    height: lastOffset.height + value.translation.height
+                )
             }
-            .onEnded { value in
-                guard scale > 1 else { return }
-                lastOffset = CGSize(width: lastOffset.width + value.translation.width,
-                                    height: lastOffset.height + value.translation.height)
+            .onEnded { _ in
+                lastOffset = offset
+                clampOffset()
             }
     }
 
     private func toggleZoom() {
-        if scale > 1.01 {
-            scale = 1
-            lastScale = 1
+        if scale > 1.1 {
+            resetTransform()
+        } else {
+            scale = 2.0
+        }
+        clampOffset()
+    }
+
+    private func resetTransform() {
+        scale = 1.0
+        lastScale = 1.0
+        offset = .zero
+        lastOffset = .zero
+    }
+
+    /// Prevent panning far outside the image bounds when zoomed.
+    private func clampOffset() {
+        guard scale > 1 else {
             offset = .zero
             lastOffset = .zero
-        } else {
-            scale = 2
-            lastScale = 2
+            return
         }
+        let maxOffset: CGFloat = 400 // generous cap; image size unknown here
+        offset = CGSize(
+            width: max(-maxOffset, min(maxOffset, offset.width)),
+            height: max(-maxOffset, min(maxOffset, offset.height))
+        )
+        lastOffset = offset
     }
 
-    private func clampScale(_ s: CGFloat) -> CGFloat { max(1.0, min(4.0, s)) }
-}
-
-// Data → SwiftUI Image helper (module-wide safe)
-fileprivate func cachedImage(_ data: Data) -> Image? {
-    #if canImport(UIKit)
-    if let ui = ImageCache.shared.image(data: data, maxDimension: max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * 2) {
-        return Image(uiImage: ui)
+    private func maxDisplayDimension() -> CGFloat {
+        #if os(iOS)
+        return max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+        #elseif os(macOS)
+        return NSScreen.main?.frame.width ?? 1024
+        #else
+        return 1024
+        #endif
     }
-    #elseif canImport(AppKit)
-    if let ns = NSImage(data: data) { return Image(nsImage: ns) }
-    #endif
-    return nil
 }

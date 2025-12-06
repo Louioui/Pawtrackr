@@ -52,7 +52,7 @@ final class CheckoutViewModel: ObservableObject {
     @Published var afterPhotoData: Data?
     @Published var externalReference: String = ""
     @Published var tags: Set<String> = []
-    @Published var selectedExtras: Set<String> = []
+    @Published var selectedAddOnIDs: Set<PersistentIdentifier> = []
 
     // MARK: Published State
     @Published private(set) var isSaving: Bool = false
@@ -62,7 +62,17 @@ final class CheckoutViewModel: ObservableObject {
     
     // MARK: Private State
     var allServices: [Service] // Fetched once for performance; exposed for view rendering.
+    var addOnServices: [Service] = []
     private let checkoutEndsAt: Date?
+
+    /// Derived subtotal driven by the currently selected services or any existing visit items.
+    /// Falls back to the visit's snapshot subtotal so editing an in-flight visit reflects its items.
+    private var autoSubtotal: Decimal {
+        let selectedTotal = selectedServicesTotal
+        if selectedTotal > 0 { return selectedTotal }
+        let visitTotal = visit.servicesSubtotal
+        return visitTotal > 0 ? visitTotal : .zero
+    }
     
     // MARK: Computed State
     var requiresExternalReference: Bool {
@@ -123,26 +133,32 @@ final class CheckoutViewModel: ObservableObject {
             predicate: #Predicate { $0.isEnabled == true },
             sortBy: [SortDescriptor(\.name)]
         )
-        self.allServices = (try? modelContext.fetch(descriptor)) ?? []
+        let all = (try? modelContext.fetch(descriptor)) ?? []
+        self.allServices = all.filter { $0.category != .addOn }
+        self.addOnServices = all.filter { $0.category == .addOn }
         hydrateStateFromVisit()
     }
 
     // No deinit work needed.
     
+    @MainActor
     private func hydrateStateFromVisit() {
         hydrateNotes()
         tags = Set(pet.behaviorTags)
         beforePhotoData = visit.beforePhotoData
         afterPhotoData  = visit.afterPhotoData
         
-        selectedServiceIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
+        let allIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
+        selectedServiceIDs = allIDs.filter { id in allServices.contains(where: { $0.persistentModelID == id }) }
+        selectedAddOnIDs = allIDs.filter { id in addOnServices.contains(where: { $0.persistentModelID == id }) }
+
 
         if visit.total > 0 && visit.isCompleted {
             amountString = visit.total.moneyString
             amountWasManuallySet = true
         } else {
             amountWasManuallySet = false
-            recomputeAmountFromServices()
+            updateAutoAmountFromSelection()
         }
         
         // Timer is frozen at checkout entry; no live ticking needed here.
@@ -198,14 +214,21 @@ final class CheckoutViewModel: ObservableObject {
     }
 
     /// Clears manual override and recomputes from selected services.
+    @MainActor
     func resetManualAmount() {
-        // No-op: User will always manually enter the amount.
+        amountWasManuallySet = false
+        updateAutoAmountFromSelection()
     }
     
     func isServiceSelected(_ service: Service) -> Bool {
         selectedServiceIDs.contains(service.persistentModelID)
     }
 
+    func isAddOnSelected(_ service: Service) -> Bool {
+        selectedAddOnIDs.contains(service.persistentModelID)
+    }
+
+    @MainActor
     func toggleService(_ service: Service) {
         let id = service.persistentModelID
         if selectedServiceIDs.contains(id) {
@@ -213,6 +236,18 @@ final class CheckoutViewModel: ObservableObject {
         } else {
             selectedServiceIDs.insert(id)
         }
+        updateAutoAmountFromSelection()
+    }
+
+    @MainActor
+    func toggleAddOn(_ service: Service) {
+        let id = service.persistentModelID
+        if selectedAddOnIDs.contains(id) {
+            selectedAddOnIDs.remove(id)
+        } else {
+            selectedAddOnIDs.insert(id)
+        }
+        updateAutoAmountFromSelection()
     }
     
     func choosePayment(_ method: Payment.Method) {
@@ -227,7 +262,7 @@ final class CheckoutViewModel: ObservableObject {
             // Treat blank as no manual override so chips can drive the amount again
             amountWasManuallySet = false
             amountString = ""
-            recomputeAmountFromServices()
+            updateAutoAmountFromSelection()
             return
         }
         if let dec = Formatters.parseCurrency(trimmed) {
@@ -271,6 +306,7 @@ final class CheckoutViewModel: ObservableObject {
         guard let modelContext = modelContext else { return }
         isSaving = true
         if canTransition(from: state, to: .processing) { state = .processing }
+        updateAutoAmountFromSelection()
         
         do {
             try validate()
@@ -282,22 +318,20 @@ final class CheckoutViewModel: ObservableObject {
             
             // 1. Sync VisitItems with selected services.
             let servicesToSnapshot = allServices.filter { selectedServiceIDs.contains($0.persistentModelID) }
+            let addOnsToSnapshot = addOnServices.filter { selectedAddOnIDs.contains($0.persistentModelID) }
+            let allSelectedServices = servicesToSnapshot + addOnsToSnapshot
+            let allSelectedIDs = Set(allSelectedServices.map { $0.persistentModelID })
+            
             let existingServiceIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
             
             // Remove items that are no longer selected
             visit.items.removeAll { item in
                 guard let serviceID = item.service?.persistentModelID else { return false }
-                return !selectedServiceIDs.contains(serviceID)
+                return !allSelectedIDs.contains(serviceID)
             }
             // Add new items, snapshotting their price from the service catalog.
-            for service in servicesToSnapshot where !existingServiceIDs.contains(service.persistentModelID) {
+            for service in allSelectedServices where !existingServiceIDs.contains(service.persistentModelID) {
                 visit.addItem(title: service.name, unitPrice: service.effectiveBasePrice, quantity: 1, service: service)
-            }
-
-            // Add selected extras as line items with a zero price. Their cost is assumed
-            // to be included in the final manual total if one was provided.
-            for extra in selectedExtras {
-                visit.addItem(title: extra, unitPrice: 0, quantity: 1, service: nil)
             }
             
             // 2. Apply notes, tags, and photos.
@@ -368,16 +402,23 @@ final class CheckoutViewModel: ObservableObject {
     
     // MARK: - Private Helpers
     
-    private func recomputeAmountFromServices() {
-        amountString = ""
+    /// Keeps the amount in sync with selected services unless the user explicitly set it.
+    @MainActor
+    private func updateAutoAmountFromSelection() {
+        guard !amountWasManuallySet else { return }
+        amountString = autoSubtotal.moneyString
     }
     
     // MARK: - Derived Totals
     
     private var selectedServicesTotal: Decimal {
-        allServices
+        let mainServices = allServices
             .filter { selectedServiceIDs.contains($0.persistentModelID) }
             .reduce(Decimal.zero) { $0 +~ $1.effectiveBasePrice }
+        let addOnServices = addOnServices
+            .filter { selectedAddOnIDs.contains($0.persistentModelID) }
+            .reduce(Decimal.zero) { $0 +~ $1.effectiveBasePrice }
+        return mainServices + addOnServices
     }
     
     @MainActor

@@ -20,6 +20,7 @@ public extension Decimal {
 
     /// Human-friendly currency string using the shared currency formatter.
     /// NOTE: The actual formatter lives in `Formatters.currency`.
+    @MainActor
     var moneyString: String {
         Formatters.currency.string(from: self as NSDecimalNumber) ?? "$0.00"
     }

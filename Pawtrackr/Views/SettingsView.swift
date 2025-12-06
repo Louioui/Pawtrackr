@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var errorMessage = ""
     @State private var showChangePIN = false
     @State private var pinChangeError: String? = nil
+    @State private var showPruneResult = false
+    @State private var pruneResultMessage = ""
 
     var body: some View {
         NavigationStack {
@@ -28,6 +30,7 @@ struct SettingsView: View {
                     autoLockCard
                     securityTipsCard
                     dataManagementCard
+                    businessSettingsCard
                 }
                 .padding(.vertical, 8)
             }
@@ -38,7 +41,7 @@ struct SettingsView: View {
             .alert("common.error", isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
                 Button("common.ok", role: .cancel) { }
             } message: { Text(pinChangeError ?? "") }
-            .navigationTitle("Settings")
+            .navigationTitle("settings.title")
             .navigationBarTitleDisplayMode(.inline)
             .alert("settings.data_management.confirm.title", isPresented: $showingConfirmation) {
                 Button("common.cancel", role: .cancel) { }
@@ -53,6 +56,11 @@ struct SettingsView: View {
             } message: {
                 Text(errorMessage)
             }
+            .alert("common.success", isPresented: $showPruneResult) {
+                Button("common.ok", role: .cancel) { }
+            } message: {
+                Text(pruneResultMessage)
+            }
         }
     }
     
@@ -64,6 +72,13 @@ struct SettingsView: View {
         let dataPruner = DataPruner(modelContext: modelContext)
         do {
             try dataPruner.pruneVisits(olderThan: date)
+            try dataPruner.pruneVisitPhotos(olderThan: date, keepRecentPhotosPerPet: 2)
+            pruneResultMessage = String(
+                format: NSLocalizedString("settings.data_management.prune_success_fmt", comment: ""),
+                Formatters.dateOnly.string(from: date)
+            )
+            showPruneResult = true
+            HapticManager.notify(.success)
         } catch {
             errorMessage = error.localizedDescription
             showError = true
@@ -73,9 +88,10 @@ struct SettingsView: View {
     // MARK: - UI Sections
     private var headerBar: some View {
         HStack {
-            Text("Security Settings").font(.headline)
+            Text("settings.security.title").font(.headline)
             Spacer()
             Button { } label: { Image(systemName: "questionmark.circle").foregroundStyle(.secondary) }
+                .accessibilityLabel(Text("settings.security.question_a11y"))
         }
         .padding(.horizontal)
     }
@@ -88,9 +104,9 @@ struct SettingsView: View {
                 Circle().fill(Color.white.opacity(0.2)).frame(width: 48, height: 48)
                     .overlay(Image(systemName: "checkmark.shield.fill").font(.title2).foregroundStyle(.white))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(appSettings.isBiometricLockEnabled ? "Security Active" : "Security Disabled")
+                    Text(appSettings.isBiometricLockEnabled ? "settings.security.status.active_title" : "settings.security.status.inactive_title")
                         .font(.headline).foregroundStyle(.white)
-                    Text(appSettings.isBiometricLockEnabled ? "PIN lock is enabled and protecting your data" : "PIN lock is currently disabled")
+                    Text(appSettings.isBiometricLockEnabled ? "settings.security.status.active_subtitle" : "settings.security.status.inactive_subtitle")
                         .font(.caption).foregroundStyle(.white.opacity(0.9))
                 }
                 Spacer()
@@ -105,8 +121,8 @@ struct SettingsView: View {
         Card(elevation: .regular) {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("PIN Lock Settings").font(.headline)
-                    Text("Manage your 4-digit security PIN").font(.caption).foregroundStyle(.secondary)
+                    Text("settings.pin.title").font(.headline)
+                    Text("settings.pin.subtitle").font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
                 HStack {
@@ -114,12 +130,12 @@ struct SettingsView: View {
                         Circle().fill(DS.ColorToken.primary.opacity(0.12)).frame(width: 40, height: 40)
                             .overlay(Image(systemName: "key.fill").foregroundStyle(DS.ColorToken.primary))
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("PIN Status").font(.subheadline.weight(.semibold))
+                            Text("settings.pin.status").font(.subheadline.weight(.semibold))
                             Text(pinStatusSubtitle).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
-                    Text(appSettings.isBiometricLockEnabled ? "Enabled" : "Disabled")
+                    Text(appSettings.isBiometricLockEnabled ? "settings.pin.status.enabled" : "settings.pin.status.disabled")
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(appSettings.isBiometricLockEnabled ? DS.ColorToken.success : Color.gray.opacity(0.5), in: Capsule())
@@ -128,14 +144,14 @@ struct SettingsView: View {
                 Button {
                     showChangePIN = true
                 } label: {
-                    Label("Change PIN", systemImage: "pencil").frame(maxWidth: .infinity)
+                    Label("settings.pin.change", systemImage: "pencil").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(DS.ColorToken.primary)
                 Button {
                     appSettings.isBiometricLockEnabled.toggle()
                 } label: {
-                    Label(appSettings.isBiometricLockEnabled ? "Disable PIN Lock" : "Enable PIN Lock", systemImage: appSettings.isBiometricLockEnabled ? "xmark.circle" : "checkmark.circle")
+                    Label(appSettings.isBiometricLockEnabled ? "settings.pin.disable" : "settings.pin.enable", systemImage: appSettings.isBiometricLockEnabled ? "xmark.circle" : "checkmark.circle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -149,9 +165,9 @@ struct SettingsView: View {
             let fmt = RelativeDateTimeFormatter()
             fmt.unitsStyle = .full
             let rel = fmt.localizedString(for: d, relativeTo: Date())
-            return "Last changed \(rel)"
+            return String(format: NSLocalizedString("settings.pin.status.changed_relative_fmt", comment: ""), rel)
         } else {
-            return "Never changed"
+            return NSLocalizedString("settings.pin.status.never_changed", comment: "")
         }
     }
 
@@ -159,19 +175,20 @@ struct SettingsView: View {
         Card(elevation: .regular) {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Auto-Lock Behavior").font(.headline)
-                    Text("When the PIN lock activates automatically").font(.caption).foregroundStyle(.secondary)
+                    Text("settings.autolock.title").font(.headline)
+                    Text("settings.autolock.subtitle").font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
-                toggleRow(title: "Lock on app background", subtitle: "Activate PIN when switching apps", isOn: $appSettings.autoLockOnBackground)
-                toggleRow(title: "Lock after inactivity", subtitle: "Auto-lock after 5 minutes idle", isOn: $appSettings.autoLockAfterInactivity)
-                toggleRow(title: "Require PIN for sensitive data", subtitle: "Extra security for payments & client info", isOn: .constant(true))
+                toggleRow(title: "settings.autolock.on_background.title", subtitle: "settings.autolock.on_background.subtitle", isOn: $appSettings.autoLockOnBackground)
+                toggleRow(title: "settings.autolock.on_idle.title", subtitle: "settings.autolock.on_idle.subtitle", isOn: $appSettings.autoLockAfterInactivity)
+                toggleRow(title: "settings.autolock.on_sensitive.title", subtitle: "settings.autolock.on_sensitive.subtitle", isOn: .constant(true))
+                    .disabled(true)
             }
         }
         .padding(.horizontal)
     }
 
-    private func toggleRow(title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+    private func toggleRow(title: LocalizedStringKey, subtitle: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.subheadline.weight(.semibold))
@@ -188,12 +205,12 @@ struct SettingsView: View {
                 Circle().fill(DS.ColorToken.info.opacity(0.12)).frame(width: 32, height: 32)
                     .overlay(Image(systemName: "lightbulb.fill").foregroundStyle(DS.ColorToken.info))
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Security Tips").font(.subheadline.weight(.semibold))
+                    Text("settings.tips.title").font(.subheadline.weight(.semibold))
                     Group {
-                        Text("• Use a unique PIN that's not easily guessed")
-                        Text("• Change your PIN regularly for better security")
-                        Text("• Keep your device updated with latest security patches")
-                        Text("• Don't share your PIN with unauthorized users")
+                        Text("settings.tips.tip1")
+                        Text("settings.tips.tip2")
+                        Text("settings.tips.tip3")
+                        Text("settings.tips.tip4")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -206,15 +223,43 @@ struct SettingsView: View {
     private var dataManagementCard: some View {
         Card(elevation: .regular) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Data Management").font(.headline)
-                Picker("Prune Data Older Than", selection: $viewModel.pruningThreshold) {
+                Text("settings.data_management.title").font(.headline)
+                Picker("settings.data_management.prune_picker_title", selection: $viewModel.pruningThreshold) {
                     ForEach(SettingsViewModel.PruningThreshold.allCases) { threshold in
-                        Text(threshold.rawValue).tag(threshold)
+                        Text(threshold.title).tag(threshold)
                     }
                 }
                 .pickerStyle(.segmented)
-                Button("Prune Now", role: .destructive) { showingConfirmation = true }
+                Button("settings.data_management.prune_button", role: .destructive) { showingConfirmation = true }
                     .disabled(viewModel.pruningThreshold == .never)
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var businessSettingsCard: some View {
+        Card(elevation: .regular) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("settings.business.title").font(.headline)
+                Divider()
+                NavigationLink(destination: ServiceManagementView(modelContext: modelContext)) {
+                    HStack {
+                        Image(systemName: "list.bullet.rectangle")
+                            .font(.headline)
+                            .frame(width: 30)
+                        VStack(alignment: .leading) {
+                            Text("settings.business.services_title")
+                                .font(.headline)
+                            Text("settings.business.services_subtitle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal)
@@ -237,26 +282,26 @@ private struct ChangePINSheet: View {
                 VStack(spacing: 6) {
                     Circle().fill(DS.ColorToken.primary.opacity(0.12)).frame(width: 64, height: 64)
                         .overlay(Image(systemName: "key.fill").font(.title).foregroundStyle(DS.ColorToken.primary))
-                    Text("Change PIN").font(.title3.weight(.semibold))
-                    Text("Enter your current PIN, then set a new one").font(.caption).foregroundStyle(.secondary)
+                    Text("settings.pin.change.title").font(.title3.weight(.semibold))
+                    Text("settings.pin.change.subtitle").font(.caption).foregroundStyle(.secondary)
                 }
                 VStack(spacing: 12) {
-                    pinRow(title: "Current PIN", binding: $current)
-                    pinRow(title: "New PIN", binding: $newPIN)
-                    pinRow(title: "Confirm New PIN", binding: $confirmPIN)
+                    pinRow(title: "settings.pin.change.current", binding: $current)
+                    pinRow(title: "settings.pin.change.new", binding: $newPIN)
+                    pinRow(title: "settings.pin.change.confirm", binding: $confirmPIN)
                 }
                 Spacer(minLength: 0)
             }
             .padding()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { isPresented = false } }
-                ToolbarItem(placement: .confirmationAction) { Button("Update PIN") { updatePIN() } }
+                ToolbarItem(placement: .cancellationAction) { Button("common.cancel") { isPresented = false } }
+                ToolbarItem(placement: .confirmationAction) { Button("settings.pin.change.update") { updatePIN() } }
             }
         }
     }
 
     @ViewBuilder
-    private func pinRow(title: String, binding: Binding<[String]>) -> some View {
+    private func pinRow(title: LocalizedStringKey, binding: Binding<[String]>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.subheadline.weight(.semibold))
             HStack(spacing: 10) {
@@ -275,9 +320,9 @@ private struct ChangePINSheet: View {
         let cur = current.joined()
         let np = newPIN.joined()
         let cp = confirmPIN.joined()
-        guard cur.count == 4, np.count == 4, cp.count == 4 else { errorMessage = "Enter all 4 digits for each"; return }
-        guard cur == appSettings.appPIN else { errorMessage = "Current PIN is incorrect"; return }
-        guard np == cp else { errorMessage = "New PIN entries do not match"; return }
+        guard cur.count == 4, np.count == 4, cp.count == 4 else { errorMessage = NSLocalizedString("settings.pin.change.error.incomplete", comment: ""); return }
+        guard cur == appSettings.appPIN else { errorMessage = NSLocalizedString("settings.pin.change.error.incorrect", comment: ""); return }
+        guard np == cp else { errorMessage = NSLocalizedString("settings.pin.change.error.mismatch", comment: ""); return }
         appSettings.appPIN = np
         appSettings.lastPINChangeDate = Date()
         HapticManager.notify(.success)

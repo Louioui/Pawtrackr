@@ -11,12 +11,7 @@ import Foundation
 extension Client {
     /// A boolean indicating if any of the client's pets are currently checked in for a visit.
     var hasActiveVisit: Bool {
-        for pet in pets {
-            if pet.visits.contains(where: { $0.isActive }) {
-                return true
-            }
-        }
-        return false
+        pets.contains { $0.isCheckedIn }
     }
 
     /// The start time of the most recent active visit, used for sorting "In Progress" clients.

@@ -23,8 +23,8 @@ struct PhotoWell: View {
     var body: some View {
         ImagePicker(imageData: $imageData, allowsEditing: allowsEditing) {
             ZStack {
-                if let data = imageData, let image = cachedImage(from: data) {
-                    Image(uiImage: image)
+                if let data = imageData, let image = Image(fromData: data, maxDimension: UIScreen.main.bounds.width * UIScreen.main.scale) {
+                    image
                         .resizable()
                         .scaledToFill()
                 } else {
@@ -43,16 +43,6 @@ struct PhotoWell: View {
                 }
             }
         }
-    }
-
-    private func cachedImage(from data: Data) -> UIImage? {
-        #if canImport(UIKit)
-        // Downsample to avoid decoding full-resolution images into memory
-        let target = UIScreen.main.bounds.width * UIScreen.main.scale
-        return ImageCache.shared.image(data: data, maxDimension: target)
-        #else
-        return nil
-        #endif
     }
 }
 

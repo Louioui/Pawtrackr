@@ -8,47 +8,42 @@
 import SwiftUI
 
 /// Design-system tokens for common icon/avatar sizes used across the app.
-/// Centralizes diameter, internal padding and default SF Symbol point size.
+/// Centralizes diameter and symbol styling.
 @frozen
-public enum IconSizeToken: String, CaseIterable, Sendable {
-    case xs  // tiny badges, status dots
-    case sm  // tags, list rows
-    case md  // primary avatars in lists
-    case lg  // prominent tiles/cards
-    case xl  // hero / detail headers
+public enum IconSizeToken: Equatable, Sendable, Hashable {
+    case xs, sm, md, lg, xl, custom(CGFloat)
 
+    public static var allCases: [IconSizeToken] = [.xs, .sm, .md, .lg, .xl]
+    
     /// The circular container diameter (points).
     public var diameter: CGFloat {
         switch self {
-        case .xs: 20
-        case .sm: 28
-        case .md: 36
-        case .lg: 48
-        case .xl: 64
+        case .xs: return 24
+        case .sm: return 32
+        case .md: return 40
+        case .lg: return 56
+        case .xl: return 64
+        case .custom(let v): return max(16, v)
         }
     }
 
-    /// Default SF Symbol or initials font size (points).
-    /// Tuned to balance optical weight inside a circle at `diameter`.
-    public var symbolPointSize: CGFloat {
+    /// Relative glyph scale inside the circle. Tuned so small sizes look legible.
+    public var iconScale: CGFloat {
         switch self {
-        case .xs: 11
-        case .sm: 14
-        case .md: 18
-        case .lg: 24
-        case .xl: 32
+        case .xs: return 0.46
+        case .sm: return 0.44
+        case .md: return 0.42
+        case .lg: return 0.40
+        case .xl: return 0.38
+        case .custom(let v):
+            let clamped = max(16, min(v, 80))
+            let t = (clamped - 24) / (56 - 24)
+            return max(0.36, min(0.50, 0.46 - t * 0.06))
         }
     }
 
-    /// Optional internal content padding to keep glyphs off the edge.
-    public var contentPadding: CGFloat {
-        switch self {
-        case .xs: 2
-        case .sm: 3
-        case .md: 4
-        case .lg: 5
-        case .xl: 6
-        }
+    public var fontWeight: Font.Weight {
+        diameter >= 56 ? .semibold : .medium
     }
 
     /// A subtle outline width appropriate for this size.
@@ -56,23 +51,24 @@ public enum IconSizeToken: String, CaseIterable, Sendable {
 
     /// Corner radius to fully round a square with `diameter`.
     public var cornerRadius: CGFloat { diameter / 2 }
+    
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .xs: hasher.combine(0)
+        case .sm: hasher.combine(1)
+        case .md: hasher.combine(2)
+        case .lg: hasher.combine(3)
+        case .xl: hasher.combine(4)
+        case .custom(let value):
+            hasher.combine(5)
+            hasher.combine(value)
+        }
+    }
 }
 
 /// Helpers for scaling icon metrics for Dynamic Type.
-/// Call from a View with `@Environment(\.sizeCategory) var sizeCategory` if needed.
 public enum IconSizing {
-    /// Returns a scaled symbol point size for a given token and content size category.
-    public static func scaledSymbolPointSize(
-        for token: IconSizeToken,
-        sizeCategory: ContentSizeCategory
-    ) -> CGFloat {
-        let base = token.symbolPointSize
-        // Conservative scaling so avatars don't explode with Large Text.
-        let scale = scaleMultiplier(for: sizeCategory)
-        return base * scale
-    }
-
-    /// Returns a scaled diameter while maintaining the same visual ratios.
+    /// Returns a scaled diameter for a given token and content size category.
     public static func scaledDiameter(
         for token: IconSizeToken,
         sizeCategory: ContentSizeCategory
@@ -105,7 +101,7 @@ public enum IconSizing {
     VStack(spacing: 16) {
         ForEach(IconSizeToken.allCases, id: \.self) { token in
             HStack(spacing: 12) {
-                Text(token.rawValue.uppercased())
+                Text(String(describing: token).uppercased())
                     .font(.caption)
                     .frame(width: 80, alignment: .trailing)
 
@@ -114,7 +110,7 @@ public enum IconSizing {
                     .frame(width: token.diameter, height: token.diameter)
                     .overlay {
                         Image(systemName: "pawprint.fill")
-                            .font(.system(size: token.symbolPointSize, weight: .semibold))
+                            .font(.system(size: token.diameter * token.iconScale, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
             }

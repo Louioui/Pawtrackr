@@ -15,7 +15,9 @@ extension Payment {
     }
 
     var amountCents: Int {
-        NSDecimalNumber(decimal: amount * 100).intValue
+        let handler = NSDecimalNumberHandler(roundingMode: .bankers, scale: 0, raiseOnExactness: false, raiseOnOverflow: false, raiseOnUnderflow: false, raiseOnDivideByZero: false)
+        let rounded = NSDecimalNumber(decimal: amount * 100).rounding(accordingToBehavior: handler)
+        return rounded.intValue
     }
     
     @MainActor
