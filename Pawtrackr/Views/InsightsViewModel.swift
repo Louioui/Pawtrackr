@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Combine
+import OSLog
 
 @Observable
 @MainActor
@@ -61,6 +62,10 @@ final class InsightsViewModel {
     private(set) var revenueSeries: [RevenuePoint] = []
     private(set) var totalRevenue: Decimal = .zero
     @MainActor var totalRevenueString: String { totalRevenue.moneyString }
+    private(set) var revenueToday: Decimal = .zero
+    private(set) var revenueYesterday: Decimal = .zero
+    @MainActor var revenueTodayString: String { revenueToday.moneyString }
+    @MainActor var revenueYesterdayString: String { revenueYesterday.moneyString }
     private(set) var serviceLeaders: [CountRow] = []
     private(set) var isLoading: Bool = false
     private(set) var errorMessage: String?
@@ -68,6 +73,7 @@ final class InsightsViewModel {
     // MARK: - Private state
 
     @ObservationIgnored private let modelContext: ModelContext
+    @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "insights")
     @ObservationIgnored private var cancellables: Set<AnyCancellable> = []
     @ObservationIgnored private var customAppliedStart: Date?
     @ObservationIgnored private var customAppliedEndExclusive: Date?
@@ -124,13 +130,8 @@ final class InsightsViewModel {
 
         Task { @MainActor [weak self] in
             guard let self else { return }
-            do {
-                let visits = try fetchVisits(bounds: bounds)
-                self.apply(visits: visits, bounds: bounds)
-            } catch {
-                self.errorMessage = "Failed to load insights. \(error.localizedDescription)"
-                self.apply(visits: [], bounds: bounds)
-            }
+            let visits = fetchVisits(bounds: bounds)
+            self.apply(visits: visits, bounds: bounds)
         }
     }
 
@@ -171,14 +172,20 @@ final class InsightsViewModel {
         let series = Self.buildRevenueSeries(visits: visits, bounds: bounds)
         self.revenueSeries = series
         self.totalRevenue = series.reduce(Decimal.zero) { $0 + $1.amount }
+        updateHeadlineDailyRevenue()
     }
 
-    private func fetchVisits(bounds: (start: Date?, endExclusive: Date?)) throws -> [Visit] {
+    private func fetchVisits(bounds: (start: Date?, endExclusive: Date?)) -> [Visit] {
         let descriptor = FetchDescriptor<Visit>(
             predicate: Self.makePredicate(start: bounds.start, endExclusive: bounds.endExclusive),
             sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
         )
-        return try modelContext.fetch(descriptor)
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            logger.error("Insights fetchVisits failed: \(String(describing: error))")
+            return []
+        }
     }
 
     private func dateBounds(for scope: Scope, customStart: Date?, customEnd: Date?) -> (start: Date?, endExclusive: Date?) {
@@ -224,6 +231,49 @@ final class InsightsViewModel {
         return #Predicate<Visit> { visit in
             visit.endedAt != nil && visit.endedAt! >= lowerBound && visit.endedAt! < upperBound
         }
+    }
+
+    private func updateHeadlineDailyRevenue() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        revenueToday = revenueForDay(today)
+        revenueYesterday = revenueForDay(yesterday)
+    }
+
+    private func revenueForDay(_ day: Date) -> Decimal {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: day)
+        guard let endExclusive = calendar.date(byAdding: .day, value: 1, to: start) else { return .zero }
+
+        // Use visits as the source of truth; fall back to payments if there are no completed visits.
+        let visitDesc = FetchDescriptor<Visit>(
+            predicate: #Predicate { visit in
+                visit.endedAt != nil && visit.endedAt! >= start && visit.endedAt! < endExclusive
+            }
+        )
+        let visits: [Visit]
+        do {
+            visits = try modelContext.fetch(visitDesc)
+        } catch {
+            logger.error("Insights daily visit fetch failed for \(start): \(String(describing: error))")
+            visits = []
+        }
+        let visitRevenue = visits.reduce(Decimal.zero) { $0 +~ $1.total }
+        if visitRevenue > .zero { return visitRevenue.roundedMoney() }
+
+        let paymentDesc = FetchDescriptor<Payment>(
+            predicate: #Predicate { $0.paidAt >= start && $0.paidAt < endExclusive }
+        )
+        let payments: [Payment]
+        do {
+            payments = try modelContext.fetch(paymentDesc)
+        } catch {
+            logger.error("Insights daily payment fetch failed for \(start): \(String(describing: error))")
+            payments = []
+        }
+        let paymentRevenue = payments.reduce(Decimal.zero) { $0 +~ $1.amount }
+        return paymentRevenue.roundedMoney()
     }
 
     private static func computeTopServices(visits: [Visit]) -> [CountRow] {
