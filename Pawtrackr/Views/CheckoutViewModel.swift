@@ -43,9 +43,7 @@ final class CheckoutViewModel: ObservableObject {
     
     // MARK: UI State
     @Published var sessionNotes: String = ""
-    @Published var additionalNotes: String = ""
     @Published var amountString: String = ""
-    private var amountWasManuallySet: Bool = false
     @Published var selectedServiceIDs: Set<PersistentIdentifier> = []
     @Published var selectedPaymentMethod: Payment.Method = .creditCard
     @Published var beforePhotoData: Data?
@@ -64,15 +62,6 @@ final class CheckoutViewModel: ObservableObject {
     var allServices: [Service] // Fetched once for performance; exposed for view rendering.
     var addOnServices: [Service] = []
     private let checkoutEndsAt: Date?
-
-    /// Derived subtotal driven by the currently selected services or any existing visit items.
-    /// Falls back to the visit's snapshot subtotal so editing an in-flight visit reflects its items.
-    private var autoSubtotal: Decimal {
-        let selectedTotal = selectedServicesTotal
-        if selectedTotal > 0 { return selectedTotal }
-        let visitTotal = visit.servicesSubtotal
-        return visitTotal > 0 ? visitTotal : .zero
-    }
     
     // MARK: Computed State
     var requiresExternalReference: Bool {
@@ -144,7 +133,11 @@ final class CheckoutViewModel: ObservableObject {
     @MainActor
     private func hydrateStateFromVisit() {
         hydrateNotes()
-        tags = Set(pet.behaviorTags)
+        if visit.behaviorTags.isEmpty {
+            tags = Set(pet.behaviorTags)
+        } else {
+            tags = Set(visit.behaviorTags)
+        }
         beforePhotoData = visit.beforePhotoData
         afterPhotoData  = visit.afterPhotoData
         
@@ -155,54 +148,20 @@ final class CheckoutViewModel: ObservableObject {
 
         if visit.total > 0 && visit.isCompleted {
             amountString = visit.total.moneyString
-            amountWasManuallySet = true
         } else {
-            amountWasManuallySet = false
-            updateAutoAmountFromSelection()
+            amountString = ""
         }
         
         // Timer is frozen at checkout entry; no live ticking needed here.
     }
 
     private func hydrateNotes() {
-        let existing = visit.note?.trimmed ?? ""
-        guard !existing.isEmpty else {
-            sessionNotes = ""
-            additionalNotes = ""
-            return
-        }
-
-        if let additionalRange = existing.range(of: "\n\nAdditional Notes:\n") {
-            let sessionPart = String(existing[..<additionalRange.lowerBound])
-            let additionalPart = String(existing[additionalRange.upperBound...])
-            sessionNotes = sessionPart.replacingOccurrences(of: "Session Notes:\n", with: "").trimmed
-            additionalNotes = additionalPart.trimmed
-        } else if existing.hasPrefix("Session Notes:\n") {
-            sessionNotes = existing.replacingOccurrences(of: "Session Notes:\n", with: "").trimmed
-            additionalNotes = ""
-        } else if existing.hasPrefix("Additional Notes:\n") {
-            sessionNotes = ""
-            additionalNotes = existing.replacingOccurrences(of: "Additional Notes:\n", with: "").trimmed
-        } else {
-            sessionNotes = existing
-            additionalNotes = ""
-        }
+        sessionNotes = visit.note?.trimmed ?? ""
     }
 
     private func composeVisitNote() -> String? {
         let session = sessionNotes.trimmed
-        let additional = additionalNotes.trimmed
-
-        switch (session.isEmpty, additional.isEmpty) {
-        case (true, true):
-            return nil
-        case (false, true):
-            return session
-        case (true, false):
-            return "Additional Notes:\n\(additional)"
-        case (false, false):
-            return "Session Notes:\n\(session)\n\nAdditional Notes:\n\(additional)"
-        }
+        return session.isEmpty ? nil : session
     }
     
     // MARK: - Intents
@@ -210,14 +169,6 @@ final class CheckoutViewModel: ObservableObject {
     /// Called when the user types directly into the amount field.
     func setAmountDirectly(_ text: String) {
         amountString = text
-        amountWasManuallySet = true
-    }
-
-    /// Clears manual override and recomputes from selected services.
-    @MainActor
-    func resetManualAmount() {
-        amountWasManuallySet = false
-        updateAutoAmountFromSelection()
     }
     
     func isServiceSelected(_ service: Service) -> Bool {
@@ -236,7 +187,6 @@ final class CheckoutViewModel: ObservableObject {
         } else {
             selectedServiceIDs.insert(id)
         }
-        updateAutoAmountFromSelection()
     }
 
     @MainActor
@@ -247,7 +197,6 @@ final class CheckoutViewModel: ObservableObject {
         } else {
             selectedAddOnIDs.insert(id)
         }
-        updateAutoAmountFromSelection()
     }
     
     func choosePayment(_ method: Payment.Method) {
@@ -259,18 +208,14 @@ final class CheckoutViewModel: ObservableObject {
     func formatAmountInput() {
         let trimmed = amountString.trimmed
         if trimmed.isEmpty {
-            // Treat blank as no manual override so chips can drive the amount again
-            amountWasManuallySet = false
             amountString = ""
-            updateAutoAmountFromSelection()
             return
         }
         if let dec = Formatters.parseCurrency(trimmed) {
             amountString = dec.moneyString
-            amountWasManuallySet = true
         } else {
-            // Keep user's text but mark as manual so we don't clobber it; UI can show validation later
-            amountWasManuallySet = true
+            // Keep user's text; UI can show validation later
+            amountString = trimmed
         }
     }
 
@@ -306,7 +251,6 @@ final class CheckoutViewModel: ObservableObject {
         guard let modelContext = modelContext else { return }
         isSaving = true
         if canTransition(from: state, to: .processing) { state = .processing }
-        updateAutoAmountFromSelection()
         
         do {
             try validate()
@@ -336,7 +280,9 @@ final class CheckoutViewModel: ObservableObject {
             
             // 2. Apply notes, tags, and photos.
             visit.note = composeVisitNote()
-            pet.setBehaviorTags(Array(tags))
+            let sortedTags = Array(tags.sorted())
+            visit.behaviorTags = sortedTags
+            pet.setBehaviorTags(sortedTags)
             visit.applyPhotos(before: beforePhotoData, after: afterPhotoData)
             
             // 3. Finalize visit total and mark as checked out.
@@ -363,8 +309,8 @@ final class CheckoutViewModel: ObservableObject {
                 object: nil,
                 userInfo: [
                     VisitDidCompleteKey.visitID.rawValue: visit.persistentModelID,
-                    VisitDidCompleteKey.petID.rawValue: visit.pet.persistentModelID,
-                    VisitDidCompleteKey.clientID.rawValue: visit.pet.owner?.persistentModelID as Any,
+                    VisitDidCompleteKey.petID.rawValue: visit.pet?.persistentModelID as Any,
+                    VisitDidCompleteKey.clientID.rawValue: visit.pet?.owner?.persistentModelID as Any,
                     VisitDidCompleteKey.endedAt.rawValue: finalEndedAt,
                     VisitDidCompleteKey.total.rawValue: servicesTotalDecimal
                 ].compactMapValues { $0 }
@@ -383,9 +329,8 @@ final class CheckoutViewModel: ObservableObject {
             alertMessage = error.localizedDescription
             Logger.main.error("Checkout save failed: \(error.localizedDescription)")
             showAlert = true
+            isSaving = false
         }
-        
-        isSaving = false
     }
     
     @MainActor
@@ -402,24 +347,7 @@ final class CheckoutViewModel: ObservableObject {
     
     // MARK: - Private Helpers
     
-    /// Keeps the amount in sync with selected services unless the user explicitly set it.
-    @MainActor
-    private func updateAutoAmountFromSelection() {
-        guard !amountWasManuallySet else { return }
-        amountString = autoSubtotal.moneyString
-    }
-    
     // MARK: - Derived Totals
-    
-    private var selectedServicesTotal: Decimal {
-        let mainServices = allServices
-            .filter { selectedServiceIDs.contains($0.persistentModelID) }
-            .reduce(Decimal.zero) { $0 +~ $1.effectiveBasePrice }
-        let addOnServices = addOnServices
-            .filter { selectedAddOnIDs.contains($0.persistentModelID) }
-            .reduce(Decimal.zero) { $0 +~ $1.effectiveBasePrice }
-        return mainServices + addOnServices
-    }
     
     @MainActor
     var servicesTotalDecimal: Decimal {

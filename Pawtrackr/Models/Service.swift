@@ -120,11 +120,22 @@ extension Service {
 
 // MARK: - Seed Data & Previews
 extension Service {
-    static let bath   = Service(name: "Bath",    category: .groom, systemIcon: "shower.fill",        basePrice: 45, defaultDurationMinutes: 45)
-    static let trim   = Service(name: "Trim",    category: .groom, systemIcon: "scissors",           basePrice: 35, defaultDurationMinutes: 30)
-    static let nails  = Service(name: "Nails",   category: .addOn, systemIcon: "hand.raised.fill",   basePrice: 15, defaultDurationMinutes: 10)
-    static let ears   = Service(name: "Ears",    category: .addOn, systemIcon: "ear.and.waveform",   basePrice: 12, defaultDurationMinutes: 10)
-    static let teeth  = Service(name: "Teeth",   category: .addOn, systemIcon: "mouth.fill",         basePrice: 10, defaultDurationMinutes: 10)
-    static let deshed = Service(name: "De-shed", category: .care,  systemIcon: "line.3.crossed.swirl.circle.fill", basePrice: 25, defaultDurationMinutes: 25)
-    static let fullGroom = Service(name: "Full Groom", category: .package, systemIcon: "sparkles", basePrice: 75, defaultDurationMinutes: 90, isPackage: true)
+    // Packages
+    static let fullPackage  = Service(name: "Full Package",  category: .package, systemIcon: "sparkles", isPackage: true)
+    static let basicPackage = Service(name: "Basic Package", category: .package, systemIcon: "archivebox.fill", isPackage: true)
+    static let spaPackage   = Service(name: "Spa Package",   category: .package, systemIcon: "leaf.fill", isPackage: true)
+
+    // Main Services
+    static let bath         = Service(name: "Bath",     category: .groom, systemIcon: "shower.fill")
+    static let haircut      = Service(name: "Haircut",  category: .groom, systemIcon: "scissors")
+
+    // Add-Ons
+    static let deshedding   = Service(name: "De-shedding",          category: .addOn, systemIcon: "line.3.crossed.swirl.circle.fill")
+    static let analGlands   = Service(name: "Anal Glands Expression", category: .addOn, systemIcon: "dot.circle")
+    static let faceGrooming = Service(name: "Face Grooming",        category: .addOn, systemIcon: "mustache.fill")
+    static let pawTrim      = Service(name: "Paw Trim",             category: .addOn, systemIcon: "pawprint.fill")
+    static let hygieneTrim  = Service(name: "Hygiene Area Trim",    category: .addOn, systemIcon: "person.fill.viewfinder")
+    static let knotsFee     = Service(name: "Knots and Matting Fee",  category: .addOn, systemIcon: "exclamationmark.triangle.fill")
+    static let fleaAndTick  = Service(name: "Flea & Ticks Treatment", category: .addOn, systemIcon: "ladybug.fill")
+    static let hairDye      = Service(name: "Hair Dye",             category: .addOn, systemIcon: "paintpalette.fill")
 }

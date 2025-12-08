@@ -32,6 +32,7 @@ struct VisitDetailView: View {
                         servicesCard
                         photosCard
                         notesCard
+                        behaviorTagsCard
                     }
                     .padding(.top, 8)
                 }
@@ -73,7 +74,9 @@ struct VisitDetailView: View {
                 }
             }
             .fullScreenCover(isPresented: $showCheckout) {
-                CheckoutView(pet: visit.pet, visit: visit)
+                if let pet = visit.pet {
+                    CheckoutView(pet: pet, visit: visit)
+                }
             }
             .fullScreenCover(item: Binding(
                 get: { 
@@ -94,9 +97,9 @@ struct VisitDetailView: View {
     // MARK: - Header (pet summary) 
     
     private var header: some View {
-        Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(visit.pet.gender)), thickness: 4)) {
+        Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(visit.pet?.gender)), thickness: 4)) {
             HStack(spacing: 12) {
-                if let data = visit.pet.photoData {
+                if let data = visit.pet?.photoData {
 #if canImport(UIKit)
                     if let ui = ImageCache.shared.image(data: data, maxDimension: 128) {
                         Image(uiImage: ui)
@@ -104,7 +107,7 @@ struct VisitDetailView: View {
                             .frame(width: 64, height: 64)
                             .clipShape(Circle())
                     } else {
-                        SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
+                        SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
                     }
 #elseif canImport(AppKit)
                     if let ns = NSImage(data: data) {
@@ -113,16 +116,16 @@ struct VisitDetailView: View {
                             .frame(width: 64, height: 64)
                             .clipShape(Circle())
                     } else {
-                        SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
+                        SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
                     }
 #else
-                    SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
+                    SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
 #endif
                 } else {
-                    SpeciesAndGenderIcons.badge(for: visit.pet.species, gender: visit.pet.gender, size: 64)
+                    SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(visit.pet.name)
+                    Text(visit.pet?.name ?? "Unknown")
                         .font(.title3.weight(.semibold))
                     Text(petSubtitle(visit.pet))
                         .font(.subheadline)
@@ -157,7 +160,8 @@ struct VisitDetailView: View {
         .padding(.horizontal)
     }
     
-    private func petSubtitle(_ pet: Pet) -> String {
+    private func petSubtitle(_ pet: Pet?) -> String {
+        guard let pet = pet else { return "" }
         if let breed = pet.breed, !breed.isEmpty { return "\(breed) • \(pet.species.displayName)" }
         return pet.species.displayName
     }
@@ -384,6 +388,24 @@ struct VisitDetailView: View {
             .padding(.horizontal)
         }
         
+        @ViewBuilder
+        private var behaviorTagsCard: some View {
+            if !visit.behaviorTags.isEmpty {
+                Card {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Behavior Tags")
+                            .font(.subheadline.weight(.semibold))
+                        FlowLayout(spacing: 8, rowSpacing: 8) {
+                            ForEach(visit.behaviorTags, id: \.self) { tag in
+                                Chip(tag, style: .tinted, size: .sm, tint: .blue)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+        
         // MARK: - Export (CSV)
         
         private func exportCSVForVisit() -> String {
@@ -396,8 +418,8 @@ struct VisitDetailView: View {
 
             let started = visit.startedAt.ISO8601Format()
             let ended = visit.endedAt?.ISO8601Format() ?? ""
-            let petName = visit.pet.name
-            let ownerName = visit.pet.owner.map { "\($0.firstName) \($0.lastName)" } ?? ""
+            let petName = visit.pet?.name ?? "Unknown"
+            let ownerName = visit.pet?.owner.map { "\($0.firstName) \($0.lastName)" } ?? ""
             let services = visit.items.map { $0.displayName }.joined(separator: "; ")
             let amount = visit.totalCurrencyString
             let payment = visit.payment?.method.displayName ?? ""

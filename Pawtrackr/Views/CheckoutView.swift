@@ -30,7 +30,6 @@ struct CheckoutView: View {
                     photosSection
                     serviceChargeSection
                     paymentSection
-                    additionalNotesSection
                     summarySection
                 }
                 .padding(.horizontal)
@@ -311,12 +310,6 @@ private extension CheckoutView {
                 Text(NSLocalizedString("checkout.service_charge_hint", comment: ""))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Button(NSLocalizedString("checkout.reset_total", comment: ""), role: .none) {
-                    viewModel.resetManualAmount()
-                }
-                .font(.footnote.weight(.semibold))
-                .buttonStyle(.borderless)
-                .foregroundColor(Color.accentColor)
             }
         }
     }
@@ -340,18 +333,6 @@ private extension CheckoutView {
                             .textFieldStyle(.roundedBorder)
                     }
                 }
-            }
-        }
-    }
-
-    var additionalNotesSection: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionTitle("checkout.additional_notes")
-                notesEditor(
-                    text: $viewModel.additionalNotes,
-                    placeholder: NSLocalizedString("checkout.additional_placeholder", comment: "")
-                )
             }
         }
     }
@@ -428,16 +409,9 @@ private extension CheckoutView {
                         .foregroundStyle(Color.accentColor)
                 }
                 .frame(width: 36, height: 36)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(service.name)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Color(.label))
-                    if let price = service.basePrice, price > 0 {
-                        Text(price.moneyString)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Text(service.name)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color(.label))
                 Spacer()
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? .green : .secondary)

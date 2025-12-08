@@ -19,6 +19,7 @@ final class Visit {
 
     // MARK: - Notes & Media
     var note: String?
+    var behaviorTags: [String] = []
     @Attribute(.externalStorage) var beforePhotoData: Data?
     @Attribute(.externalStorage) var afterPhotoData: Data?
 
@@ -28,7 +29,8 @@ final class Visit {
     var total: Decimal
 
     // MARK: - Relationships
-    var pet: Pet
+    /// The pet this visit belongs to. Optional to allow SwiftData cascade deletes to work properly.
+    var pet: Pet?
 
     @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit)
     var items: [VisitItem] = []
@@ -50,6 +52,20 @@ final class Visit {
         self.total = .zero
         self.pet = pet
         pet.activeVisit = self
+    }
+
+    /// Convenience initializer when pet may not be available yet
+    init(startedAt: Date = .now) {
+        self.uuid = UUID()
+        self.createdAt = .now
+        self.updatedAt = .now
+        self.startedAt = startedAt
+        self.endedAt = nil
+        self.note = nil
+        self.beforePhotoData = nil
+        self.afterPhotoData = nil
+        self.total = .zero
+        self.pet = nil
     }
 
     // MARK: - Derived State
@@ -97,14 +113,14 @@ final class Visit {
     func markCheckedIn(now: Date = .now) {
         if startedAt > now { startedAt = now }
         endedAt = nil
-        pet.activeVisit = self
+        pet?.activeVisit = self
         didUpdate()
     }
 
     func markCheckedOut(total customTotal: Decimal? = nil, now: Date = .now) {
         if let custom = customTotal { total = custom.roundedMoney() } else { recalcTotal() }
         if endedAt == nil { endedAt = now }
-        pet.activeVisit = nil
+        pet?.activeVisit = nil
         didUpdate()
     }
 
@@ -137,9 +153,9 @@ final class Visit {
         didUpdate()
     }
 
-    private func didUpdate() { 
+    private func didUpdate() {
         updatedAt = .now
         // Also update the client's last visit date to reflect the most recent activity.
-        pet.owner?.lastVisitDate = sortKeyDate
+        pet?.owner?.lastVisitDate = sortKeyDate
     }
 }

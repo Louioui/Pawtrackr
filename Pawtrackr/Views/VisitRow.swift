@@ -14,14 +14,14 @@ struct VisitRow: View {
         // FIX: Use the correct Card initializer.
         Card(
             elevation: .regular,
-            accent: .leading(.color(DS.ColorToken.gender(visit.pet.gender)), thickness: 4)
+            accent: .leading(.color(DS.ColorToken.gender(visit.pet?.gender)), thickness: 4)
         ) {
             HStack(alignment: .top, spacing: 12) {
                 VStack {
-                    AvatarView(.pet(species: visit.pet.species, gender: visit.pet.gender, name: visit.pet.name), size: .md)
+                    AvatarView(.pet(species: visit.pet?.species, gender: visit.pet?.gender, name: visit.pet?.name ?? "Unknown"), size: .md)
                     Spacer()
                 }
-                
+
                 VStack(alignment: .leading, spacing: 6) {
                     header
                     services
@@ -34,10 +34,10 @@ struct VisitRow: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(visit.pet.owner?.fullName ?? "Unknown Owner")
+                Text(visit.pet?.owner?.fullName ?? "Unknown Owner")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(visit.pet.name)
+                Text(visit.pet?.name ?? "Unknown")
                     .font(.subheadline.weight(.semibold))
             }
             Spacer()

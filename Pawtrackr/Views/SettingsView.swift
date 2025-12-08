@@ -6,19 +6,14 @@
 //
 
 import SwiftUI
-import SwiftData
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appSettings: AppSettings
-    @StateObject private var viewModel = SettingsViewModel()
-    @State private var showingConfirmation = false
-    @State private var showError = false
-    @State private var errorMessage = ""
     @State private var showChangePIN = false
     @State private var pinChangeError: String? = nil
-    @State private var showPruneResult = false
-    @State private var pruneResultMessage = ""
+    @State private var showError = false
+    @State private var errorMessage = ""
 
     var body: some View {
         NavigationStack {
@@ -27,10 +22,9 @@ struct SettingsView: View {
                     headerBar
                     securityStatusCard
                     pinManagementCard
-                    autoLockCard
-                    securityTipsCard
-                    dataManagementCard
-                    businessSettingsCard
+                    
+                    
+                    
                 }
                 .padding(.vertical, 8)
             }
@@ -43,48 +37,14 @@ struct SettingsView: View {
             } message: { Text(pinChangeError ?? "") }
             .navigationTitle("settings.title")
             .navigationBarTitleDisplayMode(.inline)
-            .alert("settings.data_management.confirm.title", isPresented: $showingConfirmation) {
-                Button("common.cancel", role: .cancel) { }
-                Button("settings.data_management.confirm.delete", role: .destructive) {
-                    pruneData()
-                }
-            } message: {
-                Text("settings.data_management.confirm.message")
-            }
             .alert("common.error", isPresented: $showError) {
                 Button("common.ok", role: .cancel) { }
             } message: {
                 Text(errorMessage)
             }
-            .alert("common.success", isPresented: $showPruneResult) {
-                Button("common.ok", role: .cancel) { }
-            } message: {
-                Text(pruneResultMessage)
-            }
         }
     }
     
-    private func pruneData() {
-        guard let date = viewModel.pruningThreshold.date else {
-            return
-        }
-        
-        let dataPruner = DataPruner(modelContext: modelContext)
-        do {
-            try dataPruner.pruneVisits(olderThan: date)
-            try dataPruner.pruneVisitPhotos(olderThan: date, keepRecentPhotosPerPet: 2)
-            pruneResultMessage = String(
-                format: NSLocalizedString("settings.data_management.prune_success_fmt", comment: ""),
-                Formatters.dateOnly.string(from: date)
-            )
-            showPruneResult = true
-            HapticManager.notify(.success)
-        } catch {
-            errorMessage = error.localizedDescription
-            showError = true
-        }
-    }
-
     // MARK: - UI Sections
     private var headerBar: some View {
         HStack {
@@ -171,99 +131,8 @@ struct SettingsView: View {
         }
     }
 
-    private var autoLockCard: some View {
-        Card(elevation: .regular) {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("settings.autolock.title").font(.headline)
-                    Text("settings.autolock.subtitle").font(.caption).foregroundStyle(.secondary)
-                }
-                Divider()
-                toggleRow(title: "settings.autolock.on_background.title", subtitle: "settings.autolock.on_background.subtitle", isOn: $appSettings.autoLockOnBackground)
-                toggleRow(title: "settings.autolock.on_idle.title", subtitle: "settings.autolock.on_idle.subtitle", isOn: $appSettings.autoLockAfterInactivity)
-                toggleRow(title: "settings.autolock.on_sensitive.title", subtitle: "settings.autolock.on_sensitive.subtitle", isOn: .constant(true))
-                    .disabled(true)
-            }
-        }
-        .padding(.horizontal)
-    }
 
-    private func toggleRow(title: LocalizedStringKey, subtitle: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Toggle("", isOn: isOn).labelsHidden()
-        }
-    }
 
-    private var securityTipsCard: some View {
-        Card(elevation: .regular) {
-            HStack(alignment: .top, spacing: 12) {
-                Circle().fill(DS.ColorToken.info.opacity(0.12)).frame(width: 32, height: 32)
-                    .overlay(Image(systemName: "lightbulb.fill").foregroundStyle(DS.ColorToken.info))
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("settings.tips.title").font(.subheadline.weight(.semibold))
-                    Group {
-                        Text("settings.tips.tip1")
-                        Text("settings.tips.tip2")
-                        Text("settings.tips.tip3")
-                        Text("settings.tips.tip4")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.horizontal)
-    }
-
-    private var dataManagementCard: some View {
-        Card(elevation: .regular) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("settings.data_management.title").font(.headline)
-                Picker("settings.data_management.prune_picker_title", selection: $viewModel.pruningThreshold) {
-                    ForEach(SettingsViewModel.PruningThreshold.allCases) { threshold in
-                        Text(threshold.title).tag(threshold)
-                    }
-                }
-                .pickerStyle(.segmented)
-                Button("settings.data_management.prune_button", role: .destructive) { showingConfirmation = true }
-                    .disabled(viewModel.pruningThreshold == .never)
-            }
-        }
-        .padding(.horizontal)
-    }
-
-    private var businessSettingsCard: some View {
-        Card(elevation: .regular) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("settings.business.title").font(.headline)
-                Divider()
-                NavigationLink(destination: ServiceManagementView(modelContext: modelContext)) {
-                    HStack {
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(.headline)
-                            .frame(width: 30)
-                        VStack(alignment: .leading) {
-                            Text("settings.business.services_title")
-                                .font(.headline)
-                            Text("settings.business.services_subtitle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal)
-    }
 }
 
 // MARK: - Change PIN Sheet

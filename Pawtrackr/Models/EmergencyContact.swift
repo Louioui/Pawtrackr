@@ -24,3 +24,7 @@ final class EmergencyContact {
     }
 }
 
+// Use a stable UUID-backed identity to avoid relying on persistentModelID in SwiftUI lists/alerts.
+extension EmergencyContact: Identifiable {
+    var id: UUID { uuid }
+}

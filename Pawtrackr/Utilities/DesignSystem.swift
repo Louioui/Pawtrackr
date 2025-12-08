@@ -42,7 +42,7 @@ enum DS {
         static let sessionText       = success                           // text on the soft chip
 
         // Gender
-        static func gender(_ g: PetGender) -> Color { g == .male ? genderMale : genderFemale }
+        static func gender(_ g: PetGender?) -> Color { (g ?? .male) == .male ? genderMale : genderFemale }
 
         // Species (soft tints used behind paw/badges)
         static func species(_ s: Species) -> Color {

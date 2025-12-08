@@ -9,12 +9,18 @@
 
 "insights.title" = "Estadísticas";
 "insights.filters" = "Filtros";
+"insights.scope.today" = "Hoy";
+"insights.scope.yesterday" = "Ayer";
 "insights.revenue" = "Ingresos";
 "insights.total_visits" = "Visitas totales";
 "insights.aov" = "Venta prom. (AOV)";
 "insights.avg_duration" = "Duración prom.";
 "insights.visits" = "Visitas";
+"insights.kpis" = "Indicadores";
 "insights.revenue_trend" = "Tendencia de ingresos";
+"insights.daily_revenue" = "Ingresos diarios";
+"insights.up_vs_yesterday" = "Arriba vs ayer";
+"insights.down_vs_yesterday" = "Abajo vs ayer";
 "insights.top_services" = "Servicios destacados";
 "insights.visits_by_package" = "Visitas por paquete";
 "insights.package_mix" = "Mezcla de paquetes";

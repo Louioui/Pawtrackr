@@ -19,7 +19,6 @@ struct ClientsView: View {
     @Namespace var namespace
     
     @State private var viewModel: ClientsViewModel?
-    @State private var dashVM: DashboardViewModel?
     @State private var showingNewClientSheet = false
     @State private var showNotifications = false
     @State private var storedNotifications: [NotificationItem] = []
@@ -44,15 +43,8 @@ struct ClientsView: View {
         ScrollView {
             VStack(spacing: 16) {
                 headerBar
-                
-                if let dvm = dashVM {
-                    quickStats(dvm)
-                } else {
-                    quickStatsSkeleton
-                }
 
                 if let viewModel {
-                    searchBar
                     if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
                         emptyState(viewModel)
                     } else {
@@ -65,6 +57,8 @@ struct ClientsView: View {
             .padding(.top, 20)
             .padding(.bottom, 80) // Padding to avoid the FAB
         }
+        .searchable(text: Binding(get: { viewModel?.searchText ?? "" }, set: { if let vm = viewModel { vm.searchText = $0 } }),
+                    prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
         .background(DS.ColorToken.background)
         .ignoresSafeArea(edges: .top)
         .alert("common.error", isPresented: showErrorAlert) {
@@ -114,9 +108,7 @@ struct ClientsView: View {
         }
         .onAppear {
             if viewModel == nil { viewModel = ClientsViewModel(modelContext: modelContext) }
-            if dashVM == nil { dashVM = DashboardViewModel(modelContext: modelContext) }
             viewModel?.fetchClients()
-            Task { await dashVM?.refresh() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
             if let id = note.createdClientID, note.clientCreatePhase == .created {
@@ -128,15 +120,6 @@ struct ClientsView: View {
         }
     }
 
-    @ViewBuilder
-    private var searchBar: some View {
-        if let viewModel {
-            SearchField(text: Binding(get: { viewModel.searchText }, set: { viewModel.searchText = $0 }),
-                        placeholder: NSLocalizedString("clients.search_placeholder", comment: ""))
-                .padding(.horizontal)
-        }
-    }
-    
     @ViewBuilder
     private func clientSections(_ viewModel: ClientsViewModel) -> some View {
         if !viewModel.inProgressClients.isEmpty {
@@ -232,7 +215,7 @@ struct ClientsView: View {
         .padding(.top, topPadding)
     }
 
-    // MARK: - Header + Quick Stats (Refined UI)
+    // MARK: - Header (Refined UI)
     private var headerBar: some View {
         HStack {
             VStack(alignment: .leading) {
@@ -264,37 +247,6 @@ struct ClientsView: View {
     }
 
     private var notificationsCount: Int { storedNotifications.count }
-
-    private func quickStats(_ vm: DashboardViewModel) -> some View {
-        HStack(spacing: 12) {
-            QuickStatCard(
-                title: "Visits Today",
-                value: vm.kpi.appointmentsTodayText,
-                icon: "calendar.badge.checkmark",
-                color: .blue
-            )
-            QuickStatCard(
-                title: "Revenue Today",
-                value: vm.kpi.revenueTodayString,
-                icon: "dollarsign.circle.fill",
-                color: .green
-            )
-        }
-        .padding(.horizontal)
-    }
-
-    private var quickStatsSkeleton: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.secondary.opacity(0.1))
-                .frame(height: 88)
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.secondary.opacity(0.1))
-                .frame(height: 88)
-        }
-        .padding(.horizontal)
-        .redacted(reason: .placeholder)
-    }
 
     private var clientsSkeleton: some View {
         VStack(spacing: 10) {

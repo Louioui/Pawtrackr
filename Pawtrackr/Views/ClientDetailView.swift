@@ -17,7 +17,6 @@ struct ClientDetailView: View {
 
     // Lazy-initialized ViewModel to avoid context crashes
     @State private var viewModel: ClientDetailViewModel? = nil
-    private var vm: ClientDetailViewModel { viewModel! }
 
     // Local sheet routing (do not depend on VM for UI routing)
     @State private var sheetDestination: SheetDestination?
@@ -86,14 +85,20 @@ struct ClientDetailView: View {
         self.client = client
         self.coordinator = coordinator
         self.namespace = namespace
-        self.petsCoordinator = PetsCoordinator(navigationController: coordinator!.navigationController)
+        // Safely initialize petsCoordinator only if coordinator is available
+        if let coordinator = coordinator {
+            self.petsCoordinator = PetsCoordinator(navigationController: coordinator.navigationController)
+        } else {
+            // Fallback: create a standalone coordinator (navigation may be limited)
+            self.petsCoordinator = PetsCoordinator(navigationController: UINavigationController())
+        }
     }
 
     // MARK: - Body
     var body: some View {
         Group {
-            if viewModel != nil {
-                navigationContent
+            if let vm = viewModel {
+                navigationContent(vm: vm)
             } else {
                 ProgressView()
                     .padding()
@@ -108,8 +113,8 @@ struct ClientDetailView: View {
         }
     }
 
-    private var navigationContent: some View {
-        content
+    private func navigationContent(vm: ClientDetailViewModel) -> some View {
+        content(vm: vm)
         .navigationTitle("client_details.title")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -120,7 +125,7 @@ struct ClientDetailView: View {
                 sheetDestination = .addPet
             }
         }
-        .sheet(item: $sheetDestination) { destination in
+        .sheet(item: $sheetDestination) { [vm] destination in
             switch destination {
             case .addPet:
                 AddPetSheet(client: vm.client)
@@ -168,10 +173,10 @@ struct ClientDetailView: View {
                 secondaryButton: .cancel()
             )
         }
-        .fullScreenCover(item: $checkoutPet) { pet in
+        .fullScreenCover(item: $checkoutPet) { [vm] pet in
             CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
         }
-        .alert(item: $alertDestination) { destination in
+        .alert(item: $alertDestination) { [vm] destination in
             switch destination {
             case .checkIn(let pet):
                 Alert(
@@ -187,7 +192,7 @@ struct ClientDetailView: View {
                     title: Text(String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName)),
                     message: Text(NSLocalizedString("clients.delete_confirm_message", comment: "")),
                     primaryButton: .destructive(Text(NSLocalizedString("common.yes", comment: ""))) {
-                        deleteClient()
+                        deleteClient(vm: vm)
                     },
                     secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
                 )
@@ -202,14 +207,14 @@ struct ClientDetailView: View {
         .task { vm.refreshRecentVisits() }
     }
 
-    private var content: some View {
+    private func content(vm: ClientDetailViewModel) -> some View {
         ScrollView {
             VStack(spacing: 16) {
                 ownerHeader(client: vm.client)
                 emergencyContactsCard(client: vm.client)
                 notesCard(client: vm.client)
-                petsSection
-                recentHistorySection
+                petsSection(vm: vm)
+                recentHistorySection(vm: vm)
             }
             .padding(.vertical, 8)
         }
@@ -352,7 +357,7 @@ struct ClientDetailView: View {
                 if client.emergencyContacts.isEmpty {
                     Text("No emergency contacts yet").font(.footnote).foregroundStyle(.secondary)
                 } else {
-                    ForEach(client.emergencyContacts) { c in
+                    ForEach(client.emergencyContacts, id: \.uuid) { c in
                         HStack(spacing: 10) {
                             Image(systemName: "phone.fill").foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 2) {
@@ -382,11 +387,16 @@ struct ClientDetailView: View {
 
     private func confirmDeleteContact(_ contact: EmergencyContact) {
         modelContext.delete(contact)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            Logger.main.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
+        }
         viewModel?.refreshRecentVisits()
     }
 
     private func addOrUpdateContact() {
+        guard let vm = viewModel else { return }
         let name = newContactName.trimmingCharacters(in: .whitespacesAndNewlines)
         let relation = newContactRelation.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = newContactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -400,7 +410,11 @@ struct ClientDetailView: View {
             ec.owner = vm.client
             vm.client.emergencyContacts.append(ec)
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            Logger.main.error("Failed to save contact: \(error.localizedDescription, privacy: .public)")
+        }
         showContactEditor = false
         newContactName = ""; newContactRelation = ""; newContactPhone = ""
     }
@@ -413,7 +427,7 @@ struct ClientDetailView: View {
         showContactEditor = true
     }
 
-    private var petsSection: some View {
+    private func petsSection(vm: ClientDetailViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Pets (\(vm.pets.count))").font(.headline).padding(.horizontal)
             VStack(spacing: 12) {
@@ -460,7 +474,7 @@ struct ClientDetailView: View {
         }
     }
 
-    private var recentHistorySection: some View {
+    private func recentHistorySection(vm: ClientDetailViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(NSLocalizedString("client_details.recent_history", comment: "")).font(.headline)
@@ -572,23 +586,29 @@ struct ClientDetailView: View {
     }
 
     // MARK: - Actions
-    private func deleteClient() {
+    private func deleteClient(vm: ClientDetailViewModel) {
+        Task { await performDeleteClient(vm: vm) }
+    }
+
+    @MainActor
+    private func performDeleteClient(vm: ClientDetailViewModel) async {
         isDeleting = true
 
         let client = vm.client
         let pets = Array(client.pets)
         let visits = pets.flatMap { pet in Array(pet.visits) }
+        let appointments = pets.flatMap { pet in Array(pet.appointments) }
         // Track activity dates before deletion so summaries can be rebuilt.
         let paymentDates = visits.compactMap { $0.payment?.paidAt }
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
 
-        // Manually delete visit items to work around a potential SwiftData cascade bug
+        // Manually delete visit items first
         for visit in visits {
             for item in visit.items {
                 modelContext.delete(item)
             }
         }
-        
+
         // Clean up payments explicitly to avoid orphaned revenue rows.
         for visit in visits {
             if let payment = visit.payment {
@@ -596,7 +616,28 @@ struct ClientDetailView: View {
             }
         }
 
-        // Rely on delete rules: pets/visits/appointments/items/emergencyContacts cascade from client.
+        // Delete visits explicitly BEFORE pets (Visit.pet is non-optional)
+        for visit in visits {
+            modelContext.delete(visit)
+        }
+
+        // Delete appointments explicitly
+        for appointment in appointments {
+            modelContext.delete(appointment)
+        }
+
+        // Now delete pets (visits are already gone)
+        for pet in pets {
+            pet.activeVisit = nil  // Clear any reference
+            modelContext.delete(pet)
+        }
+
+        // Delete emergency contacts
+        for contact in client.emergencyContacts {
+            modelContext.delete(contact)
+        }
+
+        // Finally delete the client
         modelContext.delete(client)
 
         do {
@@ -608,6 +649,7 @@ struct ClientDetailView: View {
             for date in visitActivityDates { affectedDays.insert(cal.startOfDay(for: date)) }
             for day in affectedDays {
                 SummaryUpdater.rebuildDay(for: day, in: modelContext)
+                await Task.yield()
             }
 
             isDeleting = false
@@ -643,7 +685,11 @@ struct ClientDetailView: View {
             return
         }
         client.setEmail(editEmail)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            Logger.main.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
+        }
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }
         // Optional: show a small saved toast for inline edits
         withAnimation(Animations.fastEaseOut) { showSavedToast = true }

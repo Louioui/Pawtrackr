@@ -8,7 +8,6 @@
 import Foundation
 import SwiftData
 import OSLog
-import OSLog
 
 enum SummaryUpdater {
     /// Recalculate the DaySummary for the calendar day that contains `date`.
@@ -17,14 +16,7 @@ enum SummaryUpdater {
         let start = cal.startOfDay(for: date)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return }
         do {
-            // Calculate revenue from payments
-            let paymentDesc = FetchDescriptor<Payment>(
-                predicate: #Predicate { $0.paidAt >= start && $0.paidAt < end }
-            )
-            let payments = try context.fetch(paymentDesc)
-            let revenue = payments.reduce(Decimal.zero) { $0 +~ $1.amount }
-
-            // Calculate visit count and get visits for service/category counts
+            // Calculate visit count and revenue directly from completed visits.
             let visitDesc = FetchDescriptor<Visit>(
                 predicate: #Predicate { visit in
                     visit.endedAt != nil ? (visit.endedAt! >= start && visit.endedAt! < end) : false
@@ -32,6 +24,14 @@ enum SummaryUpdater {
             )
             let visits = try context.fetch(visitDesc)
             let count = visits.count
+            let visitRevenue = visits.reduce(Decimal.zero) { $0 +~ $1.total }
+
+            // Payments are optional—prefer visit totals and only fall back to payments if needed.
+            let paymentDesc = FetchDescriptor<Payment>(
+                predicate: #Predicate { $0.paidAt >= start && $0.paidAt < end }
+            )
+            let paymentRevenue = (try? context.fetch(paymentDesc))?.reduce(Decimal.zero) { $0 +~ $1.amount } ?? .zero
+            let revenue = visitRevenue > .zero ? visitRevenue : paymentRevenue
 
             // Upsert DaySummary
             let existing = try context.fetch(FetchDescriptor<DaySummary>(predicate: #Predicate { $0.day == start }))

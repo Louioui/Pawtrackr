@@ -34,6 +34,16 @@ struct SpeciesAndGenderIcons {
 
     /// Badge for species + gender. Defaults to ringed style.
     @ViewBuilder
+    static func badge(for species: Species?,
+                      gender: PetGender?,
+                      size: CGFloat = 28,
+                      style: BadgeStyle = .ringed,
+                      isDecorative: Bool = false) -> some View {
+        badge(for: species ?? .dog, gender: gender ?? .male, size: size, style: style, isDecorative: isDecorative)
+    }
+
+    /// Badge for species + gender (non-optional). Defaults to ringed style.
+    @ViewBuilder
     static func badge(for species: Species,
                       gender: PetGender,
                       size: CGFloat = 28,

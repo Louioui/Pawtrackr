@@ -24,10 +24,10 @@ struct VisitTimelineRow: View {
     private var topRow: some View {
         HStack(alignment: .top) {
             HStack(spacing: 10) {
-                IconCircle(size: .md, style: .auto(species: visit.pet.species, gender: visit.pet.gender), lineWidth: 0)
+                IconCircle(size: .md, style: .auto(species: visit.pet?.species, gender: visit.pet?.gender), lineWidth: 0)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(visit.pet.name).font(.subheadline.weight(.semibold))
-                    Text("\(visit.pet.shortDescriptor) • \(visit.pet.owner?.fullName ?? "")")
+                    Text(visit.pet?.name ?? "Unknown").font(.subheadline.weight(.semibold))
+                    Text("\(visit.pet?.shortDescriptor ?? "") • \(visit.pet?.owner?.fullName ?? "")")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

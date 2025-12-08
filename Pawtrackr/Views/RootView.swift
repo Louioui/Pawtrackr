@@ -17,6 +17,7 @@ struct RootView: View {
         }
         .task {
             DataMigrations.coercePets(in: modelContext)
+            DataMigrations.ensureServiceCatalog(in: modelContext)
 
             DataMigrations.backfillDaySummaries(in: modelContext)
         }

@@ -71,7 +71,7 @@ final class ClientDetailViewModel: ObservableObject {
             }()
             let filtered = results.filter { v in
                 guard v.endedAt != nil else { return false }
-                guard allowedPetIDs.contains(v.pet.persistentModelID) else { return false }
+                guard let pet = v.pet, allowedPetIDs.contains(pet.persistentModelID) else { return false }
                 if let start = startBound, let ended = v.endedAt { return ended >= start }
                 return true
             }

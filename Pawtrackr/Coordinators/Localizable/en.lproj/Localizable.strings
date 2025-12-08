@@ -9,12 +9,18 @@
 
 "insights.title" = "Insights";
 "insights.filters" = "Filters";
+"insights.scope.today" = "Today";
+"insights.scope.yesterday" = "Yesterday";
 "insights.revenue" = "Revenue";
 "insights.total_visits" = "Total Visits";
 "insights.aov" = "Avg. Sale (AOV)";
 "insights.avg_duration" = "Avg. Duration";
 "insights.visits" = "Visits";
+"insights.kpis" = "KPIs";
 "insights.revenue_trend" = "Revenue Trend";
+"insights.daily_revenue" = "Daily Revenue";
+"insights.up_vs_yesterday" = "Up vs yesterday";
+"insights.down_vs_yesterday" = "Down vs yesterday";
 "insights.top_services" = "Top Services";
 "insights.visits_by_package" = "Visits by Package";
 "insights.package_mix" = "Package Mix";

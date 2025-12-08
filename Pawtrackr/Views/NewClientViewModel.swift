@@ -7,25 +7,27 @@
 
 import SwiftUI
 import SwiftData
+import Observation
 
 @MainActor
-class NewClientViewModel: ObservableObject {
-    @Published var first = ""
-    @Published var last  = ""
-    @Published var phone = ""
-    @Published var email = ""
-    @Published var address = ""
+@Observable
+final class NewClientViewModel {
+    var first = ""
+    var last  = ""
+    var phone = ""
+    var email = ""
+    var address = ""
 
-    @Published var contacts: [TempContact] = [TempContact(index: 1)]
-    @Published var pets: [TempPet] = []
+    var contacts: [TempContact] = [TempContact(index: 1)]
+    var pets: [TempPet] = [TempPet(index: 1)]
 
-    @Published var showAlert = false
-    @Published var alertText = ""
-    @Published var isSaving: Bool = false
-    @Published var showDuplicateAlert: Bool = false
-    @Published var duplicateClientID: PersistentIdentifier? = nil
-    
-    private var modelContext: ModelContext
+    var showAlert = false
+    var alertText = ""
+    var isSaving: Bool = false
+    var showDuplicateAlert: Bool = false
+    var duplicateClientID: PersistentIdentifier? = nil
+
+    @ObservationIgnored private var modelContext: ModelContext
     
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -67,6 +69,7 @@ class NewClientViewModel: ObservableObject {
                 if let data = tp.photoData { pet.photoData = data }
                 if !tp.health.trimmed.isEmpty { pet.setHealth(tp.health.trimmed) }
                 if !tp.behaviorTags.isEmpty { pet.setBehaviorTags(Array(tp.behaviorTags)) }
+                if tp.hasBirthdate { pet.setBirthdate(tp.birthdate) }
                 pet.owner = client
             }
 
@@ -113,6 +116,10 @@ class NewClientViewModel: ObservableObject {
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             throw ValidationError.custom(message: "Please enter a valid email address.")
         }
+        let hasPet = pets.contains { !$0.name.trimmed.isEmpty }
+        if !hasPet {
+            throw ValidationError.custom(message: "Add at least one pet before creating this client.")
+        }
     }
 
     private func isValidEmail(_ raw: String) -> Bool {
@@ -148,6 +155,8 @@ struct TempPet: Identifiable {
     var health = ""
     var behaviorTags: Set<String> = []
     var photoData: Data? = nil
+    var hasBirthdate: Bool = false
+    var birthdate: Date = Date()
 }
 
 struct TempContact: Identifiable {

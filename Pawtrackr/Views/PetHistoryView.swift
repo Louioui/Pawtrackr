@@ -10,6 +10,24 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+// A wrapper to make CSV data transferable for use with ShareLink.
+struct CSVDoc: Transferable {
+    let data: Data
+    let filename: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(contentType: .commaSeparatedText) { doc in
+            doc.data
+        } importing: { data in
+            // Default filename for imported data, can be ignored.
+            CSVDoc(data: data, filename: "data.csv")
+        }
+        .suggestedFileName { doc in
+            doc.filename
+        }
+    }
+}
+
 struct PetHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var envModelContext
@@ -103,7 +121,8 @@ struct PetHistoryView: View {
                         let visits = vm.totalVisits
                         let visitsText = String.localizedStringWithFormat(NSLocalizedString("visits.count", comment: "visit count"), visits)
                         Chip.info(visitsText)
-                        Chip.info(String(format: "%@ %@", NSLocalizedString("visits.avg_duration", comment: "avg duration short"), vm.averageDurationString))
+                        Chip.info(String(format: "%@ %@",
+                                         NSLocalizedString("visits.avg_duration", comment: "avg duration short"), vm.averageDurationString))
                     }
                     .padding(.top, 4)
                 }

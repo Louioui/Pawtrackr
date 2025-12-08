@@ -36,7 +36,7 @@ class DataPruner {
         // 2) Track per-pet recent count so we keep the latest N with photos
         var keptPerPet: [PersistentIdentifier: Int] = [:]
         for v in visits {
-            let petID = v.pet.persistentModelID
+            guard let petID = v.pet?.persistentModelID else { continue }
             let kept = keptPerPet[petID, default: 0]
             if kept < keepRecentPhotosPerPet && (v.beforePhotoData != nil || v.afterPhotoData != nil) {
                 keptPerPet[petID] = kept + 1

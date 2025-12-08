@@ -59,24 +59,40 @@ enum PawtrackrMigrationPlan: SchemaMigrationPlan {
 enum DataMigrations {
     static func coercePets(in context: ModelContext) {
         do {
-            let pets = try context.fetch(FetchDescriptor<Pet>())
+            let sortDescriptors = [SortDescriptor(\Pet.createdAt, order: .forward)]
+            let batchSize = 500
+            var offset = 0
             var updates = 0
-            for pet in pets {
-                var changed = false
-                // Species is already constrained to .dog/.cat at type level now.
-                // If older data somehow loads with an unexpected value, leave as-is; SwiftData
-                // would typically reject unknown enum cases at decode time.
 
-                // Gender: ensure either .male or .female. If not, default to .male.
-                if pet.gender != .male && pet.gender != .female {
-                    pet.gender = .male
-                    changed = true
+            while true {
+                var descriptor = FetchDescriptor<Pet>(sortBy: sortDescriptors)
+                descriptor.fetchLimit = batchSize
+                descriptor.fetchOffset = offset
+
+                let pets = try context.fetch(descriptor)
+                if pets.isEmpty { break }
+
+                var batchChanged = false
+                for pet in pets {
+                    var changed = false
+                    // Species is already constrained to .dog/.cat at type level now.
+                    // Gender: ensure either .male or .female. If not, default to .male.
+                    if pet.gender != .male && pet.gender != .female {
+                        pet.gender = .male
+                        changed = true
+                    }
+
+                    if changed { updates += 1; batchChanged = true }
                 }
 
-                if changed { updates += 1 }
+                if batchChanged {
+                    try context.save()
+                }
+
+                offset += pets.count
             }
+
             if updates > 0 {
-                try context.save()
                 Logger.migrations.info("Coerced \(updates) pet records for narrowed enums.")
             }
         } catch {
@@ -123,6 +139,71 @@ enum DataMigrations {
             Logger.migrations.info("DaySummary backfill: inserted=\(inserted), updated=\(updated)")
         } catch {
             Logger.migrations.error("DaySummary backfill failed: \(String(describing: error))")
+        }
+    }
+
+    /// Ensure the service catalog exists with the current set of packages/add-ons,
+    /// and strip any default prices so checkout amounts are always user-entered.
+    static func ensureServiceCatalog(in context: ModelContext) {
+        struct ServiceDefinition {
+            let name: String
+            let category: Service.Category?
+            let icon: String?
+            let isPackage: Bool
+        }
+
+        let desired: [ServiceDefinition] = [
+            // Core packages / services (no default price)
+            .init(name: "Full Package",  category: .package, icon: "sparkles", isPackage: true),
+            .init(name: "Basic Package", category: .package, icon: "archivebox.fill", isPackage: true),
+            .init(name: "Spa Package",   category: .package, icon: "leaf.fill", isPackage: true),
+            .init(name: "Bath",          category: .groom,   icon: "shower.fill", isPackage: false),
+            .init(name: "Haircut",       category: .groom,   icon: "scissors", isPackage: false),
+
+            // Add-ons (no default price)
+            .init(name: "De-shedding",               category: .addOn, icon: "line.3.crossed.swirl.circle.fill", isPackage: false),
+            .init(name: "Anal Glands Expression",    category: .addOn, icon: "dot.circle", isPackage: false),
+            .init(name: "Face Grooming",             category: .addOn, icon: "mustache.fill", isPackage: false),
+            .init(name: "Paw Trim",                  category: .addOn, icon: "pawprint.fill", isPackage: false),
+            .init(name: "Hygiene Area Trim",         category: .addOn, icon: "person.fill.viewfinder", isPackage: false),
+            .init(name: "Knots and Matting Fee",     category: .addOn, icon: "exclamationmark.triangle.fill", isPackage: false),
+            .init(name: "Flea & Ticks Treatment",    category: .addOn, icon: "ladybug.fill", isPackage: false),
+            .init(name: "Hair Dye",                  category: .addOn, icon: "paintpalette.fill", isPackage: false)
+        ]
+
+        do {
+            let existing = try context.fetch(FetchDescriptor<Service>())
+            var byName: [String: Service] = [:]
+            existing.forEach { byName[$0.name.lowercased()] = $0 }
+
+            for def in desired {
+                let key = def.name.lowercased()
+                if let svc = byName[key] {
+                    // Normalize attributes and remove any default price.
+                    svc.setCategory(def.category)
+                    svc.setSystemIcon(def.icon)
+                    svc.setBasePrice(nil)
+                    svc.setEnabled(true)
+                    svc.isPackage = def.isPackage
+                } else {
+                    let svc = Service(
+                        name: def.name,
+                        category: def.category,
+                        systemIcon: def.icon,
+                        basePrice: nil,
+                        isEnabled: true,
+                        isPackage: def.isPackage
+                    )
+                    context.insert(svc)
+                }
+            }
+
+            // Persist any updates/inserts.
+            if context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            Logger.migrations.error("ensureServiceCatalog failed: \(String(describing: error))")
         }
     }
 }

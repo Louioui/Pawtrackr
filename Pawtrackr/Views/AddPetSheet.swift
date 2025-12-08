@@ -31,6 +31,9 @@ struct AddPetSheet: View {
     @State private var selectedGender: PetGender = .male
     @State private var breed: String = ""
     @State private var color: String = ""
+    @State private var healthNotes: String = ""
+    @State private var hasBirthdate: Bool = false
+    @State private var birthdate: Date = Date()
 
     // Image picking - Corrected to use Data?
     @State private var avatarImageData: Data? = nil
@@ -44,7 +47,27 @@ struct AddPetSheet: View {
         NavigationStack {
             Form {
                 Section("Profile Photo") {
-                    PhotoWell(imageData: $avatarImageData, title: "Avatar")
+                    HStack {
+                        Spacer()
+                        ImagePicker(imageData: $avatarImageData) {
+                            VStack(alignment: .center, spacing: 12) {
+                                AvatarView(
+                                    .pet(
+                                        species: selectedSpecies,
+                                        gender: selectedGender,
+                                        name: petName,
+                                        imageData: avatarImageData
+                                    ),
+                                    size: .lg
+                                )
+                                Text("Choose Photo")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
                 }
 
                 Section("Pet Info") {
@@ -73,6 +96,18 @@ struct AddPetSheet: View {
                     TextField("Color (optional)", text: $color)
                         .textInputAutocapitalization(.words)
                         .disableAutocorrection(true)
+
+                    Toggle("Set Birthdate", isOn: $hasBirthdate.animation())
+                    if hasBirthdate {
+                        DatePicker("Birthdate", selection: $birthdate, in: ...Date(), displayedComponents: .date)
+                    }
+                }
+
+                Section {
+                    TextField(text: $healthNotes) {
+                        Label("Health Notes (optional)", systemImage: "cross.case.fill")
+                    }
+                    .textInputAutocapitalization(.sentences)
                 }
 
                 // Notes removed per request
@@ -128,9 +163,12 @@ struct AddPetSheet: View {
 
         let trimmedBreed = canonicalOptionalWord(breed)
         let trimmedColor = canonicalOptionalWord(color)
+        let trimmedHealth = canonicalOptionalWord(healthNotes)
 
         if let trimmedBreed { newPet.breed = trimmedBreed }
         if let trimmedColor { newPet.color = trimmedColor }
+        if let trimmedHealth { newPet.health = trimmedHealth }
+        if hasBirthdate { newPet.setBirthdate(birthdate) }
 
         newPet.photoData = avatarImageData
         newPet.owner = client

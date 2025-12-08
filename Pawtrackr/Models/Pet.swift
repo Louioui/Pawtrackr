@@ -221,7 +221,7 @@ extension Pet {
     
     /// Standardized, common behavior tags for consistent data entry.
     enum BehaviorTag: String, CaseIterable, Identifiable {
-        case calm, cooperative, anxious, nervous, aggressive, senior, puppy, specialNeeds, bites
+        case calm, cooperative, anxious, nervous, aggressive, specialNeeds
         var id: String { rawValue }
         
         var displayName: String {
@@ -231,10 +231,7 @@ extension Pet {
             case .anxious: "Anxious"
             case .nervous: "Nervous"
             case .aggressive: "Aggressive"
-            case .senior: "Senior"
-            case .puppy: "Puppy / Young"
             case .specialNeeds: "Special Needs"
-            case .bites: "Bites"
             }
         }
     }
