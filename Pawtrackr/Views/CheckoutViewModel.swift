@@ -339,17 +339,18 @@ final class CheckoutViewModel: ObservableObject {
                 ].compactMapValues { $0 }
             )
             
-            isSaving = false
             if canTransition(from: .processing, to: .confirmed) { state = .confirmed }
-            
+            isSaving = false
+
         } catch let error as ValidationError {
-            if canTransition(from: .processing, to: .failed(error)) { state = .failed(error) } else { state = .failed(error) }
+            state = .failed(error)
             alertMessage = error.localizedDescription
             showAlert = true
+            isSaving = false
         } catch {
-            let error = ValidationError.custom(message: "An unexpected error occurred while saving. Please try again.")
-            if canTransition(from: .processing, to: .failed(error)) { state = .failed(error) } else { state = .failed(error) }
-            alertMessage = error.localizedDescription
+            let validationError = ValidationError.custom(message: "An unexpected error occurred while saving. Please try again.")
+            state = .failed(validationError)
+            alertMessage = validationError.localizedDescription
             Logger.main.error("Checkout save failed: \(error.localizedDescription)")
             showAlert = true
             isSaving = false

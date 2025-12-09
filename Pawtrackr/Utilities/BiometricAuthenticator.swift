@@ -7,11 +7,13 @@ enum BiometricType {
     case faceID
 }
 
-class BiometricAuthenticator {
-    private let context = LAContext()
-    private var error: NSError?
-
+final class BiometricAuthenticator {
+    /// Returns the available biometric type on this device.
+    /// Creates a fresh LAContext each time to get accurate state.
     func biometricType() -> BiometricType {
+        let context = LAContext()
+        var error: NSError?
+
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
             return .none
         }
@@ -21,21 +23,40 @@ class BiometricAuthenticator {
             return .touchID
         case .faceID:
             return .faceID
-        default:
+        case .opticID:
+            return .faceID // Treat Apple Vision Pro optic ID as face-based
+        @unknown default:
             return .none
         }
     }
 
+    /// Authenticates the user using biometrics.
+    /// Creates a fresh LAContext to avoid reusing invalidated contexts.
     func authenticate(completion: @escaping (Bool, Error?) -> Void) {
+        let context = LAContext()
+        var error: NSError?
+
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
-            completion(false, error)
+            DispatchQueue.main.async {
+                completion(false, error)
+            }
             return
         }
 
-        let reason = "Log in to your account"
+        let reason = NSLocalizedString("biometric.reason", comment: "Biometric authentication reason")
         context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, authenticationError in
             DispatchQueue.main.async {
                 completion(success, authenticationError)
+            }
+        }
+    }
+
+    /// Async/await version of authenticate for modern Swift concurrency.
+    @MainActor
+    func authenticate() async -> (success: Bool, error: Error?) {
+        await withCheckedContinuation { continuation in
+            authenticate { success, error in
+                continuation.resume(returning: (success, error))
             }
         }
     }

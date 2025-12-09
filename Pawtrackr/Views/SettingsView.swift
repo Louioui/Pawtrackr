@@ -190,10 +190,9 @@ private struct ChangePINSheet: View {
         let np = newPIN.joined()
         let cp = confirmPIN.joined()
         guard cur.count == 4, np.count == 4, cp.count == 4 else { errorMessage = NSLocalizedString("settings.pin.change.error.incomplete", comment: ""); return }
-        guard cur == appSettings.appPIN else { errorMessage = NSLocalizedString("settings.pin.change.error.incorrect", comment: ""); return }
+        guard appSettings.validatePIN(cur) else { errorMessage = NSLocalizedString("settings.pin.change.error.incorrect", comment: ""); return }
         guard np == cp else { errorMessage = NSLocalizedString("settings.pin.change.error.mismatch", comment: ""); return }
-        appSettings.appPIN = np
-        appSettings.lastPINChangeDate = Date()
+        guard appSettings.changePIN(to: np) else { errorMessage = NSLocalizedString("settings.pin.change.error.invalid", comment: "Invalid PIN format"); return }
         HapticManager.notify(.success)
         isPresented = false
     }

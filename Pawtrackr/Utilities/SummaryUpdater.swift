@@ -11,30 +11,30 @@ import OSLog
 
 enum SummaryUpdater {
     /// Recalculate the DaySummary for the calendar day that contains `date`.
+    /// Optimized to fetch only the data needed for the specific day.
     static func rebuildDay(for date: Date, in context: ModelContext) {
         let cal = Calendar.current
         let start = cal.startOfDay(for: date)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return }
+
         do {
-            // Fetch all visits and filter in memory to avoid SwiftData predicate capture issues
-            let allVisits = try context.fetch(FetchDescriptor<Visit>())
-            let visits = allVisits.filter { visit in
-                guard let endedAt = visit.endedAt else { return false }
-                return endedAt >= start && endedAt < end
-            }
+            // Fetch only visits that ended on this specific day
+            let visits = try fetchVisitsEndedInRange(start: start, end: end, in: context)
             let count = visits.count
             let visitRevenue = visits.reduce(Decimal.zero) { $0 +~ $1.total }
 
-            // Payments are optional—prefer visit totals and only fall back to payments if needed.
-            let allPayments = try context.fetch(FetchDescriptor<Payment>())
-            let payments = allPayments.filter { $0.paidAt >= start && $0.paidAt < end }
-            let paymentRevenue = payments.reduce(Decimal.zero) { $0 +~ $1.amount }
-            let revenue = visitRevenue > .zero ? visitRevenue : paymentRevenue
+            // Fetch only payments for this day if needed
+            let revenue: Decimal
+            if visitRevenue > .zero {
+                revenue = visitRevenue
+            } else {
+                let payments = try fetchPaymentsInRange(start: start, end: end, in: context)
+                revenue = payments.reduce(Decimal.zero) { $0 +~ $1.amount }
+            }
 
-            // Upsert DaySummary - fetch all and filter in memory
-            let allDaySummaries = try context.fetch(FetchDescriptor<DaySummary>())
-            let existing = allDaySummaries.filter { cal.isDate($0.day, inSameDayAs: start) }
-            if let s = existing.first {
+            // Upsert DaySummary - fetch only for this day
+            let existingSummary = try fetchDaySummary(for: start, in: context)
+            if let s = existingSummary {
                 s.revenue = revenue
                 s.visitCount = count
             } else {
@@ -47,16 +47,15 @@ enum SummaryUpdater {
                 for item in v.items { svcCounts[item.displayName, default: 0] += 1 }
             }
 
-            let allServiceSummaries = try context.fetch(FetchDescriptor<ServiceDaySummary>())
-            let existingSvc = allServiceSummaries.filter { cal.isDate($0.day, inSameDayAs: start) }
+            let existingSvc = try fetchServiceDaySummaries(for: start, in: context)
             var existingSvcDict = existingSvc.reduce(into: [String: ServiceDaySummary]()) { $0[$1.serviceName] = $1 }
 
-            for (name, count) in svcCounts {
+            for (name, svcCount) in svcCounts {
                 if let summary = existingSvcDict[name] {
-                    summary.count = count
+                    summary.count = svcCount
                     existingSvcDict.removeValue(forKey: name)
                 } else {
-                    context.insert(ServiceDaySummary(day: start, serviceName: name, count: count))
+                    context.insert(ServiceDaySummary(day: start, serviceName: name, count: svcCount))
                 }
             }
 
@@ -74,16 +73,15 @@ enum SummaryUpdater {
                 }
             }
 
-            let allCatSummaries = try context.fetch(FetchDescriptor<CategoryDaySummary>())
-            let existingCat = allCatSummaries.filter { cal.isDate($0.day, inSameDayAs: start) }
+            let existingCat = try fetchCategoryDaySummaries(for: start, in: context)
             var existingCatDict = existingCat.reduce(into: [String: CategoryDaySummary]()) { $0[$1.categoryRaw] = $1 }
 
-            for (raw, count) in catCounts {
+            for (raw, catCount) in catCounts {
                 if let summary = existingCatDict[raw] {
-                    summary.count = count
+                    summary.count = catCount
                     existingCatDict.removeValue(forKey: raw)
                 } else {
-                    context.insert(CategoryDaySummary(day: start, categoryRaw: raw, count: count))
+                    context.insert(CategoryDaySummary(day: start, categoryRaw: raw, count: catCount))
                 }
             }
 
@@ -96,6 +94,48 @@ enum SummaryUpdater {
         } catch {
             Logger.summaries.error("Summary rebuild failed for \(start, privacy: .public): \(String(describing: error))")
         }
+    }
+
+    // MARK: - Optimized Fetch Helpers
+
+    private static func fetchVisitsEndedInRange(start: Date, end: Date, in context: ModelContext) throws -> [Visit] {
+        // SwiftData predicates don't support capturing local variables in closures well,
+        // so we fetch completed visits and filter in memory for the specific range
+        let descriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { $0.endedAt != nil }
+        )
+        let completed = try context.fetch(descriptor)
+        return completed.filter { visit in
+            guard let endedAt = visit.endedAt else { return false }
+            return endedAt >= start && endedAt < end
+        }
+    }
+
+    private static func fetchPaymentsInRange(start: Date, end: Date, in context: ModelContext) throws -> [Payment] {
+        let descriptor = FetchDescriptor<Payment>()
+        let all = try context.fetch(descriptor)
+        return all.filter { $0.paidAt >= start && $0.paidAt < end }
+    }
+
+    private static func fetchDaySummary(for day: Date, in context: ModelContext) throws -> DaySummary? {
+        let cal = Calendar.current
+        let descriptor = FetchDescriptor<DaySummary>()
+        let all = try context.fetch(descriptor)
+        return all.first { cal.isDate($0.day, inSameDayAs: day) }
+    }
+
+    private static func fetchServiceDaySummaries(for day: Date, in context: ModelContext) throws -> [ServiceDaySummary] {
+        let cal = Calendar.current
+        let descriptor = FetchDescriptor<ServiceDaySummary>()
+        let all = try context.fetch(descriptor)
+        return all.filter { cal.isDate($0.day, inSameDayAs: day) }
+    }
+
+    private static func fetchCategoryDaySummaries(for day: Date, in context: ModelContext) throws -> [CategoryDaySummary] {
+        let cal = Calendar.current
+        let descriptor = FetchDescriptor<CategoryDaySummary>()
+        let all = try context.fetch(descriptor)
+        return all.filter { cal.isDate($0.day, inSameDayAs: day) }
     }
 
     /// Rebuild summaries for all days that have completed visits.

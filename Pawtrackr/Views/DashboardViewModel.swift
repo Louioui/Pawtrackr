@@ -51,6 +51,7 @@ final class DashboardViewModel: ObservableObject {
 
   private let modelContext: ModelContext
   private var cancellables: Set<AnyCancellable> = []
+
   init(modelContext: ModelContext) {
     self.modelContext = modelContext
     // Auto-refresh dashboard when a checkout completes
@@ -58,12 +59,28 @@ final class DashboardViewModel: ObservableObject {
       .receive(on: RunLoop.main)
       .sink { [weak self] _ in
         guard let self else { return }
-        Task { await self.refresh() }
+        Task { @MainActor [weak self] in
+          await self?.refresh()
+        }
+      }
+      .store(in: &cancellables)
+
+    // Also refresh when model context saves (client/pet changes)
+    NotificationCenter.default.publisher(for: ModelContext.didSave)
+      .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+      .sink { [weak self] _ in
+        guard let self else { return }
+        Task { @MainActor [weak self] in
+          await self?.refresh()
+        }
       }
       .store(in: &cancellables)
   }
 
-  // See note in RecentHistoryViewModel about deinit and actor isolation.
+  deinit {
+    cancellables.forEach { $0.cancel() }
+    cancellables.removeAll()
+  }
 
   func refresh() async {
     await fetchKPIs()
@@ -93,8 +110,11 @@ final class DashboardViewModel: ObservableObject {
         sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
       ))
 
-      // Get today's summary for revenue and completed count
-      let summaryDesc = FetchDescriptor<DaySummary>(predicate: #Predicate { $0.day == start })
+      // Get today's summary for revenue and completed count using a range match (avoids exact-date equality issues)
+      let summaryDesc = FetchDescriptor<DaySummary>(
+        predicate: #Predicate { summary in summary.day >= start && summary.day < end },
+        sortBy: [SortDescriptor(\.day, order: .reverse)]
+      )
       let summary = try modelContext.fetch(summaryDesc).first
 
       kpi = KPI(

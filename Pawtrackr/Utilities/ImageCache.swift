@@ -2,7 +2,7 @@
 //  ImageCache.swift
 //  Pawtrackr
 //
-//  Lightweight in-memory image cache with downsampling.
+//  Thread-safe, lightweight in-memory image cache with downsampling.
 //  Speeds up repeated decoding of Data-backed images across the app.
 //
 
@@ -12,20 +12,63 @@ import Foundation
 import UIKit
 import ImageIO
 
-final class ImageCache {
+final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
+
     private let cache = NSCache<NSString, UIImage>()
-    private init() { cache.countLimit = 200 }
+    private let queue = DispatchQueue(label: "com.pawtrackr.imagecache", attributes: .concurrent)
+
+    private init() {
+        cache.countLimit = 200
+        cache.totalCostLimit = 50 * 1024 * 1024 // 50MB limit
+
+        // Clear cache on memory warning
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.clearCache()
+        }
+    }
 
     /// Returns a decoded, downsampled UIImage for the given data and max dimension.
-    /// Images are cached by a computed key that includes the data hash and target size.
+    /// Thread-safe: can be called from any thread.
     func image(data: Data, maxDimension: CGFloat) -> UIImage? {
-        let key = cacheKey(for: data, maxDimension: maxDimension)
-        if let hit = cache.object(forKey: key as NSString) { return hit }
+        let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
 
+        // Check cache first (concurrent read)
+        var cachedImage: UIImage?
+        queue.sync {
+            cachedImage = cache.object(forKey: key)
+        }
+        if let hit = cachedImage { return hit }
+
+        // Decode image (can happen on any thread)
         guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
-        cache.setObject(image, forKey: key as NSString)
+
+        // Store in cache (barrier write)
+        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+        queue.async(flags: .barrier) { [weak self] in
+            self?.cache.setObject(image, forKey: key, cost: cost)
+        }
+
         return image
+    }
+
+    /// Clears all cached images. Thread-safe.
+    func clearCache() {
+        queue.async(flags: .barrier) { [weak self] in
+            self?.cache.removeAllObjects()
+        }
+    }
+
+    /// Removes a specific image from cache. Thread-safe.
+    func removeImage(for data: Data, maxDimension: CGFloat) {
+        let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
+        queue.async(flags: .barrier) { [weak self] in
+            self?.cache.removeObject(forKey: key)
+        }
     }
 
     private func cacheKey(for data: Data, maxDimension: CGFloat) -> String {
@@ -40,21 +83,26 @@ final class ImageCache {
             kCGImageSourceShouldCache: false
         ]
         guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
-        let max = max(1, Int(maxDimension * UIScreen.main.scale))
+
+        let scale = UIScreen.main.scale
+        let maxPixels = max(1, Int(maxDimension * scale))
+
         let downsampleOptions: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: max
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels
         ]
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
-        return UIImage(cgImage: cg, scale: UIScreen.main.scale, orientation: .up)
+        return UIImage(cgImage: cg, scale: scale, orientation: .up)
     }
 }
 #else
 // Fallback stub for non-UIKit platforms
-final class ImageCache {
+final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
     private init() {}
+
+    func clearCache() {}
 }
 #endif
 

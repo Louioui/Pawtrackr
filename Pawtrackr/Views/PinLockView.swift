@@ -31,19 +31,41 @@ public struct PinLockGate<Content: View>: View {
                 PinLockView(isUnlocked: $isUnlocked)
             }
         }
-        .onChange(of: scenePhase) {
-            if appSettings.autoLockOnBackground, scenePhase != .active { isUnlocked = false }
+        // Reset the idle timer on any user interaction routed through this container.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in resetInactivityLock() }
+                .onEnded { _ in resetInactivityLock() }
+        )
+        .onChange(of: scenePhase) { phase in
+            if appSettings.autoLockOnBackground, phase != .active {
+                isUnlocked = false
+                invalidateInactivityTimer()
+            } else if phase == .active {
+                resetInactivityLock()
+            }
         }
-        .onAppear { scheduleInactivityLock() }
-        .onDisappear { inactivityTimer?.invalidate(); inactivityTimer = nil }
+        .onChange(of: appSettings.autoLockAfterInactivity) { _ in resetInactivityLock() }
+        .onChange(of: appSettings.isBiometricLockEnabled) { _ in resetInactivityLock() }
+        .onChange(of: isUnlocked) { unlocked in
+            unlocked ? resetInactivityLock() : invalidateInactivityTimer()
+        }
+        .onAppear { resetInactivityLock() }
+        .onDisappear { invalidateInactivityTimer() }
     }
 
-    private func scheduleInactivityLock() {
-        inactivityTimer?.invalidate()
+    private func resetInactivityLock() {
+        invalidateInactivityTimer()
         guard appSettings.autoLockAfterInactivity, appSettings.isBiometricLockEnabled else { return }
-        inactivityTimer = Timer.scheduledTimer(withTimeInterval: Double(appSettings.idleLockMinutes * 60), repeats: true) { _ in
+        let interval = max(1, appSettings.idleLockMinutes * 60)
+        inactivityTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: false) { _ in
             isUnlocked = false
         }
+    }
+
+    private func invalidateInactivityTimer() {
+        inactivityTimer?.invalidate()
+        inactivityTimer = nil
     }
 }
 
@@ -147,11 +169,12 @@ public struct PinLockView: View {
     private func validateIfComplete() {
         guard digits.count == 4 else { return }
         let entered = digits.map(String.init).joined()
-        if entered == appSettings.appPIN {
+        if appSettings.validatePIN(entered) {
             isUnlocked = true
         } else {
             performShake()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            HapticManager.notify(.error)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 digits.removeAll()
             }
         }

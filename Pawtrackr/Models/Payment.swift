@@ -12,40 +12,40 @@ import SwiftData
 @Model
 final class Payment {
     // MARK: - Properties
-    
-    var amount: Decimal {
-        didSet {
-            // Enforce that the amount is always non-negative and correctly rounded.
-            let clamped = max(0, amount)
-            let rounded = clamped.roundedMoney()
-            if amount != rounded {
-                amount = rounded
-            }
-        }
-    }
-    
+
+    /// The payment amount (always non-negative and rounded to 2 decimal places).
+    private(set) var amount: Decimal
+
     var method: Method
     @Attribute var paidAt: Date
     var note: String?
     @Attribute var externalReference: String?
 
     // MARK: - Relationships
-    
-    // FIX: The inverse side of a relationship is a plain property, with NO @Relationship macro.
+
+    // The inverse side of a relationship is a plain property, with NO @Relationship macro.
     var visit: Visit?
 
     // MARK: - Init
-    
+
     init(amount: Decimal,
          method: Method,
          paidAt: Date = .now,
          note: String? = nil,
          externalReference: String? = nil) {
-        self.amount = amount
+        // Ensure amount is non-negative and properly rounded at init time
+        self.amount = max(0, amount).roundedMoney()
         self.method = method
         self.paidAt = paidAt
         self.note = note
         self.externalReference = externalReference
+    }
+
+    // MARK: - Mutating API
+
+    /// Sets the payment amount, ensuring it's non-negative and properly rounded.
+    func setAmount(_ newAmount: Decimal) {
+        amount = max(0, newAmount).roundedMoney()
     }
 }
 

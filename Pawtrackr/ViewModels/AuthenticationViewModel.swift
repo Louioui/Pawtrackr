@@ -1,3 +1,9 @@
+//
+//  AuthenticationViewModel.swift
+//  Pawtrackr
+//
+//  Manages user authentication state for the app.
+//
 
 import Foundation
 import SwiftData
@@ -7,26 +13,25 @@ final class AuthenticationViewModel: ObservableObject {
     @Published var currentUser: User?
     @Published var isAuthenticated = false
 
-    private var modelContext: ModelContext
+    private let modelContext: ModelContext
+    private let localEmail = "local@pawtrackr.local"
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
 
-    func signInWithPIN(_ pin: String) {
-        // Only accept the app PIN
-        guard pin == "1994" else { return }
-        // Use or create a local offline user record
-        let localEmail = "local@pawtrackr.local"
-        if let user = try? modelContext.fetch(FetchDescriptor<User>(predicate: #Predicate { $0.email == localEmail })).first {
-            currentUser = user
-            isAuthenticated = true
-            return
-        }
-        let newUser = User(name: "Local User", email: localEmail)
-        modelContext.insert(newUser)
-        currentUser = newUser
-        isAuthenticated = true
+    /// Signs in using the PIN from AppSettings (not hardcoded).
+    /// Call this after PIN validation succeeds in PinLockView.
+    func signInAfterPINValidation() {
+        signInLocalUser()
+    }
+
+    /// Legacy method - validates PIN against AppSettings.appPIN
+    /// NOTE: Prefer using PinLockView for PIN validation and call signInAfterPINValidation() on success.
+    func signInWithPIN(_ pin: String, appSettings: AppSettings) -> Bool {
+        guard pin == appSettings.appPIN else { return false }
+        signInLocalUser()
+        return true
     }
 
     func signIn(email: String) {
@@ -36,9 +41,9 @@ final class AuthenticationViewModel: ObservableObject {
             currentUser = user
             isAuthenticated = true
         } else {
-            // For simplicity, we are creating a new user if one doesn't exist.
             let newUser = User(name: "New User", email: email)
             modelContext.insert(newUser)
+            try? modelContext.save()
             currentUser = newUser
             isAuthenticated = true
         }
@@ -50,16 +55,27 @@ final class AuthenticationViewModel: ObservableObject {
     }
 
     func signInAfterUnlock() {
-        // Use or create a local offline user record
-        let localEmail = "local@pawtrackr.local"
-        if let user = try? modelContext.fetch(FetchDescriptor<User>(predicate: #Predicate { $0.email == localEmail })).first {
+        signInLocalUser()
+    }
+
+    // MARK: - Private Helpers
+
+    private func signInLocalUser() {
+        if let user = fetchLocalUser() {
             currentUser = user
             isAuthenticated = true
             return
         }
         let newUser = User(name: "Local User", email: localEmail)
         modelContext.insert(newUser)
+        try? modelContext.save()
         currentUser = newUser
         isAuthenticated = true
+    }
+
+    private func fetchLocalUser() -> User? {
+        let email = localEmail
+        let descriptor = FetchDescriptor<User>(predicate: #Predicate { $0.email == email })
+        return try? modelContext.fetch(descriptor).first
     }
 }

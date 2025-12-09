@@ -23,26 +23,6 @@ final class InsightsViewModel {
         var countString: String { "\(count)x" }
     }
 
-    struct ServiceRevenueRow: Identifiable {
-        let name: String
-        let revenue: Decimal
-        let share: Double
-        let rank: Int
-        var id: String { name }
-        @MainActor var revenueString: String { revenue.moneyString }
-        @MainActor var shareString: String { Formatters.percentString(share, showSign: false) ?? "0%" }
-    }
-
-    struct TopClientRow: Identifiable {
-        let clientName: String
-        let visitCount: Int
-        let totalSpent: Decimal
-        let favoriteService: String?
-        let rank: Int
-        var id: String { clientName }
-        @MainActor var totalSpentString: String { totalSpent.moneyString }
-    }
-
     enum Scope: CaseIterable, Identifiable {
         case today
         case yesterday
@@ -108,46 +88,8 @@ final class InsightsViewModel {
     @MainActor var revenueTodayString: String { revenueToday.moneyString }
     @MainActor var revenueYesterdayString: String { revenueYesterday.moneyString }
     private(set) var serviceLeaders: [CountRow] = []
-    private(set) var topClients: [TopClientRow] = []
     private(set) var totalVisitsInPeriod: Int = 0
-    private(set) var averagePerVisit: Decimal = .zero
-    @MainActor var averagePerVisitString: String { averagePerVisit.moneyString }
-    private(set) var averageDailyRevenue: Decimal = .zero
-    @MainActor var averageDailyRevenueString: String { averageDailyRevenue.moneyString }
-    private(set) var revenueChangeAmount: Decimal = .zero
-    private(set) var revenueChangePercent: Double?
-    @MainActor var revenueChangeAmountString: String { revenueChangeAmount.moneyString }
-    @MainActor var revenueChangePercentString: String { Formatters.percentString(revenueChangePercent) ?? "—" }
-    @MainActor var revenueChangeComparisonLabel: String {
-        let bounds = comparisonPeriodBounds(for: scope, currentBounds: activeBounds)
-        guard let start = bounds.start, let endExclusive = bounds.endExclusive else {
-            return NSLocalizedString("vs. Previous Period", comment: "Label for revenue change comparison against previous period")
-        }
-
-        let inclusiveEnd = Calendar.current.date(byAdding: .day, value: -1, to: endExclusive) ?? endExclusive
-        let formatter = Formatters.dateOnly
-
-        switch scope {
-        case .thisMonth:
-            return NSLocalizedString("vs. Previous Month", comment: "Label for revenue change comparison")
-        case .yearToDate:
-            return NSLocalizedString("vs. Previous Year", comment: "Label for revenue change comparison")
-        default:
-            let formattedStart = formatter.string(from: start)
-            if Calendar.current.isDate(start, inSameDayAs: inclusiveEnd) {
-                return NSLocalizedString("vs. \(formattedStart)", comment: "Label for revenue change comparison against a single day")
-            }
-        let formattedEnd = formatter.string(from: inclusiveEnd)
-        return NSLocalizedString("vs. \(formattedStart) – \(formattedEnd)", comment: "Label for revenue change comparison against a date range")
-        }
-    }
-    private(set) var bestRevenueDay: RevenuePoint?
     private(set) var activePeriodDays: Int = 0
-    private(set) var topRevenueServices: [ServiceRevenueRow] = []
-    @MainActor var bestRevenueDayLabel: String? {
-        guard let bestRevenueDay else { return nil }
-        return "\(Formatters.dateOnly.string(from: bestRevenueDay.date)) • \(bestRevenueDay.amount.moneyString)"
-    }
     private(set) var isLoading: Bool = false
     private(set) var errorMessage: String?
 
@@ -254,35 +196,25 @@ final class InsightsViewModel {
     private func dateBounds(for scope: Scope, customStart: Date?, customEnd: Date?) -> (start: Date?, endExclusive: Date?) {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+
         switch scope {
         case .today:
-            let endExclusive = calendar.date(byAdding: .day, value: 1, to: today)
-            return (today, endExclusive)
+            return (today, calendar.date(byAdding: .day, value: 1, to: today))
         case .yesterday:
-            let start = calendar.date(byAdding: .day, value: -1, to: today)
-            return (start, today)
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+            return (yesterday, today)
         case .last7Days:
-            let start = calendar.date(byAdding: .day, value: -6, to: today)
-            let endExclusive = calendar.date(byAdding: .day, value: 1, to: today)
-            return (start, endExclusive)
+            let start = calendar.date(byAdding: .day, value: -6, to: today)!
+            return (start, calendar.date(byAdding: .day, value: 1, to: today))
         case .last30Days:
-            let start = calendar.date(byAdding: .day, value: -29, to: today)
-            let endExclusive = calendar.date(byAdding: .day, value: 1, to: today)
-            return (start, endExclusive)
+            let start = calendar.date(byAdding: .day, value: -29, to: today)!
+            return (start, calendar.date(byAdding: .day, value: 1, to: today))
         case .thisMonth:
-            let comps = calendar.dateComponents([.year, .month], from: today)
-            guard let start = calendar.date(from: comps) else {
-                return (nil, nil)
-            }
-            let endExclusive = calendar.date(byAdding: .day, value: 1, to: today)
-            return (start, endExclusive)
+            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
+            return (start, calendar.date(byAdding: .day, value: 1, to: today))
         case .yearToDate:
-            let comps = calendar.dateComponents([.year], from: today)
-            guard let start = calendar.date(from: comps) else {
-                return (nil, nil)
-            }
-            let endExclusive = calendar.date(byAdding: .day, value: 1, to: today)
-            return (start, endExclusive)
+            let start = calendar.date(from: calendar.dateComponents([.year], from: today))!
+            return (start, calendar.date(byAdding: .day, value: 1, to: today))
         case .custom:
             return (customStart, customEnd)
         }
@@ -291,80 +223,71 @@ final class InsightsViewModel {
     private func apply(bounds: (start: Date?, endExclusive: Date?)) throws {
         defer { isLoading = false }
         
-        // 1. Fetch aggregated data
+        let (daySummaries, serviceSummaries) = try fetchData(bounds: bounds)
+        
+        computeOverallStats(daySummaries: daySummaries, bounds: bounds)
+        
+        buildChartData(daySummaries: daySummaries, bounds: bounds)
+        
+        self.serviceLeaders = computeTopServices(summaries: serviceSummaries)
+        
+        updateHeadlineDailyRevenue()
+    }
+
+    private func fetchData(bounds: (start: Date?, endExclusive: Date?)) throws -> (daySummaries: [DaySummary], serviceSummaries: [ServiceDaySummary]) {
         let daySummaries = try fetchDaySummaries(bounds: bounds)
         let serviceSummaries = try fetchServiceDaySummaries(bounds: bounds)
-        
-        // 2. Compute overall stats
+        return (daySummaries, serviceSummaries)
+    }
+
+    private func computeOverallStats(daySummaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) {
         let totalVisits = daySummaries.reduce(0) { $0 + $1.visitCount }
         let totalRev = daySummaries.reduce(Decimal.zero) { $0 + $1.revenue }
         let periodDays = daysInRange(bounds)
         
         self.totalVisitsInPeriod = totalVisits
         self.totalRevenue = totalRev
-        self.averagePerVisit = totalVisits > 0 ? (totalRev / Decimal(totalVisits)).roundedMoney() : .zero
-        self.averageDailyRevenue = periodDays > 0 ? (totalRev / Decimal(periodDays)).roundedMoney() : .zero
         self.activePeriodDays = periodDays
-        
-        // 3. Build data for charts and lists
+    }
+
+    private func buildChartData(daySummaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) {
         self.revenueSeries = buildRevenueSeries(summaries: daySummaries, bounds: bounds)
         self.revenueMovingAverage = buildMovingAverage(for: revenueSeries, window: min(7, max(3, revenueSeries.count)))
-        self.bestRevenueDay = revenueSeries.max(by: { $0.amount < $1.amount })
-        self.serviceLeaders = computeTopServices(summaries: serviceSummaries)
-        
-        // 3b. Compare against a smarter, context-aware period.
-        let comparisonBounds = comparisonPeriodBounds(for: scope, currentBounds: bounds)
-        if let comparisonStart = comparisonBounds.start, let comparisonEnd = comparisonBounds.endExclusive, comparisonStart < comparisonEnd {
-            let previousSummaries = try fetchDaySummaries(bounds: comparisonBounds)
-            let previousTotal = previousSummaries.reduce(Decimal.zero) { $0 + $1.revenue }
-            computeRevenueDelta(current: totalRev, previous: previousTotal)
-        } else {
-            revenueChangeAmount = .zero
-            revenueChangePercent = nil
-        }
-        
-        // 4. Update headline numbers
-        updateHeadlineDailyRevenue()
-        
-        // 5. Fetch top clients and revenue by service (requires visits)
-        let visits = try fetchVisits(bounds: bounds)
-        self.topClients = Self.computeTopClients(visits: visits)
-        self.topRevenueServices = computeTopRevenueServices(visits: visits, totalRevenue: totalRev)
     }
     
     private func fetchDaySummaries(bounds: (start: Date?, endExclusive: Date?)) throws -> [DaySummary] {
-        // Fetch all and filter in memory to avoid SwiftData predicate capture issues
+        // SwiftData predicates don't support capturing tuple members, so fetch all and filter in memory
         let descriptor = FetchDescriptor<DaySummary>(sortBy: [SortDescriptor(\.day)])
         let all = try modelContext.fetch(descriptor)
 
-        let start = bounds.start ?? .distantPast
-        let end = bounds.endExclusive ?? .distantFuture
+        let startDate = bounds.start ?? .distantPast
+        let endDate = bounds.endExclusive ?? .distantFuture
 
-        return all.filter { $0.day >= start && $0.day < end }
+        return all.filter { $0.day >= startDate && $0.day < endDate }
     }
 
     private func fetchServiceDaySummaries(bounds: (start: Date?, endExclusive: Date?)) throws -> [ServiceDaySummary] {
-        // Fetch all and filter in memory to avoid SwiftData predicate capture issues
+        // SwiftData predicates don't support capturing tuple members, so fetch all and filter in memory
         let descriptor = FetchDescriptor<ServiceDaySummary>()
         let all = try modelContext.fetch(descriptor)
 
-        let start = bounds.start ?? .distantPast
-        let end = bounds.endExclusive ?? .distantFuture
+        let startDate = bounds.start ?? .distantPast
+        let endDate = bounds.endExclusive ?? .distantFuture
 
-        return all.filter { $0.day >= start && $0.day < end }
+        return all.filter { $0.day >= startDate && $0.day < endDate }
     }
 
     private func fetchVisits(bounds: (start: Date?, endExclusive: Date?)) throws -> [Visit] {
-        // Fetch all completed visits and filter in memory to avoid SwiftData predicate capture issues
+        // SwiftData predicates don't support capturing tuple members, so fetch all and filter in memory
         let descriptor = FetchDescriptor<Visit>()
         let all = try modelContext.fetch(descriptor)
 
-        let start = bounds.start ?? .distantPast
-        let end = bounds.endExclusive ?? .distantFuture
+        let startDate = bounds.start ?? .distantPast
+        let endDate = bounds.endExclusive ?? .distantFuture
 
         return all.filter { visit in
             guard let endedAt = visit.endedAt else { return false }
-            return endedAt >= start && endedAt < end
+            return endedAt >= startDate && endedAt < endDate
         }
     }
     
@@ -373,38 +296,6 @@ final class InsightsViewModel {
         return max(0, Calendar.current.dateComponents([.day], from: start, to: endExclusive).day ?? 0)
     }
     
-    private func comparisonPeriodBounds(for scope: Scope, currentBounds: (start: Date?, endExclusive: Date?)) -> (start: Date?, endExclusive: Date?) {
-        let cal = Calendar.current
-        guard let start = currentBounds.start, let endExclusive = currentBounds.endExclusive else { return (nil, nil) }
-
-        switch scope {
-        case .thisMonth:
-            // Compare to the same date range in the previous month.
-            guard let prevMonthStart = cal.date(byAdding: .month, value: -1, to: start),
-                  let prevMonthEnd = cal.date(byAdding: .month, value: -1, to: endExclusive) else {
-                return (nil, nil)
-            }
-            return (prevMonthStart, prevMonthEnd)
-
-        case .yearToDate:
-            // Compare to the same date range in the previous year.
-            guard let prevYearStart = cal.date(byAdding: .year, value: -1, to: start),
-                  let prevYearEnd = cal.date(byAdding: .year, value: -1, to: endExclusive) else {
-                return (nil, nil)
-            }
-            return (prevYearStart, prevYearEnd)
-
-        case .today, .yesterday, .last7Days, .last30Days, .custom:
-            // Default behavior: compare to the immediately preceding period of the same length.
-            let lengthInDays = cal.dateComponents([.day], from: start, to: endExclusive).day ?? 0
-            guard lengthInDays > 0,
-                  let previousStart = cal.date(byAdding: .day, value: -lengthInDays, to: start) else {
-                return (nil, nil)
-            }
-            return (previousStart, start)
-        }
-    }
-
     private func buildRevenueSeries(summaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) -> [RevenuePoint] {
         let periodDays = daysInRange(bounds)
 
@@ -501,16 +392,6 @@ final class InsightsViewModel {
 
         return result
     }
-    
-    private func computeRevenueDelta(current: Decimal, previous: Decimal) {
-        revenueChangeAmount = (current - previous).roundedMoney()
-        if previous > .zero {
-            let delta = (current - previous) / previous
-            revenueChangePercent = (delta as NSDecimalNumber).doubleValue
-        } else {
-            revenueChangePercent = nil
-        }
-    }
 
     private func computeTopServices(summaries: [ServiceDaySummary]) -> [CountRow] {
         let serviceCounts = summaries.reduce(into: [String: Int]()) { result, summary in
@@ -530,93 +411,6 @@ final class InsightsViewModel {
             .map { index, pair in CountRow(name: pair.key, count: pair.value, rank: index + 1) }
     }
     
-    private func computeTopRevenueServices(visits: [Visit], totalRevenue: Decimal) -> [ServiceRevenueRow] {
-        guard totalRevenue > .zero else { return [] }
-
-        var revenueByService: [String: Decimal] = [:]
-
-        for visit in visits {
-            for item in visit.items {
-                let name = (item.service?.name ?? item.name).trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !name.isEmpty else { continue }
-                let lineTotal = (item.unitPrice * Decimal(item.quantity)).roundedMoney()
-                revenueByService[name, default: .zero] = revenueByService[name, default: .zero] + lineTotal
-            }
-        }
-
-        let sorted = revenueByService.sorted { lhs, rhs in
-            if lhs.value != rhs.value {
-                return lhs.value > rhs.value
-            }
-            return lhs.key < rhs.key
-        }
-
-        return sorted
-            .prefix(5)
-            .enumerated()
-            .map { idx, pair in
-                let shareDecimal = pair.value / totalRevenue
-                let shareDouble = (shareDecimal as NSDecimalNumber).doubleValue
-                return ServiceRevenueRow(name: pair.key, revenue: pair.value, share: shareDouble, rank: idx + 1)
-            }
-    }
-    
-    private static func computeTopClients(visits: [Visit]) -> [TopClientRow] {
-        guard !visits.isEmpty else { return [] }
-
-        // Group visits by client name
-        struct ClientStats {
-            var visitCount: Int = 0
-            var totalSpent: Decimal = .zero
-            var serviceCounts: [String: Int] = [:]
-        }
-
-        var clientStats: [String: ClientStats] = [:]
-
-        for visit in visits {
-            guard let clientName = visit.pet?.owner?.fullName, !clientName.isEmpty else { continue }
-
-            var stats = clientStats[clientName] ?? ClientStats()
-            stats.visitCount += 1
-            stats.totalSpent = stats.totalSpent +~ visit.total
-
-            // Count services for this client
-            for item in visit.items {
-                let serviceName = (item.service?.name ?? item.name).trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !serviceName.isEmpty else { continue }
-                stats.serviceCounts[serviceName, default: 0] += 1
-            }
-
-            clientStats[clientName] = stats
-        }
-
-        // Sort by total spent (descending), then by visit count
-        let sorted = clientStats.sorted { lhs, rhs in
-            if lhs.value.totalSpent != rhs.value.totalSpent {
-                return lhs.value.totalSpent > rhs.value.totalSpent
-            }
-            return lhs.value.visitCount > rhs.value.visitCount
-        }
-
-        return sorted
-            .prefix(5)
-            .enumerated()
-            .map { index, pair in
-                // Find the favorite service (most used by this client)
-                let favoriteService = pair.value.serviceCounts
-                    .max(by: { $0.value < $1.value })?
-                    .key
-
-                return TopClientRow(
-                    clientName: pair.key,
-                    visitCount: pair.value.visitCount,
-                    totalSpent: pair.value.totalSpent,
-                    favoriteService: favoriteService,
-                    rank: index + 1
-                )
-            }
-    }
-
     private func updateHeadlineDailyRevenue() {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -628,12 +422,10 @@ final class InsightsViewModel {
     private func revenueForDay(_ day: Date) -> Decimal {
         let calendar = Calendar.current
         let targetDay = calendar.startOfDay(for: day)
-
-        // Fetch all and filter in memory to avoid SwiftData predicate capture issues
-        let desc = FetchDescriptor<DaySummary>()
+        let predicate = #Predicate<DaySummary> { $0.day == targetDay }
+        let descriptor = FetchDescriptor<DaySummary>(predicate: predicate)
         do {
-            let all = try modelContext.fetch(desc)
-            let summary = all.first { calendar.isDate($0.day, inSameDayAs: targetDay) }
+            let summary = try modelContext.fetch(descriptor).first
             return summary?.revenue ?? .zero
         } catch {
             logger.error("Insights daily summary fetch failed for \(targetDay): \(String(describing: error))")

@@ -156,22 +156,29 @@ struct ClientsView: View {
                         .matchedGeometryEffect(id: client.id, in: namespace)
                 }
                 .buttonStyle(.plain)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                .contextMenu {
                     Button(role: .destructive) {
                         clientToDelete = client
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
-                    
+
                     #if canImport(UIKit)
                     if let phone = client.phone, let tel = PhoneUtils.telURLString(phone), let url = URL(string: tel) {
                         Button {
                             UIApplication.shared.open(url)
                             HapticManager.selectionChanged()
-                        } label: { Label("Call", systemImage: "phone") }
-                        .tint(.green)
+                        } label: {
+                            Label("Call", systemImage: "phone")
+                        }
                     }
                     #endif
+
+                    Button {
+                        coordinator?.showClientDetail(client: client, namespace: namespace)
+                    } label: {
+                        Label("View Details", systemImage: "person.crop.circle")
+                    }
                 }
                 .onAppear {
                     guard enableInfiniteScroll,
