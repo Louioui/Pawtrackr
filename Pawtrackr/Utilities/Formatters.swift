@@ -67,6 +67,26 @@ enum Formatters {
         return dec.roundedMoney()
     }
 
+    // MARK: - Percentage
+
+    /// Shared percentage formatter used for growth deltas (e.g., "+12.5%").
+    static let percent: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = .current
+        f.numberStyle = .percent
+        f.minimumFractionDigits = 0
+        f.maximumFractionDigits = 1
+        f.positivePrefix = "+"
+        return f
+    }()
+
+    static func percentString(_ value: Double?, showSign: Bool = true) -> String? {
+        guard let value else { return nil }
+        percent.positivePrefix = showSign ? "+" : ""
+        percent.negativePrefix = showSign ? "-" : "-"
+        return percent.string(from: NSNumber(value: value))
+    }
+
     // MARK: - ISO 8601
 
     /// ISO 8601 formatter for exporting/importing timestamps.

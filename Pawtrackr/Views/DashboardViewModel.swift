@@ -93,14 +93,15 @@ final class DashboardViewModel: ObservableObject {
         sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
       ))
 
-      let completedToday = todays.filter { $0.endedAt != nil }
-      let revenue = completedToday.reduce(Decimal.zero) { sum, v in sum +~ v.total }
+      // Get today's summary for revenue and completed count
+      let summaryDesc = FetchDescriptor<DaySummary>(predicate: #Predicate { $0.day == start })
+      let summary = try modelContext.fetch(summaryDesc).first
 
       kpi = KPI(
         appointmentsToday: todays.count,
         inProgressCount: inProg.count,
-        revenueToday: revenue,
-        completedToday: completedToday.count
+        revenueToday: summary?.revenue ?? .zero,
+        completedToday: summary?.visitCount ?? 0
       )
     } catch {
       kpi = KPI()
@@ -136,31 +137,29 @@ final class DashboardViewModel: ObservableObject {
     let cal = Calendar.current
     let end = cal.startOfDay(for: .now)
     let start = cal.date(byAdding: .day, value: -days + 1, to: end)!
-    // Precompute boundary outside predicate (builders disallow calling date math inside)
-    let endExclusive = cal.date(byAdding: .day, value: 1, to: end)!
 
     do {
-      let desc = FetchDescriptor<Visit>(
-        predicate: #Predicate { v in
-          v.endedAt != nil &&
-          v.endedAt! >= start &&
-          v.endedAt! < endExclusive
-        },
-        sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
-      )
-      let visits = try modelContext.fetch(desc)
-
-      var bucket: [Date: Decimal] = [:]
-      for v in visits {
-        let day = cal.startOfDay(for: v.endedAt ?? v.startedAt)
-        bucket[day, default: .zero] = bucket[day, default: .zero] +~ v.total
-      }
-      revenueSeries = (0..<days).compactMap { i in
-        let d = cal.date(byAdding: .day, value: -((days - 1) - i), to: end)!
-        return RevenuePoint(date: d, amount: bucket[d, default: .zero])
-      }
+        // Fetch pre-aggregated summaries instead of all visits
+        let desc = FetchDescriptor<DaySummary>(
+            predicate: #Predicate { summary in
+                summary.day >= start && summary.day <= end
+            },
+            sortBy: [SortDescriptor(\.day)]
+        )
+        let summaries = try modelContext.fetch(desc)
+        
+        // Create a dictionary for quick lookups
+        let bucket = summaries.reduce(into: [Date: Decimal]()) { dict, summary in
+            dict[summary.day] = summary.revenue
+        }
+        
+        // Build the series, filling in missing days with zero
+        revenueSeries = (0..<days).map { i in
+            let date = cal.date(byAdding: .day, value: -((days - 1) - i), to: end)!
+            return RevenuePoint(date: date, amount: bucket[date, default: .zero])
+        }
     } catch {
-      revenueSeries = []
+        revenueSeries = []
     }
   }
 

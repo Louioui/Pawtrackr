@@ -115,6 +115,15 @@ final class CheckoutViewModel: ObservableObject {
         self.init(pet: pet, visit: nil)
     }
     
+    /// Define the preferred order for main services (packages and main services)
+    private static let serviceOrder: [String] = [
+        "Full Package",
+        "Basic Package",
+        "Spa Package",
+        "Bath",
+        "Haircut"
+    ]
+
     @MainActor
     func loadServices(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -123,7 +132,21 @@ final class CheckoutViewModel: ObservableObject {
             sortBy: [SortDescriptor(\.name)]
         )
         let all = (try? modelContext.fetch(descriptor)) ?? []
-        self.allServices = all.filter { $0.category != .addOn }
+
+        // Separate main services (packages + groom) from add-ons
+        let mainServices = all.filter { $0.category != .addOn }
+
+        // Sort main services by the predefined order
+        self.allServices = mainServices.sorted { svc1, svc2 in
+            let idx1 = Self.serviceOrder.firstIndex(of: svc1.name) ?? Int.max
+            let idx2 = Self.serviceOrder.firstIndex(of: svc2.name) ?? Int.max
+            if idx1 != idx2 {
+                return idx1 < idx2
+            }
+            // Fall back to alphabetical for services not in the predefined list
+            return svc1.name < svc2.name
+        }
+
         self.addOnServices = all.filter { $0.category == .addOn }
         hydrateStateFromVisit()
     }

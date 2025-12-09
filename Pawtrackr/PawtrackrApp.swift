@@ -9,6 +9,7 @@
 import SwiftUI
 import SwiftData
 import OSLog
+import Combine
 
 @main
 struct PawtrackrApp: App {
@@ -16,6 +17,7 @@ struct PawtrackrApp: App {
     private var scheduledTasks: ScheduledTasks?
     @StateObject private var appSettings = AppSettings()
     @StateObject private var authViewModel: AuthenticationViewModel
+    private var cancellables: Set<AnyCancellable> = []
 
     init() {
         do {
@@ -29,14 +31,28 @@ struct PawtrackrApp: App {
             // Now create the task, capturing only the local constant.
             Task { @MainActor in
                 DataSeeder.seedServicesIfNeeded(in: localContainer.mainContext)
+                // Rebuild all historical summaries to ensure revenue data is captured
+                SummaryUpdater.rebuildAllSummaries(in: localContainer.mainContext)
             }
-            
+
             // Finally, assign the container to the instance property.
             self.container = localContainer
             self.scheduledTasks = ScheduledTasks(modelContainer: localContainer)
             self.scheduledTasks?.start()
 
             _authViewModel = StateObject(wrappedValue: AuthenticationViewModel(modelContext: localContainer.mainContext))
+
+            // Add a subscriber to automatically update day summaries when a visit completes.
+            let mainContext = localContainer.mainContext
+            NotificationCenter.default.publisher(for: .visitDidComplete)
+                .sink { notification in
+                    guard let date = notification.endedAtDate else { return }
+                    // Run on main actor since ModelContext is not thread-safe
+                    Task { @MainActor in
+                        SummaryUpdater.rebuildDay(for: date, in: mainContext)
+                    }
+                }
+                .store(in: &cancellables)
             
         } catch {
             let logger = Logger(subsystem: "com.pawtrackr", category: "PawtrackrApp")
