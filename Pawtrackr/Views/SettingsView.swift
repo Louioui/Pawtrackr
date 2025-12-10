@@ -141,58 +141,135 @@ private struct ChangePINSheet: View {
     @Binding var isPresented: Bool
     @Binding var errorMessage: String?
 
-    @State private var current: [String] = Array(repeating: "", count: 4)
-    @State private var newPIN: [String] = Array(repeating: "", count: 4)
-    @State private var confirmPIN: [String] = Array(repeating: "", count: 4)
+    @State private var currentPIN: String = ""
+    @State private var newPIN: String = ""
+    @State private var confirmPIN: String = ""
+    @FocusState private var focusedField: PINField?
+
+    private enum PINField {
+        case current, new, confirm
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                VStack(spacing: 6) {
-                    Circle().fill(DS.ColorToken.primary.opacity(0.12)).frame(width: 64, height: 64)
-                        .overlay(Image(systemName: "key.fill").font(.title).foregroundStyle(DS.ColorToken.primary))
-                    Text(NSLocalizedString("settings.pin.change.title", comment: "")).font(.title3.weight(.semibold))
-                    Text(NSLocalizedString("settings.pin.change.subtitle", comment: "")).font(.caption).foregroundStyle(.secondary)
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 6) {
+                        Circle().fill(DS.ColorToken.primary.opacity(0.12)).frame(width: 64, height: 64)
+                            .overlay(Image(systemName: "key.fill").font(.title).foregroundStyle(DS.ColorToken.primary))
+                        Text(NSLocalizedString("settings.pin.change.title", comment: "")).font(.title3.weight(.semibold))
+                        Text(NSLocalizedString("settings.pin.change.subtitle", comment: "")).font(.caption).foregroundStyle(.secondary)
+                    }
+
+                    VStack(spacing: 20) {
+                        pinInputField(
+                            title: NSLocalizedString("settings.pin.change.current", comment: ""),
+                            pin: $currentPIN,
+                            field: .current
+                        )
+
+                        pinInputField(
+                            title: NSLocalizedString("settings.pin.change.new", comment: ""),
+                            pin: $newPIN,
+                            field: .new
+                        )
+
+                        pinInputField(
+                            title: NSLocalizedString("settings.pin.change.confirm", comment: ""),
+                            pin: $confirmPIN,
+                            field: .confirm
+                        )
+                    }
+
+                    Spacer(minLength: 20)
                 }
-                VStack(spacing: 12) {
-                    pinRow(title: LocalizedStringKey(NSLocalizedString("settings.pin.change.current", comment: "")), binding: $current)
-                    pinRow(title: LocalizedStringKey(NSLocalizedString("settings.pin.change.new", comment: "")), binding: $newPIN)
-                    pinRow(title: LocalizedStringKey(NSLocalizedString("settings.pin.change.confirm", comment: "")), binding: $confirmPIN)
-                }
-                Spacer(minLength: 0)
+                .padding()
             }
-            .padding()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { isPresented = false } }
-                ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("settings.pin.change.update", comment: "")) { updatePIN() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("common.cancel", comment: "")) { isPresented = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(NSLocalizedString("settings.pin.change.update", comment: "")) { updatePIN() }
+                        .disabled(currentPIN.count != 4 || newPIN.count != 4 || confirmPIN.count != 4)
+                }
+            }
+            .onAppear {
+                focusedField = .current
             }
         }
     }
 
     @ViewBuilder
-    private func pinRow(title: LocalizedStringKey, binding: Binding<[String]>) -> some View {
+    private func pinInputField(title: String, pin: Binding<String>, field: PINField) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.subheadline.weight(.semibold))
-            HStack(spacing: 10) {
+
+            HStack(spacing: 12) {
                 ForEach(0..<4, id: \.self) { idx in
-                    TextField("", text: Binding(get: { binding.wrappedValue[idx] }, set: { binding.wrappedValue[idx] = String($0.prefix(1)) }))
-                        .textFieldStyle(.roundedBorder)
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .frame(width: 44)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(DS.ColorToken.surface)
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(focusedField == field ? DS.ColorToken.primary : DS.ColorToken.border, lineWidth: focusedField == field ? 2 : 1)
+
+                        if idx < pin.wrappedValue.count {
+                            Circle()
+                                .fill(Color.primary)
+                                .frame(width: 12, height: 12)
+                        }
+                    }
+                    .frame(width: 50, height: 56)
                 }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                focusedField = field
+            }
+            .overlay {
+                // Hidden text field to capture keyboard input
+                TextField("", text: Binding(
+                    get: { pin.wrappedValue },
+                    set: { newValue in
+                        // Only allow numeric characters, max 4 digits
+                        let filtered = newValue.filter { $0.isNumber }
+                        pin.wrappedValue = String(filtered.prefix(4))
+
+                        // Auto-advance to next field when 4 digits entered
+                        if pin.wrappedValue.count == 4 {
+                            switch field {
+                            case .current: focusedField = .new
+                            case .new: focusedField = .confirm
+                            case .confirm: focusedField = nil
+                            }
+                        }
+                    }
+                ))
+                .keyboardType(.numberPad)
+                .focused($focusedField, equals: field)
+                .opacity(0.01) // Nearly invisible but still functional
+                .frame(width: 1, height: 1)
             }
         }
     }
 
     private func updatePIN() {
-        let cur = current.joined()
-        let np = newPIN.joined()
-        let cp = confirmPIN.joined()
-        guard cur.count == 4, np.count == 4, cp.count == 4 else { errorMessage = NSLocalizedString("settings.pin.change.error.incomplete", comment: ""); return }
-        guard appSettings.validatePIN(cur) else { errorMessage = NSLocalizedString("settings.pin.change.error.incorrect", comment: ""); return }
-        guard np == cp else { errorMessage = NSLocalizedString("settings.pin.change.error.mismatch", comment: ""); return }
-        guard appSettings.changePIN(to: np) else { errorMessage = NSLocalizedString("settings.pin.change.error.invalid", comment: "Invalid PIN format"); return }
+        guard currentPIN.count == 4, newPIN.count == 4, confirmPIN.count == 4 else {
+            errorMessage = NSLocalizedString("settings.pin.change.error.incomplete", comment: "")
+            return
+        }
+        guard appSettings.validatePIN(currentPIN) else {
+            errorMessage = NSLocalizedString("settings.pin.change.error.incorrect", comment: "")
+            return
+        }
+        guard newPIN == confirmPIN else {
+            errorMessage = NSLocalizedString("settings.pin.change.error.mismatch", comment: "")
+            return
+        }
+        guard appSettings.changePIN(to: newPIN) else {
+            errorMessage = NSLocalizedString("settings.pin.change.error.invalid", comment: "")
+            return
+        }
         HapticManager.notify(.success)
         isPresented = false
     }

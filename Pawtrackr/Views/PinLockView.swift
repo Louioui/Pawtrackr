@@ -76,6 +76,8 @@ public struct PinLockView: View {
     @Binding var isUnlocked: Bool
     @State private var digits: [Int] = []
     @State private var shakeOffset: CGFloat = 0
+    @State private var failedAttempts: Int = 0
+    @State private var showHint: Bool = false
 
     // Uses AppSettings.appPIN for a changeable PIN.
 
@@ -123,10 +125,21 @@ public struct PinLockView: View {
                 }
             }
 
-            // (Optional) remove this hint when you’re ready
-            Text(NSLocalizedString("pin.hint", comment: ""))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            // Show hint only after 8 failed attempts
+            if showHint {
+                VStack(spacing: 4) {
+                    Text(NSLocalizedString("pin.hint.label", comment: ""))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text(appSettings.appPIN)
+                        .font(.headline.monospaced())
+                        .foregroundStyle(DS.ColorToken.primary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(DS.ColorToken.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                .transition(.opacity.combined(with: .scale))
+            }
 
             Spacer()
         }
@@ -140,7 +153,11 @@ public struct PinLockView: View {
     private func authenticateWithBiometrics() {
         if authenticator.biometricType() != .none {
             authenticator.authenticate { success, error in
-                if success { isUnlocked = true }
+                if success {
+                    failedAttempts = 0
+                    showHint = false
+                    isUnlocked = true
+                }
             }
         }
     }
@@ -170,10 +187,21 @@ public struct PinLockView: View {
         guard digits.count == 4 else { return }
         let entered = digits.map(String.init).joined()
         if appSettings.validatePIN(entered) {
+            failedAttempts = 0
+            showHint = false
             isUnlocked = true
         } else {
+            failedAttempts += 1
             performShake()
             HapticManager.notify(.error)
+
+            // Show hint after 8 failed attempts
+            if failedAttempts >= 8 && !showHint {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showHint = true
+                }
+            }
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 digits.removeAll()
             }

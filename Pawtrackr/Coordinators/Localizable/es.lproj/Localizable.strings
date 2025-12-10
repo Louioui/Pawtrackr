@@ -428,3 +428,6 @@
 // More actions
 "a11y.more_actions" = "Más acciones";
 "a11y.add_new_pet" = "Agregar nueva mascota";
+
+// PIN Hint
+"pin.hint.label" = "Tu PIN es:";
