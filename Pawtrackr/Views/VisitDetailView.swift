@@ -63,7 +63,7 @@ struct VisitDetailView: View {
                         } label: {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                Text(visit.endedAt == nil ? "Check Out" : "Resume Checkout")
+                                Text(visit.endedAt == nil ? NSLocalizedString("visit.check_out", comment: "") : NSLocalizedString("visit.resume_checkout", comment: ""))
                                     .fontWeight(.semibold)
                             }
                         }
@@ -186,7 +186,7 @@ struct VisitDetailView: View {
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             if let ref = payment.externalReference, !ref.isEmpty {
-                                Text("Ref: \(ref)")
+                                Text(String(format: NSLocalizedString("visit.ref_fmt", comment: ""), ref))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -351,7 +351,7 @@ struct VisitDetailView: View {
         private var placeholder: some View {
             VStack(spacing: 6) {
                 Image(systemName: "photo")
-                Text("No Photo")
+                Text(NSLocalizedString("visit.no_photo", comment: ""))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -393,7 +393,7 @@ struct VisitDetailView: View {
             if !visit.behaviorTags.isEmpty {
                 Card {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Behavior Tags")
+                        Text(NSLocalizedString("visit.behavior_tags", comment: ""))
                             .font(.subheadline.weight(.semibold))
                         FlowLayout(spacing: 8, rowSpacing: 8) {
                             ForEach(visit.behaviorTags, id: \.self) { tag in

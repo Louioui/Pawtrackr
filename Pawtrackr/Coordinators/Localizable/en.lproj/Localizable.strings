@@ -37,6 +37,7 @@
 "checkout.complete_title" = "Checkout Complete!";
 "checkout.complete_desc_fmt" = "Payment of %@ has been processed successfully.";
 "common.continue" = "Continue";
+"common.done" = "Done";
 
 "new_client.title" = "Add New Client";
 
@@ -304,3 +305,129 @@
 "insights.compare.start_date" = "Comparison Start";
 "insights.compare.end_date" = "Comparison End";
 "insights.compare.apply" = "Apply Range";
+
+"common.load_more" = "Load More";
+
+// Dashboard
+"dashboard.title" = "Dashboard";
+"dashboard.appointments" = "Appointments";
+"dashboard.in_progress" = "In Progress";
+"dashboard.revenue" = "Revenue";
+"dashboard.completed" = "Completed";
+"dashboard.no_photo" = "No Photo";
+
+// Client Detail
+"client_detail.client_since_fmt" = "Client since %@";
+"client_detail.notes" = "Notes";
+"client_detail.emergency_contacts" = "Emergency Contacts";
+"client_detail.no_emergency_contacts" = "No emergency contacts yet";
+"client_detail.new_emergency_contact" = "New Emergency Contact";
+"client_detail.edit_emergency_contact" = "Edit Emergency Contact";
+"client_detail.add_contact" = "Add Contact";
+"client_detail.edit_contact" = "Edit Contact";
+"client_detail.delete_contact_title" = "Delete Contact?";
+"client_detail.delete_contact_message" = "This cannot be undone.";
+"client_detail.pets_count_fmt" = "Pets (%d)";
+"client_detail.check_in" = "Check In";
+"client_detail.check_out" = "Check Out";
+"client_detail.history" = "History";
+"client_detail.available" = "Available";
+"client_detail.all" = "All";
+"client_detail.last_90d" = "Last 90d";
+"client_detail.no_history_yet" = "No History Yet";
+"client_detail.visits_count_fmt" = "%d visits";
+"client_detail.saved_successfully" = "Saved successfully";
+"client_detail.session_started" = "Session started";
+
+// New Client Sheet
+"new_client.capture_hint" = "Capture the owner, an emergency contact, and at least one pet.";
+"new_client.owner" = "Owner";
+"new_client.first_name" = "First Name *";
+"new_client.last_name" = "Last Name *";
+"new_client.phone" = "Phone *";
+"new_client.email" = "Email";
+"new_client.address" = "Address";
+"new_client.emergency_contacts" = "Emergency Contacts";
+"new_client.add" = "Add";
+"new_client.add_contact_hint" = "Add at least one emergency contact so you can reach an owner quickly.";
+"new_client.contact_name" = "Name";
+"new_client.contact_phone" = "Phone";
+"new_client.pets" = "Pets";
+"new_client.add_pet" = "Add Pet";
+"new_client.add_pet_hint" = "Add at least one pet to create this client.";
+"new_client.choose_photo" = "Choose Photo";
+"new_client.pet_name" = "Pet Name *";
+"new_client.health_notes" = "Health Notes (optional)";
+"new_client.set_birthdate" = "Set Birthdate";
+"new_client.birthdate" = "Birthdate";
+"new_client.new_client" = "New Client";
+"new_client.cannot_create_client" = "Cannot Create Client";
+"new_client.client_exists" = "Client Exists";
+"new_client.client_exists_message" = "A client with this phone number already exists. Would you like to open their profile?";
+"new_client.open" = "Open";
+
+// Visit Timeline Row
+"visit.paid" = "Paid";
+"visit.processing" = "Processing";
+"visit.check_in_time" = "Check-in";
+"visit.check_out_time" = "Check-out";
+"visit.in_progress" = "In Progress";
+
+// Login
+"login.app_name" = "Pawtrackr";
+"login.enter_pin" = "Enter PIN to Continue";
+
+// Add Pet Sheet
+"add_pet.profile_photo" = "Profile Photo";
+"add_pet.choose_photo" = "Choose Photo";
+"add_pet.pet_info" = "Pet Info";
+"add_pet.name" = "Name";
+"add_pet.species" = "Species";
+"add_pet.gender" = "Gender";
+"add_pet.breed" = "Breed (optional)";
+"add_pet.color" = "Color (optional)";
+"add_pet.set_birthdate" = "Set Birthdate";
+"add_pet.birthdate" = "Birthdate";
+"add_pet.health_notes" = "Health Notes (optional)";
+"add_pet.title" = "Add Pet";
+"add_pet.unable_to_save" = "Unable to Save";
+"add_pet.select_species" = "Select a species.";
+"add_pet.name_empty" = "Pet name can't be empty.";
+"add_pet.save_error" = "We couldn't save this pet. Please try again.";
+
+// Service Management
+"service.management_title" = "Service Management";
+"service.disabled" = "Disabled";
+"service.details" = "Details";
+"service.name" = "Service Name";
+"service.category" = "Category";
+"service.icon" = "Icon";
+"service.pricing_duration" = "Pricing & Duration";
+"service.price" = "Price";
+"service.duration_minutes_fmt" = "%d minutes";
+"service.status" = "Status";
+"service.enabled_in_app" = "Enabled in app";
+"service.is_package" = "Is a Package deal";
+"service.add_service" = "Add Service";
+"service.edit_service" = "Edit Service";
+
+// Visit Detail
+"visit.ref_fmt" = "Ref: %@";
+"visit.no_photo" = "No Photo";
+"visit.behavior_tags" = "Behavior Tags";
+"visit.check_out" = "Check Out";
+"visit.resume_checkout" = "Resume Checkout";
+
+// Appointments
+"appointments.title" = "Appointments";
+"appointments.add" = "Add Appointment";
+"appointments.pet" = "Pet";
+
+// Common form fields
+"form.name" = "Name";
+"form.phone" = "Phone";
+"form.relation" = "Relation";
+
+// More actions
+"a11y.more_actions" = "More actions";
+"a11y.add_new_pet" = "Add New Pet";

@@ -14,8 +14,8 @@ struct LoginView: View {
             VStack(spacing: 20) {
                 VStack(spacing: 6) {
                     Image(systemName: "pawprint.fill").font(.largeTitle)
-                    Text("Pawtrackr").font(.title.bold())
-                    Text("Enter PIN to Continue").font(.subheadline).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("login.app_name", comment: "")).font(.title.bold())
+                    Text(NSLocalizedString("login.enter_pin", comment: "")).font(.subheadline).foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 8)
 

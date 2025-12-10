@@ -64,13 +64,6 @@ struct CheckoutView: View {
         ToolbarItem(placement: .cancellationAction) {
             Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { dismiss() }
         }
-        ToolbarItemGroup(placement: .keyboard) {
-            Spacer()
-            Button(NSLocalizedString("common.confirm", comment: "")) {
-                viewModel.formatAmountInput()
-                hideKeyboard()
-            }
-        }
     }
 
     private func bottomCta() -> some View {

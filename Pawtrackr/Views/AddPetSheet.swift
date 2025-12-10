@@ -40,13 +40,13 @@ struct AddPetSheet: View {
 
     // Alerts
     @State private var showAlert: Bool = false
-    @State private var alertTitle: String = "Unable to Save"
+    @State private var alertTitle: String = NSLocalizedString("add_pet.unable_to_save", comment: "")
     @State private var alertMessage: String = ""
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Profile Photo") {
+                Section(NSLocalizedString("add_pet.profile_photo", comment: "")) {
                     HStack {
                         Spacer()
                         ImagePicker(imageData: $avatarImageData) {
@@ -60,7 +60,7 @@ struct AddPetSheet: View {
                                     ),
                                     size: .lg
                                 )
-                                Text("Choose Photo")
+                                Text(NSLocalizedString("add_pet.choose_photo", comment: ""))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -70,42 +70,42 @@ struct AddPetSheet: View {
                     .padding(.vertical, 10)
                 }
 
-                Section("Pet Info") {
-                    TextField("Name", text: $petName)
+                Section(NSLocalizedString("add_pet.pet_info", comment: "")) {
+                    TextField(NSLocalizedString("add_pet.name", comment: ""), text: $petName)
                         .textInputAutocapitalization(.words)
                         .disableAutocorrection(true)
                         .submitLabel(.done)
 
-                    Picker("Species", selection: Binding($selectedSpecies, replacingNilWith: .dog)) {
+                    Picker(NSLocalizedString("add_pet.species", comment: ""), selection: Binding($selectedSpecies, replacingNilWith: .dog)) {
                         // Restrict to Dog or Cat only
                         Text(Species.dog.displayName).tag(Species.dog as Species)
                         Text(Species.cat.displayName).tag(Species.cat as Species)
                     }
                     .pickerStyle(.segmented)
 
-                    Picker("Gender", selection: $selectedGender) {
+                    Picker(NSLocalizedString("add_pet.gender", comment: ""), selection: $selectedGender) {
                         // Restrict to Male or Female only
                         Text(PetGender.male.displayName).tag(PetGender.male)
                         Text(PetGender.female.displayName).tag(PetGender.female)
                     }
                     .pickerStyle(.segmented)
 
-                    TextField("Breed (optional)", text: $breed)
+                    TextField(NSLocalizedString("add_pet.breed", comment: ""), text: $breed)
                         .textInputAutocapitalization(.words)
                         .disableAutocorrection(true)
-                    TextField("Color (optional)", text: $color)
+                    TextField(NSLocalizedString("add_pet.color", comment: ""), text: $color)
                         .textInputAutocapitalization(.words)
                         .disableAutocorrection(true)
 
-                    Toggle("Set Birthdate", isOn: $hasBirthdate.animation())
+                    Toggle(NSLocalizedString("add_pet.set_birthdate", comment: ""), isOn: $hasBirthdate.animation())
                     if hasBirthdate {
-                        DatePicker("Birthdate", selection: $birthdate, in: ...Date(), displayedComponents: .date)
+                        DatePicker(NSLocalizedString("add_pet.birthdate", comment: ""), selection: $birthdate, in: ...Date(), displayedComponents: .date)
                     }
                 }
 
                 Section {
                     TextField(text: $healthNotes) {
-                        Label("Health Notes (optional)", systemImage: "cross.case.fill")
+                        Label(NSLocalizedString("add_pet.health_notes", comment: ""), systemImage: "cross.case.fill")
                     }
                     .textInputAutocapitalization(.sentences)
                 }
@@ -122,19 +122,19 @@ struct AddPetSheet: View {
 #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
 #endif
-            .navigationTitle("Add Pet")
+            .navigationTitle(NSLocalizedString("add_pet.title", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(NSLocalizedString("common.cancel", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { savePet() }
+                    Button(NSLocalizedString("common.save", comment: "")) { savePet() }
                         .disabled(petName.trimmed.isEmpty || selectedSpecies == nil)
                         .accessibilityHint(petName.trimmed.isEmpty ? "Enter a pet name to enable save" : "Saves this pet to the client")
                 }
             }
             .alert(alertTitle, isPresented: $showAlert) {
-                Button("OK", role: .cancel) { }
+                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
             } message: {
                 Text(alertMessage)
             }
@@ -148,13 +148,13 @@ struct AddPetSheet: View {
 
     private func savePet() {
         guard let species = selectedSpecies else {
-            alertMessage = "Select a species."
+            alertMessage = NSLocalizedString("add_pet.select_species", comment: "")
             showAlert = true
             return
         }
         let trimmedName = canonicalPetName(petName)
         guard !trimmedName.isEmpty else {
-            alertMessage = "Pet name can't be empty."
+            alertMessage = NSLocalizedString("add_pet.name_empty", comment: "")
             showAlert = true
             return
         }
@@ -181,7 +181,7 @@ struct AddPetSheet: View {
             HapticManager.notify(.success)
             dismiss()
         } catch {
-            alertMessage = "We couldn't save this pet. Please try again.\n\(error.localizedDescription)"
+            alertMessage = NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)"
             showAlert = true
         }
     }

@@ -30,7 +30,7 @@ struct ServiceManagementView: View {
                         }
                         Spacer()
                         if !service.isEnabled {
-                            Text("Disabled")
+                            Text(NSLocalizedString("service.disabled", comment: ""))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 8)
@@ -43,7 +43,7 @@ struct ServiceManagementView: View {
             }
             .onDelete(perform: deleteService)
         }
-        .navigationTitle("Service Management")
+        .navigationTitle(NSLocalizedString("service.management_title", comment: ""))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingAddService = true }) {
@@ -80,51 +80,51 @@ struct EditServiceView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Details") {
-                    TextField("Service Name", text: $viewModel.name)
-                    Picker("Category", selection: $viewModel.category) {
+                Section(NSLocalizedString("service.details", comment: "")) {
+                    TextField(NSLocalizedString("service.name", comment: ""), text: $viewModel.name)
+                    Picker(NSLocalizedString("service.category", comment: ""), selection: $viewModel.category) {
                         ForEach(Service.Category.allCases) { category in
                             Text(category.rawValue).tag(category)
                         }
                     }
                     HStack {
-                        Text("Icon")
+                        Text(NSLocalizedString("service.icon", comment: ""))
                         Spacer()
                         Image(systemName: viewModel.systemIcon)
                     }
                 }
-                
-                Section("Pricing & Duration") {
-                    TextField("Price", value: $viewModel.price, format: .currency(code: "USD"))
+
+                Section(NSLocalizedString("service.pricing_duration", comment: "")) {
+                    TextField(NSLocalizedString("service.price", comment: ""), value: $viewModel.price, format: .currency(code: "USD"))
                         .keyboardType(.decimalPad)
-                    
+
                     Stepper(
-                        "\(viewModel.duration) minutes",
+                        String(format: NSLocalizedString("service.duration_minutes_fmt", comment: ""), viewModel.duration),
                         value: $viewModel.duration,
                         in: 5...480,
                         step: 5
                     )
                 }
 
-                Section("Status") {
-                    Toggle("Enabled in app", isOn: $viewModel.isEnabled)
-                    Toggle("Is a Package deal", isOn: $viewModel.isPackage)
+                Section(NSLocalizedString("service.status", comment: "")) {
+                    Toggle(NSLocalizedString("service.enabled_in_app", comment: ""), isOn: $viewModel.isEnabled)
+                    Toggle(NSLocalizedString("service.is_package", comment: ""), isOn: $viewModel.isPackage)
                 }
             }
-            .navigationTitle(viewModel.service == nil ? "Add Service" : "Edit Service")
+            .navigationTitle(viewModel.service == nil ? NSLocalizedString("service.add_service", comment: "") : NSLocalizedString("service.edit_service", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(NSLocalizedString("common.cancel", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { saveService() }
+                    Button(NSLocalizedString("common.save", comment: "")) { saveService() }
                 }
             }
-            .alert("Error", isPresented: Binding(
+            .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
             )) {
-                Button("OK") {}
+                Button(NSLocalizedString("common.ok", comment: "")) {}
             } message: {
                 Text(viewModel.errorMessage ?? "An unknown error occurred.")
             }

@@ -50,7 +50,7 @@ struct NewClientSheet: View {
                             .frame(width: 44, height: 44)
                             .background(DS.ColorToken.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Capture the owner, an emergency contact, and at least one pet.")
+                            Text(NSLocalizedString("new_client.capture_hint", comment: ""))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -60,12 +60,12 @@ struct NewClientSheet: View {
 
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Owner").font(.subheadline.weight(.semibold))
-                        inputField("First Name *", text: $viewModel.first)
+                        Text(NSLocalizedString("new_client.owner", comment: "")).font(.subheadline.weight(.semibold))
+                        inputField(NSLocalizedString("new_client.first_name", comment: ""), text: $viewModel.first)
                             .textInputAutocapitalization(.words)
-                        inputField("Last Name *", text: $viewModel.last)
+                        inputField(NSLocalizedString("new_client.last_name", comment: ""), text: $viewModel.last)
                             .textInputAutocapitalization(.words)
-                        inputField("Phone *", text: $viewModel.phone)
+                        inputField(NSLocalizedString("new_client.phone", comment: ""), text: $viewModel.phone)
                             .keyboardType(.phonePad)
                             .onChange(of: viewModel.phone) {
                                 let digits = viewModel.phone.filter(\.isNumber)
@@ -75,10 +75,10 @@ struct NewClientSheet: View {
                                     viewModel.phone = formatted
                                 }
                             }
-                        inputField("Email", text: $viewModel.email)
+                        inputField(NSLocalizedString("new_client.email", comment: ""), text: $viewModel.email)
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)
-                        inputField("Address", text: $viewModel.address)
+                        inputField(NSLocalizedString("new_client.address", comment: ""), text: $viewModel.address)
                             .textInputAutocapitalization(.words)
                     }
                 }
@@ -86,25 +86,25 @@ struct NewClientSheet: View {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Emergency Contacts").font(.subheadline.weight(.semibold))
+                            Text(NSLocalizedString("new_client.emergency_contacts", comment: "")).font(.subheadline.weight(.semibold))
                             Spacer()
                             Button {
                                 viewModel.addContact()
                             } label: {
-                                Label("Add", systemImage: "plus.circle.fill")
+                                Label(NSLocalizedString("new_client.add", comment: ""), systemImage: "plus.circle.fill")
                             }
                             .buttonStyle(.bordered)
                         }
                         if viewModel.contacts.isEmpty {
-                            Text("Add at least one emergency contact so you can reach an owner quickly.")
+                            Text(NSLocalizedString("new_client.add_contact_hint", comment: ""))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach($viewModel.contacts) { $contact in
                                 VStack(alignment: .leading, spacing: 8) {
-                                    inputField("Name", text: $contact.name)
+                                    inputField(NSLocalizedString("new_client.contact_name", comment: ""), text: $contact.name)
                                         .textInputAutocapitalization(.words)
-                                    inputField("Phone", text: $contact.phone)
+                                    inputField(NSLocalizedString("new_client.contact_phone", comment: ""), text: $contact.phone)
                                         .keyboardType(.phonePad)
                                         .onChange(of: contact.phone) {
                                             let digits = contact.phone.filter(\.isNumber)
@@ -125,17 +125,17 @@ struct NewClientSheet: View {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Pets").font(.subheadline.weight(.semibold))
+                            Text(NSLocalizedString("new_client.pets", comment: "")).font(.subheadline.weight(.semibold))
                             Spacer()
                             Button {
                                 viewModel.addPet()
                             } label: {
-                                Label("Add Pet", systemImage: "plus.circle")
+                                Label(NSLocalizedString("new_client.add_pet", comment: ""), systemImage: "plus.circle")
                             }
                             .buttonStyle(.bordered)
                         }
                         if viewModel.pets.isEmpty {
-                            Text("Add at least one pet to create this client.")
+                            Text(NSLocalizedString("new_client.add_pet_hint", comment: ""))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -154,7 +154,7 @@ struct NewClientSheet: View {
                                                 ),
                                                 size: .lg
                                             )
-                                            Text("Choose Photo")
+                                            Text(NSLocalizedString("new_client.choose_photo", comment: ""))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
@@ -163,22 +163,22 @@ struct NewClientSheet: View {
                                 }
                                 .padding(.bottom, 10)
 
-                                inputField("Pet Name *", text: $pet.name)
+                                inputField(NSLocalizedString("new_client.pet_name", comment: ""), text: $pet.name)
                                     .textInputAutocapitalization(.words)
-                                Picker("Species", selection: $pet.species) {
+                                Picker(NSLocalizedString("add_pet.species", comment: ""), selection: $pet.species) {
                                     ForEach(Species.allCases) { species in
-                                        Text(species.rawValue.capitalized).tag(species)
+                                        Text(species.displayName).tag(species)
                                     }
                                 }
-                                Picker("Gender", selection: $pet.gender) {
-                                    Text("Male").tag(PetGender.male as PetGender?)
-                                    Text("Female").tag(PetGender.female as PetGender?)
+                                Picker(NSLocalizedString("add_pet.gender", comment: ""), selection: $pet.gender) {
+                                    Text(NSLocalizedString("gender.male", comment: "")).tag(PetGender.male as PetGender?)
+                                    Text(NSLocalizedString("gender.female", comment: "")).tag(PetGender.female as PetGender?)
                                 }
 
                                 HStack {
                                     Image(systemName: "cross.case.fill")
                                         .foregroundStyle(.secondary)
-                                    TextField("Health Notes (optional)", text: $pet.health)
+                                    TextField(NSLocalizedString("new_client.health_notes", comment: ""), text: $pet.health)
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
@@ -187,10 +187,10 @@ struct NewClientSheet: View {
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                                         .stroke(DS.ColorToken.border, lineWidth: 1)
                                 )
-                                
-                                Toggle("Set Birthdate", isOn: $pet.hasBirthdate.animation())
+
+                                Toggle(NSLocalizedString("new_client.set_birthdate", comment: ""), isOn: $pet.hasBirthdate.animation())
                                 if pet.hasBirthdate {
-                                    DatePicker("Birthdate", selection: $pet.birthdate, in: ...Date(), displayedComponents: .date)
+                                    DatePicker(NSLocalizedString("new_client.birthdate", comment: ""), selection: $pet.birthdate, in: ...Date(), displayedComponents: .date)
                                 }
                             }
                             .padding()
@@ -202,10 +202,10 @@ struct NewClientSheet: View {
             .padding()
         }
         .background(DS.ColorToken.background.ignoresSafeArea())
-        .navigationTitle("New Client")
+        .navigationTitle(NSLocalizedString("new_client.new_client", comment: ""))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", role: .cancel) { dismiss() }
+                Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
@@ -214,27 +214,27 @@ struct NewClientSheet: View {
                         dismiss()
                     }
                 } label: {
-                    Label("Create", systemImage: "checkmark.circle.fill")
+                    Label(NSLocalizedString("common.create", comment: ""), systemImage: "checkmark.circle.fill")
                         .labelStyle(.titleAndIcon)
                 }
                 .disabled(viewModel.isSaving)
             }
         }
-        .alert("Cannot Create Client", isPresented: $viewModel.showAlert) {
-            Button("OK", role: .cancel) { }
+        .alert(NSLocalizedString("new_client.cannot_create_client", comment: ""), isPresented: $viewModel.showAlert) {
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
         } message: {
             Text(viewModel.alertText)
         }
-        .alert("Client Exists", isPresented: $viewModel.showDuplicateAlert) {
-            Button("Open") {
+        .alert(NSLocalizedString("new_client.client_exists", comment: ""), isPresented: $viewModel.showDuplicateAlert) {
+            Button(NSLocalizedString("new_client.open", comment: "")) {
                 if let id = viewModel.duplicateClientID {
                     NotificationCenter.default.post(name: .clientOpenRequested, object: nil, userInfo: [ClientOpenKey.clientID.rawValue: id])
                 }
                 dismiss()
             }
-            Button("Cancel", role: .cancel) { }
+            Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { }
         } message: {
-            Text("A client with this phone number already exists. Would you like to open their profile?")
+            Text(NSLocalizedString("new_client.client_exists_message", comment: ""))
         }
     }
 }

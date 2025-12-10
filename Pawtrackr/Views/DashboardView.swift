@@ -36,7 +36,7 @@ import Charts
             }
         }
       }
-      .navigationTitle("Dashboard")
+      .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
       .sheet(isPresented: $showNewClient) {
         NewClientSheet(modelContext: modelContext)
       }
@@ -85,18 +85,18 @@ import Charts
       Grid(horizontalSpacing: 12, verticalSpacing: 12) {
         GridRow {
           NavigationLink { RecentHistoryView(initialScope: .today) } label: {
-            kpiCard(title: "Appointments", value: vm.kpi.appointmentsTodayText, symbol: "calendar")
+            kpiCard(title: NSLocalizedString("dashboard.appointments", comment: ""), value: vm.kpi.appointmentsTodayText, symbol: "calendar")
           }
           NavigationLink { RecentHistoryView(initialScope: .today) } label: {
-            kpiCard(title: "In Progress",  value: "\(vm.kpi.inProgressCount)",   symbol: "hourglass")
+            kpiCard(title: NSLocalizedString("dashboard.in_progress", comment: ""),  value: "\(vm.kpi.inProgressCount)",   symbol: "hourglass")
           }
         }
         GridRow {
           NavigationLink { InsightsView() } label: {
-            kpiCard(title: "Revenue",     value: vm.kpi.revenueTodayString,      symbol: "dollarsign.circle")
+            kpiCard(title: NSLocalizedString("dashboard.revenue", comment: ""),     value: vm.kpi.revenueTodayString,      symbol: "dollarsign.circle")
           }
           NavigationLink { RecentHistoryView(initialScope: .today) } label: {
-            kpiCard(title: "Completed",   value: "\(vm.kpi.completedToday)",      symbol: "checkmark.circle")
+            kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""),   value: "\(vm.kpi.completedToday)",      symbol: "checkmark.circle")
           }
         }
       }
@@ -180,7 +180,7 @@ import Charts
               Image(uiImage: uiImage).resizable().scaledToFill()
                 .frame(height: 120).clipped().cornerRadius(8)
             } else {
-              LabelContent(title: "No Photo", systemImage: "photo")
+              LabelContent(title: NSLocalizedString("dashboard.no_photo", comment: ""), systemImage: "photo")
             }
           }
         }

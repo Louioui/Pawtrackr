@@ -140,11 +140,11 @@ struct ClientDetailView: View {
         .sheet(isPresented: $showContactEditor) {
             NavigationStack {
                 Form {
-                    Section(editingContact == nil ? "New Emergency Contact" : "Edit Emergency Contact") {
-                        TextField("Name", text: $newContactName)
+                    Section(editingContact == nil ? NSLocalizedString("client_detail.new_emergency_contact", comment: "") : NSLocalizedString("client_detail.edit_emergency_contact", comment: "")) {
+                        TextField(NSLocalizedString("form.name", comment: ""), text: $newContactName)
                             .focused($contactNameFocused)
-                        TextField("Relation", text: $newContactRelation)
-                        TextField("Phone", text: $newContactPhone)
+                        TextField(NSLocalizedString("form.relation", comment: ""), text: $newContactRelation)
+                        TextField(NSLocalizedString("form.phone", comment: ""), text: $newContactPhone)
                             .onChange(of: newContactPhone) { _, v in
                                 guard !v.isEmpty else { return }
                                 // Clamp to core 10 digits; do not allow extensions in this field.
@@ -157,19 +157,19 @@ struct ClientDetailView: View {
                         #endif
                     }
                 }
-                .navigationTitle(editingContact == nil ? "Add Contact" : "Edit Contact")
+                .navigationTitle(editingContact == nil ? NSLocalizedString("client_detail.add_contact", comment: "") : NSLocalizedString("client_detail.edit_contact", comment: ""))
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showContactEditor = false } }
-                    ToolbarItem(placement: .confirmationAction) { Button("Save") { addOrUpdateContact() } }
+                    ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { showContactEditor = false } }
+                    ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("common.save", comment: "")) { addOrUpdateContact() } }
                 }
                 .task { contactNameFocused = true }
             }
         }
         .alert(item: $contactPendingDelete) { c in
             Alert(
-                title: Text("Delete Contact?"),
-                message: Text("This cannot be undone."),
-                primaryButton: .destructive(Text("Delete")) { confirmDeleteContact(c) },
+                title: Text(NSLocalizedString("client_detail.delete_contact_title", comment: "")),
+                message: Text(NSLocalizedString("client_detail.delete_contact_message", comment: "")),
+                primaryButton: .destructive(Text(NSLocalizedString("common.delete", comment: ""))) { confirmDeleteContact(c) },
                 secondaryButton: .cancel()
             )
         }
@@ -231,7 +231,7 @@ struct ClientDetailView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(client.fullName)
                             .font(.title3.weight(.semibold))
-                        Text("Client since \(Formatters.monthYear.string(from: client.createdAt))")
+                        Text(String(format: NSLocalizedString("client_detail.client_since_fmt", comment: ""), Formatters.monthYear.string(from: client.createdAt)))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -321,7 +321,7 @@ struct ClientDetailView: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "note.text").foregroundStyle(.yellow)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Notes").font(.headline)
+                    Text(NSLocalizedString("client_detail.notes", comment: "")).font(.headline)
                     Text(notes.trimmingCharacters(in: .whitespacesAndNewlines)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -344,7 +344,7 @@ struct ClientDetailView: View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Emergency Contacts").font(.headline)
+                    Text(NSLocalizedString("client_detail.emergency_contacts", comment: "")).font(.headline)
                     Spacer()
                     Button {
                         editingContact = nil
@@ -352,10 +352,10 @@ struct ClientDetailView: View {
                         showContactEditor = true
                     } label: { Image(systemName: "plus.circle.fill").font(.headline) }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Add emergency contact")
+                        .accessibilityLabel(NSLocalizedString("client_detail.add_contact", comment: ""))
                 }
                 if client.emergencyContacts.isEmpty {
-                    Text("No emergency contacts yet").font(.footnote).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("client_detail.no_emergency_contacts", comment: "")).font(.footnote).foregroundStyle(.secondary)
                 } else {
                     ForEach(client.emergencyContacts, id: \.uuid) { c in
                         HStack(spacing: 10) {
@@ -429,7 +429,7 @@ struct ClientDetailView: View {
 
     private func petsSection(vm: ClientDetailViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Pets (\(vm.pets.count))").font(.headline).padding(.horizontal)
+            Text(String(format: NSLocalizedString("client_detail.pets_count_fmt", comment: ""), vm.pets.count)).font(.headline).padding(.horizontal)
             VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
                     Card {
@@ -445,7 +445,7 @@ struct ClientDetailView: View {
                                     petStatusPill(pet)
                                 }
                                 HStack(spacing: 8) {
-                                    actionButton(title: "Check In", systemImage: "arrow.down.right.circle.fill", tint: .blue) {
+                                    actionButton(title: NSLocalizedString("client_detail.check_in", comment: ""), systemImage: "arrow.down.right.circle.fill", tint: .blue) {
                                         vm.checkIn(pet: pet)
                                         withAnimation(Animations.fastEaseOut) { showSessionStartedToast = true }
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -454,13 +454,13 @@ struct ClientDetailView: View {
                                     }
                                     .disabled(pet.activeVisit != nil)
 
-                                    actionButton(title: "Check Out", systemImage: "creditcard.fill", tint: .green) {
+                                    actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "creditcard.fill", tint: .green) {
                                         // Open checkout; pass active visit so it finalizes the ongoing session
                                         checkoutPet = pet
                                     }
                                     .disabled(pet.activeVisit == nil)
 
-                                    actionButton(title: "History", systemImage: "clock.arrow.circlepath", borderOnly: true) {
+                                    actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {
                                         sheetDestination = .history(pet)
                                     }
                                 }
@@ -479,12 +479,12 @@ struct ClientDetailView: View {
             HStack {
                 Text(NSLocalizedString("client_details.recent_history", comment: "")).font(.headline)
                 Spacer()
-                Picker("Range", selection: Binding(
+                Picker(NSLocalizedString("client_detail.all", comment: ""), selection: Binding(
                     get: { vm.historyRange },
                     set: { vm.historyRange = $0 }
                 )) {
-                    Text("All").tag(ClientDetailViewModel.HistoryRange.all)
-                    Text("Last 90d").tag(ClientDetailViewModel.HistoryRange.lastNDays(90))
+                    Text(NSLocalizedString("client_detail.all", comment: "")).tag(ClientDetailViewModel.HistoryRange.all)
+                    Text(NSLocalizedString("client_detail.last_90d", comment: "")).tag(ClientDetailViewModel.HistoryRange.lastNDays(90))
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 260)
@@ -492,7 +492,7 @@ struct ClientDetailView: View {
             .padding(.horizontal)
 
             if vm.recentVisits.isEmpty {
-                ContentUnavailableView("No History Yet", systemImage: "clock.badge.questionmark")
+                ContentUnavailableView(NSLocalizedString("client_detail.no_history_yet", comment: ""), systemImage: "clock.badge.questionmark")
                     .padding(.vertical, 20)
             } else {
                 // Group by day to mirror the sample design
@@ -503,7 +503,7 @@ struct ClientDetailView: View {
                         let visits = grouped[day]!.sorted(by: { $0.sortKeyDate > $1.sortKeyDate })
                         HStack(spacing: 6) {
                             Text(Formatters.dateOnly.string(from: day)).font(.subheadline.weight(.semibold))
-                            Text("\(visits.count) visits")
+                            Text(String(format: NSLocalizedString("client_detail.visits_count_fmt", comment: ""), visits.count))
                                 .font(.caption.weight(.bold))
                                 .padding(.vertical, 2)
                                 .padding(.horizontal, 6)
@@ -542,11 +542,11 @@ struct ClientDetailView: View {
         .overlay(alignment: .top) {
             VStack(spacing: 6) {
                 if showSessionStartedToast {
-                    SessionToast(text: "Session started", tint: .blue)
+                    SessionToast(text: NSLocalizedString("client_detail.session_started", comment: ""), tint: .blue)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 if showSavedToast {
-                    SavedToast()
+                    SavedToast(text: NSLocalizedString("client_detail.saved_successfully", comment: ""))
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
@@ -702,10 +702,11 @@ struct ClientDetailView: View {
     @State private var showSessionStartedToast = false
 
     private struct SavedToast: View {
+        var text: String
         var body: some View {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.white)
-                Text("Saved successfully").foregroundStyle(.white)
+                Text(text).foregroundStyle(.white)
             }
             .font(.callout.weight(.semibold))
             .padding(.horizontal, 12)
@@ -778,7 +779,7 @@ private struct InitialsCircle: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.blue.opacity(0.12)))
         .foregroundStyle(.blue)
     } else {
-        Text("Available")
+        Text(NSLocalizedString("client_detail.available", comment: ""))
             .font(.caption.weight(.bold))
             .padding(.vertical, 4)
             .padding(.horizontal, 8)

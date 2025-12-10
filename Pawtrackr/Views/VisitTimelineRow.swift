@@ -34,14 +34,14 @@ struct VisitTimelineRow: View {
             }
             Spacer()
             if visit.isPaid {
-                Text("Paid")
+                Text(NSLocalizedString("visit.paid", comment: ""))
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(Color.green))
                     .foregroundStyle(.white)
             } else if visit.isActive {
-                Text("Processing")
+                Text(NSLocalizedString("visit.processing", comment: ""))
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -54,16 +54,16 @@ struct VisitTimelineRow: View {
     private var timingRow: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Check-in").font(.caption).foregroundStyle(.secondary)
+                Text(NSLocalizedString("visit.check_in_time", comment: "")).font(.caption).foregroundStyle(.secondary)
                 Text(Formatters.timeOnly.string(from: visit.startedAt)).font(.subheadline.weight(.medium))
             }
             Spacer()
             VStack(alignment: .leading, spacing: 2) {
-                Text("Check-out").font(.caption).foregroundStyle(.secondary)
+                Text(NSLocalizedString("visit.check_out_time", comment: "")).font(.caption).foregroundStyle(.secondary)
                 if let end = visit.endedAt {
                     Text(Formatters.timeOnly.string(from: end)).font(.subheadline.weight(.medium))
                 } else {
-                    Text("In Progress").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("visit.in_progress", comment: "")).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                 }
             }
         }

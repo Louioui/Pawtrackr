@@ -77,7 +77,7 @@ struct ClientsView: View {
             )
         }
         .fabOverlay {
-            FAB(systemImage: "plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
+            FAB(systemImage: "person.fill.badge.plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
                 showingNewClientSheet = true
             }
         }

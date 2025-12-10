@@ -32,13 +32,13 @@ struct SettingsView: View {
                 ChangePINSheet(isPresented: $showChangePIN, errorMessage: $pinChangeError)
                     .environmentObject(appSettings)
             }
-            .alert("common.error", isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
-                Button("common.ok", role: .cancel) { }
+            .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
+                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
             } message: { Text(pinChangeError ?? "") }
-            .navigationTitle("settings.title")
+            .navigationTitle(NSLocalizedString("settings.title", comment: ""))
             .navigationBarTitleDisplayMode(.inline)
-            .alert("common.error", isPresented: $showError) {
-                Button("common.ok", role: .cancel) { }
+            .alert(NSLocalizedString("common.error", comment: ""), isPresented: $showError) {
+                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
             } message: {
                 Text(errorMessage)
             }
@@ -48,10 +48,10 @@ struct SettingsView: View {
     // MARK: - UI Sections
     private var headerBar: some View {
         HStack {
-            Text("settings.security.title").font(.headline)
+            Text(NSLocalizedString("settings.security.title", comment: "")).font(.headline)
             Spacer()
             Button { } label: { Image(systemName: "questionmark.circle").foregroundStyle(.secondary) }
-                .accessibilityLabel(Text("settings.security.question_a11y"))
+                .accessibilityLabel(Text(NSLocalizedString("settings.security.question_a11y", comment: "")))
         }
         .padding(.horizontal)
     }
@@ -64,9 +64,9 @@ struct SettingsView: View {
                 Circle().fill(Color.white.opacity(0.2)).frame(width: 48, height: 48)
                     .overlay(Image(systemName: "checkmark.shield.fill").font(.title2).foregroundStyle(.white))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(appSettings.isBiometricLockEnabled ? "settings.security.status.active_title" : "settings.security.status.inactive_title")
+                    Text(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.security.status.active_title" : "settings.security.status.inactive_title", comment: ""))
                         .font(.headline).foregroundStyle(.white)
-                    Text(appSettings.isBiometricLockEnabled ? "settings.security.status.active_subtitle" : "settings.security.status.inactive_subtitle")
+                    Text(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.security.status.active_subtitle" : "settings.security.status.inactive_subtitle", comment: ""))
                         .font(.caption).foregroundStyle(.white.opacity(0.9))
                 }
                 Spacer()
@@ -81,8 +81,8 @@ struct SettingsView: View {
         Card(elevation: .regular) {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("settings.pin.title").font(.headline)
-                    Text("settings.pin.subtitle").font(.caption).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("settings.pin.title", comment: "")).font(.headline)
+                    Text(NSLocalizedString("settings.pin.subtitle", comment: "")).font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
                 HStack {
@@ -90,12 +90,12 @@ struct SettingsView: View {
                         Circle().fill(DS.ColorToken.primary.opacity(0.12)).frame(width: 40, height: 40)
                             .overlay(Image(systemName: "key.fill").foregroundStyle(DS.ColorToken.primary))
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("settings.pin.status").font(.subheadline.weight(.semibold))
+                            Text(NSLocalizedString("settings.pin.status", comment: "")).font(.subheadline.weight(.semibold))
                             Text(pinStatusSubtitle).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
-                    Text(appSettings.isBiometricLockEnabled ? "settings.pin.status.enabled" : "settings.pin.status.disabled")
+                    Text(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.pin.status.enabled" : "settings.pin.status.disabled", comment: ""))
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(appSettings.isBiometricLockEnabled ? DS.ColorToken.success : Color.gray.opacity(0.5), in: Capsule())
@@ -104,14 +104,14 @@ struct SettingsView: View {
                 Button {
                     showChangePIN = true
                 } label: {
-                    Label("settings.pin.change", systemImage: "pencil").frame(maxWidth: .infinity)
+                    Label(NSLocalizedString("settings.pin.change", comment: ""), systemImage: "pencil").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(DS.ColorToken.primary)
                 Button {
                     appSettings.isBiometricLockEnabled.toggle()
                 } label: {
-                    Label(appSettings.isBiometricLockEnabled ? "settings.pin.disable" : "settings.pin.enable", systemImage: appSettings.isBiometricLockEnabled ? "xmark.circle" : "checkmark.circle")
+                    Label(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.pin.disable" : "settings.pin.enable", comment: ""), systemImage: appSettings.isBiometricLockEnabled ? "xmark.circle" : "checkmark.circle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -151,20 +151,20 @@ private struct ChangePINSheet: View {
                 VStack(spacing: 6) {
                     Circle().fill(DS.ColorToken.primary.opacity(0.12)).frame(width: 64, height: 64)
                         .overlay(Image(systemName: "key.fill").font(.title).foregroundStyle(DS.ColorToken.primary))
-                    Text("settings.pin.change.title").font(.title3.weight(.semibold))
-                    Text("settings.pin.change.subtitle").font(.caption).foregroundStyle(.secondary)
+                    Text(NSLocalizedString("settings.pin.change.title", comment: "")).font(.title3.weight(.semibold))
+                    Text(NSLocalizedString("settings.pin.change.subtitle", comment: "")).font(.caption).foregroundStyle(.secondary)
                 }
                 VStack(spacing: 12) {
-                    pinRow(title: "settings.pin.change.current", binding: $current)
-                    pinRow(title: "settings.pin.change.new", binding: $newPIN)
-                    pinRow(title: "settings.pin.change.confirm", binding: $confirmPIN)
+                    pinRow(title: LocalizedStringKey(NSLocalizedString("settings.pin.change.current", comment: "")), binding: $current)
+                    pinRow(title: LocalizedStringKey(NSLocalizedString("settings.pin.change.new", comment: "")), binding: $newPIN)
+                    pinRow(title: LocalizedStringKey(NSLocalizedString("settings.pin.change.confirm", comment: "")), binding: $confirmPIN)
                 }
                 Spacer(minLength: 0)
             }
             .padding()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("common.cancel") { isPresented = false } }
-                ToolbarItem(placement: .confirmationAction) { Button("settings.pin.change.update") { updatePIN() } }
+                ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { isPresented = false } }
+                ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("settings.pin.change.update", comment: "")) { updatePIN() } }
             }
         }
     }

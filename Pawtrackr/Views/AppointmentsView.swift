@@ -20,11 +20,11 @@ struct AppointmentsView: View {
                 }
                 .onDelete(perform: deleteAppointment)
             }
-            .navigationTitle("Appointments")
+            .navigationTitle(NSLocalizedString("appointments.title", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: addAppointment) {
-                        Label("Add Appointment", systemImage: "plus")
+                        Label(NSLocalizedString("appointments.add", comment: ""), systemImage: "plus")
                     }
                 }
             }
@@ -51,7 +51,7 @@ struct PetSelectionView: View {
     @Binding var selectedPet: Pet?
 
     var body: some View {
-        Picker("Pet", selection: $selectedPet) {
+        Picker(NSLocalizedString("appointments.pet", comment: ""), selection: $selectedPet) {
             ForEach(pets) { pet in
                 Text(pet.name).tag(pet as Pet?)
             }
