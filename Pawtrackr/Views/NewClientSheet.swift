@@ -140,61 +140,154 @@ struct NewClientSheet: View {
                                 .foregroundStyle(.secondary)
                         }
                         ForEach($viewModel.pets) { $pet in
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack {
-                                    Spacer()
-                                    ImagePicker(imageData: $pet.photoData) {
-                                        VStack(alignment: .center, spacing: 12) {
-                                            AvatarView(
-                                                .pet(
-                                                    species: pet.species,
-                                                    gender: pet.gender,
-                                                    name: pet.name,
-                                                    imageData: pet.photoData
-                                                ),
-                                                size: .lg
-                                            )
-                                            Text(NSLocalizedString("new_client.choose_photo", comment: ""))
+                            VStack(alignment: .leading, spacing: 0) {
+                                // Gender accent bar at top
+                                Rectangle()
+                                    .fill(DS.ColorToken.gender(pet.gender))
+                                    .frame(height: 4)
+
+                                VStack(alignment: .leading, spacing: 16) {
+                                    // Photo section
+                                    HStack {
+                                        Spacer()
+                                        ImagePicker(imageData: $pet.photoData) {
+                                            VStack(alignment: .center, spacing: 8) {
+                                                AvatarView(
+                                                    .pet(
+                                                        species: pet.species,
+                                                        gender: pet.gender,
+                                                        name: pet.name,
+                                                        imageData: pet.photoData
+                                                    ),
+                                                    size: .lg
+                                                )
+                                                Text(NSLocalizedString("new_client.choose_photo", comment: ""))
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 8)
+
+                                    // Pet name
+                                    inputField(NSLocalizedString("new_client.pet_name", comment: ""), text: $pet.name)
+                                        .textInputAutocapitalization(.words)
+
+                                    // Species picker - segmented style
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(NSLocalizedString("add_pet.species", comment: ""))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Picker(NSLocalizedString("add_pet.species", comment: ""), selection: $pet.species) {
+                                            Text(Species.dog.displayName).tag(Species.dog)
+                                            Text(Species.cat.displayName).tag(Species.cat)
+                                        }
+                                        .pickerStyle(.segmented)
+                                    }
+
+                                    // Gender picker - segmented style
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(NSLocalizedString("add_pet.gender", comment: ""))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Picker(NSLocalizedString("add_pet.gender", comment: ""), selection: $pet.gender) {
+                                            Text(PetGender.male.displayName).tag(PetGender.male as PetGender?)
+                                            Text(PetGender.female.displayName).tag(PetGender.female as PetGender?)
+                                        }
+                                        .pickerStyle(.segmented)
+                                    }
+
+                                    // Breed and Color in a row
+                                    HStack(spacing: 12) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "pawprint.fill")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                                Text(NSLocalizedString("add_pet.breed", comment: ""))
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            TextField("", text: $pet.breed)
+                                                .textInputAutocapitalization(.words)
+                                                .disableAutocorrection(true)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 10)
+                                                .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                        .stroke(DS.ColorToken.border, lineWidth: 1)
+                                                )
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "paintpalette.fill")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                                Text(NSLocalizedString("add_pet.color", comment: ""))
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            TextField("", text: $pet.color)
+                                                .textInputAutocapitalization(.words)
+                                                .disableAutocorrection(true)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 10)
+                                                .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                        .stroke(DS.ColorToken.border, lineWidth: 1)
+                                                )
+                                        }
+                                    }
+
+                                    // Birthday section
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Toggle(isOn: $pet.hasBirthdate.animation()) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "birthday.cake.fill")
+                                                    .foregroundStyle(.orange)
+                                                Text(NSLocalizedString("new_client.set_birthdate", comment: ""))
+                                            }
+                                        }
+                                        if pet.hasBirthdate {
+                                            DatePicker(NSLocalizedString("new_client.birthdate", comment: ""), selection: $pet.birthdate, in: ...Date(), displayedComponents: .date)
+                                                .datePickerStyle(.compact)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(DS.ColorToken.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                                    // Health notes
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "cross.case.fill")
+                                                .font(.caption2)
+                                                .foregroundStyle(.red.opacity(0.8))
+                                            Text(NSLocalizedString("new_client.health_notes", comment: ""))
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
+                                        TextField("", text: $pet.health)
+                                            .textInputAutocapitalization(.sentences)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 10)
+                                            .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                    .stroke(DS.ColorToken.border, lineWidth: 1)
+                                            )
                                     }
-                                    Spacer()
                                 }
-                                .padding(.bottom, 10)
-
-                                inputField(NSLocalizedString("new_client.pet_name", comment: ""), text: $pet.name)
-                                    .textInputAutocapitalization(.words)
-                                Picker(NSLocalizedString("add_pet.species", comment: ""), selection: $pet.species) {
-                                    ForEach(Species.allCases) { species in
-                                        Text(species.displayName).tag(species)
-                                    }
-                                }
-                                Picker(NSLocalizedString("add_pet.gender", comment: ""), selection: $pet.gender) {
-                                    Text(NSLocalizedString("gender.male", comment: "")).tag(PetGender.male as PetGender?)
-                                    Text(NSLocalizedString("gender.female", comment: "")).tag(PetGender.female as PetGender?)
-                                }
-
-                                HStack {
-                                    Image(systemName: "cross.case.fill")
-                                        .foregroundStyle(.secondary)
-                                    TextField(NSLocalizedString("new_client.health_notes", comment: ""), text: $pet.health)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(DS.ColorToken.border, lineWidth: 1)
-                                )
-
-                                Toggle(NSLocalizedString("new_client.set_birthdate", comment: ""), isOn: $pet.hasBirthdate.animation())
-                                if pet.hasBirthdate {
-                                    DatePicker(NSLocalizedString("new_client.birthdate", comment: ""), selection: $pet.birthdate, in: ...Date(), displayedComponents: .date)
-                                }
+                                .padding()
                             }
-                            .padding()
                             .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(DS.ColorToken.border.opacity(0.5), lineWidth: 1)
+                            )
                         }
                     }
                 }

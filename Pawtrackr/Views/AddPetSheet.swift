@@ -45,80 +45,162 @@ struct AddPetSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section(NSLocalizedString("add_pet.profile_photo", comment: "")) {
-                    HStack {
-                        Spacer()
-                        ImagePicker(imageData: $avatarImageData) {
-                            VStack(alignment: .center, spacing: 12) {
-                                AvatarView(
-                                    .pet(
-                                        species: selectedSpecies,
-                                        gender: selectedGender,
-                                        name: petName,
-                                        imageData: avatarImageData
-                                    ),
-                                    size: .lg
-                                )
-                                Text(NSLocalizedString("add_pet.choose_photo", comment: ""))
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Pet card with gender accent
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Gender accent bar at top
+                        Rectangle()
+                            .fill(DS.ColorToken.gender(selectedGender))
+                            .frame(height: 4)
+
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Photo section
+                            HStack {
+                                Spacer()
+                                ImagePicker(imageData: $avatarImageData) {
+                                    VStack(alignment: .center, spacing: 8) {
+                                        AvatarView(
+                                            .pet(
+                                                species: selectedSpecies,
+                                                gender: selectedGender,
+                                                name: petName,
+                                                imageData: avatarImageData
+                                            ),
+                                            size: .lg
+                                        )
+                                        Text(NSLocalizedString("add_pet.choose_photo", comment: ""))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 8)
+
+                            // Pet name
+                            petInputField(NSLocalizedString("add_pet.name", comment: ""), text: $petName)
+                                .textInputAutocapitalization(.words)
+                                .disableAutocorrection(true)
+
+                            // Species picker - segmented style
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(NSLocalizedString("add_pet.species", comment: ""))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Picker(NSLocalizedString("add_pet.species", comment: ""), selection: Binding($selectedSpecies, replacingNilWith: .dog)) {
+                                    Text(Species.dog.displayName).tag(Species.dog as Species)
+                                    Text(Species.cat.displayName).tag(Species.cat as Species)
+                                }
+                                .pickerStyle(.segmented)
+                            }
+
+                            // Gender picker - segmented style
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(NSLocalizedString("add_pet.gender", comment: ""))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Picker(NSLocalizedString("add_pet.gender", comment: ""), selection: $selectedGender) {
+                                    Text(PetGender.male.displayName).tag(PetGender.male)
+                                    Text(PetGender.female.displayName).tag(PetGender.female)
+                                }
+                                .pickerStyle(.segmented)
+                            }
+
+                            // Breed and Color in a row
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "pawprint.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                        Text(NSLocalizedString("add_pet.breed", comment: ""))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    TextField("", text: $breed)
+                                        .textInputAutocapitalization(.words)
+                                        .disableAutocorrection(true)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 10)
+                                        .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .stroke(DS.ColorToken.border, lineWidth: 1)
+                                        )
+                                }
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "paintpalette.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                        Text(NSLocalizedString("add_pet.color", comment: ""))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    TextField("", text: $color)
+                                        .textInputAutocapitalization(.words)
+                                        .disableAutocorrection(true)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 10)
+                                        .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .stroke(DS.ColorToken.border, lineWidth: 1)
+                                        )
+                                }
+                            }
+
+                            // Birthday section
+                            VStack(alignment: .leading, spacing: 8) {
+                                Toggle(isOn: $hasBirthdate.animation()) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "birthday.cake.fill")
+                                            .foregroundStyle(.orange)
+                                        Text(NSLocalizedString("add_pet.set_birthdate", comment: ""))
+                                    }
+                                }
+                                if hasBirthdate {
+                                    DatePicker(NSLocalizedString("add_pet.birthdate", comment: ""), selection: $birthdate, in: ...Date(), displayedComponents: .date)
+                                        .datePickerStyle(.compact)
+                                }
+                            }
+                            .padding(12)
+                            .background(DS.ColorToken.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                            // Health notes
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "cross.case.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.red.opacity(0.8))
+                                    Text(NSLocalizedString("add_pet.health_notes", comment: ""))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                TextField("", text: $healthNotes)
+                                    .textInputAutocapitalization(.sentences)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(DS.ColorToken.border, lineWidth: 1)
+                                    )
                             }
                         }
-                        Spacer()
+                        .padding()
                     }
-                    .padding(.vertical, 10)
+                    .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(DS.ColorToken.border.opacity(0.5), lineWidth: 1)
+                    )
                 }
-
-                Section(NSLocalizedString("add_pet.pet_info", comment: "")) {
-                    TextField(NSLocalizedString("add_pet.name", comment: ""), text: $petName)
-                        .textInputAutocapitalization(.words)
-                        .disableAutocorrection(true)
-                        .submitLabel(.done)
-
-                    Picker(NSLocalizedString("add_pet.species", comment: ""), selection: Binding($selectedSpecies, replacingNilWith: .dog)) {
-                        // Restrict to Dog or Cat only
-                        Text(Species.dog.displayName).tag(Species.dog as Species)
-                        Text(Species.cat.displayName).tag(Species.cat as Species)
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker(NSLocalizedString("add_pet.gender", comment: ""), selection: $selectedGender) {
-                        // Restrict to Male or Female only
-                        Text(PetGender.male.displayName).tag(PetGender.male)
-                        Text(PetGender.female.displayName).tag(PetGender.female)
-                    }
-                    .pickerStyle(.segmented)
-
-                    TextField(NSLocalizedString("add_pet.breed", comment: ""), text: $breed)
-                        .textInputAutocapitalization(.words)
-                        .disableAutocorrection(true)
-                    TextField(NSLocalizedString("add_pet.color", comment: ""), text: $color)
-                        .textInputAutocapitalization(.words)
-                        .disableAutocorrection(true)
-
-                    Toggle(NSLocalizedString("add_pet.set_birthdate", comment: ""), isOn: $hasBirthdate.animation())
-                    if hasBirthdate {
-                        DatePicker(NSLocalizedString("add_pet.birthdate", comment: ""), selection: $birthdate, in: ...Date(), displayedComponents: .date)
-                    }
-                }
-
-                Section {
-                    TextField(text: $healthNotes) {
-                        Label(NSLocalizedString("add_pet.health_notes", comment: ""), systemImage: "cross.case.fill")
-                    }
-                    .textInputAutocapitalization(.sentences)
-                }
-
-                // Notes removed per request
+                .padding()
             }
-            .overlay(
-                Rectangle()
-                    .fill(DS.ColorToken.gender(selectedGender))
-                    .frame(height: 4)
-                    .frame(maxHeight: .infinity, alignment: .top),
-                alignment: .top
-            )
+            .background(DS.ColorToken.background.ignoresSafeArea())
 #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
 #endif
@@ -140,10 +222,21 @@ struct AddPetSheet: View {
             }
         }
 #if os(iOS)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
 #endif
         .accessibilityElement(children: .contain)
+    }
+
+    private func petInputField(_ title: String, text: Binding<String>) -> some View {
+        TextField(title, text: text)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(DS.ColorToken.border, lineWidth: 1)
+            )
     }
 
     private func savePet() {
