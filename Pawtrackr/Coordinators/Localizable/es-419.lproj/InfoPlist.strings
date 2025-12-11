@@ -1,2 +1,14 @@
 "CFBundleDisplayName" = "Pawtrackr";
 
+/* Privacy - Camera Usage Description */
+"NSCameraUsageDescription" = "Pawtrackr necesita acceso a la cámara para tomar fotos de las mascotas durante las sesiones de aseo.";
+
+/* Privacy - Photo Library Usage Description */
+"NSPhotoLibraryUsageDescription" = "Pawtrackr necesita acceso a tu biblioteca de fotos para seleccionar fotos de mascotas para los registros de clientes.";
+
+/* Privacy - Photo Library Additions Usage Description */
+"NSPhotoLibraryAddUsageDescription" = "Pawtrackr necesita permiso para guardar fotos de aseo en tu biblioteca de fotos.";
+
+/* Privacy - Face ID Usage Description */
+"NSFaceIDUsageDescription" = "Pawtrackr usa Face ID para proteger tus datos.";
+

@@ -254,7 +254,10 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Pawtrackr needs camera access to take photos of pets during grooming sessions.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Pawtrackr uses Face ID to secure your data.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Pawtrackr needs permission to save grooming photos to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Pawtrackr needs access to your photo library to select pet photos for client records.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -297,7 +300,10 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Pawtrackr needs camera access to take photos of pets during grooming sessions.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Pawtrackr uses Face ID to secure your data.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Pawtrackr needs permission to save grooming photos to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Pawtrackr needs access to your photo library to select pet photos for client records.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

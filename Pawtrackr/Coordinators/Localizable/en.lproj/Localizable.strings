@@ -11,6 +11,11 @@
 "insights.filters" = "Filters";
 "insights.scope.today" = "Today";
 "insights.scope.yesterday" = "Yesterday";
+"7D" = "7D";
+"30D" = "30D";
+"MTD" = "MTD";
+"YTD" = "YTD";
+"Custom" = "Custom";
 "insights.revenue" = "Revenue";
 "insights.total_visits" = "Total Visits";
 "insights.aov" = "Avg. Sale (AOV)";
@@ -27,8 +32,16 @@
 "insights.no_revenue" = "No Revenue Data";
 "insights.no_category" = "No category data";
 "insights.no_service_data" = "No service data in this range.";
+"Today's Revenue" = "Today's Revenue";
+"Yesterday's Revenue" = "Yesterday's Revenue";
+"Last 7 Days Revenue" = "Last 7 Days Revenue";
+"Last 30 Days Revenue" = "Last 30 Days Revenue";
+"Month to Date Revenue" = "Month to Date Revenue";
+"Year to Date Revenue" = "Year to Date Revenue";
+"Custom Period Revenue" = "Custom Period Revenue";
 
 "visits.avg_duration" = "Avg.";
+"visits.count" = "%d visits";
 
 "checkout.title" = "Check Out";
 "checkout.complete" = "Complete Checkout";
@@ -49,6 +62,7 @@
 "common.ok" = "OK";
 "common.delete" = "Delete";
 "common.error" = "Error";
+"errors.unknown" = "Something went wrong. Please try again.";
 "common.save_failed" = "Save failed. Please try again.\n\n%@";
 
 // New Client Sheet
@@ -238,6 +252,7 @@
 
 // MARK: Settings Screen
 
+"biometric.reason" = "Authenticate to unlock Pawtrackr.";
 "settings.security.title" = "Security Settings";
 "settings.security.status.active_title" = "Security Active";
 "settings.security.status.inactive_title" = "Security Disabled";
@@ -292,6 +307,7 @@
 "settings.pin.change.update" = "Update PIN";
 "settings.pin.change.error.incomplete" = "Enter all 4 digits for each PIN.";
 "settings.pin.change.error.incorrect" = "Current PIN is incorrect.";
+"settings.pin.change.error.invalid" = "Unable to update PIN. Please try a different code.";
 "settings.pin.change.error.mismatch" = "New PIN entries do not match.";
 
 // Business Settings

@@ -11,6 +11,11 @@
 "insights.filters" = "Filtros";
 "insights.scope.today" = "Hoy";
 "insights.scope.yesterday" = "Ayer";
+"7D" = "7D";
+"30D" = "30D";
+"MTD" = "Mes";
+"YTD" = "Año";
+"Custom" = "Personalizado";
 "insights.revenue" = "Ingresos";
 "insights.total_visits" = "Visitas totales";
 "insights.aov" = "Venta prom. (AOV)";
@@ -27,8 +32,16 @@
 "insights.no_revenue" = "Sin datos de ingresos";
 "insights.no_category" = "Sin datos de categoría";
 "insights.no_service_data" = "Sin datos de servicios en este rango.";
+"Today's Revenue" = "Ingresos de hoy";
+"Yesterday's Revenue" = "Ingresos de ayer";
+"Last 7 Days Revenue" = "Ingresos últimos 7 días";
+"Last 30 Days Revenue" = "Ingresos últimos 30 días";
+"Month to Date Revenue" = "Ingresos del mes en curso";
+"Year to Date Revenue" = "Ingresos del año en curso";
+"Custom Period Revenue" = "Ingresos período personalizado";
 
 "visits.avg_duration" = "Prom.";
+"visits.count" = "%d visitas";
 
 "checkout.title" = "Finalizar";
 "checkout.complete" = "Completar pago";
@@ -49,6 +62,7 @@
 "common.ok" = "OK";
 "common.delete" = "Eliminar";
 "common.error" = "Error";
+"errors.unknown" = "Error desconocido. Inténtalo de nuevo.";
 "common.save_failed" = "Error al guardar. Inténtalo de nuevo.\n\n%@";
 
 // New Client Sheet
@@ -237,6 +251,7 @@
 
 // MARK: Settings Screen
 
+"biometric.reason" = "Autentícate para desbloquear Pawtrackr.";
 "settings.security.title" = "Configuración de seguridad";
 "settings.security.status.active_title" = "Seguridad activa";
 "settings.security.status.inactive_title" = "Seguridad desactivada";
@@ -291,6 +306,7 @@
 "settings.pin.change.update" = "Actualizar PIN";
 "settings.pin.change.error.incomplete" = "Ingresa los 4 dígitos para cada PIN.";
 "settings.pin.change.error.incorrect" = "El PIN actual es incorrecto.";
+"settings.pin.change.error.invalid" = "No se pudo actualizar el PIN. Prueba con otro código.";
 "settings.pin.change.error.mismatch" = "Los nuevos PIN no coinciden.";
 
 // Business Settings
