@@ -52,7 +52,7 @@ final class Payment {
 // MARK: - Payment Method Enum
 
 extension Payment {
-    enum Method: String, Codable, CaseIterable, Identifiable {
+    enum Method: String, Codable, CaseIterable, Identifiable  
         case cash, debitCard, creditCard, zelle, other
 
         // ... (Codable implementation is correct) ...
