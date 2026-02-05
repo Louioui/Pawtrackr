@@ -80,7 +80,9 @@ struct AddPetSheet: View {
 
                             // Pet name
                             petInputField(NSLocalizedString("add_pet.name", comment: ""), text: $petName)
+                                #if os(iOS)
                                 .textInputAutocapitalization(.words)
+                                #endif
                                 .disableAutocorrection(true)
 
                             // Species picker - segmented style
@@ -119,7 +121,9 @@ struct AddPetSheet: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     TextField("", text: $breed)
-                                        .textInputAutocapitalization(.words)
+                                        #if os(iOS)
+                                .textInputAutocapitalization(.words)
+                                #endif
                                         .disableAutocorrection(true)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 10)
@@ -140,7 +144,9 @@ struct AddPetSheet: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     TextField("", text: $color)
-                                        .textInputAutocapitalization(.words)
+                                        #if os(iOS)
+                                .textInputAutocapitalization(.words)
+                                #endif
                                         .disableAutocorrection(true)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 10)
@@ -180,7 +186,9 @@ struct AddPetSheet: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 TextField("", text: $healthNotes)
-                                    .textInputAutocapitalization(.sentences)
+                                    #if os(iOS)
+                                .textInputAutocapitalization(.sentences)
+                                #endif
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 10)
                                     .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))

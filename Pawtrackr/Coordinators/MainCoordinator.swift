@@ -1,6 +1,15 @@
+//
+//  MainCoordinator.swift
+//  Pawtrackr
+//
+//  Legacy coordinator - iOS only.
+//  Navigation is now handled by NavigationRouter for cross-platform support.
+//
 
+#if canImport(UIKit)
 import SwiftUI
 import SwiftData
+import UIKit
 
 class MainCoordinator: Coordinator {
     var navigationController: UINavigationController
@@ -17,10 +26,11 @@ class MainCoordinator: Coordinator {
 
     func start() {
         let clientsCoordinator = ClientsCoordinator(navigationController: navigationController)
-        let mainTabView = MainTabView(clientsCoordinator: clientsCoordinator)
+        let mainTabView = MainTabView()
             .environmentObject(appSettings)
             .environmentObject(authViewModel)
             .environment(\.modelContext, modelContext)
         navigationController.pushViewController(UIHostingController(rootView: mainTabView), animated: false)
     }
 }
+#endif

@@ -22,7 +22,7 @@ struct AppointmentsView: View {
             }
             .navigationTitle(NSLocalizedString("appointments.title", comment: ""))
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button(action: addAppointment) {
                         Label(NSLocalizedString("appointments.add", comment: ""), systemImage: "plus")
                     }

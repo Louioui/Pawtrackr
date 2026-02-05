@@ -7,8 +7,13 @@
 
 import Foundation
 import SwiftData
-import UIKit
 import Combine
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 @MainActor
 final class DashboardViewModel: ObservableObject {
@@ -33,14 +38,18 @@ final class DashboardViewModel: ObservableObject {
   struct GalleryItem: Identifiable {
     let id = UUID()
     let imageData: Data?
+
+    #if canImport(UIKit)
     var uiImage: UIImage? {
-      #if os(iOS)
       guard let imageData else { return nil }
       return ImageCache.shared.image(data: imageData, maxDimension: 300)
-      #else
-      return nil
-      #endif
     }
+    #elseif canImport(AppKit)
+    var nsImage: NSImage? {
+      guard let imageData else { return nil }
+      return ImageCache.shared.image(data: imageData, maxDimension: 300)
+    }
+    #endif
   }
 
   @Published var kpi = KPI()

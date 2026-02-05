@@ -17,11 +17,6 @@ import Charts
     @State private var showNewClient = false
     @State private var showContent = false
     @Namespace var namespace
-    private let clientsCoordinator: ClientsCoordinator
-
-    init() {
-        clientsCoordinator = ClientsCoordinator(navigationController: UINavigationController())
-    }
 
   var body: some View {
     NavigationStack {
@@ -41,7 +36,7 @@ import Charts
         NewClientSheet(modelContext: modelContext)
       }
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
+        ToolbarItem(placement: .primaryAction) {
           NavigationLink(destination: InsightsView()) {
             Image(systemName: "chart.bar")
           }
@@ -109,7 +104,7 @@ import Charts
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 12) {
           actionCard(title: NSLocalizedString("dashboard.new_client", comment: ""), symbol: "person.crop.circle.badge.plus") { showNewClient = true }
-          NavigationLink { ClientsView(coordinator: clientsCoordinator) } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") }
+          NavigationLink { ClientsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") }
           NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
           NavigationLink { InsightsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "doc.chart") }
         }
@@ -133,12 +128,12 @@ import Charts
       HStack {
         Text(NSLocalizedString("dashboard.recent_clients", comment: "")).font(.headline)
         Spacer()
-        NavigationLink(NSLocalizedString("dashboard.view_all", comment: ""), destination: ClientsView(coordinator: clientsCoordinator))
+        NavigationLink(NSLocalizedString("dashboard.view_all", comment: ""), destination: ClientsView())
           .font(.footnote)
       }
       LazyVStack(spacing: 10) {
         ForEach(vm.recentClients.prefix(5)) { client in
-          NavigationLink { ClientDetailView(client: client, coordinator: clientsCoordinator, namespace: namespace) } label: { ClientRow(client: client) }
+          NavigationLink { ClientDetailView(client: client) } label: { ClientRow(client: client) }
             .buttonStyle(.plain)
         }
       }
@@ -176,12 +171,21 @@ import Charts
       LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
         ForEach(vm.gallery) { item in
           Card {
+            #if canImport(UIKit)
             if let uiImage = item.uiImage {
               Image(uiImage: uiImage).resizable().scaledToFill()
                 .frame(height: 120).clipped().cornerRadius(8)
             } else {
               LabelContent(title: NSLocalizedString("dashboard.no_photo", comment: ""), systemImage: "photo")
             }
+            #elseif canImport(AppKit)
+            if let nsImage = item.nsImage {
+              Image(nsImage: nsImage).resizable().scaledToFill()
+                .frame(height: 120).clipped().cornerRadius(8)
+            } else {
+              LabelContent(title: NSLocalizedString("dashboard.no_photo", comment: ""), systemImage: "photo")
+            }
+            #endif
           }
         }
       }

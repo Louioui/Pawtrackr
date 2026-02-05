@@ -11,19 +11,23 @@
 //
 
 import SwiftUI
-import PhotosUI
 import UniformTypeIdentifiers
 import ImageIO
 
-#if canImport(UIKit) // Ensure this code only compiles on iOS/visionOS etc.
+#if canImport(UIKit)
+import PhotosUI
+#endif
 
-// MARK: - Public View
+// MARK: - Public Types (Cross-Platform)
 public enum ImagePickerSource: Equatable {
     case library
     case camera
     /// Presents a prompt letting the user choose camera or library at runtime.
+    /// On macOS, this behaves as .library since there's no device camera.
     case prompt
 }
+
+#if canImport(UIKit) // iOS/visionOS implementation
 
 public struct ImagePicker<Label: View>: View {
     @Binding private var imageData: Data?
@@ -278,4 +282,114 @@ fileprivate extension UIImage {
         }
     }
 }
+
+#elseif canImport(AppKit) // macOS implementation
+
+import AppKit
+
+public struct ImagePicker<Label: View>: View {
+    @Binding private var imageData: Data?
+    private let source: ImagePickerSource
+    private let allowsEditing: Bool
+    private let maxDimension: CGFloat?
+    private let jpegQuality: CGFloat?
+    private let label: () -> Label
+
+    public init(imageData: Binding<Data?>,
+                source: ImagePickerSource = .library,
+                allowsEditing: Bool = true,
+                maxDimension: CGFloat? = nil,
+                jpegQuality: CGFloat? = nil,
+                @ViewBuilder label: @escaping () -> Label) {
+        _imageData = imageData
+        self.source = source
+        self.allowsEditing = allowsEditing
+        self.maxDimension = maxDimension
+        self.jpegQuality = jpegQuality
+        self.label = label
+    }
+
+    public var body: some View {
+        Button(action: openFilePicker) {
+            label()
+        }
+    }
+
+    private func openFilePicker() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.title = "Select Image"
+        panel.message = "Choose an image file"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            Task {
+                await loadImage(from: url)
+            }
+        }
+    }
+
+    @MainActor
+    private func loadImage(from url: URL) async {
+        guard let data = try? Data(contentsOf: url) else { return }
+
+        let md = maxDimension ?? DeviceConfig.imageMaxDimension
+        let jq = jpegQuality ?? DeviceConfig.jpegQuality
+        let processor = MacImageProcessor(maxDimension: md, jpegQuality: jq)
+        imageData = await processor.process(data: data)
+    }
+}
+
+// MARK: - macOS Image Processing Actor
+private actor MacImageProcessor {
+    let maxDimension: CGFloat?
+    let jpegQuality: CGFloat
+
+    init(maxDimension: CGFloat?, jpegQuality: CGFloat) {
+        self.maxDimension = maxDimension
+        self.jpegQuality = jpegQuality
+    }
+
+    func process(data: Data) -> Data? {
+        guard let nsImage = NSImage(data: data) else { return nil }
+        return process(image: nsImage)
+    }
+
+    func process(image: NSImage) -> Data? {
+        let downsized = image.downsized(toMaxDimension: maxDimension)
+
+        // Convert to JPEG
+        guard let tiffData = downsized.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData) else { return nil }
+
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: jpegQuality])
+    }
+}
+
+// MARK: - NSImage Helpers
+fileprivate extension NSImage {
+    func downsized(toMaxDimension maxDimension: CGFloat?) -> NSImage {
+        guard let maxDimension, maxDimension > 0 else { return self }
+
+        let width = size.width
+        let height = size.height
+        let longest = max(width, height)
+        guard longest > maxDimension else { return self }
+
+        let scale = maxDimension / longest
+        let newSize = NSSize(width: floor(width * scale), height: floor(height * scale))
+
+        let newImage = NSImage(size: newSize)
+        newImage.lockFocus()
+        self.draw(in: NSRect(origin: .zero, size: newSize),
+                  from: NSRect(origin: .zero, size: size),
+                  operation: .copy,
+                  fraction: 1.0)
+        newImage.unlockFocus()
+        return newImage
+    }
+}
+
 #endif

@@ -1,5 +1,14 @@
+//
+//  ClientsCoordinator.swift
+//  Pawtrackr
+//
+//  Legacy coordinator - iOS only.
+//  Navigation is now handled by NavigationRouter for cross-platform support.
+//
 
+#if canImport(UIKit)
 import SwiftUI
+import UIKit
 
 class ClientsCoordinator: Coordinator {
     var navigationController: UINavigationController
@@ -9,13 +18,13 @@ class ClientsCoordinator: Coordinator {
     }
 
     func start() {
-        let clientsView = ClientsView(coordinator: self)
+        let clientsView = ClientsView()
         navigationController.pushViewController(UIHostingController(rootView: clientsView), animated: false)
     }
 
     @MainActor
     func showClientDetail(client: Client, namespace: Namespace.ID) {
-        let clientDetailView = ClientDetailView(client: client, coordinator: self, namespace: namespace)
+        let clientDetailView = ClientDetailView(client: client)
         navigationController.pushViewController(UIHostingController(rootView: clientDetailView), animated: true)
     }
 
@@ -24,3 +33,4 @@ class ClientsCoordinator: Coordinator {
         navigationController.pushViewController(UIHostingController(rootView: visitDetailView), animated: true)
     }
 }
+#endif

@@ -1,5 +1,14 @@
+//
+//  PetsCoordinator.swift
+//  Pawtrackr
+//
+//  Legacy coordinator - iOS only.
+//  Navigation is now handled by NavigationRouter for cross-platform support.
+//
 
+#if canImport(UIKit)
 import SwiftUI
+import UIKit
 
 class PetsCoordinator: Coordinator {
     var navigationController: UINavigationController
@@ -17,3 +26,4 @@ class PetsCoordinator: Coordinator {
         navigationController.pushViewController(UIHostingController(rootView: petDetailView), animated: true)
     }
 }
+#endif

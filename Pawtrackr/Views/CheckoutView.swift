@@ -36,7 +36,7 @@ struct CheckoutView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 120)
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .background(DS.ColorToken.background.ignoresSafeArea())
             .navigationTitle("checkout.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -141,7 +141,7 @@ struct CheckoutView: View {
                 .padding(24)
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color(.systemBackground))
+                        .fill(DS.ColorToken.surface)
                 )
                 .padding(32)
             }
@@ -177,7 +177,7 @@ struct CheckoutView: View {
                 .padding(24)
                 .background(
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color(.systemBackground))
+                        .fill(DS.ColorToken.surface)
                 )
                 .padding(32)
             }
@@ -294,11 +294,13 @@ private extension CheckoutView {
                 sectionTitle("checkout.service_charge")
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                     TextField("$0.00", text: amountBinding)
+                        #if os(iOS)
                         .keyboardType(.decimalPad)
+                        #endif
                         .focused($amountFieldFocused)
                         .font(.system(size: 32, weight: .semibold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(Color(.label))
+                        .foregroundStyle(Color.primary)
                 }
                 Text(NSLocalizedString("checkout.service_charge_hint", comment: ""))
                     .font(.footnote)
@@ -346,7 +348,7 @@ private extension CheckoutView {
     func sectionTitle(_ key: String) -> some View {
         Text(NSLocalizedString(key, comment: ""))
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color(.label))
+            .foregroundStyle(Color.primary)
     }
 
     func summaryRow(title: String, value: String, isTotal: Bool = false) -> some View {
@@ -357,7 +359,7 @@ private extension CheckoutView {
             Spacer()
             Text(value.isEmpty ? "—" : value)
                 .font(isTotal ? .title3.weight(.bold) : .subheadline)
-                .foregroundStyle(isTotal ? .green : Color(.label))
+                .foregroundStyle(isTotal ? .green : Color.primary)
                 .multilineTextAlignment(.trailing)
                 .monospacedDigit()
         }
@@ -384,7 +386,7 @@ private extension CheckoutView {
                 Capsule()
                     .stroke(isSelected ? Color(red: 0.4, green: 0.85, blue: 0.97) : Color.clear, lineWidth: 1)
             )
-            .foregroundColor(isSelected ? Color(.label) : Color(.secondaryLabel))
+            .foregroundColor(isSelected ? Color.primary : Color.secondary)
         }
         .buttonStyle(.plain)
     }
@@ -404,7 +406,7 @@ private extension CheckoutView {
                 .frame(width: 36, height: 36)
                 Text(service.name)
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color(.label))
+                    .foregroundStyle(Color.primary)
                 Spacer()
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? .green : .secondary)
@@ -448,13 +450,13 @@ private extension CheckoutView {
             )
         }
         .buttonStyle(.plain)
-        .foregroundColor(Color(.label))
+        .foregroundColor(Color.primary)
     }
 
     func notesEditor(text: Binding<String>, placeholder: String) -> some View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+                .fill(DS.ColorToken.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(Color.gray.opacity(0.2), lineWidth: 1)
@@ -489,13 +491,13 @@ private extension CheckoutView {
                 .frame(width: 58, height: 58)
                 Text(option.label)
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color(.label))
+                    .foregroundStyle(Color.primary)
             }
             .padding(12)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isSelected ? option.tint.opacity(0.15) : Color(.systemBackground))
+                    .fill(isSelected ? option.tint.opacity(0.15) : DS.ColorToken.surface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .stroke(isSelected ? option.tint : Color.gray.opacity(0.2), lineWidth: 2)

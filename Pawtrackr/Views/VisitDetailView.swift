@@ -55,10 +55,10 @@ struct VisitDetailView: View {
                     .accessibilityHint(csv.isEmpty ? NSLocalizedString("sharelink.accessibility.hint.no_data_to_export", comment: "") : NSLocalizedString("sharelink.accessibility.hint.export_visit", comment: ""))
                 }
                 // New: Check Out / Resume Checkout action available until payment is attached
+                #if os(iOS)
                 ToolbarItem(placement: .bottomBar) {
                     if visit.payment == nil {
                         Button {
-                            // Do not persist an interim completion; present checkout and let it finalize.
                             showCheckout = true
                         } label: {
                             HStack {
@@ -72,22 +72,58 @@ struct VisitDetailView: View {
                         .accessibilityLabel("Open checkout to complete payment")
                     }
                 }
+                #else
+                ToolbarItem(placement: .secondaryAction) {
+                    if visit.payment == nil {
+                        Button {
+                            showCheckout = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text(visit.endedAt == nil ? NSLocalizedString("visit.check_out", comment: "") : NSLocalizedString("visit.resume_checkout", comment: ""))
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.green)
+                        .accessibilityLabel("Open checkout to complete payment")
+                    }
+                }
+                #endif
             }
+            #if os(iOS)
             .fullScreenCover(isPresented: $showCheckout) {
                 if let pet = visit.pet {
                     CheckoutView(pet: pet, visit: visit)
                 }
             }
             .fullScreenCover(item: Binding(
-                get: { 
-                    previewData.map { PreviewItem(data: $0, title: previewTitle) } 
+                get: {
+                    previewData.map { PreviewItem(data: $0, title: previewTitle) }
                 },
-                set: { newValue in 
-                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" } 
+                set: { newValue in
+                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" }
                 }
             )) { item in
                 PhotoPreview(imageData: item.data, title: item.title)
             }
+            #else
+            .sheet(isPresented: $showCheckout) {
+                if let pet = visit.pet {
+                    CheckoutView(pet: pet, visit: visit)
+                }
+            }
+            .sheet(item: Binding(
+                get: {
+                    previewData.map { PreviewItem(data: $0, title: previewTitle) }
+                },
+                set: { newValue in
+                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" }
+                }
+            )) { item in
+                PhotoPreview(imageData: item.data, title: item.title)
+            }
+            #endif
             .onAppear {
                 visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt)
             }

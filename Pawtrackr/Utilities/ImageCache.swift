@@ -96,13 +96,84 @@ final class ImageCache: @unchecked Sendable {
         return UIImage(cgImage: cg, scale: scale, orientation: .up)
     }
 }
-#else
-// Fallback stub for non-UIKit platforms
+#elseif canImport(AppKit)
+import AppKit
+import ImageIO
+
 final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
-    private init() {}
 
-    func clearCache() {}
+    private let cache = NSCache<NSString, NSImage>()
+    private let queue = DispatchQueue(label: "com.pawtrackr.imagecache", attributes: .concurrent)
+
+    private init() {
+        cache.countLimit = 200
+        cache.totalCostLimit = 50 * 1024 * 1024 // 50MB limit
+    }
+
+    /// Returns a decoded, downsampled NSImage for the given data and max dimension.
+    /// Thread-safe: can be called from any thread.
+    func image(data: Data, maxDimension: CGFloat) -> NSImage? {
+        let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
+
+        // Check cache first (concurrent read)
+        var cachedImage: NSImage?
+        queue.sync {
+            cachedImage = cache.object(forKey: key)
+        }
+        if let hit = cachedImage { return hit }
+
+        // Decode image (can happen on any thread)
+        guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
+
+        // Store in cache (barrier write)
+        let cost = Int(image.size.width * image.size.height * 4)
+        queue.async(flags: .barrier) { [weak self] in
+            self?.cache.setObject(image, forKey: key, cost: cost)
+        }
+
+        return image
+    }
+
+    /// Clears all cached images. Thread-safe.
+    func clearCache() {
+        queue.async(flags: .barrier) { [weak self] in
+            self?.cache.removeAllObjects()
+        }
+    }
+
+    /// Removes a specific image from cache. Thread-safe.
+    func removeImage(for data: Data, maxDimension: CGFloat) {
+        let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
+        queue.async(flags: .barrier) { [weak self] in
+            self?.cache.removeObject(forKey: key)
+        }
+    }
+
+    private func cacheKey(for data: Data, maxDimension: CGFloat) -> String {
+        let h = (data as NSData).hash
+        return "\(data.count)-\(h)-\(Int(maxDimension.rounded()))"
+    }
+
+    /// Efficient downsampling using CGImageSource; avoids decoding full-resolution into memory.
+    private func downsample(data: Data, maxDimension: CGFloat) -> NSImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceShouldCache: false
+        ]
+        guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
+
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let maxPixels = max(1, Int(maxDimension * scale))
+
+        let downsampleOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
+
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }
 }
 #endif
 

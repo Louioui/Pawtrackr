@@ -80,7 +80,7 @@ struct PawtrackrApp: App {
         WindowGroup {
             if let container = container {
                 if authViewModel.isAuthenticated {
-                    CoordinatorView()
+                    ContentView()
                         .environmentObject(appSettings)
                         .environmentObject(authViewModel)
                         // Inject the shared SwiftData container so all views read/write the same store.
@@ -103,5 +103,8 @@ struct PawtrackrApp: App {
                 }
             }
         }
+        #if os(macOS)
+        .defaultSize(width: 1200, height: 800)
+        #endif
     }
 }

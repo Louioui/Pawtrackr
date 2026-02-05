@@ -15,17 +15,16 @@ import UIKit
 
 struct ClientsView: View {
     @Environment(\.modelContext) private var modelContext
-    weak var coordinator: ClientsCoordinator?
+    @Environment(NavigationRouter.self) private var router
     @Namespace var namespace
-    
+
     @State private var viewModel: ClientsViewModel?
     @State private var showingNewClientSheet = false
     @State private var showNotifications = false
     @State private var storedNotifications: [NotificationItem] = []
     @State private var clientToDelete: Client?
 
-    init(coordinator: ClientsCoordinator?) {
-        self.coordinator = coordinator
+    init() {
         _viewModel = State(initialValue: nil)
     }
 
@@ -89,7 +88,7 @@ struct ClientsView: View {
                 let all = vm.inProgressClients + vm.otherClients
                 if let client = all.first(where: { $0.persistentModelID == id }) {
                     withAnimation(Animations.gentleSpring) {
-                        coordinator?.showClientDetail(client: client, namespace: namespace)
+                        router.navigateToClient(client)
                     }
                     NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
                         ClientDidCreateKey.clientID.rawValue: id,
@@ -151,7 +150,7 @@ struct ClientsView: View {
     private func clientList(for clients: [Client], enableInfiniteScroll: Bool = false) -> some View {
         LazyVStack(spacing: 10) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
-                Button(action: { coordinator?.showClientDetail(client: client, namespace: namespace) }) {
+                Button(action: { router.navigateToClient(client) }) {
                     CardFactory.makeClientCard(client: client)
                         .matchedGeometryEffect(id: client.id, in: namespace)
                 }
@@ -175,7 +174,7 @@ struct ClientsView: View {
                     #endif
 
                     Button {
-                        coordinator?.showClientDetail(client: client, namespace: namespace)
+                        router.navigateToClient(client)
                     } label: {
                         Label("View Details", systemImage: "person.crop.circle")
                     }

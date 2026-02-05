@@ -1,6 +1,15 @@
+//
+//  CoordinatorView.swift
+//  Pawtrackr
+//
+//  Legacy coordinator view - iOS only.
+//  Navigation is now handled by ContentView for cross-platform support.
+//
 
+#if canImport(UIKit)
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct CoordinatorView: UIViewControllerRepresentable {
     @EnvironmentObject var appSettings: AppSettings
@@ -30,3 +39,4 @@ struct CoordinatorView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
 }
+#endif

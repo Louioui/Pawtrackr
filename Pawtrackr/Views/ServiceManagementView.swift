@@ -96,7 +96,9 @@ struct EditServiceView: View {
 
                 Section(NSLocalizedString("service.pricing_duration", comment: "")) {
                     TextField(NSLocalizedString("service.price", comment: ""), value: $viewModel.price, format: .currency(code: "USD"))
+                        #if os(iOS)
                         .keyboardType(.decimalPad)
+                        #endif
 
                     Stepper(
                         String(format: NSLocalizedString("service.duration_minutes_fmt", comment: ""), viewModel.duration),

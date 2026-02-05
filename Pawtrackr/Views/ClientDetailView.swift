@@ -75,23 +75,13 @@ struct ClientDetailView: View {
     @State private var editPhone: String = ""
     @State private var editEmail: String = ""
 
-    weak var coordinator: ClientsCoordinator?
-    var namespace: Namespace.ID
-    private var petsCoordinator: PetsCoordinator
+    @Environment(NavigationRouter.self) private var router
+    @Namespace private var namespace
 
     // MARK: - Init
     private let client: Client
-    init(client: Client, coordinator: ClientsCoordinator?, namespace: Namespace.ID) {
+    init(client: Client) {
         self.client = client
-        self.coordinator = coordinator
-        self.namespace = namespace
-        // Safely initialize petsCoordinator only if coordinator is available
-        if let coordinator = coordinator {
-            self.petsCoordinator = PetsCoordinator(navigationController: coordinator.navigationController)
-        } else {
-            // Fallback: create a standalone coordinator (navigation may be limited)
-            self.petsCoordinator = PetsCoordinator(navigationController: UINavigationController())
-        }
     }
 
     // MARK: - Body
@@ -173,9 +163,15 @@ struct ClientDetailView: View {
                 secondaryButton: .cancel()
             )
         }
+        #if os(iOS)
         .fullScreenCover(item: $checkoutPet) { [vm] pet in
             CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
         }
+        #else
+        .sheet(item: $checkoutPet) { [vm] pet in
+            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
+        }
+        #endif
         .alert(item: $alertDestination) { [vm] destination in
             switch destination {
             case .checkIn(let pet):
@@ -512,7 +508,7 @@ struct ClientDetailView: View {
                             Spacer()
                         }
                         ForEach(visits) { visit in
-                            Button(action: { coordinator?.showVisitDetail(visit: visit) }) {
+                            Button(action: { router.navigateToVisit(visit) }) {
                                 CardFactory.makeVisitTimelineRow(visit: visit)
                             }
                             .buttonStyle(.plain)
@@ -569,7 +565,7 @@ struct ClientDetailView: View {
     @ToolbarContentBuilder
     private func toolbarContent(_ vm: ClientDetailViewModel) -> some ToolbarContent {
         // Rely on the system-provided back button to avoid duplicates
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .primaryAction) {
             Button(role: .destructive) {
                 alertDestination = .deleteClient
             } label: {

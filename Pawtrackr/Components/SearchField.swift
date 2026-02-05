@@ -22,7 +22,9 @@ struct SearchField: View {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField(placeholder, text: $text)
                 .autocorrectionDisabled(true)
+                #if os(iOS)
                 .textInputAutocapitalization(.never)
+                #endif
             if !text.isEmpty {
                 Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                 .buttonStyle(.plain)

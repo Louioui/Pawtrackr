@@ -1,4 +1,3 @@
-
 //
 //  PhotoWell.swift
 //  Pawtrackr
@@ -7,6 +6,12 @@
 //
 
 import SwiftUI
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// A reusable component that displays a photo, a placeholder, and handles the tap-to-pick-image action.
 struct PhotoWell: View {
@@ -20,15 +25,30 @@ struct PhotoWell: View {
         self.allowsEditing = allowsEditing
     }
 
+    private var maxImageDimension: CGFloat {
+        #if canImport(UIKit)
+        return UIScreen.main.bounds.width * UIScreen.main.scale
+        #elseif canImport(AppKit)
+        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        return (NSScreen.main?.frame.width ?? 1200) * scale
+        #else
+        return 1600
+        #endif
+    }
+
     var body: some View {
         ImagePicker(imageData: $imageData, allowsEditing: allowsEditing) {
             ZStack {
-                if let data = imageData, let image = Image(fromData: data, maxDimension: UIScreen.main.bounds.width * UIScreen.main.scale) {
+                if let data = imageData, let image = Image(fromData: data, maxDimension: maxImageDimension) {
                     image
                         .resizable()
                         .scaledToFill()
                 } else {
+                    #if os(macOS)
+                    AddPhotoPlaceholder(title: title, subtitle: "Click to add")
+                    #else
                     AddPhotoPlaceholder(title: title, subtitle: "Tap to add")
+                    #endif
                 }
             }
             .frame(maxWidth: .infinity, idealHeight: 160)

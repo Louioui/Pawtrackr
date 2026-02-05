@@ -9,10 +9,12 @@ import Foundation
 
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 struct DeviceConfig {
-    enum Class { case smallPhone, phone, tablet, other }
+    enum Class { case smallPhone, phone, tablet, desktop, other }
 
     static var deviceClass: Class {
         #if canImport(UIKit)
@@ -20,35 +22,31 @@ struct DeviceConfig {
         if w < 360 { return .smallPhone }
         if w < 600 { return .phone }
         return .tablet
+        #elseif os(macOS)
+        return .desktop
         #else
         return .other
         #endif
     }
 
     static var imageMaxDimension: CGFloat? {
-        #if canImport(UIKit)
         switch deviceClass {
         case .smallPhone: return 1200
         case .phone:      return 1600
         case .tablet:     return 2400
+        case .desktop:    return 2400  // High quality for Retina displays
         case .other:      return 1600
         }
-        #else
-        return nil
-        #endif
     }
 
     static var jpegQuality: CGFloat {
-        #if canImport(UIKit)
         switch deviceClass {
         case .smallPhone: return 0.80
         case .phone:      return 0.85
         case .tablet:     return 0.88
+        case .desktop:    return 0.90  // Higher quality for macOS
         case .other:      return 0.85
         }
-        #else
-        return 0.85
-        #endif
     }
 }
 

@@ -62,11 +62,17 @@ struct NewClientSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(NSLocalizedString("new_client.owner", comment: "")).font(.subheadline.weight(.semibold))
                         inputField(NSLocalizedString("new_client.first_name", comment: ""), text: $viewModel.first)
+                            #if os(iOS)
                             .textInputAutocapitalization(.words)
+                            #endif
                         inputField(NSLocalizedString("new_client.last_name", comment: ""), text: $viewModel.last)
+                            #if os(iOS)
                             .textInputAutocapitalization(.words)
+                            #endif
                         inputField(NSLocalizedString("new_client.phone", comment: ""), text: $viewModel.phone)
+                            #if os(iOS)
                             .keyboardType(.phonePad)
+                            #endif
                             .onChange(of: viewModel.phone) {
                                 let digits = viewModel.phone.filter(\.isNumber)
                                 let clampedDigits = String(digits.prefix(10))
@@ -76,10 +82,16 @@ struct NewClientSheet: View {
                                 }
                             }
                         inputField(NSLocalizedString("new_client.email", comment: ""), text: $viewModel.email)
+                            #if os(iOS)
                             .keyboardType(.emailAddress)
+                            #endif
+                            #if os(iOS)
                             .textInputAutocapitalization(.never)
+                            #endif
                         inputField(NSLocalizedString("new_client.address", comment: ""), text: $viewModel.address)
+                            #if os(iOS)
                             .textInputAutocapitalization(.words)
+                            #endif
                     }
                 }
 
@@ -103,9 +115,13 @@ struct NewClientSheet: View {
                             ForEach($viewModel.contacts) { $contact in
                                 VStack(alignment: .leading, spacing: 8) {
                                     inputField(NSLocalizedString("new_client.contact_name", comment: ""), text: $contact.name)
-                                        .textInputAutocapitalization(.words)
+                                        #if os(iOS)
+                            .textInputAutocapitalization(.words)
+                            #endif
                                     inputField(NSLocalizedString("new_client.contact_phone", comment: ""), text: $contact.phone)
-                                        .keyboardType(.phonePad)
+                                        #if os(iOS)
+                            .keyboardType(.phonePad)
+                            #endif
                                         .onChange(of: contact.phone) {
                                             let digits = contact.phone.filter(\.isNumber)
                                             let clampedDigits = String(digits.prefix(10))
@@ -172,7 +188,9 @@ struct NewClientSheet: View {
 
                                     // Pet name
                                     inputField(NSLocalizedString("new_client.pet_name", comment: ""), text: $pet.name)
-                                        .textInputAutocapitalization(.words)
+                                        #if os(iOS)
+                            .textInputAutocapitalization(.words)
+                            #endif
 
                                     // Species picker - segmented style
                                     VStack(alignment: .leading, spacing: 6) {
@@ -210,7 +228,9 @@ struct NewClientSheet: View {
                                                     .foregroundStyle(.secondary)
                                             }
                                             TextField("", text: $pet.breed)
-                                                .textInputAutocapitalization(.words)
+                                                #if os(iOS)
+                            .textInputAutocapitalization(.words)
+                            #endif
                                                 .disableAutocorrection(true)
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 10)
@@ -231,7 +251,9 @@ struct NewClientSheet: View {
                                                     .foregroundStyle(.secondary)
                                             }
                                             TextField("", text: $pet.color)
-                                                .textInputAutocapitalization(.words)
+                                                #if os(iOS)
+                            .textInputAutocapitalization(.words)
+                            #endif
                                                 .disableAutocorrection(true)
                                                 .padding(.horizontal, 12)
                                                 .padding(.vertical, 10)
@@ -271,7 +293,9 @@ struct NewClientSheet: View {
                                                 .foregroundStyle(.secondary)
                                         }
                                         TextField("", text: $pet.health)
-                                            .textInputAutocapitalization(.sentences)
+                                            #if os(iOS)
+                            .textInputAutocapitalization(.sentences)
+                            #endif
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 10)
                                             .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))

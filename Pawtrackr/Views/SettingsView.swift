@@ -36,7 +36,9 @@ struct SettingsView: View {
                 Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
             } message: { Text(pinChangeError ?? "") }
             .navigationTitle(NSLocalizedString("settings.title", comment: ""))
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .alert(NSLocalizedString("common.error", comment: ""), isPresented: $showError) {
                 Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
             } message: {
@@ -245,7 +247,9 @@ private struct ChangePINSheet: View {
                         }
                     }
                 ))
+                #if os(iOS)
                 .keyboardType(.numberPad)
+                #endif
                 .focused($focusedField, equals: field)
                 .opacity(0.01) // Nearly invisible but still functional
                 .frame(width: 1, height: 1)

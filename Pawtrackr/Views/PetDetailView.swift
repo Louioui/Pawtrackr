@@ -155,9 +155,15 @@ final class PetDetailViewModel {
                         .navigationBarTitleDisplayMode(.inline)
 #endif
                         .toolbar {
+                            #if os(iOS)
                             ToolbarItem(placement: .topBarLeading) {
                                 Button { dismiss() } label: { Image(systemName: "chevron.backward") }
                             }
+                            #else
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button { dismiss() } label: { Image(systemName: "chevron.backward") }
+                            }
+                            #endif
                         }
                         .alert(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name), isPresented: $confirmCheckIn) {
                             Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
