@@ -22,21 +22,32 @@ struct CheckoutView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    headerSection
-                    servicesSection
-                    behaviorSection
-                    photosSection
-                    serviceChargeSection
-                    paymentSection
-                    summarySection
+            ZStack {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        headerSection
+                        servicesSection
+                        behaviorSection
+                        photosSection
+                        serviceChargeSection
+                        paymentSection
+                        summarySection
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 16)
+                    .padding(.bottom, 120)
                 }
-                .padding(.horizontal)
-                .padding(.top, 16)
-                .padding(.bottom, 120)
+                .background(DS.ColorToken.background.ignoresSafeArea())
+
+                // Simple centered overlay for processing/success
+                if viewModel.isSaving || viewModel.state == .confirmed {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture { } // Block taps
+
+                    overlayContent
+                }
             }
-            .background(DS.ColorToken.background.ignoresSafeArea())
             .navigationTitle("checkout.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -48,8 +59,6 @@ struct CheckoutView: View {
             } message: {
                 Text(viewModel.alertMessage)
             }
-            .overlay { processingOverlay(viewModel) }
-            .overlay { successOverlay(viewModel) }
         }
         .onAppear {
             viewModel.loadServices(modelContext: modelContext)
@@ -57,6 +66,56 @@ struct CheckoutView: View {
         .onChange(of: amountFieldFocused) {
             if !amountFieldFocused { viewModel.formatAmountInput() }
         }
+        .onChange(of: viewModel.state) { oldValue, newValue in
+            // Auto-dismiss after a short delay when confirmed
+            if case .confirmed = newValue {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var overlayContent: some View {
+        VStack(spacing: 16) {
+            if case .confirmed = viewModel.state {
+                // Success state
+                ZStack {
+                    Circle().fill(Color.green.opacity(0.15))
+                    Image(systemName: "checkmark")
+                        .font(.title)
+                        .foregroundStyle(.green)
+                }
+                .frame(width: 68, height: 68)
+                Text(NSLocalizedString("checkout.complete_title", comment: ""))
+                    .font(.headline)
+                Text(String(format: NSLocalizedString("checkout.complete_desc_fmt", comment: ""), viewModel.finalTotalString))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            } else {
+                // Processing state
+                ZStack {
+                    Circle().fill(Color.accentColor.opacity(0.15))
+                    ProgressView().tint(.accentColor)
+                }
+                .frame(width: 68, height: 68)
+                Text(NSLocalizedString("checkout.processing", comment: ""))
+                    .font(.headline)
+                Text(NSLocalizedString("checkout.processing_desc", comment: ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(DS.ColorToken.surface)
+        )
+        .padding(32)
     }
 
     @ToolbarContentBuilder
@@ -120,70 +179,6 @@ struct CheckoutView: View {
         }
     }
 
-    @ViewBuilder
-    private func processingOverlay(_ viewModel: CheckoutViewModel) -> some View {
-        if viewModel.isSaving {
-            ZStack {
-                Color.black.opacity(0.4).ignoresSafeArea()
-                VStack(spacing: 16) {
-                    ZStack {
-                        Circle().fill(Color.accentColor.opacity(0.15))
-                        ProgressView().tint(.accentColor)
-                    }
-                    .frame(width: 68, height: 68)
-                    Text(NSLocalizedString("checkout.processing", comment: ""))
-                        .font(.headline)
-                    Text(NSLocalizedString("checkout.processing_desc", comment: ""))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(24)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(DS.ColorToken.surface)
-                )
-                .padding(32)
-            }
-            .transition(.opacity)
-        }
-    }
-
-    @ViewBuilder
-    private func successOverlay(_ viewModel: CheckoutViewModel) -> some View {
-        if case .confirmed = viewModel.state {
-            ZStack {
-                Color.black.opacity(0.4).ignoresSafeArea()
-                VStack(spacing: 16) {
-                    ZStack {
-                        Circle().fill(Color.green.opacity(0.15))
-                        Image(systemName: "checkmark")
-                            .font(.title)
-                            .foregroundStyle(.green)
-                    }
-                    .frame(width: 68, height: 68)
-                    Text(NSLocalizedString("checkout.complete_title", comment: ""))
-                        .font(.headline)
-                    Text(String(format: NSLocalizedString("checkout.complete_desc_fmt", comment: ""), viewModel.finalTotalString))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                    Button(NSLocalizedString("common.continue", comment: "")) {
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(24)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(DS.ColorToken.surface)
-                )
-                .padding(32)
-            }
-            .transition(.opacity)
-        }
-    }
 }
 
 private extension CheckoutView {

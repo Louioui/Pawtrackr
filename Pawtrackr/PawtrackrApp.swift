@@ -43,13 +43,14 @@ struct PawtrackrApp: App {
             _authViewModel = StateObject(wrappedValue: AuthenticationViewModel(modelContext: localContainer.mainContext))
 
             // Add a subscriber to automatically update day summaries when a visit completes.
-            let mainContext = localContainer.mainContext
+            // Use a background context so checkout UI is never blocked by aggregation work.
             NotificationCenter.default.publisher(for: .visitDidComplete)
                 .sink { notification in
                     guard let date = notification.endedAtDate else { return }
-                    // Run on main actor since ModelContext is not thread-safe
-                    Task { @MainActor in
-                        SummaryUpdater.rebuildDay(for: date, in: mainContext)
+                    let targetDate = date
+                    Task.detached(priority: .utility) {
+                        let backgroundContext = ModelContext(localContainer)
+                        SummaryUpdater.rebuildDay(for: targetDate, in: backgroundContext)
                     }
                 }
                 .store(in: &cancellables)

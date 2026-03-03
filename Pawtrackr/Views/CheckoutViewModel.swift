@@ -13,13 +13,28 @@ import SwiftData
 import OSLog
 
 final class CheckoutViewModel: ObservableObject {
-    enum CheckoutState {
+    enum CheckoutState: Equatable {
         case selectingServices
         case addingPhotos
         case choosingPayment
         case processing
         case confirmed
-        case failed(Error)
+        case failed(String) // Changed from Error to String for Equatable conformance
+
+        static func == (lhs: CheckoutState, rhs: CheckoutState) -> Bool {
+            switch (lhs, rhs) {
+            case (.selectingServices, .selectingServices),
+                 (.addingPhotos, .addingPhotos),
+                 (.choosingPayment, .choosingPayment),
+                 (.processing, .processing),
+                 (.confirmed, .confirmed):
+                return true
+            case (.failed(let lhsMsg), .failed(let rhsMsg)):
+                return lhsMsg == rhsMsg
+            default:
+                return false
+            }
+        }
     }
 
     /// Lightweight state machine to centralize allowed transitions.
@@ -27,7 +42,10 @@ final class CheckoutViewModel: ObservableObject {
         switch (from, to) {
         case (.selectingServices, .addingPhotos): return true
         case (.addingPhotos, .choosingPayment): return true
-        case (.choosingPayment, .processing): return true
+        // Allow processing from any input state (user can complete checkout at any step)
+        case (.selectingServices, .processing),
+             (.addingPhotos, .processing),
+             (.choosingPayment, .processing): return true
         case (.processing, .confirmed), (.processing, .failed(_)): return true
         case (.failed(_), .selectingServices), (.failed(_), .addingPhotos), (.failed(_), .choosingPayment): return true
         default: return false
@@ -270,91 +288,165 @@ final class CheckoutViewModel: ObservableObject {
     
     @MainActor
     func processPayment() async {
-        guard !isSaving else { return }
-        guard let modelContext = modelContext else { return }
+        print("DEBUG: processPayment started")
+        guard !isSaving else {
+            print("DEBUG: Already saving, returning early")
+            return
+        }
+        guard let modelContext = modelContext else {
+            print("DEBUG: modelContext is nil")
+            alertMessage = "Unable to save. Please try again."
+            showAlert = true
+            return
+        }
+
+        print("DEBUG: Setting isSaving = true")
         isSaving = true
-        if canTransition(from: state, to: .processing) { state = .processing }
-        
+        state = .processing
+
+        // Guarantee cleanup no matter what happens
+        defer {
+            print("DEBUG: defer block executing, isSaving=\(isSaving)")
+            if isSaving {
+                isSaving = false
+                print("DEBUG: defer set isSaving = false")
+            }
+        }
+
+        // Yield to allow UI to update and show processing overlay
+        await Task.yield()
+        print("DEBUG: After first yield")
+
         do {
+            print("DEBUG: About to validate")
             try validate()
-            
+            print("DEBUG: Validation passed")
+
             // If the visit was temporary, insert it into the context now.
+            print("DEBUG: Checking if visit needs insertion")
             if visit.modelContext == nil {
+                print("DEBUG: Inserting visit into context")
                 modelContext.insert(visit)
             }
-            
+            print("DEBUG: Visit context check done")
+
             // 1. Sync VisitItems with selected services.
+            print("DEBUG: Starting service sync - allServices count: \(allServices.count)")
             let servicesToSnapshot = allServices.filter { selectedServiceIDs.contains($0.persistentModelID) }
+            print("DEBUG: servicesToSnapshot count: \(servicesToSnapshot.count)")
             let addOnsToSnapshot = addOnServices.filter { selectedAddOnIDs.contains($0.persistentModelID) }
+            print("DEBUG: addOnsToSnapshot count: \(addOnsToSnapshot.count)")
             let allSelectedServices = servicesToSnapshot + addOnsToSnapshot
             let allSelectedIDs = Set(allSelectedServices.map { $0.persistentModelID })
-            
+            print("DEBUG: allSelectedIDs count: \(allSelectedIDs.count)")
+
+            print("DEBUG: Getting existing service IDs from visit.items")
             let existingServiceIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
-            
+            print("DEBUG: existingServiceIDs count: \(existingServiceIDs.count)")
+
             // Remove items that are no longer selected
+            print("DEBUG: Removing unselected items")
             visit.items.removeAll { item in
                 guard let serviceID = item.service?.persistentModelID else { return false }
                 return !allSelectedIDs.contains(serviceID)
             }
+            print("DEBUG: Items removed")
+
             // Add new items, snapshotting their price from the service catalog.
+            print("DEBUG: Adding new items")
             for service in allSelectedServices where !existingServiceIDs.contains(service.persistentModelID) {
                 visit.addItem(title: service.name, unitPrice: service.effectiveBasePrice, quantity: 1, service: service)
             }
-            
+            print("DEBUG: Items added")
+
             // 2. Apply notes, tags, and photos.
+            print("DEBUG: Applying notes and tags")
             visit.note = composeVisitNote()
             let sortedTags = Array(tags.sorted())
             visit.behaviorTags = sortedTags
             pet.setBehaviorTags(sortedTags)
+            print("DEBUG: Applying photos")
             visit.applyPhotos(before: beforePhotoData, after: afterPhotoData)
-            
+            print("DEBUG: Notes, tags, photos applied")
+
             // 3. Finalize visit total and mark as checked out.
-            // If already completed, preserve its original endedAt; otherwise, use captured checkout end.
+            print("DEBUG: Marking checked out")
             let finalEndedAt = visit.endedAt ?? checkoutEndsAt ?? Date()
             visit.markCheckedOut(total: servicesTotalDecimal, now: finalEndedAt)
+            print("DEBUG: Visit marked checked out")
 
             // 4. Create and attach payment.
+            print("DEBUG: Getting cleanedRef")
             let cleanedRef = externalReference.trimmed
+            print("DEBUG: cleanedRef = \(cleanedRef)")
+            print("DEBUG: Getting servicesTotalDecimal")
+            let paymentAmount = servicesTotalDecimal
+            print("DEBUG: paymentAmount = \(paymentAmount)")
+            print("DEBUG: Creating Payment object - method: \(selectedPaymentMethod)")
+            let paymentDate = Date()
+            print("DEBUG: Payment date created")
+            let paymentRef: String? = cleanedRef.isEmpty ? nil : cleanedRef
+            print("DEBUG: Payment ref: \(String(describing: paymentRef))")
+
+            // Create payment with minimal params first
+            print("DEBUG: About to call Payment init")
             let payment = Payment(
-                amount: servicesTotalDecimal,
+                amount: paymentAmount,
                 method: selectedPaymentMethod,
-                paidAt: Date(),
-                externalReference: cleanedRef.isEmpty ? nil : cleanedRef
+                paidAt: paymentDate,
+                externalReference: paymentRef
             )
+            print("DEBUG: Payment init completed")
+            print("DEBUG: Payment created, attaching to visit")
             visit.attachPayment(payment)
-            
-            // 5. Save and notify.
+            print("DEBUG: Payment attached")
+
+            // 5. Save
+            print("DEBUG: About to save modelContext")
             try modelContext.save()
-            // Update daily summaries for Insights immediately
-            SummaryUpdater.rebuildDay(for: finalEndedAt, in: modelContext)
-            NotificationCenter.default.post(
-                name: .visitDidComplete,
-                object: nil,
-                userInfo: [
-                    VisitDidCompleteKey.visitID.rawValue: visit.persistentModelID,
-                    VisitDidCompleteKey.petID.rawValue: visit.pet?.persistentModelID as Any,
-                    VisitDidCompleteKey.clientID.rawValue: visit.pet?.owner?.persistentModelID as Any,
-                    VisitDidCompleteKey.endedAt.rawValue: finalEndedAt,
-                    VisitDidCompleteKey.total.rawValue: servicesTotalDecimal
-                ].compactMapValues { $0 }
-            )
-            
-            if canTransition(from: .processing, to: .confirmed) { state = .confirmed }
+            print("DEBUG: modelContext saved successfully")
+
+            // 6. Notify (wrapped to prevent observer issues from blocking completion)
+            let notificationInfo: [String: Any] = [
+                VisitDidCompleteKey.visitID.rawValue: visit.persistentModelID,
+                VisitDidCompleteKey.petID.rawValue: visit.pet?.persistentModelID as Any,
+                VisitDidCompleteKey.clientID.rawValue: visit.pet?.owner?.persistentModelID as Any,
+                VisitDidCompleteKey.endedAt.rawValue: finalEndedAt,
+                VisitDidCompleteKey.total.rawValue: servicesTotalDecimal
+            ].compactMapValues { $0 }
+
+            print("DEBUG: Posting notification asynchronously")
+            // Post notification asynchronously so it doesn't block checkout completion
+            Task.detached { @MainActor in
+                NotificationCenter.default.post(
+                    name: .visitDidComplete,
+                    object: nil,
+                    userInfo: notificationInfo
+                )
+            }
+
+            // Success - update state immediately
+            print("DEBUG: Setting state = .confirmed and isSaving = false")
+            state = .confirmed
             isSaving = false
+            print("DEBUG: processPayment SUCCESS - isSaving is now \(isSaving)")
 
         } catch let error as ValidationError {
-            state = .failed(error)
+            print("DEBUG: ValidationError caught: \(error.localizedDescription)")
+            state = .failed(error.localizedDescription)
             alertMessage = error.localizedDescription
             showAlert = true
             isSaving = false
         } catch {
-            let validationError = ValidationError.custom(message: "An unexpected error occurred while saving. Please try again.")
-            state = .failed(validationError)
-            alertMessage = validationError.localizedDescription
+            print("DEBUG: General error caught: \(error.localizedDescription)")
+            let message = "An unexpected error occurred while saving. Please try again."
+            state = .failed(message)
+            alertMessage = message
             Logger.main.error("Checkout save failed: \(error.localizedDescription)")
             showAlert = true
             isSaving = false
         }
+        print("DEBUG: processPayment function exiting")
     }
     
     @MainActor

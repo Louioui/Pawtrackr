@@ -46,10 +46,22 @@ public func *~ (lhs: Decimal, rhs: Decimal) -> Decimal {
 public extension Decimal {
     /// Initialize from any numeric type safely.
     init<T: BinaryInteger>(_ value: T) {
-        self = Decimal(string: String(value)) ?? Decimal(Double(value))
+        // Avoid recursive init calls and preserve precision when possible.
+        if let parsed = Decimal(string: String(value)) {
+            self = parsed
+        } else {
+            self = NSDecimalNumber(value: Double(value)).decimalValue
+        }
     }
 
     init<T: BinaryFloatingPoint>(_ value: T) {
-        self = Decimal(string: String(describing: value)) ?? Decimal(Double(value))
+        // Avoid recursive init calls and guard against non-finite values.
+        if value.isFinite, let parsed = Decimal(string: String(describing: value)) {
+            self = parsed
+        } else if value.isFinite {
+            self = NSDecimalNumber(value: Double(value)).decimalValue
+        } else {
+            self = .zero
+        }
     }
 }

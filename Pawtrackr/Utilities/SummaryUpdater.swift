@@ -89,7 +89,9 @@ enum SummaryUpdater {
                 context.delete(summary)
             }
 
-            try context.save()
+            if context.hasChanges {
+                try context.save()
+            }
             Logger.summaries.info("Summary rebuilt for \(start, privacy: .public): \(count) visits, \(revenue) revenue")
         } catch {
             Logger.summaries.error("Summary rebuild failed for \(start, privacy: .public): \(String(describing: error))")
@@ -99,43 +101,45 @@ enum SummaryUpdater {
     // MARK: - Optimized Fetch Helpers
 
     private static func fetchVisitsEndedInRange(start: Date, end: Date, in context: ModelContext) throws -> [Visit] {
-        // SwiftData predicates don't support capturing local variables in closures well,
-        // so we fetch completed visits and filter in memory for the specific range
         let descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate<Visit> { $0.endedAt != nil }
+            predicate: #Predicate<Visit> {
+                $0.endedAt != nil &&
+                $0.endedAt! >= start &&
+                $0.endedAt! < end
+            }
         )
-        let completed = try context.fetch(descriptor)
-        return completed.filter { visit in
-            guard let endedAt = visit.endedAt else { return false }
-            return endedAt >= start && endedAt < end
-        }
+        return try context.fetch(descriptor)
     }
 
     private static func fetchPaymentsInRange(start: Date, end: Date, in context: ModelContext) throws -> [Payment] {
-        let descriptor = FetchDescriptor<Payment>()
-        let all = try context.fetch(descriptor)
-        return all.filter { $0.paidAt >= start && $0.paidAt < end }
+        let descriptor = FetchDescriptor<Payment>(
+            predicate: #Predicate<Payment> {
+                $0.paidAt >= start &&
+                $0.paidAt < end
+            }
+        )
+        return try context.fetch(descriptor)
     }
 
     private static func fetchDaySummary(for day: Date, in context: ModelContext) throws -> DaySummary? {
-        let cal = Calendar.current
-        let descriptor = FetchDescriptor<DaySummary>()
-        let all = try context.fetch(descriptor)
-        return all.first { cal.isDate($0.day, inSameDayAs: day) }
+        let descriptor = FetchDescriptor<DaySummary>(
+            predicate: #Predicate<DaySummary> { $0.day == day }
+        )
+        return try context.fetch(descriptor).first
     }
 
     private static func fetchServiceDaySummaries(for day: Date, in context: ModelContext) throws -> [ServiceDaySummary] {
-        let cal = Calendar.current
-        let descriptor = FetchDescriptor<ServiceDaySummary>()
-        let all = try context.fetch(descriptor)
-        return all.filter { cal.isDate($0.day, inSameDayAs: day) }
+        let descriptor = FetchDescriptor<ServiceDaySummary>(
+            predicate: #Predicate<ServiceDaySummary> { $0.day == day }
+        )
+        return try context.fetch(descriptor)
     }
 
     private static func fetchCategoryDaySummaries(for day: Date, in context: ModelContext) throws -> [CategoryDaySummary] {
-        let cal = Calendar.current
-        let descriptor = FetchDescriptor<CategoryDaySummary>()
-        let all = try context.fetch(descriptor)
-        return all.filter { cal.isDate($0.day, inSameDayAs: day) }
+        let descriptor = FetchDescriptor<CategoryDaySummary>(
+            predicate: #Predicate<CategoryDaySummary> { $0.day == day }
+        )
+        return try context.fetch(descriptor)
     }
 
     /// Rebuild summaries for all days that have completed visits.

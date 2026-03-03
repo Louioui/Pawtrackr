@@ -16,7 +16,7 @@ final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
 
     private let cache = NSCache<NSString, UIImage>()
-    private let queue = DispatchQueue(label: "com.pawtrackr.imagecache", attributes: .concurrent)
+    private let lock = NSLock()
 
     private init() {
         cache.countLimit = 200
@@ -37,38 +37,37 @@ final class ImageCache: @unchecked Sendable {
     func image(data: Data, maxDimension: CGFloat) -> UIImage? {
         let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
 
-        // Check cache first (concurrent read)
-        var cachedImage: UIImage?
-        queue.sync {
-            cachedImage = cache.object(forKey: key)
-        }
+        // Check cache first (fast lock-based read)
+        lock.lock()
+        let cachedImage = cache.object(forKey: key)
+        lock.unlock()
         if let hit = cachedImage { return hit }
 
-        // Decode image (can happen on any thread)
+        // Decode image (can happen on any thread, outside lock)
         guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
 
-        // Store in cache (barrier write)
+        // Store in cache
         let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
-        queue.async(flags: .barrier) { [weak self] in
-            self?.cache.setObject(image, forKey: key, cost: cost)
-        }
+        lock.lock()
+        cache.setObject(image, forKey: key, cost: cost)
+        lock.unlock()
 
         return image
     }
 
     /// Clears all cached images. Thread-safe.
     func clearCache() {
-        queue.async(flags: .barrier) { [weak self] in
-            self?.cache.removeAllObjects()
-        }
+        lock.lock()
+        cache.removeAllObjects()
+        lock.unlock()
     }
 
     /// Removes a specific image from cache. Thread-safe.
     func removeImage(for data: Data, maxDimension: CGFloat) {
         let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
-        queue.async(flags: .barrier) { [weak self] in
-            self?.cache.removeObject(forKey: key)
-        }
+        lock.lock()
+        cache.removeObject(forKey: key)
+        lock.unlock()
     }
 
     private func cacheKey(for data: Data, maxDimension: CGFloat) -> String {
@@ -104,7 +103,7 @@ final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
 
     private let cache = NSCache<NSString, NSImage>()
-    private let queue = DispatchQueue(label: "com.pawtrackr.imagecache", attributes: .concurrent)
+    private let lock = NSLock()
 
     private init() {
         cache.countLimit = 200
@@ -116,38 +115,37 @@ final class ImageCache: @unchecked Sendable {
     func image(data: Data, maxDimension: CGFloat) -> NSImage? {
         let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
 
-        // Check cache first (concurrent read)
-        var cachedImage: NSImage?
-        queue.sync {
-            cachedImage = cache.object(forKey: key)
-        }
+        // Check cache first (fast lock-based read)
+        lock.lock()
+        let cachedImage = cache.object(forKey: key)
+        lock.unlock()
         if let hit = cachedImage { return hit }
 
-        // Decode image (can happen on any thread)
+        // Decode image (can happen on any thread, outside lock)
         guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
 
-        // Store in cache (barrier write)
+        // Store in cache
         let cost = Int(image.size.width * image.size.height * 4)
-        queue.async(flags: .barrier) { [weak self] in
-            self?.cache.setObject(image, forKey: key, cost: cost)
-        }
+        lock.lock()
+        cache.setObject(image, forKey: key, cost: cost)
+        lock.unlock()
 
         return image
     }
 
     /// Clears all cached images. Thread-safe.
     func clearCache() {
-        queue.async(flags: .barrier) { [weak self] in
-            self?.cache.removeAllObjects()
-        }
+        lock.lock()
+        cache.removeAllObjects()
+        lock.unlock()
     }
 
     /// Removes a specific image from cache. Thread-safe.
     func removeImage(for data: Data, maxDimension: CGFloat) {
         let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
-        queue.async(flags: .barrier) { [weak self] in
-            self?.cache.removeObject(forKey: key)
-        }
+        lock.lock()
+        cache.removeObject(forKey: key)
+        lock.unlock()
     }
 
     private func cacheKey(for data: Data, maxDimension: CGFloat) -> String {
