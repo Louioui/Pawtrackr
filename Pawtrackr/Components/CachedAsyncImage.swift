@@ -1,4 +1,4 @@
-//
+ //
 //  CachedAsyncImage.swift
 //  Pawtrackr
 //
@@ -10,26 +10,35 @@ import SwiftUI
 import Combine
 
 @MainActor
-final class ImageRemoteLoader: ObservableObject {
-    @Published var data: Data? = nil
-    @Published var error: Error? = nil
+@Observable
+final class ImageRemoteLoader {
+    var data: Data? = nil
+    var error: Error? = nil
+    var isLoading: Bool = false
     
-    private var cancellable: AnyCancellable?
+    private var currentTask: Task<Void, Never>?
 
     func load(_ url: URL) {
-        cancellable = ImageLoaderService.shared.publisher(for: url)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                if case .failure(let error) = completion {
-                    self?.error = error
-                }
-            }, receiveValue: { [weak self] data in
-                self?.data = data
-            })
+        currentTask?.cancel()
+        isLoading = true
+        currentTask = Task {
+            do {
+                let data = try await ImageLoaderService.shared.fetch(for: url)
+                
+                guard !Task.isCancelled else { return }
+                self.data = data
+                self.isLoading = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.error = error
+                self.isLoading = false
+            }
+        }
     }
 
     func cancel() {
-        cancellable?.cancel()
+        currentTask?.cancel()
+        currentTask = nil
     }
 }
 
@@ -39,33 +48,31 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
     @ViewBuilder var placeholder: () -> Placeholder
     @ViewBuilder var failure: () -> Failure
 
-    @StateObject private var loader = ImageRemoteLoader()
+    @State private var loader = ImageRemoteLoader()
 
     var body: some View {
-        content
-            .onAppear { loader.load(url) }
-            .onDisappear { loader.cancel() }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        #if canImport(UIKit)
-        if let data = loader.data, let ui = ImageCache.shared.image(data: data, maxDimension: maxDimension) {
-            Image(uiImage: ui).resizable().scaledToFill()
-        } else if loader.error != nil {
-            failure()
-        } else {
-            placeholder()
+        Group {
+            if let data = loader.data {
+                #if canImport(UIKit)
+                if let ui = ImageCache.shared.image(data: data, maxDimension: maxDimension) {
+                    Image(uiImage: ui).resizable().scaledToFill()
+                } else {
+                    failure()
+                }
+                #else
+                if let ns = ImageCache.shared.image(data: data, maxDimension: maxDimension) {
+                    Image(nsImage: ns).resizable().scaledToFill()
+                } else {
+                    failure()
+                }
+                #endif
+            } else if loader.error != nil {
+                failure()
+            } else {
+                placeholder()
+            }
         }
-        #else
-        if let data = loader.data, let ns = NSImage(data: data) {
-            Image(nsImage: ns).resizable().scaledToFill()
-        } else if loader.error != nil {
-            failure()
-        } else {
-            placeholder()
-        }
-        #endif
+        .task { loader.load(url) }
     }
 }
 

@@ -327,8 +327,10 @@ struct NewClientSheet: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     viewModel.createClient()
-                    if !viewModel.showAlert && !viewModel.showDuplicateAlert {
-                        dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if viewModel.appError == nil && !viewModel.showDuplicateAlert {
+                            dismiss()
+                        }
                     }
                 } label: {
                     Label(NSLocalizedString("common.create", comment: ""), systemImage: "checkmark.circle.fill")
@@ -337,10 +339,12 @@ struct NewClientSheet: View {
                 .disabled(viewModel.isSaving)
             }
         }
-        .alert(NSLocalizedString("new_client.cannot_create_client", comment: ""), isPresented: $viewModel.showAlert) {
-            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-        } message: {
-            Text(viewModel.alertText)
+        .alert(item: $viewModel.appError) { error in
+            Alert(
+                title: Text(NSLocalizedString("new_client.cannot_create_client", comment: "")),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+            )
         }
         .alert(NSLocalizedString("new_client.client_exists", comment: ""), isPresented: $viewModel.showDuplicateAlert) {
             Button(NSLocalizedString("new_client.open", comment: "")) {

@@ -132,15 +132,3 @@ final class VisitItem {
         updatedAt = .now
     }
 }
-
-// FIX: Add local extensions to resolve 'trimmed' and 'roundedMoney' being inaccessible.
-// A better long-term solution is to move these to their own shared files.
-
-fileprivate extension Decimal {
-    func roundedMoney() -> Decimal {
-        var result = Decimal()
-        var value = self
-        NSDecimalRound(&result, &value, 2, .bankers)
-        return result
-    }
-}

@@ -17,6 +17,8 @@ final class AppSettings: ObservableObject {
         static let lastPINChangeDate = "lastPINChangeDate"
         static let autoLockOnBackground = "autoLockOnBackground"
         static let autoLockAfterInactivity = "autoLockAfterInactivity"
+        static let businessName = "businessName"
+        static let currencySymbol = "currencySymbol"
     }
 
     // MARK: - Defaults
@@ -27,9 +29,23 @@ final class AppSettings: ObservableObject {
         static let autoLockBackground = true
         static let autoLockInactivity = false
         static let idleLockMinutes = 5
+        static let businessName = "My Pet Grooming"
+        static let currencySymbol = "$"
     }
 
     // MARK: - Published Properties
+
+    @Published var businessName: String {
+        didSet {
+            UserDefaults.standard.set(businessName, forKey: Keys.businessName)
+        }
+    }
+
+    @Published var currencySymbol: String {
+        didSet {
+            UserDefaults.standard.set(currencySymbol, forKey: Keys.currencySymbol)
+        }
+    }
 
     @Published var isBiometricLockEnabled: Bool {
         didSet {
@@ -81,6 +97,8 @@ final class AppSettings: ObservableObject {
         ])
 
         // Read values
+        self.businessName = UserDefaults.standard.string(forKey: Keys.businessName) ?? Defaults.businessName
+        self.currencySymbol = UserDefaults.standard.string(forKey: Keys.currencySymbol) ?? Defaults.currencySymbol
         self.isBiometricLockEnabled = UserDefaults.standard.bool(forKey: Keys.biometricLockEnabled)
         self.autoLockOnBackground = UserDefaults.standard.bool(forKey: Keys.autoLockOnBackground)
         self.autoLockAfterInactivity = UserDefaults.standard.bool(forKey: Keys.autoLockAfterInactivity)

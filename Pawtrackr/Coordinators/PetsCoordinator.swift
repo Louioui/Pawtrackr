@@ -22,7 +22,7 @@ class PetsCoordinator: Coordinator {
     }
 
     func showPetDetail(pet: Pet, namespace: Namespace.ID) {
-        let petDetailView = PetDetailViewModel.PetDetailView(pet: pet, namespace: namespace)
+        let petDetailView = PetDetailView(pet: pet, namespace: namespace)
         navigationController.pushViewController(UIHostingController(rootView: petDetailView), animated: true)
     }
 }

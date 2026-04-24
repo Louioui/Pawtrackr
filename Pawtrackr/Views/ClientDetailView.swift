@@ -105,102 +105,133 @@ struct ClientDetailView: View {
 
     private func navigationContent(vm: ClientDetailViewModel) -> some View {
         content(vm: vm)
-        .navigationTitle("client_details.title")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar { toolbarContent(vm) }
-        .fabOverlay {
-            FAB(systemImage: "pawprint.fill", accessibilityLabel: "Add New Pet") {
-                sheetDestination = .addPet
+            .navigationTitle("client_details.title")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                toolbarContent(vm)
+                macAddPetToolbarItem
+            }
+            #if os(iOS)
+            .fabOverlay { addPetFab }
+            #endif
+            .sheet(item: $sheetDestination) { destination in
+                destinationSheet(destination, vm: vm)
+            }
+            .sheet(isPresented: $showContactEditor) {
+                contactEditorSheet
+            }
+            .alert(item: $contactPendingDelete, content: contactDeleteAlert)
+            .modifier(CheckoutPresentationModifier(checkoutPet: $checkoutPet, vm: vm))
+            .alert(item: $alertDestination) { destination in
+                destinationAlert(destination, vm: vm)
+            }
+            .task { vm.refreshRecentVisits() }
+    }
+
+    #if os(macOS)
+    @ToolbarContentBuilder
+    private var macAddPetToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button { sheetDestination = .addPet } label: {
+                Label(NSLocalizedString("a11y.add_new_pet", comment: ""), systemImage: "plus")
             }
         }
-        .sheet(item: $sheetDestination) { [vm] destination in
-            switch destination {
-            case .addPet:
-                AddPetSheet(client: vm.client)
-            case .editClient:
-                EditClientSheet(client: vm.client)
-            case .checkout:
-                EmptyView()
-            case .history(let pet):
-                PetHistoryView(pet: pet)
-            }
+    }
+    #else
+    @ToolbarContentBuilder
+    private var macAddPetToolbarItem: some ToolbarContent {
+        EmptyToolbarContent()
+    }
+    #endif
+
+    #if os(iOS)
+    private var addPetFab: some View {
+        FAB(systemImage: "pawprint.fill", accessibilityLabel: NSLocalizedString("a11y.add_new_pet", comment: "")) {
+            sheetDestination = .addPet
         }
-        .sheet(isPresented: $showContactEditor) {
-            NavigationStack {
-                Form {
-                    Section(editingContact == nil ? NSLocalizedString("client_detail.new_emergency_contact", comment: "") : NSLocalizedString("client_detail.edit_emergency_contact", comment: "")) {
-                        TextField(NSLocalizedString("form.name", comment: ""), text: $newContactName)
-                            .focused($contactNameFocused)
-                        TextField(NSLocalizedString("form.relation", comment: ""), text: $newContactRelation)
-                        TextField(NSLocalizedString("form.phone", comment: ""), text: $newContactPhone)
-                            .onChange(of: newContactPhone) { _, v in
-                                guard !v.isEmpty else { return }
-                                // Clamp to core 10 digits; do not allow extensions in this field.
-                                let formatted = PhoneUtils.formatAsYouType(v, includeExtension: false)
-                                if formatted != v { newContactPhone = formatted }
-                            }
-                        #if os(iOS)
-                            .keyboardType(.phonePad)
-                            .textContentType(.telephoneNumber)
-                        #endif
-                    }
+    }
+    #endif
+
+    @ViewBuilder
+    private func destinationSheet(_ destination: SheetDestination, vm: ClientDetailViewModel) -> some View {
+        switch destination {
+        case .addPet:
+            AddPetSheet(client: vm.client)
+        case .editClient:
+            EditClientSheet(client: vm.client)
+        case .checkout:
+            EmptyView()
+        case .history(let pet):
+            PetHistoryView(pet: pet)
+        }
+    }
+
+    private var contactEditorSheet: some View {
+        NavigationStack {
+            Form {
+                Section(editingContact == nil ? NSLocalizedString("client_detail.new_emergency_contact", comment: "") : NSLocalizedString("client_detail.edit_emergency_contact", comment: "")) {
+                    TextField(NSLocalizedString("form.name", comment: ""), text: $newContactName)
+                        .focused($contactNameFocused)
+                    TextField(NSLocalizedString("form.relation", comment: ""), text: $newContactRelation)
+                    TextField(NSLocalizedString("form.phone", comment: ""), text: $newContactPhone)
+                        .onChange(of: newContactPhone) { _, v in
+                            guard !v.isEmpty else { return }
+                            let formatted = PhoneUtils.formatAsYouType(v, includeExtension: false)
+                            if formatted != v { newContactPhone = formatted }
+                        }
+                    #if os(iOS)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                    #endif
                 }
-                .navigationTitle(editingContact == nil ? NSLocalizedString("client_detail.add_contact", comment: "") : NSLocalizedString("client_detail.edit_contact", comment: ""))
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { showContactEditor = false } }
-                    ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("common.save", comment: "")) { addOrUpdateContact() } }
-                }
-                .task { contactNameFocused = true }
             }
+            .navigationTitle(editingContact == nil ? NSLocalizedString("client_detail.add_contact", comment: "") : NSLocalizedString("client_detail.edit_contact", comment: ""))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { showContactEditor = false } }
+                ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("common.save", comment: "")) { addOrUpdateContact() } }
+            }
+            .task { contactNameFocused = true }
         }
-        .alert(item: $contactPendingDelete) { c in
-            Alert(
-                title: Text(NSLocalizedString("client_detail.delete_contact_title", comment: "")),
-                message: Text(NSLocalizedString("client_detail.delete_contact_message", comment: "")),
-                primaryButton: .destructive(Text(NSLocalizedString("common.delete", comment: ""))) { confirmDeleteContact(c) },
-                secondaryButton: .cancel()
+    }
+
+    private func contactDeleteAlert(_ contact: EmergencyContact) -> Alert {
+        Alert(
+            title: Text(NSLocalizedString("client_detail.delete_contact_title", comment: "")),
+            message: Text(NSLocalizedString("client_detail.delete_contact_message", comment: "")),
+            primaryButton: .destructive(Text(NSLocalizedString("common.delete", comment: ""))) { confirmDeleteContact(contact) },
+            secondaryButton: .cancel()
+        )
+    }
+
+    private func destinationAlert(_ destination: AlertDestination, vm: ClientDetailViewModel) -> Alert {
+        switch destination {
+        case .checkIn(let pet):
+            return Alert(
+                title: Text(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name)),
+                message: Text(NSLocalizedString("client_details.checkin_confirm_message", comment: "")),
+                primaryButton: .default(Text(NSLocalizedString("common.yes", comment: ""))) {
+                    vm.checkIn(pet: pet)
+                },
+                secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
+            )
+        case .deleteClient:
+            return Alert(
+                title: Text(String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName)),
+                message: Text(NSLocalizedString("clients.delete_confirm_message", comment: "")),
+                primaryButton: .destructive(Text(NSLocalizedString("common.yes", comment: ""))) {
+                    deleteClient(vm: vm)
+                },
+                secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
+            )
+        case .deleteError(let message):
+            return Alert(
+                title: Text(NSLocalizedString("clients.delete_failed", comment: "")),
+                message: Text(message),
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
             )
         }
-        #if os(iOS)
-        .fullScreenCover(item: $checkoutPet) { [vm] pet in
-            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
-        }
-        #else
-        .sheet(item: $checkoutPet) { [vm] pet in
-            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
-        }
-        #endif
-        .alert(item: $alertDestination) { [vm] destination in
-            switch destination {
-            case .checkIn(let pet):
-                Alert(
-                    title: Text(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name)),
-                    message: Text(NSLocalizedString("client_details.checkin_confirm_message", comment: "")),
-                    primaryButton: .default(Text(NSLocalizedString("common.yes", comment: ""))) {
-                        vm.checkIn(pet: pet)
-                    },
-                    secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
-                )
-            case .deleteClient:
-                Alert(
-                    title: Text(String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName)),
-                    message: Text(NSLocalizedString("clients.delete_confirm_message", comment: "")),
-                    primaryButton: .destructive(Text(NSLocalizedString("common.yes", comment: ""))) {
-                        deleteClient(vm: vm)
-                    },
-                    secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
-                )
-            case .deleteError(let message):
-                Alert(
-                    title: Text(NSLocalizedString("clients.delete_failed", comment: "")),
-                    message: Text(message),
-                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
-                )
-            }
-        }
-        .task { vm.refreshRecentVisits() }
     }
 
     private func content(vm: ClientDetailViewModel) -> some View {
@@ -246,15 +277,18 @@ struct ClientDetailView: View {
                     } else {
                         Button { beginInlineEdit(client) } label: { Image(systemName: "ellipsis.circle") }
                             .font(.title3)
-                            .accessibilityLabel("More actions")
+                            .accessibilityLabel(NSLocalizedString("a11y.more_actions", comment: ""))
                     }
                 }
 
                 if isEditingClientInline {
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack { TextField("First Name", text: $editFirst).textFieldStyle(.roundedBorder); TextField("Last Name", text: $editLast).textFieldStyle(.roundedBorder) }
                         HStack {
-                            TextField("Phone", text: $editPhone)
+                            TextField(NSLocalizedString("new_client.first_name", comment: ""), text: $editFirst).textFieldStyle(.roundedBorder)
+                            TextField(NSLocalizedString("new_client.last_name", comment: ""), text: $editLast).textFieldStyle(.roundedBorder)
+                        }
+                        HStack {
+                            TextField(NSLocalizedString("new_client.phone", comment: ""), text: $editPhone)
                                 .textFieldStyle(.roundedBorder)
                                 .onChange(of: editPhone) { _, v in
                                     guard !v.isEmpty else { return }
@@ -265,7 +299,7 @@ struct ClientDetailView: View {
                                 .keyboardType(.phonePad)
                                 .textContentType(.telephoneNumber)
                             #endif
-                            TextField("Email", text: $editEmail).textFieldStyle(.roundedBorder)
+                            TextField(NSLocalizedString("new_client.email", comment: ""), text: $editEmail).textFieldStyle(.roundedBorder)
                         }
                     }
                 } else {
@@ -591,61 +625,27 @@ struct ClientDetailView: View {
         isDeleting = true
 
         let client = vm.client
-        let pets = Array(client.pets)
-        let visits = pets.flatMap { pet in Array(pet.visits) }
-        let appointments = pets.flatMap { pet in Array(pet.appointments) }
-        // Track activity dates before deletion so summaries can be rebuilt.
+        // Gather affected dates before deletion for summary updates
+        let pets = client.pets
+        let visits = pets.flatMap { $0.visits }
         let paymentDates = visits.compactMap { $0.payment?.paidAt }
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
 
-        // Manually delete visit items first
-        for visit in visits {
-            for item in visit.items {
-                modelContext.delete(item)
-            }
-        }
-
-        // Clean up payments explicitly to avoid orphaned revenue rows.
-        for visit in visits {
-            if let payment = visit.payment {
-                modelContext.delete(payment)
-            }
-        }
-
-        // Delete visits explicitly BEFORE pets (Visit.pet is non-optional)
-        for visit in visits {
-            modelContext.delete(visit)
-        }
-
-        // Delete appointments explicitly
-        for appointment in appointments {
-            modelContext.delete(appointment)
-        }
-
-        // Now delete pets (visits are already gone)
-        for pet in pets {
-            pet.activeVisit = nil  // Clear any reference
-            modelContext.delete(pet)
-        }
-
-        // Delete emergency contacts
-        for contact in client.emergencyContacts {
-            modelContext.delete(contact)
-        }
-
-        // Finally delete the client
+        // Delete the client; cascade rules will handle pets, visits, items, payments, and contacts.
         modelContext.delete(client)
 
         do {
             try modelContext.save()
 
+            // Rebuild summaries for affected days
             let cal = Calendar.current
             var affectedDays: Set<Date> = []
             for date in paymentDates { affectedDays.insert(cal.startOfDay(for: date)) }
             for date in visitActivityDates { affectedDays.insert(cal.startOfDay(for: date)) }
+            
             for day in affectedDays {
                 SummaryUpdater.rebuildDay(for: day, in: modelContext)
-                await Task.yield()
+                await Task.yield() // Yield to keep UI responsive
             }
 
             isDeleting = false
@@ -726,6 +726,29 @@ struct ClientDetailView: View {
             .background(Capsule().fill(tint.opacity(0.9)))
             .shadow(radius: 6)
         }
+    }
+}
+
+private struct EmptyToolbarContent: ToolbarContent {
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .automatic) { }
+    }
+}
+
+private struct CheckoutPresentationModifier: ViewModifier {
+    @Binding var checkoutPet: Pet?
+    let vm: ClientDetailViewModel
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.fullScreenCover(item: $checkoutPet) { pet in
+            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
+        }
+        #else
+        content.sheet(item: $checkoutPet) { pet in
+            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
+        }
+        #endif
     }
 }
 

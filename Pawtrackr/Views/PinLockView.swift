@@ -24,34 +24,38 @@ public struct PinLockGate<Content: View>: View {
     }
 
     public var body: some View {
-        Group {
-            if isUnlocked || !appSettings.isBiometricLockEnabled {
-                content
-            } else {
-                PinLockView(isUnlocked: $isUnlocked)
+        gateContent
+            .simultaneousGesture(activityResetGesture)
+            .onChange(of: scenePhase) { _, phase in
+                if appSettings.autoLockOnBackground, phase != .active {
+                    isUnlocked = false
+                    invalidateInactivityTimer()
+                } else if phase == .active {
+                    resetInactivityLock()
+                }
             }
-        }
-        // Reset the idle timer on any user interaction routed through this container.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in resetInactivityLock() }
-                .onEnded { _ in resetInactivityLock() }
-        )
-        .onChange(of: scenePhase) { phase in
-            if appSettings.autoLockOnBackground, phase != .active {
-                isUnlocked = false
-                invalidateInactivityTimer()
-            } else if phase == .active {
-                resetInactivityLock()
+            .onChange(of: appSettings.autoLockAfterInactivity) { _, _ in resetInactivityLock() }
+            .onChange(of: appSettings.isBiometricLockEnabled) { _, _ in resetInactivityLock() }
+            .onChange(of: isUnlocked) { _, unlocked in
+                unlocked ? resetInactivityLock() : invalidateInactivityTimer()
             }
+            .onAppear { resetInactivityLock() }
+            .onDisappear { invalidateInactivityTimer() }
+    }
+
+    @ViewBuilder
+    private var gateContent: some View {
+        if isUnlocked || !appSettings.isBiometricLockEnabled {
+            content
+        } else {
+            PinLockView(isUnlocked: $isUnlocked)
         }
-        .onChange(of: appSettings.autoLockAfterInactivity) { _ in resetInactivityLock() }
-        .onChange(of: appSettings.isBiometricLockEnabled) { _ in resetInactivityLock() }
-        .onChange(of: isUnlocked) { unlocked in
-            unlocked ? resetInactivityLock() : invalidateInactivityTimer()
-        }
-        .onAppear { resetInactivityLock() }
-        .onDisappear { invalidateInactivityTimer() }
+    }
+
+    private var activityResetGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in resetInactivityLock() }
+            .onEnded { _ in resetInactivityLock() }
     }
 
     private func resetInactivityLock() {
@@ -86,68 +90,87 @@ public struct PinLockView: View {
     }
 
     public var body: some View {
+        lockContent
+            .padding(24)
+            .frame(maxWidth: 420)
+            .onChange(of: digits) { _, _ in validateIfComplete() }
+            .onAppear(perform: authenticateWithBiometrics)
+            .accessibilityElement(children: .contain)
+    }
+
+    private var lockContent: some View {
         VStack(spacing: 24) {
             Spacer(minLength: 20)
-
-            VStack(spacing: 8) {
-                Text(NSLocalizedString("pin.enter", comment: "")).font(.title2).bold()
-                Text(NSLocalizedString("pin.requirement", comment: ""))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 16) {
-                ForEach(0..<4, id: \.self) { idx in
-                    Circle()
-                        .fill(idx < digits.count ? Color.primary : Color.secondary.opacity(0.25))
-                        .frame(width: 14, height: 14)
-                }
-            }
-            .offset(x: shakeOffset)
-            .animation(.easeInOut(duration: 0.06), value: shakeOffset)
-
-            VStack(spacing: 12) {
-                keyRow([1,2,3])
-                keyRow([4,5,6])
-                keyRow([7,8,9])
-                HStack(spacing: 12) {
-                    if authenticator.biometricType() != .none {
-                        KeyButton(systemName: authenticator.biometricType() == .faceID ? "faceid" : "touchid") {
-                            authenticateWithBiometrics()
-                        }
-                        .accessibilityLabel("Authenticate with Biometrics")
-                    } else {
-                        KeypadSpacer()
-                    }
-                    KeyButton(label: "0") { tapDigit(0) }
-                    KeyButton(systemName: "delete.left.fill") { deleteDigit() }
-                        .accessibilityLabel("Delete")
-                }
-            }
-
-            // Show hint only after 8 failed attempts
-            if showHint {
-                VStack(spacing: 4) {
-                    Text(NSLocalizedString("pin.hint.label", comment: ""))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text(appSettings.appPIN)
-                        .font(.headline.monospaced())
-                        .foregroundStyle(DS.ColorToken.primary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(DS.ColorToken.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-                .transition(.opacity.combined(with: .scale))
-            }
-
+            titleSection
+            pinDots
+            keypad
+            hintSection
             Spacer()
         }
-        .padding(24)
-        .frame(maxWidth: 420)
-        .onChange(of: digits) { validateIfComplete() }
-        .onAppear(perform: authenticateWithBiometrics)
-        .accessibilityElement(children: .contain)
+    }
+
+    private var titleSection: some View {
+        VStack(spacing: 8) {
+            Text(NSLocalizedString("pin.enter", comment: "")).font(.title2).bold()
+            Text(NSLocalizedString("pin.requirement", comment: ""))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var pinDots: some View {
+        HStack(spacing: 16) {
+            ForEach(0..<4, id: \.self) { idx in
+                Circle()
+                    .fill(idx < digits.count ? Color.primary : Color.secondary.opacity(0.25))
+                    .frame(width: 14, height: 14)
+            }
+        }
+        .offset(x: shakeOffset)
+        .animation(.easeInOut(duration: 0.06), value: shakeOffset)
+    }
+
+    private var keypad: some View {
+        VStack(spacing: 12) {
+            keyRow([1,2,3])
+            keyRow([4,5,6])
+            keyRow([7,8,9])
+            keypadBottomRow
+        }
+    }
+
+    private var keypadBottomRow: some View {
+        HStack(spacing: 12) {
+            if authenticator.biometricType() != .none {
+                KeyButton(systemName: authenticator.biometricType() == .faceID ? "faceid" : "touchid") {
+                    authenticateWithBiometrics()
+                }
+                .accessibilityLabel("Authenticate with Biometrics")
+            } else {
+                KeypadSpacer()
+            }
+            KeyButton(label: "0") { tapDigit(0) }
+            KeyButton(systemName: "delete.left.fill") { deleteDigit() }
+                .accessibilityLabel("Delete")
+        }
+    }
+
+    @ViewBuilder
+    private var hintSection: some View {
+        if showHint {
+            VStack(spacing: 4) {
+                Text(NSLocalizedString("pin.hint.label", comment: ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(appSettings.appPIN)
+                    .font(.headline.monospaced())
+                    .foregroundStyle(DS.ColorToken.primary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(DS.ColorToken.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+            .transition(.opacity.combined(with: .scale))
+        }
     }
 
     private func authenticateWithBiometrics() {

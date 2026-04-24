@@ -39,9 +39,7 @@ struct AddPetSheet: View {
     @State private var avatarImageData: Data? = nil
 
     // Alerts
-    @State private var showAlert: Bool = false
-    @State private var alertTitle: String = NSLocalizedString("add_pet.unable_to_save", comment: "")
-    @State private var alertMessage: String = ""
+    @State private var appError: AppError? = nil
 
     var body: some View {
         NavigationStack {
@@ -223,10 +221,12 @@ struct AddPetSheet: View {
                         .accessibilityHint(petName.trimmed.isEmpty ? "Enter a pet name to enable save" : "Saves this pet to the client")
                 }
             }
-            .alert(alertTitle, isPresented: $showAlert) {
-                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-            } message: {
-                Text(alertMessage)
+            .alert(item: $appError) { error in
+                Alert(
+                    title: Text(NSLocalizedString("add_pet.unable_to_save", comment: "")),
+                    message: Text(error.localizedDescription),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+                )
             }
         }
 #if os(iOS)
@@ -249,14 +249,12 @@ struct AddPetSheet: View {
 
     private func savePet() {
         guard let species = selectedSpecies else {
-            alertMessage = NSLocalizedString("add_pet.select_species", comment: "")
-            showAlert = true
+            appError = .validation(.custom(message: NSLocalizedString("add_pet.select_species", comment: "")))
             return
         }
         let trimmedName = canonicalPetName(petName)
         guard !trimmedName.isEmpty else {
-            alertMessage = NSLocalizedString("add_pet.name_empty", comment: "")
-            showAlert = true
+            appError = .validation(.custom(message: NSLocalizedString("add_pet.name_empty", comment: "")))
             return
         }
 
@@ -282,8 +280,7 @@ struct AddPetSheet: View {
             HapticManager.notify(.success)
             dismiss()
         } catch {
-            alertMessage = NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)"
-            showAlert = true
+            appError = .database(NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)")
         }
     }
 }

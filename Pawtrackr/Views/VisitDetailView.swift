@@ -24,110 +24,100 @@ struct VisitDetailView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(spacing: 12) {
-                        header
-                        metaCards
-                        servicesCard
-                        photosCard
-                        notesCard
-                        behaviorTagsCard
-                    }
-                    .padding(.top, 8)
-                }
-            }
+            visitContent
             .navigationTitle(NSLocalizedString("visit.title", comment: ""))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
-            .toolbar {
-                // Rely on the system-provided back button to avoid duplicates
-                ToolbarItem(placement: .primaryAction) {
-                    let csv = exportCSVForVisit()
-                    ShareLink(
-                        item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Visit.csv"),
-                        preview: SharePreview("Pawtrackr_Visit.csv", icon: Image(systemName: "doc.text.fill"))
-                    ) {
-                        Label("common.export", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(csv.isEmpty)
-                    .accessibilityHint(csv.isEmpty ? NSLocalizedString("sharelink.accessibility.hint.no_data_to_export", comment: "") : NSLocalizedString("sharelink.accessibility.hint.export_visit", comment: ""))
-                }
-                // New: Check Out / Resume Checkout action available until payment is attached
-                #if os(iOS)
-                ToolbarItem(placement: .bottomBar) {
-                    if visit.payment == nil {
-                        Button {
-                            showCheckout = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                Text(visit.endedAt == nil ? NSLocalizedString("visit.check_out", comment: "") : NSLocalizedString("visit.resume_checkout", comment: ""))
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.green)
-                        .accessibilityLabel("Open checkout to complete payment")
-                    }
-                }
-                #else
-                ToolbarItem(placement: .secondaryAction) {
-                    if visit.payment == nil {
-                        Button {
-                            showCheckout = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                Text(visit.endedAt == nil ? NSLocalizedString("visit.check_out", comment: "") : NSLocalizedString("visit.resume_checkout", comment: ""))
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.green)
-                        .accessibilityLabel("Open checkout to complete payment")
-                    }
-                }
-                #endif
-            }
-            #if os(iOS)
-            .fullScreenCover(isPresented: $showCheckout) {
-                if let pet = visit.pet {
-                    CheckoutView(pet: pet, visit: visit)
-                }
-            }
-            .fullScreenCover(item: Binding(
-                get: {
-                    previewData.map { PreviewItem(data: $0, title: previewTitle) }
-                },
-                set: { newValue in
-                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" }
-                }
-            )) { item in
-                PhotoPreview(imageData: item.data, title: item.title)
-            }
-            #else
-            .sheet(isPresented: $showCheckout) {
-                if let pet = visit.pet {
-                    CheckoutView(pet: pet, visit: visit)
-                }
-            }
-            .sheet(item: Binding(
-                get: {
-                    previewData.map { PreviewItem(data: $0, title: previewTitle) }
-                },
-                set: { newValue in
-                    if let v = newValue { previewData = v.data; previewTitle = v.title } else { previewData = nil; previewTitle = "" }
-                }
-            )) { item in
-                PhotoPreview(imageData: item.data, title: item.title)
-            }
-            #endif
+            .toolbar { toolbarContent }
+            .modifier(VisitCheckoutModifier(showCheckout: $showCheckout, visit: visit))
+            .modifier(VisitPreviewModifier(previewItem: previewItemBinding))
             .onAppear {
                 visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt)
             }
         }
+    }
+
+    private var visitContent: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 12) {
+                    header
+                    metaCards
+                    servicesCard
+                    photosCard
+                    notesCard
+                    behaviorTagsCard
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            exportButton
+        }
+        checkoutToolbarItem
+    }
+
+    private var exportButton: some View {
+        let csv = exportCSVForVisit()
+        return ShareLink(
+            item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Visit.csv"),
+            preview: SharePreview("Pawtrackr_Visit.csv", icon: Image(systemName: "doc.text.fill"))
+        ) {
+            Label("common.export", systemImage: "square.and.arrow.up")
+        }
+        .disabled(csv.isEmpty)
+        .accessibilityHint(csv.isEmpty ? NSLocalizedString("sharelink.accessibility.hint.no_data_to_export", comment: "") : NSLocalizedString("sharelink.accessibility.hint.export_visit", comment: ""))
+    }
+
+    @ToolbarContentBuilder
+    private var checkoutToolbarItem: some ToolbarContent {
+        #if os(iOS)
+        ToolbarItem(placement: .bottomBar) {
+            checkoutButton
+        }
+        #else
+        ToolbarItem(placement: .secondaryAction) {
+            checkoutButton
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var checkoutButton: some View {
+        if visit.payment == nil {
+            Button {
+                showCheckout = true
+            } label: {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text(visit.endedAt == nil ? NSLocalizedString("visit.check_out", comment: "") : NSLocalizedString("visit.resume_checkout", comment: ""))
+                        .fontWeight(.semibold)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            .accessibilityLabel("Open checkout to complete payment")
+        }
+    }
+
+    private var previewItemBinding: Binding<PreviewItem?> {
+        Binding(
+            get: { previewData.map { PreviewItem(data: $0, title: previewTitle) } },
+            set: { newValue in
+                if let v = newValue {
+                    previewData = v.data
+                    previewTitle = v.title
+                } else {
+                    previewData = nil
+                    previewTitle = ""
+                }
+            }
+        )
     }
     
     // MARK: - Header (pet summary) 
@@ -481,4 +471,41 @@ fileprivate struct PreviewItem: Identifiable {
     let id = UUID()
     let data: Data
     let title: String
+}
+
+private struct VisitCheckoutModifier: ViewModifier {
+    @Binding var showCheckout: Bool
+    let visit: Visit
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.fullScreenCover(isPresented: $showCheckout) {
+            if let pet = visit.pet {
+                CheckoutView(pet: pet, visit: visit)
+            }
+        }
+        #else
+        content.sheet(isPresented: $showCheckout) {
+            if let pet = visit.pet {
+                CheckoutView(pet: pet, visit: visit)
+            }
+        }
+        #endif
+    }
+}
+
+private struct VisitPreviewModifier: ViewModifier {
+    let previewItem: Binding<PreviewItem?>
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.fullScreenCover(item: previewItem) { item in
+            PhotoPreview(imageData: item.data, title: item.title)
+        }
+        #else
+        content.sheet(item: previewItem) { item in
+            PhotoPreview(imageData: item.data, title: item.title)
+        }
+        #endif
+    }
 }

@@ -21,12 +21,12 @@ class EditServiceViewModel {
     var duration: Int = 30 // Default duration in minutes
     var systemIcon: String = "wrench.and.screwdriver"
     
-    var errorMessage: String?
+    var appError: AppError? = nil
 
-    private var modelContext: ModelContext
+    private let repository: ServiceRepositoryProtocol
 
-    init(modelContext: ModelContext, service: Service? = nil) {
-        self.modelContext = modelContext
+    init(modelContext: ModelContext, service: Service? = nil, repository: ServiceRepositoryProtocol? = nil) {
+        self.repository = repository ?? ServiceRepository(modelContainer: modelContext.container)
         self.service = service
         
         if let service = service {
@@ -44,9 +44,17 @@ class EditServiceViewModel {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ValidationError.custom(message: "Service name cannot be empty.")
         }
+        
+        if let p = price, p < 0 {
+            throw ValidationError.custom(message: "Price cannot be negative.")
+        }
+        
+        if duration <= 0 {
+            throw ValidationError.custom(message: "Duration must be at least 1 minute.")
+        }
     }
 
-    func save() throws {
+    func save() async throws {
         try validate()
         
         let serviceToSave: Service
@@ -55,12 +63,13 @@ class EditServiceViewModel {
         } else {
             // Check for duplicate service name on creation
             let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let existing = try modelContext.fetch(FetchDescriptor<Service>(predicate: #Predicate { $0.name == trimmedName }))
-            if !existing.isEmpty {
+            // Note: repository doesn't have findByName yet, but we can add it if needed
+            // For now, let's just use fetchAll and filter
+            let all = try await repository.fetchAllServices()
+            if all.contains(where: { $0.name.lowercased() == trimmedName.lowercased() }) {
                 throw ValidationError.custom(message: "A service with this name already exists.")
             }
             serviceToSave = Service(name: trimmedName)
-            modelContext.insert(serviceToSave)
         }
         
         serviceToSave.rename(name)
@@ -71,6 +80,6 @@ class EditServiceViewModel {
         serviceToSave.setDefaultDurationMinutes(duration)
         serviceToSave.setSystemIcon(systemIcon)
         
-        try modelContext.save()
+        try await repository.saveService(serviceToSave)
     }
 }

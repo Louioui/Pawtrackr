@@ -142,40 +142,58 @@ enum SummaryUpdater {
         return try context.fetch(descriptor)
     }
 
-    /// Rebuild summaries for all days that have completed visits.
-    /// Call this once on app launch to ensure historical data is captured.
-    @MainActor
+    /// Rebuild summaries only for days that have changed since the last sync.
+    /// Call this once on app launch.
     static func rebuildAllSummaries(in context: ModelContext) {
+        let lastSync = UserDefaults.standard.object(forKey: "lastSummarySyncDate") as? Date ?? .distantPast
+        let now = Date()
+        
         do {
-            // Fetch all completed visits
-            let allVisits = try context.fetch(FetchDescriptor<Visit>())
-            let completedVisits = allVisits.filter { $0.endedAt != nil }
+            // Fetch visits updated since last sync
+            let descriptor = FetchDescriptor<Visit>(
+                predicate: #Predicate<Visit> { $0.updatedAt > lastSync }
+            )
+            let changedVisits = try context.fetch(descriptor)
+            
+            if changedVisits.isEmpty {
+                Logger.summaries.info("No visits changed since \(lastSync), skipping full rebuild")
+                UserDefaults.standard.set(now, forKey: "lastSummarySyncDate")
+                return
+            }
 
-            // Get unique days
+            // Get unique days from changed visits
             let cal = Calendar.current
             var uniqueDays = Set<Date>()
-            for visit in completedVisits {
+            for visit in changedVisits {
                 if let endedAt = visit.endedAt {
                     uniqueDays.insert(cal.startOfDay(for: endedAt))
                 }
+                // Also rebuild the day it started if it was recently updated (e.g. checked in)
+                uniqueDays.insert(cal.startOfDay(for: visit.startedAt))
             }
 
-            Logger.summaries.info("Rebuilding summaries for \(uniqueDays.count) unique days")
+            Logger.summaries.info("Rebuilding summaries for \(uniqueDays.count) changed days")
 
-            // Rebuild each day
+            // Rebuild each changed day
             for day in uniqueDays {
-                rebuildDaySync(for: day, allVisits: completedVisits, in: context)
+                rebuildDay(for: day, in: context)
             }
 
-            try context.save()
-            Logger.summaries.info("All summaries rebuilt successfully")
+            UserDefaults.standard.set(now, forKey: "lastSummarySyncDate")
+            Logger.summaries.info("Incremental summary rebuild successful")
         } catch {
-            Logger.summaries.error("Failed to rebuild all summaries: \(String(describing: error))")
+            Logger.summaries.error("Incremental summary rebuild failed: \(String(describing: error))")
         }
     }
 
     /// Synchronous version that reuses already-fetched visits for efficiency
-    private static func rebuildDaySync(for date: Date, allVisits: [Visit], in context: ModelContext) {
+    private static func rebuildDaySync(
+        for date: Date, 
+        allVisits: [Visit], 
+        existingSummary: DaySummary?,
+        existingServiceSummaries: [ServiceDaySummary],
+        in context: ModelContext
+    ) {
         let cal = Calendar.current
         let start = cal.startOfDay(for: date)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return }
@@ -188,41 +206,33 @@ enum SummaryUpdater {
         let count = visits.count
         let revenue = visits.reduce(Decimal.zero) { $0 +~ $1.total }
 
-        do {
-            // Upsert DaySummary
-            let allDaySummaries = try context.fetch(FetchDescriptor<DaySummary>())
-            let existing = allDaySummaries.filter { cal.isDate($0.day, inSameDayAs: start) }
-            if let s = existing.first {
-                s.revenue = revenue
-                s.visitCount = count
+        // Upsert DaySummary
+        if let s = existingSummary {
+            s.revenue = revenue
+            s.visitCount = count
+        } else {
+            context.insert(DaySummary(day: start, revenue: revenue, visitCount: count))
+        }
+
+        // Rebuild per-service counts
+        var svcCounts: [String: Int] = [:]
+        for v in visits {
+            for item in v.items { svcCounts[item.displayName, default: 0] += 1 }
+        }
+
+        var existingSvcDict = existingServiceSummaries.reduce(into: [String: ServiceDaySummary]()) { $0[$1.serviceName] = $1 }
+
+        for (name, svcCount) in svcCounts {
+            if let summary = existingSvcDict[name] {
+                summary.count = svcCount
+                existingSvcDict.removeValue(forKey: name)
             } else {
-                context.insert(DaySummary(day: start, revenue: revenue, visitCount: count))
+                context.insert(ServiceDaySummary(day: start, serviceName: name, count: svcCount))
             }
+        }
 
-            // Rebuild per-service counts
-            var svcCounts: [String: Int] = [:]
-            for v in visits {
-                for item in v.items { svcCounts[item.displayName, default: 0] += 1 }
-            }
-
-            let allServiceSummaries = try context.fetch(FetchDescriptor<ServiceDaySummary>())
-            let existingSvc = allServiceSummaries.filter { cal.isDate($0.day, inSameDayAs: start) }
-            var existingSvcDict = existingSvc.reduce(into: [String: ServiceDaySummary]()) { $0[$1.serviceName] = $1 }
-
-            for (name, svcCount) in svcCounts {
-                if let summary = existingSvcDict[name] {
-                    summary.count = svcCount
-                    existingSvcDict.removeValue(forKey: name)
-                } else {
-                    context.insert(ServiceDaySummary(day: start, serviceName: name, count: svcCount))
-                }
-            }
-
-            for summary in existingSvcDict.values {
-                context.delete(summary)
-            }
-        } catch {
-            Logger.summaries.error("rebuildDaySync failed for \(start): \(String(describing: error))")
+        for summary in existingSvcDict.values {
+            context.delete(summary)
         }
     }
 }

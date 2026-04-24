@@ -25,35 +25,41 @@ struct RecentHistoryView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let viewModel {
-                    @Bindable var bvm = viewModel
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            header(bvm)
-                            summaryChips(viewModel).padding(.horizontal)
-                            visitList(viewModel)
-                        }
-                        .padding(.top, 8)
-                        .animated(Animations.fastEaseOut, value: viewModel.scope)
+            recentHistoryContent
+                .navigationTitle("Recent History")
+                .toolbar { if let viewModel { toolbarContent(viewModel) } }
+                .refreshable { viewModel?.fetchVisits() }
+                .task {
+                    if viewModel == nil {
+                        let vm = RecentHistoryViewModel(modelContext: modelContext)
+                        if let s = initialScope { vm.scope = s }
+                        if let q = initialQuery { vm.query = q }
+                        viewModel = vm
                     }
-                } else {
-                    ProgressView("Loading…")
                 }
-            }
-            .navigationTitle("Recent History")
-            .toolbar { if let viewModel { toolbarContent(viewModel) } }
-            .refreshable { viewModel?.fetchVisits() }
-            .task {
-                if viewModel == nil {
-                    let vm = RecentHistoryViewModel(modelContext: modelContext)
-                    if let s = initialScope { vm.scope = s }
-                    if let q = initialQuery { vm.query = q }
-                    viewModel = vm
-                }
-            }
         }
-        
+    }
+
+    @ViewBuilder
+    private var recentHistoryContent: some View {
+        if let viewModel {
+            loadedContent(viewModel)
+        } else {
+            ProgressView("Loading…")
+        }
+    }
+
+    private func loadedContent(_ viewModel: RecentHistoryViewModel) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                header(viewModel)
+                summaryChips(viewModel)
+                    .padding(.horizontal)
+                visitList(viewModel)
+            }
+            .padding(.top, 8)
+            .animated(Animations.fastEaseOut, value: viewModel.scope)
+        }
     }
     
     private func deleteVisit(_ visit: Visit) {
@@ -66,12 +72,27 @@ struct RecentHistoryView: View {
             HapticManager.notify(.error)
         }
     }
-    private func header(@Bindable _ viewModel: RecentHistoryViewModel) -> some View {
+
+    private func header(_ viewModel: RecentHistoryViewModel) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            SearchField(text: $viewModel.query)
-            ScopePicker(scope: $viewModel.scope)
+            SearchField(text: queryBinding(for: viewModel))
+            ScopePicker(scope: scopeBinding(for: viewModel))
         }
         .padding(.horizontal)
+    }
+
+    private func queryBinding(for viewModel: RecentHistoryViewModel) -> Binding<String> {
+        Binding(
+            get: { viewModel.query },
+            set: { viewModel.query = $0 }
+        )
+    }
+
+    private func scopeBinding(for viewModel: RecentHistoryViewModel) -> Binding<RecentHistoryViewModel.Scope> {
+        Binding(
+            get: { viewModel.scope },
+            set: { viewModel.scope = $0 }
+        )
     }
 
     private func summaryChips(_ viewModel: RecentHistoryViewModel) -> some View {

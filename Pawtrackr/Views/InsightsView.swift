@@ -9,60 +9,72 @@ struct InsightsView: View {
     @State private var viewModel: InsightsViewModel?
     @State private var selectedRevenueDate: Date?
 
-    private var showErrorAlert: Binding<Bool> {
-        Binding {
-            viewModel?.errorMessage != nil
-        } set: { _ in
-            viewModel?.clearErrorMessage()
+    var body: some View {
+        insightsContent
+            .navigationTitle(Text("insights.title"))
+            .task {
+                if viewModel == nil {
+                    viewModel = InsightsViewModel(modelContext: modelContext)
+                }
+            }
+            .alert(item: appErrorBinding) { error in
+                Alert(
+                    title: Text(NSLocalizedString("common.error", comment: "")),
+                    message: Text(error.localizedDescription),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+                )
+            }
+    }
+
+    @ViewBuilder
+    private var insightsContent: some View {
+        if let vm = viewModel {
+            insightsLoadedContent(vm)
+        } else {
+            ProgressView("Loading Insights...")
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            Group {
-                if let vm = viewModel {
-                    @Bindable var bvm = vm
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            filtersSection(vm)
-                            revenueSummary(vm)
-                            revenueChart(vm)
-                            topServices(vm)
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        .padding(.bottom, 24)
-                    }
-                    .refreshable {
-                        await MainActor.run { vm.refresh() }
-                    }
-                    .animation(.default, value: bvm.scope)
-                    .overlay {
-                        if bvm.isLoading {
-                            ProgressView()
-                                .padding()
-                                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                    }
-                } else {
-                    ProgressView("Loading Insights...")
-                }
+    private func insightsLoadedContent(_ vm: InsightsViewModel) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                filtersSection(vm)
+                revenueSummary(vm)
+                revenueChart(vm)
+                topServices(vm)
             }
-            .navigationTitle(Text("insights.title"))
-            .task { if viewModel == nil { viewModel = InsightsViewModel(modelContext: modelContext) } }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
-        .alert("common.error", isPresented: showErrorAlert) {
-            Button("common.ok") {}
-        } message: {
-            Text(viewModel?.errorMessage ?? NSLocalizedString("errors.unknown", comment: "Unknown error message"))
+        .refreshable {
+            vm.refresh()
         }
+        .animation(.default, value: vm.scope)
+        .overlay {
+            if vm.isLoading {
+                loadingOverlay
+            }
+        }
+    }
+
+    private var loadingOverlay: some View {
+        ProgressView()
+            .padding()
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var appErrorBinding: Binding<AppError?> {
+        Binding(
+            get: { viewModel?.appError },
+            set: { viewModel?.appError = $0 }
+        )
     }
     
     // MARK: - Sections
     
     private func filtersSection(_ vm: InsightsViewModel) -> some View {
-        @Bindable var bvm = vm
-        return Card {
+        Card {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -74,23 +86,44 @@ struct InsightsView: View {
                     Spacer()
                 }
                 
-                scopeChips(selection: $bvm.scope) {
+                scopeChips(selection: scopeBinding(for: vm)) {
                     selectedRevenueDate = nil
                 }
                 
                 if vm.scope == .custom {
-                    DatePicker("Start Date", selection: $bvm.customDraftStart, in: ...Date(), displayedComponents: .date)
-                    DatePicker("End Date", selection: $bvm.customDraftEnd, in: bvm.customDraftStart..., displayedComponents: .date)
+                    DatePicker("Start Date", selection: customStartBinding(for: vm), in: ...Date(), displayedComponents: .date)
+                    DatePicker("End Date", selection: customEndBinding(for: vm), in: vm.customDraftStart..., displayedComponents: .date)
                     Button(action: { vm.applyCustomDates() }) {
                         Label("insights.compare.apply", systemImage: "checkmark.circle.fill")
                             .labelStyle(.titleAndIcon)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(bvm.customDraftEnd < bvm.customDraftStart)
+                    .disabled(vm.customDraftEnd < vm.customDraftStart)
                 }
             }
             .padding(16)
         }
+    }
+
+    private func scopeBinding(for vm: InsightsViewModel) -> Binding<InsightsViewModel.Scope> {
+        Binding(
+            get: { vm.scope },
+            set: { vm.scope = $0 }
+        )
+    }
+
+    private func customStartBinding(for vm: InsightsViewModel) -> Binding<Date> {
+        Binding(
+            get: { vm.customDraftStart },
+            set: { vm.customDraftStart = $0 }
+        )
+    }
+
+    private func customEndBinding(for vm: InsightsViewModel) -> Binding<Date> {
+        Binding(
+            get: { vm.customDraftEnd },
+            set: { vm.customDraftEnd = $0 }
+        )
     }
     
     private func revenueSummary(_ vm: InsightsViewModel) -> some View {
@@ -246,8 +279,8 @@ struct InsightsView: View {
                                 .gesture(
                                     DragGesture(minimumDistance: 0)
                                         .onChanged { value in
-                                            let plotAreaFrame = proxy.plotAreaFrame
-                                            let x = value.location.x - g[plotAreaFrame].origin.x
+                                            guard let plotFrame = proxy.plotFrame else { return }
+                                            let x = value.location.x - g[plotFrame].origin.x
                                             if let date: Date = proxy.value(atX: x) {
                                                 selectedRevenueDate = date
                                             }
@@ -383,31 +416,3 @@ private struct TopServiceRow: View {
         .contentShape(Rectangle())
     }
 }
-
-// MARK: - Small Components (can be moved to a shared file)
-
-// FIX: Implemented the LeaderRow view to conform to View.
-private struct LeaderRow: View {
-    let title: String
-    let trailing: String
-    var rank: Int? = nil
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            if let rank {
-                Text("\(rank).")
-                    .frame(width: 24, alignment: .leading)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            Text(title).lineLimit(1)
-            Spacer()
-            Text(trailing)
-                .fontWeight(.semibold)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        }
-        .font(.subheadline)
-    }
-}
-

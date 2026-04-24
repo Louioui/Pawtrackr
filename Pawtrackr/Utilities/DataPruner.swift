@@ -9,13 +9,8 @@
 import Foundation
 import SwiftData
 
-class DataPruner {
-    private let modelContext: ModelContext
-
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
-    }
-
+@ModelActor
+actor DataPruner {
     /// Hard-delete entire Visit objects started before a cutoff date.
     func pruneVisits(olderThan date: Date) throws {
         let predicate = #Predicate<Visit> { visit in visit.startedAt < date }

@@ -2,8 +2,8 @@
 //  ContentView.swift
 //  Pawtrackr
 //
-//  Cross-platform main content view using NavigationStack.
-//  Replaces CoordinatorView for iOS/macOS compatibility.
+//  Cross-platform main content view.
+//  Uses NavigationSplitView for macOS/iPad and TabView for iPhone.
 //
 
 import SwiftUI
@@ -14,42 +14,83 @@ struct ContentView: View {
     @EnvironmentObject var appSettings: AppSettings
     @EnvironmentObject var authViewModel: AuthenticationViewModel
 
-    /// Shared navigation router for programmatic navigation
     @State private var router = NavigationRouter()
+    @State private var sidebarSelection: NavigationItem? = .clients
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
+        rootContent
+            .environment(router)
+            .onChange(of: appSettings.currencySymbol) { _, newValue in
+                Formatters.updateCurrencySymbol(newValue)
+            }
+    }
+
+    // MARK: - Views
+
+    @ViewBuilder
+    private var rootContent: some View {
+        #if os(macOS)
+        splitView
+        #else
+        if horizontalSizeClass == .compact {
+            tabView
+        } else {
+            splitView
+        }
+        #endif
+    }
+
+    private var tabView: some View {
         TabView {
-            // MARK: - Clients Tab
             NavigationStack(path: $router.clientsPath) {
                 ClientsView()
                     .navigationDestination(for: AppDestination.self) { destination in
                         destinationView(for: destination)
                     }
             }
-            .tabItem {
-                Label("Clients", systemImage: "person.3.fill")
-            }
+            .tabItem { Label("Clients", systemImage: "person.3.fill") }
 
-            // MARK: - Insights Tab
             NavigationStack(path: $router.insightsPath) {
                 InsightsView()
             }
-            .tabItem {
-                Label("Insights", systemImage: "chart.bar.fill")
-            }
+            .tabItem { Label("Insights", systemImage: "chart.bar.fill") }
 
-            // MARK: - Settings Tab
             NavigationStack(path: $router.settingsPath) {
                 SettingsView()
             }
-            .tabItem {
-                Label("Settings", systemImage: "gear")
+            .tabItem { Label("Settings", systemImage: "gear") }
+        }
+    }
+
+    private var splitView: some View {
+        NavigationSplitView {
+            SidebarView(selection: $sidebarSelection)
+        } detail: {
+            NavigationStack(path: $router.clientsPath) {
+                splitViewDetail
+                .navigationDestination(for: AppDestination.self) { destination in
+                    destinationView(for: destination)
+                }
             }
         }
-        .environment(router)
         #if os(macOS)
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 1000, minHeight: 700)
         #endif
+    }
+
+    @ViewBuilder
+    private var splitViewDetail: some View {
+        switch sidebarSelection {
+        case .clients:
+            ClientsView()
+        case .insights:
+            InsightsView()
+        case .settings:
+            SettingsView()
+        case .none:
+            Text("Select an item")
+        }
     }
 
     // MARK: - Navigation Destination Factory
@@ -61,7 +102,7 @@ struct ContentView: View {
             ClientDetailView(client: client)
 
         case .petDetail(let pet):
-            PetDetailViewModel.PetDetailView(pet: pet, namespace: Namespace().wrappedValue)
+            PetDetailView(pet: pet, namespace: Namespace().wrappedValue)
 
         case .visitDetail(let visit):
             VisitDetailView(visit: visit)
@@ -73,10 +114,4 @@ struct ContentView: View {
             CheckoutView(pet: pet, visit: pet.activeVisit)
         }
     }
-}
-
-#Preview {
-    ContentView()
-        .environmentObject(AppSettings())
-        .environmentObject(AuthenticationViewModel(modelContext: try! ModelContainer(for: Schema(PawtrackrSchema.models), configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]).mainContext))
 }

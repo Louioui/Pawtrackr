@@ -17,17 +17,42 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    headerBar
-                    securityStatusCard
-                    pinManagementCard
-                    
-                    
-                    
+            Form {
+                Section(header: Text("Business Profile")) {
+                    TextField("Business Name", text: $appSettings.businessName)
+                    TextField("Currency Symbol", text: $appSettings.currencySymbol)
+                        .frame(width: 50)
                 }
-                .padding(.vertical, 8)
+                
+                Section(header: Text("Security")) {
+                    securityStatusCard
+                        .listRowInsets(EdgeInsets())
+                    
+                    Toggle("Biometric Lock", isOn: $appSettings.isBiometricLockEnabled)
+                    
+                    Button("Change PIN") {
+                        showChangePIN = true
+                    }
+                }
+                
+                Section(header: Text("Data Export")) {
+                    if let clientsExport = try? ExportService.shared.exportClientsToCSV(modelContext: modelContext) {
+                        ShareLink(item: clientsExport, preview: SharePreview("Clients Export", image: Image(systemName: "person.3.fill"))) {
+                            Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    
+                    if let visitsExport = try? ExportService.shared.exportVisitsToCSV(modelContext: modelContext) {
+                        ShareLink(item: visitsExport, preview: SharePreview("Visits Export", image: Image(systemName: "calendar"))) {
+                            Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
             }
+            .navigationTitle(NSLocalizedString("settings.title", comment: ""))
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.large)
+#endif
             .sheet(isPresented: $showChangePIN) {
                 ChangePINSheet(isPresented: $showChangePIN, errorMessage: $pinChangeError)
                     .environmentObject(appSettings)
@@ -35,15 +60,6 @@ struct SettingsView: View {
             .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
                 Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
             } message: { Text(pinChangeError ?? "") }
-            .navigationTitle(NSLocalizedString("settings.title", comment: ""))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .alert(NSLocalizedString("common.error", comment: ""), isPresented: $showError) {
-                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-            } message: {
-                Text(errorMessage)
-            }
         }
     }
     

@@ -12,24 +12,33 @@ import SwiftData
 @MainActor
 class ServiceManagementViewModel {
     var services: [Service] = []
-    private var modelContext: ModelContext
+    var appError: AppError? = nil
+    private let repository: ServiceRepositoryProtocol
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+    init(modelContext: ModelContext, repository: ServiceRepositoryProtocol? = nil) {
+        self.repository = repository ?? ServiceRepository(modelContainer: modelContext.container)
         fetchServices()
     }
 
     func fetchServices() {
-        do {
-            let descriptor = FetchDescriptor<Service>(sortBy: [SortDescriptor(\.name)])
-            services = try modelContext.fetch(descriptor)
-        } catch {
-            print("Failed to fetch services: \(error)")
+        Task {
+            do {
+                services = try await repository.fetchAllServices()
+            } catch {
+                appError = .database(error.localizedDescription)
+                print("Failed to fetch services: \(error)")
+            }
         }
     }
 
     func deleteService(_ service: Service) {
-        modelContext.delete(service)
-        fetchServices()
+        Task {
+            do {
+                try await repository.deleteService(service)
+                fetchServices()
+            } catch {
+                appError = .database(error.localizedDescription)
+            }
+        }
     }
 }

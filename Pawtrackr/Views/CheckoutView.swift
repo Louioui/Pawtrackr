@@ -13,66 +13,118 @@ import SwiftData
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var viewModel: CheckoutViewModel
+    @State private var viewModel: CheckoutViewModel
     @FocusState private var amountFieldFocused: Bool
 
     init(pet: Pet, visit: Visit? = nil) {
-        _viewModel = StateObject(wrappedValue: CheckoutViewModel(pet: pet, visit: visit))
+        _viewModel = State(initialValue: CheckoutViewModel(pet: pet, visit: visit))
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        headerSection
-                        servicesSection
-                        behaviorSection
-                        photosSection
-                        serviceChargeSection
-                        paymentSection
-                        summarySection
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 16)
-                    .padding(.bottom, 120)
-                }
-                .background(DS.ColorToken.background.ignoresSafeArea())
-
-                // Simple centered overlay for processing/success
-                if viewModel.isSaving || viewModel.state == .confirmed {
-                    Color.black.opacity(0.4)
-                        .ignoresSafeArea()
-                        .onTapGesture { } // Block taps
-
-                    overlayContent
-                }
-            }
+        checkoutContent
             .navigationTitle("checkout.title")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom, content: bottomCta)
-            .alert(NSLocalizedString("common.error", comment: ""), isPresented: $viewModel.showAlert) {
-                Button(NSLocalizedString("common.ok", comment: "")) {}
-            } message: {
-                Text(viewModel.alertMessage)
+            .alert(item: appErrorBinding) { error in
+                Alert(
+                    title: Text(NSLocalizedString("common.error", comment: "")),
+                    message: Text(error.localizedDescription),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+                )
             }
-        }
-        .onAppear {
-            viewModel.loadServices(modelContext: modelContext)
-        }
-        .onChange(of: amountFieldFocused) {
-            if !amountFieldFocused { viewModel.formatAmountInput() }
-        }
-        .onChange(of: viewModel.state) { oldValue, newValue in
-            // Auto-dismiss after a short delay when confirmed
-            if case .confirmed = newValue {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    dismiss()
+            .onAppear {
+                viewModel.loadServices(modelContext: modelContext)
+            }
+            .onChange(of: viewModel.selectedServiceIDs) { _, _ in
+                viewModel.syncSubtotal()
+            }
+            .onChange(of: viewModel.selectedAddOnIDs) { _, _ in
+                viewModel.syncSubtotal()
+            }
+            .onChange(of: amountFieldFocused) { _, focused in
+                if !focused { viewModel.formatAmountInput() }
+            }
+            .onChange(of: viewModel.state) { _, newValue in
+                if case .confirmed = newValue {
+                    #if os(iOS)
+                    HapticManager.notify(.success)
+                    #endif
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        dismiss()
+                    }
                 }
             }
+    }
+
+    private var checkoutContent: some View {
+        ZStack {
+            checkoutScrollContent
+
+            if isShowingOverlay {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture { }
+
+                overlayContent
+            }
+        }
+    }
+
+    private var checkoutScrollContent: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                headerSection
+                servicesSection
+                behaviorSection
+                photosSection
+                serviceChargeSection
+                paymentSection
+                summarySection
+            }
+            .padding(.horizontal)
+            .padding(.top, 16)
+            .padding(.bottom, 120)
+        }
+        .background(DS.ColorToken.background.ignoresSafeArea())
+    }
+
+    private var isShowingOverlay: Bool {
+        viewModel.isSaving || viewModel.state == .confirmed
+    }
+
+    private var appErrorBinding: Binding<AppError?> {
+        Binding(
+            get: { viewModel.appError },
+            set: { viewModel.appError = $0 }
+        )
+    }
+
+    private var bottomCta: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button {
+                hideKeyboard()
+                Task { await viewModel.processPayment() }
+            } label: {
+                HStack {
+                    if viewModel.isSaving {
+                        ProgressView().tint(.white).padding(.trailing, 8)
+                    }
+                    Text(viewModel.isSaving ? "Processing..." : "Confirm Checkout • \(viewModel.finalTotalString)")
+                        .font(.headline)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(viewModel.isConfirmEnabled ? DS.ColorToken.success : Color.gray)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+            .disabled(!viewModel.isConfirmEnabled || viewModel.isSaving)
+            .padding()
+            .background(DS.ColorToken.background)
         }
     }
 
@@ -124,61 +176,6 @@ struct CheckoutView: View {
             Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { dismiss() }
         }
     }
-
-    private func bottomCta() -> some View {
-        Button(action: processCheckout) {
-            HStack(spacing: 12) {
-                if viewModel.isSaving {
-                    ProgressView().tint(.white)
-                } else {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.headline)
-                    Text(ctaButtonTitle)
-                        .fontWeight(.semibold)
-                }
-                Spacer()
-                Text(viewModel.finalTotalString)
-                    .fontWeight(.bold)
-                    .monospacedDigit()
-            }
-            .foregroundColor(.white)
-            .padding()
-            .background(
-                LinearGradient(
-                    colors: [Color(red: 0.4, green: 0.85, blue: 0.97), Color(red: 0.65, green: 0.72, blue: 0.99)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 4)
-        }
-        .disabled(!viewModel.isConfirmEnabled || viewModel.isSaving)
-        .padding(.horizontal)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-    }
-
-    private var ctaButtonTitle: String {
-        switch viewModel.state {
-        case .processing:
-            return NSLocalizedString("checkout.processing", comment: "")
-        case .confirmed:
-            return NSLocalizedString("common.done", comment: "")
-        default:
-            return NSLocalizedString("checkout.complete", comment: "")
-        }
-    }
-
-    private func processCheckout() {
-        switch viewModel.state {
-        case .confirmed:
-            dismiss()
-        default:
-            Task { await viewModel.processPayment() }
-        }
-    }
-
 }
 
 private extension CheckoutView {
@@ -506,8 +503,9 @@ private extension CheckoutView {
         Binding(
             get: { viewModel.amountString },
             set: { newValue in
-                let filtered = newValue.filter { "0123456789.".contains($0) }
-                viewModel.setAmountDirectly("$" + filtered)
+                // Allow digits and the locale's decimal separator
+                let allowed = "0123456789" + (Locale.current.decimalSeparator ?? ".")
+                viewModel.amountString = newValue.filter { allowed.contains($0) }
             }
         )
     }

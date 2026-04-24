@@ -30,7 +30,13 @@ final class Service {
     var systemIcon: String?
 
     /// The default price for the service. This can be overridden on a per-visit basis.
-    var basePrice: Decimal?
+    var basePrice: Decimal {
+        didSet {
+            if basePrice < 0 {
+                basePrice = .zero
+            }
+        }
+    }
     
     /// An estimated duration in minutes, useful for scheduling.
     var defaultDurationMinutes: Int?
@@ -56,7 +62,7 @@ final class Service {
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.category = category
         self.systemIcon = systemIcon?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.basePrice = basePrice?.roundedMoney()
+        self.basePrice = basePrice?.roundedMoney() ?? .zero
         self.defaultDurationMinutes = defaultDurationMinutes.map { max(0, $0) }
         self.isEnabled = isEnabled
         self.isPackage = isPackage
@@ -65,7 +71,7 @@ final class Service {
     // MARK: - Derived
     
     /// The price to use by default when this service is added to a visit.
-    var effectiveBasePrice: Decimal { basePrice ?? .zero }
+    var effectiveBasePrice: Decimal { basePrice }
     
     // MARK: - Mutating API (explicitly updates timestamps)
     func rename(_ newName: String) {
@@ -84,7 +90,7 @@ final class Service {
     }
 
     func setBasePrice(_ newPrice: Decimal?) {
-        self.basePrice = newPrice?.roundedMoney()
+        self.basePrice = newPrice?.roundedMoney() ?? .zero
         didUpdate()
     }
 

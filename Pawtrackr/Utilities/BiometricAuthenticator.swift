@@ -19,6 +19,8 @@ final class BiometricAuthenticator {
         }
 
         switch context.biometryType {
+        case .none:
+            return .none
         case .touchID:
             return .touchID
         case .faceID:

@@ -16,17 +16,16 @@ import SwiftData
 @MainActor
 final class PetDetailViewModel {
     var pet: Pet
-    private var modelContext: ModelContext
+    var appError: AppError? = nil
+    private let visitRepository: VisitRepositoryProtocol
     
     // State
     var sheetDestination: SheetDestination?
     let visitTimer = VisitTimer()
-    var showAlert: Bool = false
-    var alertMessage: String = ""
     
     // Computed Data
     var activeVisit: Visit? {
-        pet.visits.first { $0.endedAt == nil }
+        pet.activeVisit
     }
     
     var sortedVisits: [Visit] {
@@ -58,20 +57,21 @@ final class PetDetailViewModel {
     
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
-        self.modelContext = modelContext
+        self.visitRepository = VisitRepository(modelContainer: modelContext.container)
         
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleVisitCompletion),
-            name: .visitDidComplete,
-            object: nil
-        )
+        Task { [weak self] in
+            let notifications = NotificationCenter.default.notifications(named: .visitDidComplete).map { _ in () }
+            for await _ in notifications {
+                self?.updateTimerOnMain()
+            }
+        }
         
         updateTimer()
     }
-
-    deinit {
-        NotificationCenter.default.removeObserver(self)
+    
+    @MainActor
+    private func updateTimerOnMain() {
+        updateTimer()
     }
     
     func updateTimer() {
@@ -85,14 +85,14 @@ final class PetDetailViewModel {
     // MARK: Intents
     func checkIn() {
         guard activeVisit == nil else { return }
-        let newVisit = Visit(pet: pet)
-        modelContext.insert(newVisit)
-        do { try modelContext.save() }
-        catch {
-            alertMessage = "Could not start a visit. Please try again."
-            showAlert = true
+        Task {
+            do {
+                _ = try await visitRepository.checkIn(pet: pet, date: .now)
+                updateTimer()
+            } catch {
+                appError = .database("Could not start a visit. Please try again.")
+            }
         }
-        updateTimer() // Refresh timer after check-in
     }
     
     func showCheckout() {
@@ -102,10 +102,6 @@ final class PetDetailViewModel {
     
     func showHistory() {
         sheetDestination = .history(pet)
-    }
-    
-    @objc private func handleVisitCompletion() {
-        updateTimer()
     }
     
     enum SheetDestination: Identifiable {
@@ -119,83 +115,77 @@ final class PetDetailViewModel {
             }
         }
     }
-    
-    // MARK: - View
-    struct PetDetailView: View {
-        @Environment(\.dismiss) private var dismiss
-        @Environment(\.modelContext) private var modelContext
-        @State private var viewModel: PetDetailViewModel?
-        @State private var confirmCheckIn: Bool = false
-        private let initialPet: Pet
-        var namespace: Namespace.ID
 
-        init(pet: Pet, namespace: Namespace.ID) {
-            self.initialPet = pet
-            self.namespace = namespace
-            _viewModel = State(initialValue: nil)
-        }
-        
-        var body: some View {
-            Group {
-                if let vm = viewModel {
-                    @Bindable var pet = vm.pet
-                    @Bindable var bvm = vm
-                    NavigationStack {
-                        ScrollView {
-                            VStack(spacing: 12) {
+}
+
+// MARK: - View
+struct PetDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @State private var viewModel: PetDetailViewModel?
+    @State private var confirmCheckIn: Bool = false
+    private let initialPet: Pet
+    var namespace: Namespace.ID
+
+    init(pet: Pet, namespace: Namespace.ID) {
+        self.initialPet = pet
+        self.namespace = namespace
+        _viewModel = State(initialValue: nil)
+    }
+    
+    var body: some View {
+        Group {
+            if let vm = viewModel {
+                @Bindable var bvm = vm
+                ScrollView {
+                    VStack(spacing: 12) {
                         header(vm)
                         actionRow(vm)
                         quickStats(vm)
                         visitsSection(vm)
                     }
-                            .padding(.vertical, 8)
-                        }
-                        .navigationTitle(pet.name)
+                    .padding(.vertical, 8)
+                }
+                .navigationTitle(vm.pet.name)
 #if os(iOS)
-                        .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
 #endif
-                        .toolbar {
-                            #if os(iOS)
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button { dismiss() } label: { Image(systemName: "chevron.backward") }
-                            }
-                            #else
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button { dismiss() } label: { Image(systemName: "chevron.backward") }
-                            }
-                            #endif
+                .alert(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), vm.pet.name), isPresented: $confirmCheckIn) {
+                    Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
+                    Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { vm.checkIn() }
+                } message: {
+                    Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
+                }
+                .sheet(item: $bvm.sheetDestination) { destination in
+                    switch destination {
+                    case .checkout(let petForCheckout):
+                        NavigationStack {
+                            CheckoutView(pet: petForCheckout, visit: vm.activeVisit)
                         }
-                        .alert(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name), isPresented: $confirmCheckIn) {
-                            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
-                            Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { vm.checkIn() }
-                        } message: {
-                            Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
-                        }
-                        .sheet(item: $bvm.sheetDestination) { destination in
-                            switch destination {
-                            case .checkout(let petForCheckout):
-                                CheckoutView(pet: petForCheckout, visit: vm.activeVisit)
-                            case .history(let petForHistory):
-                                PetHistoryView(pet: petForHistory)
-                            }
-                        }
-                        .onChange(of: vm.pet.visits.count) {
-                            vm.updateTimer()
-                        }
-                        .alert("Save Error", isPresented: $bvm.showAlert) {
-                            Button("OK", role: .cancel) { }
-                        } message: {
-                            Text(bvm.alertMessage)
+                    case .history(let petForHistory):
+                        NavigationStack {
+                            PetHistoryView(pet: petForHistory)
                         }
                     }
-                } else {
-                    ProgressView()
-                        .task { viewModel = PetDetailViewModel(pet: initialPet, modelContext: modelContext) }
                 }
+                .onChange(of: vm.pet.visits.count) {
+                    vm.updateTimer()
+                }
+                .alert(item: $bvm.appError) { error in
+                    Alert(
+                        title: Text(NSLocalizedString("common.error", comment: "")),
+                        message: Text(error.localizedDescription),
+                        dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+                    )
+                }
+            } else {
+                ProgressView()
+                    .task { viewModel = PetDetailViewModel(pet: initialPet, modelContext: modelContext) }
             }
         }
-        
-        private func header(_ vm: PetDetailViewModel) -> some View {
+    }
+    
+    private func header(_ vm: PetDetailViewModel) -> some View {
             Card(accent: .top(.color(DS.ColorToken.gender(vm.pet.gender)))) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 16) {
@@ -215,7 +205,7 @@ final class PetDetailViewModel {
             .padding(.horizontal)
         }
 
-        private func ownerInfo(_ vm: PetDetailViewModel) -> some View {
+    private func ownerInfo(_ vm: PetDetailViewModel) -> some View {
             Group {
                 if let owner = vm.pet.owner {
                     VStack(alignment: .leading, spacing: 4) {
@@ -237,7 +227,7 @@ final class PetDetailViewModel {
             }
         }
 
-        private func sessionStatus(_ vm: PetDetailViewModel) -> some View {
+    private func sessionStatus(_ vm: PetDetailViewModel) -> some View {
             HStack(spacing: 10) {
                 Label(NSLocalizedString("status.in_session", comment: ""), systemImage: "checkmark.circle.fill")
                     .font(.footnote.weight(.semibold))
@@ -254,7 +244,7 @@ final class PetDetailViewModel {
             }
         }
         
-        private func actionRow(_ vm: PetDetailViewModel) -> some View {
+    private func actionRow(_ vm: PetDetailViewModel) -> some View {
             HStack(spacing: 12) {
                 actionTile(title: NSLocalizedString("pet.view_history", comment: ""), systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
                 actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { confirmCheckIn = true }
@@ -263,7 +253,7 @@ final class PetDetailViewModel {
             .padding(.horizontal)
         }
 
-        private func actionTile(title: String, systemImage: String, tint: Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+    private func actionTile(title: String, systemImage: String, tint: Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
             Button(action: action) {
                 VStack(spacing: 8) {
                     Image(systemName: systemImage)
@@ -285,7 +275,7 @@ final class PetDetailViewModel {
             .disabled(disabled)
         }
 
-        private func quickStats(_ vm: PetDetailViewModel) -> some View {
+    private func quickStats(_ vm: PetDetailViewModel) -> some View {
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(NSLocalizedString("pet.quick_stats", comment: "")).font(.subheadline.weight(.semibold))
@@ -299,7 +289,7 @@ final class PetDetailViewModel {
             .padding(.horizontal)
         }
 
-        private func statTile(label: String, value: String, tint: Color) -> some View {
+    private func statTile(label: String, value: String, tint: Color) -> some View {
             VStack(spacing: 6) {
                 Text(value).font(.headline.weight(.bold)).foregroundStyle(tint)
                 Text(label).font(.caption).foregroundStyle(.secondary)
@@ -309,7 +299,7 @@ final class PetDetailViewModel {
             .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         
-        private func visitsSection(_ vm: PetDetailViewModel) -> some View {
+    private func visitsSection(_ vm: PetDetailViewModel) -> some View {
             VStack(alignment: .leading, spacing: 12) {
                 // Section header
                 HStack {
@@ -349,7 +339,7 @@ final class PetDetailViewModel {
             }
         }
 
-        private func currentVisitCard(_ visit: Visit) -> some View {
+    private func currentVisitCard(_ visit: Visit) -> some View {
             Card(showBorder: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline) {
@@ -400,7 +390,7 @@ final class PetDetailViewModel {
             .leftAccentRail(DS.ColorToken.session)
         }
 
-        private func mediaThumbs(_ visit: Visit) -> some View {
+    private func mediaThumbs(_ visit: Visit) -> some View {
             HStack(spacing: 6) {
                 if let data = visit.beforePhotoData {
                 #if canImport(UIKit)
@@ -447,7 +437,7 @@ final class PetDetailViewModel {
             }
         }
 
-        private func startedString(_ date: Date) -> String {
+    private func startedString(_ date: Date) -> String {
             // Localized relative day (Today/Yesterday) + time for current locale
             let dateOnly = DateFormatter()
             dateOnly.locale = .current
@@ -461,8 +451,7 @@ final class PetDetailViewModel {
             return "\(dateOnly.string(from: date)), \(timeOnly.string(from: date))"
         }
 
-        private func vmElapsedLabel() -> String {
-            viewModel?.visitTimer.formattedElapsed ?? ""
-        }
+    private func vmElapsedLabel() -> String {
+        viewModel?.visitTimer.formattedElapsed ?? ""
     }
 }

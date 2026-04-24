@@ -28,16 +28,6 @@ struct ClientsView: View {
         _viewModel = State(initialValue: nil)
     }
 
-    private var showErrorAlert: Binding<Bool> {
-        Binding {
-            viewModel?.errorMessage != nil
-        } set: { _ in
-            if viewModel != nil {
-                viewModel?.errorMessage = nil
-            }
-        }
-    }
-
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -56,14 +46,16 @@ struct ClientsView: View {
             .padding(.top, 20)
             .padding(.bottom, 80) // Padding to avoid the FAB
         }
-        .searchable(text: Binding(get: { viewModel?.searchText ?? "" }, set: { if let vm = viewModel { vm.searchText = $0 } }),
+        .searchable(text: searchTextBinding,
                     prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
         .background(DS.ColorToken.background)
         .ignoresSafeArea(edges: .top)
-        .alert("common.error", isPresented: showErrorAlert) {
-            Button("common.ok") {}
-        } message: {
-            Text(viewModel?.errorMessage ?? NSLocalizedString("errors.unknown", comment: "Unknown error message"))
+        .alert(item: errorBinding) { error in
+            Alert(
+                title: Text(NSLocalizedString("common.error", comment: "")),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+            )
         }
         .alert(item: $clientToDelete) { client in
             Alert(
@@ -76,10 +68,43 @@ struct ClientsView: View {
             )
         }
         .fabOverlay {
+            #if os(iOS)
             FAB(systemImage: "person.fill.badge.plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
                 showingNewClientSheet = true
             }
+            #endif
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingNewClientSheet = true
+                } label: {
+                    Label(NSLocalizedString("clients.add_client", comment: ""), systemImage: "person.fill.badge.plus")
+                }
+                .keyboardShortcut("n", modifiers: .command)
+            }
+            
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    showNotifications = true
+                } label: {
+                    Image(systemName: "bell")
+                }
+            }
+        }
+        .navigationTitle("Clients")
+        #if os(macOS)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    viewModel?.fetchClients()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .keyboardShortcut("r", modifiers: .command)
+            }
+        }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: .clientOpenRequested)) { notification in
             guard let id = notification.requestedClientID else { return }
             viewModel?.fetchClients()
@@ -253,6 +278,20 @@ struct ClientsView: View {
     }
 
     private var notificationsCount: Int { storedNotifications.count }
+
+    private var searchTextBinding: Binding<String> {
+        Binding(
+            get: { viewModel?.searchText ?? "" },
+            set: { viewModel?.searchText = $0 }
+        )
+    }
+
+    private var errorBinding: Binding<AppError?> {
+        Binding(
+            get: { viewModel?.appError },
+            set: { viewModel?.appError = $0 }
+        )
+    }
 
     private var clientsSkeleton: some View {
         VStack(spacing: 10) {

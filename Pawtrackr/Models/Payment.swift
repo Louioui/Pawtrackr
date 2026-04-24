@@ -14,7 +14,7 @@ final class Payment {
     // MARK: - Properties
 
     /// The payment amount (always non-negative and rounded to 2 decimal places).
-    private(set) var amount: Decimal
+    var amount: Decimal
 
     var method: Method
     @Attribute var paidAt: Date

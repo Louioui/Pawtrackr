@@ -54,7 +54,7 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "A5900804-1E10-408C-A3FD-DFB20A3B72EC"
-            shouldBeEnabled = "No"
+            shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "../../../../var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr7Payment5ModelfMm_.swift"

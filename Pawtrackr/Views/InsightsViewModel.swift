@@ -91,7 +91,7 @@ final class InsightsViewModel {
     private(set) var totalVisitsInPeriod: Int = 0
     private(set) var activePeriodDays: Int = 0
     private(set) var isLoading: Bool = false
-    private(set) var errorMessage: String?
+    var appError: AppError? = nil
 
     // MARK: - Private state
 
@@ -149,7 +149,7 @@ final class InsightsViewModel {
     func refresh() {
         let bounds = dateBounds(for: scope, customStart: customAppliedStart, customEnd: customAppliedEndExclusive)
         isLoading = true
-        errorMessage = nil
+        appError = nil
 
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -157,13 +157,9 @@ final class InsightsViewModel {
                 try self.apply(bounds: bounds)
             } catch {
                 self.logger.error("Insights refresh failed: \(error)")
-                self.errorMessage = error.localizedDescription
+                self.appError = .database(error.localizedDescription)
             }
         }
-    }
-
-    func clearErrorMessage() {
-        errorMessage = nil
     }
 
     // MARK: - Helpers

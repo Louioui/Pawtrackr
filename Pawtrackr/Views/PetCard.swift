@@ -35,148 +35,168 @@ struct PetCard: View {
     // MARK: - View
     var body: some View {
         Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(pet.gender)), thickness: 4)) {
-            HStack(alignment: .top, spacing: 12) {
-                AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    // Title + badge + trailing details chevron
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Text(pet.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            if isActive { inProgressBadge }
-                        }
-                        Spacer()
-                        Button(action: onViewDetails) {
-                            Image(systemName: "chevron.right")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(6)
-                                .background(DS.ColorToken.surface, in: Circle())
-                                .accessibilityLabel("View details")
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Subline (breed / color)
-                    if let breed = pet.breed, !breed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(breed)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    // Behavior tags with emoji chips
-                    if !pet.behaviorTags.isEmpty {
-                        FlowLayout(spacing: 6) {
-                            ForEach(pet.behaviorTags, id: \.self) { tag in
-                                let disp = BehaviorTagIcons.display(for: tag)
-                                Chip((disp.emoji != nil ? "\(disp.emoji!) " : "") + disp.label, style: .tinted, size: .xs)
-                            }
-                        }
-                    }
-
-                    if let health = pet.health?.trimmingCharacters(in: .whitespacesAndNewlines), !health.isEmpty {
-                        HStack(spacing: 6) {
-                            Image(systemName: "cross.case.fill").foregroundStyle(.red.opacity(0.8))
-                            Text(health).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-
-                    // Timer / last visit line
-                    if isActive {
-                        // Prominent, centered live timer with subtle pulse and green accent
-                        HStack {
-                            Spacer(minLength: 0)
-                            HStack(spacing: 8) {
-                                Image(systemName: "clock")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(DS.ColorToken.success)
-                                VStack(spacing: 2) {
-                                    Text(elapsedString)
-                                        .font(.title2.weight(.bold))
-                                        .monospacedDigit()
-                                        .foregroundStyle(DS.ColorToken.success)
-                                    Text(NSLocalizedString("status.in_session", comment: ""))
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(DS.ColorToken.success)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                LinearGradient(
-                                    colors: [
-                                        DS.ColorToken.success.opacity(0.18),
-                                        DS.ColorToken.success.opacity(0.10)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            , in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(DS.ColorToken.success.opacity(0.25), lineWidth: 1)
-                            )
-                            .scaleEffect(pulse ? 1.03 : 1.0)
-                            .animation(.easeOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-                            .onAppear { pulse = true }
-                            .onDisappear { pulse = false }
-                            Spacer(minLength: 0)
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(visitTimer.accessibilityElapsedLabel)
-                    } else if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
-                        Text(String(format: NSLocalizedString("pet.last_visit_fmt", comment: ""), last.sortKeyDate.formatted(date: .abbreviated, time: .omitted)))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    // Actions: Keep Check In here; move Check Out into Visit Details screen
-                    HStack(spacing: 8) {
-                        Button(action: onCheckIn) {
-                            Label("Check In", systemImage: "play.circle.fill")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isActive)
-
-                        Button(action: onViewDetails) {
-                            Label("View Details", systemImage: "chevron.right")
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .font(.subheadline)
-                    .padding(.top, 2)
-                }
-
-                Spacer(minLength: 0)
-            }
+            cardContent
         }
         // Leading accent covers session identity; additional rail not needed.
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            // When returning to foreground, snap any durations to now so the timer text is fresh
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active && isActive {
                 visitTimer.sceneBecameActive()
             }
         }
         .onAppear { syncTimer() }
-        .onChange(of: activeVisit?.startedAt) { syncTimer() }
-        .onChange(of: activeVisit?.endedAt) { syncTimer() }
-        .onChange(of: isActive) { 
-            // Start/stop pulse when the session toggles
-            if isActive {
-                pulse = true
-            } else {
-                pulse = false
+        .onChange(of: activeVisit?.startedAt) { _, _ in syncTimer() }
+        .onChange(of: activeVisit?.endedAt) { _, _ in syncTimer() }
+        .onChange(of: isActive) { _, newValue in pulse = newValue }
+    }
+
+    // MARK: - Subviews
+    private var cardContent: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md)
+            mainContent
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var mainContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            titleRow
+            breedLine
+            behaviorTags
+            healthLine
+            sessionLine
+            actionRow
+        }
+    }
+
+    private var titleRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(pet.name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                if isActive { inProgressBadge }
+            }
+            Spacer()
+            Button(action: onViewDetails) {
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(6)
+                    .background(DS.ColorToken.surface, in: Circle())
+                    .accessibilityLabel("View details")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var breedLine: some View {
+        if let breed = pet.breed, !breed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Text(breed)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private var behaviorTags: some View {
+        if !pet.behaviorTags.isEmpty {
+            FlowLayout(spacing: 6) {
+                ForEach(pet.behaviorTags, id: \.self) { tag in
+                    let disp = BehaviorTagIcons.display(for: tag)
+                    Chip((disp.emoji != nil ? "\(disp.emoji!) " : "") + disp.label, style: .tinted, size: .xs)
+                }
             }
         }
     }
 
-    // MARK: - Subviews
+    @ViewBuilder
+    private var healthLine: some View {
+        if let health = pet.health?.trimmingCharacters(in: .whitespacesAndNewlines), !health.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "cross.case.fill").foregroundStyle(.red.opacity(0.8))
+                Text(health).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sessionLine: some View {
+        if isActive {
+            liveTimer
+        } else if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
+            Text(String(format: NSLocalizedString("pet.last_visit_fmt", comment: ""), last.sortKeyDate.formatted(date: .abbreviated, time: .omitted)))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var liveTimer: some View {
+        HStack {
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(DS.ColorToken.success)
+                VStack(spacing: 2) {
+                    Text(elapsedString)
+                        .font(.title2.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(DS.ColorToken.success)
+                    Text(NSLocalizedString("status.in_session", comment: ""))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(DS.ColorToken.success)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                LinearGradient(
+                    colors: [
+                        DS.ColorToken.success.opacity(0.18),
+                        DS.ColorToken.success.opacity(0.10)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(DS.ColorToken.success.opacity(0.25), lineWidth: 1)
+            )
+            .scaleEffect(pulse ? 1.03 : 1.0)
+            .animation(.easeOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+            .onAppear { pulse = true }
+            .onDisappear { pulse = false }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(visitTimer.accessibilityElapsedLabel)
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            Button(action: onCheckIn) {
+                Label("Check In", systemImage: "play.circle.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isActive)
+
+            Button(action: onViewDetails) {
+                Label("View Details", systemImage: "chevron.right")
+            }
+            .buttonStyle(.bordered)
+        }
+        .font(.subheadline)
+        .padding(.top, 2)
+    }
+
     private var inProgressBadge: some View {
         HStack(spacing: 6) {
             Circle().fill(DS.ColorToken.success).frame(width: 6, height: 6).accessibilityHidden(true)

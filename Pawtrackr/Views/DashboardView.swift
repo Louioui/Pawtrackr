@@ -13,36 +13,54 @@ import Charts
 
   struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(NavigationRouter.self) private var router
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
     @State private var showContent = false
     @Namespace var namespace
 
   var body: some View {
-    NavigationStack {
-      Group {
-        if let vm { content(vm) }
-        else {
-          ProgressView()
-            .task {
-              let model = DashboardViewModel(modelContext: modelContext)
-              await model.refresh()
-              vm = model
-            }
+      dashboardContent
+        .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
+        .sheet(isPresented: $showNewClient) {
+          NewClientSheet(modelContext: modelContext)
         }
-      }
-      .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
-      .sheet(isPresented: $showNewClient) {
-        NewClientSheet(modelContext: modelContext)
-      }
-      .toolbar {
-        ToolbarItem(placement: .primaryAction) {
-          NavigationLink(destination: InsightsView()) {
-            Image(systemName: "chart.bar")
-          }
-          .accessibilityLabel("Open Insights")
+        .alert(item: appErrorBinding) { error in
+          Alert(
+            title: Text(NSLocalizedString("common.error", comment: "")),
+            message: Text(error.localizedDescription),
+            dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+          )
         }
+        .toolbar { insightsToolbarItem }
+  }
+
+  @ViewBuilder
+  private var dashboardContent: some View {
+    if let vm {
+      content(vm)
+    } else {
+      ProgressView()
+        .task {
+          let model = DashboardViewModel(modelContext: modelContext)
+          await model.refresh()
+          vm = model
+        }
+    }
+  }
+
+  private var appErrorBinding: Binding<AppError?> {
+    Binding(get: { vm?.appError }, set: { vm?.appError = $0 })
+  }
+
+  @ToolbarContentBuilder
+  private var insightsToolbarItem: some ToolbarContent {
+    ToolbarItem(placement: .primaryAction) {
+      Button {
+      } label: {
+        Image(systemName: "chart.bar")
       }
+      .accessibilityLabel("Open Insights")
     }
   }
 

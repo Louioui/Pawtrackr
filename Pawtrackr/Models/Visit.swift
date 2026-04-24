@@ -35,7 +35,7 @@ final class Visit {
     @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit)
     var items: [VisitItem] = []
 
-    @Relationship(deleteRule: .nullify, inverse: \Payment.visit)
+    @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
     var payment: Payment?
     var user: User?
 
@@ -126,8 +126,17 @@ final class Visit {
 
     // NEWLY ADDED: This function was missing, causing the build error in CheckoutViewModel.
     func applyPhotos(before: Data?, after: Data?) {
-        self.beforePhotoData = before
-        self.afterPhotoData = after
+        if let before = before {
+            self.beforePhotoData = ImageCache.shared.downsampleToData(data: before, maxDimension: 1024)
+        } else {
+            self.beforePhotoData = nil
+        }
+        
+        if let after = after {
+            self.afterPhotoData = ImageCache.shared.downsampleToData(data: after, maxDimension: 1024)
+        } else {
+            self.afterPhotoData = nil
+        }
         didUpdate()
     }
 

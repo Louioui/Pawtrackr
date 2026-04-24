@@ -24,9 +24,9 @@ struct ServiceManagementView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(service.name).font(.headline)
-                            if let price = service.basePrice {
-                                Text(price.moneyString).font(.subheadline).foregroundStyle(.secondary)
-                            }
+                            Text(service.basePrice.moneyString)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
                         Spacer()
                         if !service.isEnabled {
@@ -56,6 +56,13 @@ struct ServiceManagementView: View {
         }
         .onAppear {
             viewModel.fetchServices()
+        }
+        .alert(item: $viewModel.appError) { error in
+            Alert(
+                title: Text(NSLocalizedString("common.error", comment: "")),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+            )
         }
     }
     
@@ -122,23 +129,26 @@ struct EditServiceView: View {
                     Button(NSLocalizedString("common.save", comment: "")) { saveService() }
                 }
             }
-            .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(
-                get: { viewModel.errorMessage != nil },
-                set: { if !$0 { viewModel.errorMessage = nil } }
-            )) {
-                Button(NSLocalizedString("common.ok", comment: "")) {}
-            } message: {
-                Text(viewModel.errorMessage ?? "An unknown error occurred.")
+            .alert(item: $viewModel.appError) { error in
+                Alert(
+                    title: Text(NSLocalizedString("common.error", comment: "")),
+                    message: Text(error.localizedDescription),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+                )
             }
         }
     }
 
     private func saveService() {
-        do {
-            try viewModel.save()
-            dismiss()
-        } catch {
-            viewModel.errorMessage = error.localizedDescription
+        Task {
+            do {
+                try await viewModel.save()
+                dismiss()
+            } catch let error as ValidationError {
+                viewModel.appError = .validation(error)
+            } catch {
+                viewModel.appError = .database(error.localizedDescription)
+            }
         }
     }
 }

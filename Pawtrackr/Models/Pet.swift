@@ -133,7 +133,13 @@ final class Pet {
     }
 
     func setBirthdate(_ newDate: Date?) {
+        if let date = newDate, date > Date() {
+            // Silently ignore future dates or handle as error
+            return
+        }
         birthdate = newDate
+        _cachedAgeString = nil
+        _ageLastCalculated = nil
         didUpdate()
     }
 
@@ -191,7 +197,11 @@ final class Pet {
     }
 
     func setPhotoData(_ data: Data?) {
-        photoData = data
+        if let data = data {
+            photoData = ImageCache.shared.downsampleToData(data: data, maxDimension: 1024)
+        } else {
+            photoData = nil
+        }
         didUpdate()
     }
     

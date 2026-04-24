@@ -15,17 +15,25 @@ enum Formatters {
     // MARK: - Currency
 
     /// Shared currency formatter (thread-unsafe → isolated on the main actor).
+    @MainActor
     static let currency: NumberFormatter = {
         let f = NumberFormatter()
         f.locale = .current
         f.numberStyle = .currency
         f.minimumFractionDigits = 2
         f.maximumFractionDigits = 2
-        // Banker's rounding is applied when *computing* values; formatting just displays.
+        f.currencySymbol = UserDefaults.standard.string(forKey: "currencySymbol") ?? "$"
         return f
     }()
 
+    /// Updates the currency symbol based on user settings.
+    @MainActor
+    static func updateCurrencySymbol(_ symbol: String) {
+        currency.currencySymbol = symbol
+    }
+
     /// Convenience: build a currency string without exposing a `moneyString` redeclaration.
+    @MainActor
     static func currencyString(_ value: Decimal) -> String {
         currency.string(from: value as NSDecimalNumber) ?? "$0.00"
     }

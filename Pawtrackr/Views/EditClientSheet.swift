@@ -22,8 +22,7 @@ struct EditClientSheet: View {
     @State private var address: String = ""
 
     // Alerts
-    @State private var showAlert = false
-    @State private var alertText = ""
+    @State private var appError: AppError? = nil
     @State private var attemptedSubmit = false
 
     init(client: Client) {
@@ -82,10 +81,12 @@ struct EditClientSheet: View {
                     .disabled(!isValid)
                 }
             }
-            .alert("Cannot Save", isPresented: $showAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(alertText)
+            .alert(item: $appError) { error in
+                Alert(
+                    title: Text(NSLocalizedString("common.error", comment: "")),
+                    message: Text(error.localizedDescription),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+                )
             }
             .onAppear(perform: loadFromClient)
         }
@@ -111,15 +112,13 @@ struct EditClientSheet: View {
         var e164: String? = nil
         if !phone.trimmed.isEmpty {
             guard let valid = PhoneUtils.toE164(phone) else {
-                alertText = "Phone number looks invalid."
-                showAlert = true
+                appError = .validation(.invalidPhoneNumber)
                 return
             }
             e164 = valid
         }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
-            alertText = "Email address looks invalid."
-            showAlert = true
+            appError = .validation(.custom(message: "Email address looks invalid."))
             return
         }
 
@@ -135,8 +134,7 @@ struct EditClientSheet: View {
             try ctx.save()
             dismiss()
         } catch {
-            alertText = "Save failed. Please try again.\n\n\(error.localizedDescription)"
-            showAlert = true
+            appError = .database("Save failed. Please try again.\n\n\(error.localizedDescription)")
         }
     }
 

@@ -21,16 +21,15 @@ final class NewClientViewModel {
     var contacts: [TempContact] = [TempContact(index: 1)]
     var pets: [TempPet] = [TempPet(index: 1)]
 
-    var showAlert = false
-    var alertText = ""
+    var appError: AppError? = nil
     var isSaving: Bool = false
     var showDuplicateAlert: Bool = false
     var duplicateClientID: PersistentIdentifier? = nil
 
-    @ObservationIgnored private var modelContext: ModelContext
+    @ObservationIgnored private let repository: ClientRepositoryProtocol
     
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+    init(modelContext: ModelContext, repository: ClientRepositoryProtocol? = nil) {
+        self.repository = repository ?? ClientRepository(modelContainer: modelContext.container)
     }
 
     func addPet() {
@@ -43,63 +42,68 @@ final class NewClientViewModel {
 
     func createClient() {
         isSaving = true
-        do {
-            try validate()
-            
-            let e164 = PhoneUtils.toE164(phone)
-            if let e164, let existing = try? modelContext.fetch(FetchDescriptor<Client>(predicate: #Predicate { $0.phone == e164 })).first {
-                duplicateClientID = existing.persistentModelID
-                showDuplicateAlert = true
+        appError = nil
+        
+        Task {
+            do {
+                try validate()
+                
+                let e164 = PhoneUtils.toE164(phone)
+                if let e164, let existing = try await repository.findClient(byPhone: e164) {
+                    duplicateClientID = existing.persistentModelID
+                    showDuplicateAlert = true
+                    isSaving = false
+                    return
+                }
+
+                let client = Client(firstName: first.capitalizedName,
+                                    lastName: last.capitalizedName,
+                                    phone: e164)
+                if !email.trimmed.isEmpty { client.email = email.trimmed.lowercased() }
+                if !address.trimmed.isEmpty { client.address = address.trimmed }
+
+                pets.forEach { tp in
+                    guard !tp.name.trimmed.isEmpty, let gender = tp.gender else { return }
+                    let pet = Pet(name: tp.name.capitalizedName, species: tp.species)
+                    pet.gender = gender
+                    if !tp.breed.trimmed.isEmpty { pet.breed = tp.breed.capitalizedName }
+                    if !tp.color.trimmed.isEmpty { pet.color = tp.color.trimmed.lowercased() }
+                    if let data = tp.photoData { pet.photoData = data }
+                    if !tp.health.trimmed.isEmpty { pet.setHealth(tp.health.trimmed) }
+                    if !tp.behaviorTags.isEmpty { pet.setBehaviorTags(Array(tp.behaviorTags)) }
+                    if tp.hasBirthdate { pet.setBirthdate(tp.birthdate) }
+                    pet.owner = client
+                }
+
+                for c in contacts {
+                    let name = c.name.capitalizedName
+                    let relation = c.relation.trimmed.lowercased()
+                    let ph = c.phone.trimmed
+                    guard !name.isEmpty, let e164c = PhoneUtils.toE164(ph) else { continue }
+                    let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
+                    ec.owner = client
+                    client.emergencyContacts.append(ec)
+                }
+                
+                try await repository.saveClient(client)
+
+                NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
+                    ClientDidCreateKey.clientID.rawValue: client.persistentModelID,
+                    ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.created.rawValue
+                ])
+                NotificationCenter.default.post(name: .clientOpenRequested, object: nil, userInfo: [
+                    ClientOpenKey.clientID.rawValue: client.persistentModelID
+                ])
+                
+                HapticManager.notify(.success)
                 isSaving = false
-                return
+            } catch let error as ValidationError {
+                self.appError = .validation(error)
+                isSaving = false
+            } catch {
+                self.appError = .database(error.localizedDescription)
+                isSaving = false
             }
-
-            let client = Client(firstName: canonicalPersonName(first),
-                                lastName: canonicalPersonName(last),
-                                phone: e164)
-            if !email.trimmed.isEmpty { client.email = email.trimmed.lowercased() }
-            if !address.trimmed.isEmpty { client.address = address.trimmed }
-
-            pets.forEach { tp in
-                guard !tp.name.trimmed.isEmpty, let gender = tp.gender else { return }
-                let pet = Pet(name: tp.name.trimmed, species: tp.species)
-                pet.gender = gender
-                if !tp.breed.trimmed.isEmpty { pet.breed = tp.breed.trimmed }
-                if !tp.color.trimmed.isEmpty { pet.color = tp.color.trimmed }
-                if let data = tp.photoData { pet.photoData = data }
-                if !tp.health.trimmed.isEmpty { pet.setHealth(tp.health.trimmed) }
-                if !tp.behaviorTags.isEmpty { pet.setBehaviorTags(Array(tp.behaviorTags)) }
-                if tp.hasBirthdate { pet.setBirthdate(tp.birthdate) }
-                pet.owner = client
-            }
-
-            for c in contacts {
-                let name = c.name.trimmed
-                let relation = c.relation.trimmed
-                let ph = c.phone.trimmed
-                guard !name.isEmpty, let e164c = PhoneUtils.toE164(ph) else { continue }
-                let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
-                ec.owner = client
-                client.emergencyContacts.append(ec)
-            }
-            
-            modelContext.insert(client)
-            try modelContext.save()
-
-            NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
-                ClientDidCreateKey.clientID.rawValue: client.persistentModelID,
-                ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.created.rawValue
-            ])
-            NotificationCenter.default.post(name: .clientOpenRequested, object: nil, userInfo: [
-                ClientOpenKey.clientID.rawValue: client.persistentModelID
-            ])
-            
-            HapticManager.notify(.success)
-            isSaving = false
-        } catch {
-            alertText = error.localizedDescription
-            showAlert = true
-            isSaving = false
         }
     }
 
@@ -116,9 +120,22 @@ final class NewClientViewModel {
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             throw ValidationError.custom(message: "Please enter a valid email address.")
         }
-        let hasPet = pets.contains { !$0.name.trimmed.isEmpty }
-        if !hasPet {
-            throw ValidationError.custom(message: "Add at least one pet before creating this client.")
+        
+        // Filter out completely empty pet entries if they exist
+        let nonHeroPets = pets.filter { !$0.name.trimmed.isEmpty }
+        if nonHeroPets.isEmpty {
+            throw ValidationError.custom(message: "Add at least one pet with a name before creating this client.")
+        }
+        
+        // Ensure all pets in the list have names if they have other data
+        for (idx, pet) in pets.enumerated() {
+            if !pet.name.trimmed.isEmpty && pet.gender == nil {
+                throw ValidationError.custom(message: "Please select a gender for \(pet.name.trimmed).")
+            }
+            // If the user started typing a name, but left it empty, but filled breed or something else
+            if pet.name.trimmed.isEmpty && (!pet.breed.trimmed.isEmpty || !pet.color.trimmed.isEmpty) {
+                throw ValidationError.custom(message: "Pet #\(idx + 1) needs a name.")
+            }
         }
     }
 
@@ -126,20 +143,6 @@ final class NewClientViewModel {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let pattern = #"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$"#
         return s.range(of: pattern, options: .regularExpression) != nil
-    }
-    
-    private func canonicalPersonName(_ raw: String) -> String {
-        let base = raw.trimmed.lowercased()
-        let parts = base.split(separator: " ").map { part -> String in
-            let p = String(part)
-            if p.hasPrefix("o'"), p.count > 2 {
-                let idx = p.index(p.startIndex, offsetBy: 2)
-                let rest = p[idx...]
-                return "O'" + rest.capitalized
-            }
-            return p.split(separator: "-").map { String($0).capitalized }.joined(separator: "-")
-        }
-        return parts.joined(separator: " ")
     }
 }
 

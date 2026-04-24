@@ -137,17 +137,7 @@ extension View {
 
     /// Crisp 1px-equivalent border regardless of device scale.
     func hairlineBorder(_ color: Color, cornerRadius: CGFloat = DS.Radius.md) -> some View {
-        #if os(iOS)
-        let width = 1 / UIScreen.main.scale
-        #elseif os(macOS)
-        let width = 1 / (NSScreen.main?.backingScaleFactor ?? 2.0)
-        #else
-        let width: CGFloat = 1.0
-        #endif
-        return overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(color, lineWidth: width)
-        )
+        modifier(HairlineBorderModifier(color: color, cornerRadius: cornerRadius))
     }
 
     /// Gender-colored gradient 3pt top bar.
@@ -157,5 +147,19 @@ extension View {
                 .fill(DS.ColorToken.genderGradient(gender))
                 .frame(height: 3)
         }
+    }
+}
+
+private struct HairlineBorderModifier: ViewModifier {
+    let color: Color
+    let cornerRadius: CGFloat
+    @Environment(\.displayScale) var displayScale
+
+    func body(content: Content) -> some View {
+        let width = 1.0 / displayScale
+        return content.overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(color, lineWidth: width)
+        )
     }
 }

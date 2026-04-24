@@ -9,7 +9,7 @@ import Foundation
 
 /// Centralized validation errors for Pawtrackr forms and actions.
 /// Conforms to `LocalizedError` so SwiftUI alerts can show user-friendly messages.
-public enum ValidationError: LocalizedError, Identifiable {
+public enum ValidationError: LocalizedError, Identifiable, Equatable {
     case emptyField(fieldName: String)
     case invalidPhoneNumber
     case invalidPIN

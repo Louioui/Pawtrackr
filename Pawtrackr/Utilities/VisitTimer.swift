@@ -216,7 +216,9 @@ final class VisitTimer: ObservableObject {
     private func updateElapsed(now: Date) {
         let newValue: Int
         if let started = startedAt {
-            newValue = Self.seconds(between: started, and: now)
+            // Using Calendar.current.dateComponents to get integer seconds between dates
+            let components = Calendar.current.dateComponents([.second], from: started, to: now)
+            newValue = max(0, components.second ?? 0)
         } else {
             newValue = accumulatedSeconds
         }

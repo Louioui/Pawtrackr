@@ -94,6 +94,12 @@ final class ImageCache: @unchecked Sendable {
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
         return UIImage(cgImage: cg, scale: scale, orientation: .up)
     }
+
+    /// Resizes image data to a smaller Data representation for storage.
+    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
+        guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
+        return image.jpegData(compressionQuality: 0.7)
+    }
 }
 #elseif canImport(AppKit)
 import AppKit
@@ -171,6 +177,17 @@ final class ImageCache: @unchecked Sendable {
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
 
         return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }
+
+    /// Resizes image data to a smaller Data representation for storage.
+    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
+        guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
+            return nil
+        }
+        return jpegData
     }
 }
 #endif
