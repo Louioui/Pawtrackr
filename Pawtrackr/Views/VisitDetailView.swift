@@ -309,15 +309,32 @@ struct VisitDetailView: View {
     
     // MARK: - Photos (Before / After) 
     
+    @State private var showTransformation = false
+
     private var photosCard: some View {
         Group {
             if visit.beforePhotoData == nil && visit.afterPhotoData == nil {
                 EmptyView()
             } else {
                 Card {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(NSLocalizedString("visit.photos", comment: ""))
-                            .font(.subheadline.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text(NSLocalizedString("visit.photos", comment: ""))
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            if visit.beforePhotoData != nil && visit.afterPhotoData != nil {
+                                Button {
+                                    showTransformation = true
+                                } label: {
+                                    Label("Transformation", systemImage: "sparkles.tv")
+                                        .font(.caption.bold())
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .tint(.blue)
+                            }
+                        }
+                        
                         HStack(spacing: 12) {
                             photoBox(title: NSLocalizedString("photobox.before", comment: ""), data: visit.beforePhotoData)
                             photoBox(title: NSLocalizedString("photobox.after", comment: ""), data: visit.afterPhotoData)
@@ -327,6 +344,9 @@ struct VisitDetailView: View {
             }
         }
         .padding(.horizontal)
+        .sheet(isPresented: $showTransformation) {
+            TransformationView(beforeData: visit.beforePhotoData, afterData: visit.afterPhotoData, petName: visit.pet?.name ?? "Pet")
+        }
     }
     
     @ViewBuilder

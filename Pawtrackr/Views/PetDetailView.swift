@@ -142,6 +142,7 @@ struct PetDetailView: View {
                         header(vm)
                         actionRow(vm)
                         quickStats(vm)
+                        insightsSection(vm)
                         visitsSection(vm)
                     }
                     .padding(.vertical, 8)
@@ -244,13 +245,19 @@ struct PetDetailView: View {
             }
         }
         
+    @State private var showCommunication = false
+
     private func actionRow(_ vm: PetDetailViewModel) -> some View {
             HStack(spacing: 12) {
+                actionTile(title: "Message", systemImage: "message.fill", tint: .indigo) { showCommunication = true }
                 actionTile(title: NSLocalizedString("pet.view_history", comment: ""), systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
                 actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { confirmCheckIn = true }
                 actionTile(title: NSLocalizedString("pet.check_out", comment: ""), systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)
+            .sheet(isPresented: $showCommunication) {
+                CommunicationSheet(pet: vm.pet, visit: vm.activeVisit)
+            }
         }
 
     private func actionTile(title: String, systemImage: String, tint: Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {
@@ -274,6 +281,44 @@ struct PetDetailView: View {
             .opacity(disabled ? 0.5 : 1)
             .disabled(disabled)
         }
+
+    private func insightsSection(_ vm: PetDetailViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text(NSLocalizedString("insights.professional_insights", comment: "")).font(.subheadline.weight(.bold))
+                    Spacer()
+                    Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.blue)
+                }
+                
+                HStack(spacing: 20) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("insights.engagement", comment: "")).font(.caption).foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            Text("\(Int(vm.pet.engagementScore * 100))%").font(.title3.weight(.bold))
+                            EngagementIndicator(score: vm.pet.engagementScore)
+                        }
+                    }
+                    
+                    Divider().frame(height: 30)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(NSLocalizedString("insights.lifetime_value", comment: "")).font(.caption).foregroundStyle(.secondary)
+                        Text(vm.pet.lifetimeValue.moneyString).font(.title3.weight(.bold)).foregroundStyle(.green)
+                    }
+                    
+                    Spacer()
+                }
+                
+                if let firstVisit = vm.pet.firstVisitDate {
+                    Text(String(format: NSLocalizedString("insights.client_since_fmt", comment: ""), firstVisit.formatted(date: .abbreviated, time: .omitted)))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
 
     private func quickStats(_ vm: PetDetailViewModel) -> some View {
             Card {
@@ -453,5 +498,26 @@ struct PetDetailView: View {
 
     private func vmElapsedLabel() -> String {
         viewModel?.visitTimer.formattedElapsed ?? ""
+    }
+}
+
+struct EngagementIndicator: View {
+    let score: Double
+    
+    var color: Color {
+        if score >= 0.8 { return .green }
+        if score >= 0.5 { return .orange }
+        return .red
+    }
+    
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .overlay(
+                Circle()
+                    .stroke(color.opacity(0.3), lineWidth: 4)
+                    .scaleEffect(1.2)
+            )
     }
 }

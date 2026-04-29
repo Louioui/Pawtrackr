@@ -38,7 +38,7 @@ final class DashboardRepository: DashboardRepositoryProtocol {
     func fetchKPIs() async throws -> DashboardKPI {
         let cal = Calendar.current
         let start = cal.startOfDay(for: .now)
-        let end = cal.date(byAdding: .day, value: 1, to: start)!
+        guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return DashboardKPI() }
         
         // Today's appointments (scheduled appointments for today)
         let todayApptDesc = FetchDescriptor<Appointment>(
@@ -128,7 +128,7 @@ final class DashboardRepository: DashboardRepositoryProtocol {
     func fetchRevenueSeries(days: Int) async throws -> [Date: Decimal] {
         let cal = Calendar.current
         let end = cal.startOfDay(for: .now)
-        let start = cal.date(byAdding: .day, value: -days + 1, to: end)!
+        guard let start = cal.date(byAdding: .day, value: -days + 1, to: end) else { return [:] }
         
         let desc = FetchDescriptor<DaySummary>(
             predicate: #Predicate { summary in

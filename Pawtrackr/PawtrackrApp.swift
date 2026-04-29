@@ -27,7 +27,12 @@ struct PawtrackrApp: App {
 
         do {
             let schema = Schema(PawtrackrSchema.models)
-            let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            let config = ModelConfiguration(
+                "Pawtrackr",
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                cloudKitDatabase: .automatic
+            )
             let localContainer = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self, configurations: [config])
             
             initialContainer = localContainer
@@ -72,9 +77,12 @@ struct PawtrackrApp: App {
             }
 
             NotificationCenter.default.publisher(for: .visitDidComplete)
+                .receive(on: RunLoop.main)
                 .sink { notification in
                     guard let date = notification.endedAtDate else { return }
                     let targetDate = date
+                    
+                    // Detach and use a background context for heavy work
                     Task.detached(priority: .utility) {
                         let backgroundContext = ModelContext(localContainer)
                         SummaryUpdater.rebuildDay(for: targetDate, in: backgroundContext)

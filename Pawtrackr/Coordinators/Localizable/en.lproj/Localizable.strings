@@ -449,4 +449,17 @@
 "a11y.add_new_pet" = "Add New Pet";
 
 // PIN Hint
-"pin.hint.label" = "Your PIN is:";
+// Insights & Professional Features
+"insights.professional_insights" = "Professional Insights";
+"insights.engagement" = "Engagement";
+"insights.lifetime_value" = "Lifetime Value";
+"insights.client_since_fmt" = "Client since %@";
+"insights.retention" = "Client Retention";
+"insights.retention_rate" = "Retention Rate";
+"insights.churn_risk" = "At Churn Risk";
+"dashboard.needs_attention" = "Needs Attention";
+"dashboard.action_required" = "Action Required";
+"dashboard.message" = "Message";
+"dashboard.call" = "Call";
+"receipt.share" = "Share Receipt";
+"common.done" = "Done";

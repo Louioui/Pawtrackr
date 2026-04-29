@@ -177,7 +177,7 @@ import Charts
 
   private func overduePetsSection(_ vm: DashboardViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("Needs Attention").font(.headline)
+      Text(NSLocalizedString("dashboard.needs_attention", comment: "")).font(.headline)
       LazyVStack(spacing: 12) {
         ForEach(vm.overduePets) { pet in
             if let owner = pet.owner {
@@ -190,7 +190,7 @@ import Charts
                     HStack(spacing: 16) {
                         if let sms = owner.smsURL {
                             Link(destination: sms) {
-                                Label("Message", systemImage: "message.fill")
+                                Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
                                     .font(.caption.weight(.semibold))
                                     .padding(.vertical, 8)
                                     .frame(maxWidth: .infinity)
@@ -200,7 +200,7 @@ import Charts
                         
                         if let tel = owner.telURL {
                             Link(destination: tel) {
-                                Label("Call", systemImage: "phone.fill")
+                                Label(NSLocalizedString("dashboard.call", comment: ""), systemImage: "phone.fill")
                                     .font(.caption.weight(.semibold))
                                     .padding(.vertical, 8)
                                     .frame(maxWidth: .infinity)

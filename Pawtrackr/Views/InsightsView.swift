@@ -16,6 +16,7 @@ struct InsightsView: View {
             VStack(spacing: 24) {
                 if let vm = viewModel {
                     revenueSection(vm)
+                    retentionSection(vm)
                     growthSection(vm)
                     serviceRevenueSection(vm)
                     categorySection(vm)
@@ -38,6 +39,18 @@ struct InsightsView: View {
         .refreshable {
             await viewModel?.refresh()
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if let vm = viewModel {
+                    ShareLink(item: ReportDocument(
+                        pdfData: BusinessReportService.shared.generateMonthlyReport(summary: vm.generateReportSummary()),
+                        filename: "Pawtrackr_Report_\(Date().formatted(.dateTime.month().year())).pdf"
+                    )) {
+                        Label("Export Report", systemImage: "doc.badge.arrow.up")
+                    }
+                }
+            }
+        }
     }
 
     private func revenueSection(_ vm: InsightsViewModel) -> some View {
@@ -56,6 +69,39 @@ struct InsightsView: View {
                     .foregroundStyle(.blue.gradient)
                 }
                 .frame(height: 180)
+            }
+        }
+    }
+
+    private func retentionSection(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(NSLocalizedString("insights.retention", comment: "")).font(.headline)
+                
+                HStack(spacing: 24) {
+                    Chart(vm.retentionSeries) { data in
+                        SectorMark(
+                            angle: .value("Value", data.value),
+                            innerRadius: .ratio(0.7)
+                        )
+                        .foregroundStyle(by: .value("Type", data.label))
+                    }
+                    .frame(width: 120, height: 120)
+                    .chartLegend(.hidden)
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(NSLocalizedString("insights.retention_rate", comment: "")).font(.caption).foregroundStyle(.secondary)
+                            Text("\(Int(vm.retentionRate * 100))%").font(.title2.weight(.bold)).foregroundStyle(.blue)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(NSLocalizedString("insights.churn_risk", comment: "")).font(.caption).foregroundStyle(.secondary)
+                            Text("\(vm.churnRiskCount) clients").font(.title3.weight(.bold)).foregroundStyle(.orange)
+                        }
+                    }
+                    Spacer()
+                }
             }
         }
     }

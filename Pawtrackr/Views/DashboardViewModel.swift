@@ -85,13 +85,16 @@ final class DashboardViewModel: ObservableObject {
     defer { isRefreshing = false }
     
     appError = nil
-    await fetchKPIs()
-    await fetchActiveVisits()
-    await fetchUpcomingAppointments()
-    await fetchRecentClients()
-    await fetchOverduePets()
-    await buildRevenueSeries(days: revenueWindowDays)
-    await buildGallery(days: galleryWindowDays)
+    
+    async let kpis: () = fetchKPIs()
+    async let active: () = fetchActiveVisits()
+    async let upcoming: () = fetchUpcomingAppointments()
+    async let clients: () = fetchRecentClients()
+    async let overdue: () = fetchOverduePets()
+    async let revenue: () = buildRevenueSeries(days: revenueWindowDays)
+    async let gallery: () = buildGallery(days: galleryWindowDays)
+    
+    _ = await [kpis, active, upcoming, clients, overdue, revenue, gallery]
   }
 
   // MARK: - Fetches

@@ -195,7 +195,6 @@ fileprivate struct HistoryVisitSnap: Sendable {
     let itemNames: [String]
     let total: Double
 }
-}
 
 fileprivate enum RecentHistoryComputer {
     static func filterAndSummarize(snaps: [HistoryVisitSnap], query: String) -> (filteredIDs: Set<UUID>, totalRevenue: Double) {
@@ -204,17 +203,12 @@ fileprivate enum RecentHistoryComputer {
             let total = snaps.reduce(0.0) { $0 + $1.total }
             return (Set(snaps.map { $0.id }), total)
         }
-        let needle = trimmed.folding(options: .diacriticInsensitive, locale: .current).lowercased()
+        
         var ids: Set<UUID> = []
         var total: Double = 0
         for s in snaps {
-            let fields: [String] = [
-                s.petName,
-                s.ownerFirst,
-                s.ownerLast
-            ] + s.itemNames
-            let match = fields.contains { $0.folding(options: .diacriticInsensitive, locale: .current).lowercased().contains(needle) }
-            if match {
+            let fields: [String] = [s.petName, s.ownerFirst, s.ownerLast] + s.itemNames
+            if SearchEngine.matches(trimmed, in: fields) {
                 ids.insert(s.id)
                 total += s.total
             }

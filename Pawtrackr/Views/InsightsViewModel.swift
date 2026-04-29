@@ -43,6 +43,17 @@ class InsightsViewModel {
     var topClients: [TopClientData] = []
     var monthlyGrowth: [MonthlyGrowthData] = []
     
+    struct RetentionData: Identifiable {
+        let id = UUID()
+        let label: String
+        let value: Double
+        let color: String
+    }
+
+    var retentionRate: Double = 0
+    var churnRiskCount: Int = 0
+    var retentionSeries: [RetentionData] = []
+    
     var totalRevenue: Decimal = .zero
     var averageVisitValue: Decimal = .zero
     
@@ -55,10 +66,55 @@ class InsightsViewModel {
     }
 
     func refresh() async {
-        await fetchRevenue()
-        await fetchDistributions()
-        await fetchTopClients()
-        await fetchMonthlyGrowth()
+        async let rev: () = fetchRevenue()
+        async let dist: () = fetchDistributions()
+        async let top: () = fetchTopClients()
+        async let growth: () = fetchMonthlyGrowth()
+        async let retention: () = fetchRetentionMetrics()
+        
+        _ = await [rev, dist, top, growth, retention]
+    }
+
+    func generateReportSummary() -> BusinessReportService.MonthlySummary {
+        let now = Date()
+        let topSvc = serviceDistribution.prefix(5).map { 
+            (name: $0.name, count: $0.count, revenue: $0.revenue) 
+        }
+        
+        return BusinessReportService.MonthlySummary(
+            month: now,
+            totalRevenue: totalRevenue,
+            visitCount: revenueSeries.reduce(0) { _ , _ in 0 }, // This needs real visit count
+            newClients: 0, // Placeholder
+            topServices: topSvc,
+            retentionRate: retentionRate
+        )
+    }
+
+    private func fetchRetentionMetrics() async {
+        let descriptor = FetchDescriptor<Client>()
+        do {
+            let allClients = try modelContext.fetch(descriptor)
+            guard !allClients.isEmpty else { return }
+            
+            let recurring = allClients.filter { client in
+                let visits = client.pets.flatMap { $0.visits }.filter { $0.isCompleted }
+                return visits.count > 1
+            }
+            
+            self.retentionRate = Double(recurring.count) / Double(allClients.count)
+            
+            self.churnRiskCount = allClients.filter { client in
+                client.pets.contains { $0.isOverdue }
+            }.count
+            
+            self.retentionSeries = [
+                RetentionData(label: "Recurring", value: Double(recurring.count), color: "blue"),
+                RetentionData(label: "One-time", value: Double(allClients.count - recurring.count), color: "gray")
+            ]
+        } catch {
+            print("Insights error (retention): \(error)")
+        }
     }
 
     private func fetchRevenue() async {

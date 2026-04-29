@@ -32,7 +32,9 @@ enum PawtrackrSchema: VersionedSchema {
             CategoryDaySummary.self,
 
             // Aux tables
-            EmergencyContact.self
+            EmergencyContact.self,
+            BusinessConfig.self,
+            MessageTemplate.self
         ]
     }
     
@@ -204,6 +206,20 @@ enum DataMigrations {
             }
         } catch {
             Logger.migrations.error("ensureServiceCatalog failed: \(String(describing: error))")
+        }
+    }
+
+    static func ensureMessageTemplates(in context: ModelContext) {
+        do {
+            let existing = try context.fetch(FetchDescriptor<MessageTemplate>())
+            if existing.isEmpty {
+                for template in MessageTemplate.defaults {
+                    context.insert(template)
+                }
+                try context.save()
+            }
+        } catch {
+            Logger.migrations.error("ensureMessageTemplates failed: \(String(describing: error))")
         }
     }
 }

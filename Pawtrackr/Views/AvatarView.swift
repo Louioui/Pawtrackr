@@ -188,9 +188,9 @@ public struct AvatarView: View {
 
     private var accessibilityLabelText: String {
         switch kind {
-        case .client(let name, _, _):
+        case .client(let name, _, _, _):
             return name
-        case .pet(_, _, let name, _, _):
+        case .pet(_, _, let name, _, _, _):
             return name ?? "Pet"
         case .systemImage:
             return accessibilityLabel ?? "Avatar"

@@ -303,17 +303,25 @@ struct CheckoutView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 60))
                         .foregroundStyle(.green)
-                    Text("Payment Successful").font(Font.title3.weight(.bold))
+                    Text(NSLocalizedString("checkout.complete_title", comment: "")).font(Font.title3.weight(.bold))
                     Text(viewModel.finalTotalString).font(Font.title.bold())
                     
                     ShareLink(item: ReceiptDocument(pdfData: PDFReceiptService.shared.generatePDF(for: viewModel.visit), filename: "Receipt_\(viewModel.pet.name).pdf")) {
-                        Label("Share Receipt", systemImage: "square.and.arrow.up")
+                        Label(NSLocalizedString("receipt.share", comment: ""), systemImage: "square.and.arrow.up")
                             .font(.headline)
                             .padding()
                             .frame(maxWidth: .infinity)
                             .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
                             .foregroundStyle(.white)
                     }
+                    .padding(.top, 10)
+                    
+                    Button(NSLocalizedString("common.done", comment: "")) {
+                        dismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
                     .padding(.top, 10)
                 } else {
                     ProgressView()
@@ -330,9 +338,6 @@ struct CheckoutView: View {
                 #if os(iOS)
                 HapticManager.notify(.success)
                 #endif
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    dismiss()
-                }
             }
         }
     }
