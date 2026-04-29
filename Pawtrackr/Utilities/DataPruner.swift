@@ -24,7 +24,13 @@ actor DataPruner {
     ///   - keepRecentPhotosPerPet: Always keep photos for the most recent N visits per pet.
     func pruneVisitPhotos(olderThan cutoff: Date, keepRecentPhotosPerPet: Int = 2) throws {
         // 1) Fetch candidate visits (completed and before cutoff)
-        let predicate = #Predicate<Visit> { v in v.endedAt != nil && v.endedAt! < cutoff }
+        let predicate = #Predicate<Visit> { v in
+            if let endedAt = v.endedAt {
+                return endedAt < cutoff
+            } else {
+                return false
+            }
+        }
         let desc = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
         let visits = (try? modelContext.fetch(desc)) ?? []
 

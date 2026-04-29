@@ -45,7 +45,7 @@ public struct PinLockGate<Content: View>: View {
 
     @ViewBuilder
     private var gateContent: some View {
-        if isUnlocked || !appSettings.isBiometricLockEnabled {
+        if isUnlocked || !appSettings.isLockEnabled {
             content
         } else {
             PinLockView(isUnlocked: $isUnlocked)
@@ -60,7 +60,7 @@ public struct PinLockGate<Content: View>: View {
 
     private func resetInactivityLock() {
         invalidateInactivityTimer()
-        guard appSettings.autoLockAfterInactivity, appSettings.isBiometricLockEnabled else { return }
+        guard appSettings.autoLockAfterInactivity, appSettings.isLockEnabled else { return }
         let interval = max(1, appSettings.idleLockMinutes * 60)
         inactivityTimer = Timer.scheduledTimer(withTimeInterval: Double(interval), repeats: false) { _ in
             isUnlocked = false
@@ -80,8 +80,6 @@ public struct PinLockView: View {
     @Binding var isUnlocked: Bool
     @State private var digits: [Int] = []
     @State private var shakeOffset: CGFloat = 0
-    @State private var failedAttempts: Int = 0
-    @State private var showHint: Bool = false
 
     // Uses AppSettings.appPIN for a changeable PIN.
 
@@ -104,7 +102,6 @@ public struct PinLockView: View {
             titleSection
             pinDots
             keypad
-            hintSection
             Spacer()
         }
     }
@@ -155,30 +152,10 @@ public struct PinLockView: View {
         }
     }
 
-    @ViewBuilder
-    private var hintSection: some View {
-        if showHint {
-            VStack(spacing: 4) {
-                Text(NSLocalizedString("pin.hint.label", comment: ""))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(appSettings.appPIN)
-                    .font(.headline.monospaced())
-                    .foregroundStyle(DS.ColorToken.primary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(DS.ColorToken.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-            .transition(.opacity.combined(with: .scale))
-        }
-    }
-
     private func authenticateWithBiometrics() {
         if authenticator.biometricType() != .none {
             authenticator.authenticate { success, error in
                 if success {
-                    failedAttempts = 0
-                    showHint = false
                     isUnlocked = true
                 }
             }
@@ -210,20 +187,10 @@ public struct PinLockView: View {
         guard digits.count == 4 else { return }
         let entered = digits.map(String.init).joined()
         if appSettings.validatePIN(entered) {
-            failedAttempts = 0
-            showHint = false
             isUnlocked = true
         } else {
-            failedAttempts += 1
             performShake()
             HapticManager.notify(.error)
-
-            // Show hint after 8 failed attempts
-            if failedAttempts >= 8 && !showHint {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showHint = true
-                }
-            }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 digits.removeAll()

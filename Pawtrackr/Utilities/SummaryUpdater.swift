@@ -21,13 +21,11 @@ enum SummaryUpdater {
             // Fetch only visits that ended on this specific day
             let visits = try fetchVisitsEndedInRange(start: start, end: end, in: context)
             let count = visits.count
-            let visitRevenue = visits.reduce(Decimal.zero) { $0 +~ $1.total }
-
-            // Fetch only payments for this day if needed
-            let revenue: Decimal
-            if visitRevenue > .zero {
-                revenue = visitRevenue
-            } else {
+            
+            // Primary revenue source: Sum of completed visit totals.
+            // Fallback: Sum of payments for the day if no visits are found (e.g. legacy or unlinked payments).
+            var revenue = visits.reduce(Decimal.zero) { $0 +~ $1.total }
+            if revenue == .zero {
                 let payments = try fetchPaymentsInRange(start: start, end: end, in: context)
                 revenue = payments.reduce(Decimal.zero) { $0 +~ $1.amount }
             }
@@ -67,7 +65,7 @@ enum SummaryUpdater {
             var catCounts: [String: Int] = [:]
             for v in visits {
                 for item in v.items {
-                    if let raw = item.service?.category?.rawValue {
+                    if let raw = item.serviceCategoryRaw ?? item.service?.category?.rawValue {
                         catCounts[raw, default: 0] += 1
                     }
                 }
@@ -102,10 +100,12 @@ enum SummaryUpdater {
 
     private static func fetchVisitsEndedInRange(start: Date, end: Date, in context: ModelContext) throws -> [Visit] {
         let descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate<Visit> {
-                $0.endedAt != nil &&
-                $0.endedAt! >= start &&
-                $0.endedAt! < end
+            predicate: #Predicate<Visit> { visit in
+                if let endedAt = visit.endedAt {
+                    return endedAt >= start && endedAt < end
+                } else {
+                    return false
+                }
             }
         )
         return try context.fetch(descriptor)

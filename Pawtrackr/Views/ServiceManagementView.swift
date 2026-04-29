@@ -24,7 +24,7 @@ struct ServiceManagementView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(service.name).font(.headline)
-                            Text(service.basePrice.moneyString)
+                            Text(service.effectiveBasePrice.moneyString)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }

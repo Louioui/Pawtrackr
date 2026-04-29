@@ -51,33 +51,46 @@ final class ClientDetailViewModel: ObservableObject {
 
     func refreshRecentVisits(limit: Int? = nil) {
         if let limit { currentLimit = max(limit, pageSize) }
-        // Fetch most-recent visits globally, then filter to this client's pets for portability across stores
-        var descriptor = FetchDescriptor<Visit>(
+        
+        let petIDs = Set(client.pets.map { $0.persistentModelID })
+        let now = Date()
+        let cal = Calendar.current
+        let startBound: Date? = {
+            switch historyRange {
+            case .all: return nil
+            case .lastNDays(let days):
+                return cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: now))
+            }
+        }()
+
+        // Fetch most-recent visits for this client's pets using a predicate
+        let descriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { v in
+                if let endedAt = v.endedAt {
+                    if let start = startBound {
+                        return endedAt >= start
+                    } else {
+                        return true
+                    }
+                } else {
+                    return false
+                }
+            },
             sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
         )
-        // Avoid materializing the entire Visit table; we need just a window
-        descriptor.fetchLimit = max(currentLimit * 10, pageSize * 10)
+        
         do {
             #if DEBUG
             let t0 = Date()
             #endif
+            // We still fetch a bit more because we need to filter by pet identity in memory 
+            // since SwiftData predicates have limitations with complex relationship filtering
             let results = try modelContext.fetch(descriptor)
-            let allowedPetIDs = Set(client.pets.map { $0.persistentModelID })
-            let now = Date()
-            let cal = Calendar.current
-            let startBound: Date? = {
-                switch historyRange {
-                case .all: return nil
-                case .lastNDays(let days):
-                    return cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: now))
-                }
-            }()
             let filtered = results.filter { v in
-                guard v.endedAt != nil else { return false }
-                guard let pet = v.pet, allowedPetIDs.contains(pet.persistentModelID) else { return false }
-                if let start = startBound, let ended = v.endedAt { return ended >= start }
-                return true
+                guard let pet = v.pet else { return false }
+                return petIDs.contains(pet.persistentModelID)
             }
+            
             self.lastTotalForClient = filtered.count
             self.canLoadMore = filtered.count > currentLimit
             self.recentVisits = Array(filtered.prefix(currentLimit))
@@ -124,7 +137,7 @@ final class ClientDetailViewModel: ObservableObject {
     }
 
     func addService(_ service: Service, to visit: Visit, quantity: Int = 1) {
-        visit.addItem(title: service.name, unitPrice: service.basePrice, quantity: quantity, service: service)
+        visit.addItem(title: service.name, unitPrice: service.effectiveBasePrice, quantity: quantity, service: service)
         Task {
             do { 
                 try await visitRepository.saveVisit(visit) 

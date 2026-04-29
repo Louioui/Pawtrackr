@@ -2,10 +2,6 @@
 //  CheckoutView.swift
 //  Pawtrackr
 //
-//  Created by mac on 8/15/25.
-//  Refactored by Assistant on 2025-09-03
-//  Redesigned for iOS inline checkout experience on 2025-10-09
-//
 
 import SwiftUI
 import SwiftData
@@ -14,371 +10,341 @@ struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: CheckoutViewModel
+    @State private var currentStep: CheckoutStep = .services
     @FocusState private var amountFieldFocused: Bool
+
+    enum CheckoutStep: Int, CaseIterable {
+        case services = 0
+        case details = 1
+        case payment = 2
+        
+        var title: String {
+            switch self {
+            case .services: return "Services"
+            case .details: return "Notes & Photos"
+            case .payment: return "Payment"
+            }
+        }
+    }
 
     init(pet: Pet, visit: Visit? = nil) {
         _viewModel = State(initialValue: CheckoutViewModel(pet: pet, visit: visit))
     }
 
     var body: some View {
-        checkoutContent
-            .navigationTitle("checkout.title")
-#if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-#endif
-            .toolbar { toolbarContent }
-            .safeAreaInset(edge: .bottom, content: bottomCta)
-            .alert(item: appErrorBinding) { error in
-                Alert(
-                    title: Text(NSLocalizedString("common.error", comment: "")),
-                    message: Text(error.localizedDescription),
-                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
-                )
+        VStack(spacing: 0) {
+            stepIndicator
+            
+            TabView(selection: $currentStep) {
+                servicesStep.tag(CheckoutStep.services)
+                detailsStep.tag(CheckoutStep.details)
+                paymentStep.tag(CheckoutStep.payment)
             }
-            .onAppear {
-                viewModel.loadServices(modelContext: modelContext)
+            #if os(iOS)
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            #endif
+            .animation(.spring(), value: currentStep)
+            
+            bottomBar
+        }
+        .background(DS.ColorToken.background.ignoresSafeArea())
+        .navigationTitle(currentStep.title)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
             }
-            .onChange(of: viewModel.selectedServiceIDs) { _, _ in
-                viewModel.syncSubtotal()
-            }
-            .onChange(of: viewModel.selectedAddOnIDs) { _, _ in
-                viewModel.syncSubtotal()
-            }
-            .onChange(of: amountFieldFocused) { _, focused in
-                if !focused { viewModel.formatAmountInput() }
-            }
-            .onChange(of: viewModel.state) { _, newValue in
-                if case .confirmed = newValue {
-                    #if os(iOS)
-                    HapticManager.notify(.success)
-                    #endif
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        dismiss()
-                    }
-                }
-            }
-    }
-
-    private var checkoutContent: some View {
-        ZStack {
-            checkoutScrollContent
-
-            if isShowingOverlay {
-                Color.black.opacity(0.4)
-                    .ignoresSafeArea()
-                    .onTapGesture { }
-
+        }
+        .alert(item: $viewModel.appError) { error in
+            Alert(title: Text("Error"), message: Text(error.localizedDescription), dismissButton: .default(Text("OK")))
+        }
+        .onAppear {
+            viewModel.loadServices(modelContext: modelContext)
+        }
+        .overlay {
+            if viewModel.isSaving || viewModel.state == .confirmed {
                 overlayContent
             }
         }
     }
 
-    private var checkoutScrollContent: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                headerSection
-                servicesSection
-                behaviorSection
-                photosSection
-                serviceChargeSection
-                paymentSection
-                summarySection
-            }
-            .padding(.horizontal)
-            .padding(.top, 16)
-            .padding(.bottom, 120)
-        }
-        .background(DS.ColorToken.background.ignoresSafeArea())
-    }
-
-    private var isShowingOverlay: Bool {
-        viewModel.isSaving || viewModel.state == .confirmed
-    }
-
-    private var appErrorBinding: Binding<AppError?> {
-        Binding(
-            get: { viewModel.appError },
-            set: { viewModel.appError = $0 }
-        )
-    }
-
-    private var bottomCta: some View {
-        VStack(spacing: 0) {
-            Divider()
-            Button {
-                hideKeyboard()
-                Task { await viewModel.processPayment() }
-            } label: {
-                HStack {
-                    if viewModel.isSaving {
-                        ProgressView().tint(.white).padding(.trailing, 8)
-                    }
-                    Text(viewModel.isSaving ? "Processing..." : "Confirm Checkout • \(viewModel.finalTotalString)")
-                        .font(.headline)
+    // MARK: - Steps
+    
+    private var stepIndicator: some View {
+        HStack(spacing: 0) {
+            ForEach(CheckoutStep.allCases, id: \.self) { step in
+                VStack(spacing: 8) {
+                    Circle()
+                        .fill(currentStep.rawValue >= step.rawValue ? Color.blue : Color.gray.opacity(0.3))
+                        .frame(width: 10, height: 10)
+                    Text(step.title)
+                        .font(Font.caption2.weight(.medium))
+                        .foregroundStyle(currentStep.rawValue >= step.rawValue ? Color.primary : Color.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(viewModel.isConfirmEnabled ? DS.ColorToken.success : Color.gray)
-                .foregroundColor(.white)
-                .cornerRadius(12)
-            }
-            .disabled(!viewModel.isConfirmEnabled || viewModel.isSaving)
-            .padding()
-            .background(DS.ColorToken.background)
-        }
-    }
-
-    @ViewBuilder
-    private var overlayContent: some View {
-        VStack(spacing: 16) {
-            if case .confirmed = viewModel.state {
-                // Success state
-                ZStack {
-                    Circle().fill(Color.green.opacity(0.15))
-                    Image(systemName: "checkmark")
-                        .font(.title)
-                        .foregroundStyle(.green)
+                
+                if step != .payment {
+                    Rectangle()
+                        .fill(currentStep.rawValue > step.rawValue ? Color.blue : Color.gray.opacity(0.2))
+                        .frame(height: 2)
+                        .frame(maxWidth: .infinity)
+                        .offset(y: -12)
                 }
-                .frame(width: 68, height: 68)
-                Text(NSLocalizedString("checkout.complete_title", comment: ""))
-                    .font(.headline)
-                Text(String(format: NSLocalizedString("checkout.complete_desc_fmt", comment: ""), viewModel.finalTotalString))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-            } else {
-                // Processing state
-                ZStack {
-                    Circle().fill(Color.accentColor.opacity(0.15))
-                    ProgressView().tint(.accentColor)
-                }
-                .frame(width: 68, height: 68)
-                Text(NSLocalizedString("checkout.processing", comment: ""))
-                    .font(.headline)
-                Text(NSLocalizedString("checkout.processing_desc", comment: ""))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
         }
-        .padding(24)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(DS.ColorToken.surface)
-        )
-        .padding(32)
+        .padding(.top, 16)
+        .padding(.horizontal, 32)
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { dismiss() }
-        }
-    }
-}
-
-private extension CheckoutView {
-    var headerSection: some View {
-        Card(elevation: .raised, accent: .leading(.color(Color(red: 0.63, green: 0.69, blue: 0.99)))) {
-            HStack(spacing: 16) {
-                AvatarView(
-                    .pet(
-                        species: viewModel.pet.species,
-                        gender: viewModel.pet.gender,
-                        name: viewModel.pet.name,
-                        imageData: viewModel.pet.photoData
-                    ),
-                    size: .lg,
-                    ringWidth: 5
-                )
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(viewModel.pet.name)
-                        .font(.title3).fontWeight(.semibold)
-                    Text(viewModel.pet.owner?.fullName ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 6) {
-                        Image(systemName: "clock")
-                            .foregroundStyle(.secondary)
-                        Text(String(
-                            format: NSLocalizedString("checkout.started_time_fmt", comment: ""),
-                            Formatters.timeOnly.string(from: viewModel.visit.startedAt)
-                        ))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-            }
-        }
-    }
-
-    var servicesSection: some View {
-        VStack(spacing: 12) {
-            Card {
-                VStack(alignment: .leading, spacing: 16) {
-                    sectionTitle("checkout.services_performed")
-                    FlowLayout(spacing: 10, rowSpacing: 10) {
-                        ForEach(viewModel.allServices) { service in
-                            serviceTag(for: service)
+    private var servicesStep: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                headerCard
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Main Services").font(.headline).padding(.horizontal)
+                    Card {
+                        FlowLayout(spacing: 10, rowSpacing: 10) {
+                            ForEach(viewModel.allServices) { service in
+                                serviceTag(for: service)
+                            }
                         }
                     }
-                    if viewModel.allServices.isEmpty {
-                        Text(NSLocalizedString("checkout.no_services_hint", comment: ""))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                 }
-            }
-
-            if !viewModel.addOnServices.isEmpty {
-                Card {
+                
+                if !viewModel.addOnServices.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(NSLocalizedString("checkout.add_ons", comment: ""))
-                            .font(.subheadline.weight(.semibold))
+                        Text("Add-ons").font(.headline).padding(.horizontal)
                         VStack(spacing: 10) {
                             ForEach(viewModel.addOnServices) { service in
                                 addOnRow(service)
                             }
                         }
+                        .padding(.horizontal)
                     }
                 }
             }
+            .padding(.vertical)
         }
     }
 
-    var behaviorSection: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 16) {
-                sectionTitle("checkout.notes_and_tags")
-                notesEditor(
-                    text: $viewModel.sessionNotes,
-                    placeholder: NSLocalizedString("checkout.notes_placeholder", comment: "")
-                )
-                Text(NSLocalizedString("checkout.behavior_tags", comment: ""))
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                FlowLayout(spacing: 10, rowSpacing: 10) {
-                    ForEach(CheckoutViewModel.tagOptions, id: \.self) { tag in
-                        behaviorTag(for: tag)
+    private var detailsStep: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Behavior & Notes").font(.headline).padding(.horizontal)
+                    Card {
+                        VStack(alignment: .leading, spacing: 16) {
+                            FlowLayout(spacing: 10, rowSpacing: 10) {
+                                ForEach(CheckoutViewModel.tagOptions, id: \.self) { tag in
+                                    behaviorTag(for: tag)
+                                }
+                            }
+                            
+                            TextEditor(text: $viewModel.sessionNotes)
+                                #if os(iOS)
+                                .scrollContentBackground(.hidden)
+                                #endif
+                                .frame(minHeight: 120)
+                                .padding(8)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.05)))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.2)))
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Photos").font(.headline).padding(.horizontal)
+                    Card {
+                        HStack(spacing: 20) {
+                            PhotoWell(imageData: $viewModel.beforePhotoData, title: "Before")
+                            PhotoWell(imageData: $viewModel.afterPhotoData, title: "After")
+                        }
                     }
                 }
             }
+            .padding(.vertical)
         }
     }
 
-    var photosSection: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 16) {
-                sectionTitle("checkout.before_after_photos")
-                HStack(spacing: 16) {
-                    PhotoWell(imageData: $viewModel.beforePhotoData, title: NSLocalizedString("photobox.before", comment: ""))
-                    PhotoWell(imageData: $viewModel.afterPhotoData, title: NSLocalizedString("photobox.after", comment: ""))
-                }
-            }
-        }
-    }
-
-    var serviceChargeSection: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionTitle("checkout.service_charge")
-                HStack(alignment: .lastTextBaseline, spacing: 8) {
-                    TextField("$0.00", text: amountBinding)
-                        #if os(iOS)
-                        .keyboardType(.decimalPad)
-                        #endif
-                        .focused($amountFieldFocused)
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.primary)
-                }
-                Text(NSLocalizedString("checkout.service_charge_hint", comment: ""))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    var paymentSection: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 16) {
-                sectionTitle("checkout.payment_method")
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    ForEach(paymentOptions, id: \.method) { option in
-                        paymentCard(for: option)
+    private var paymentStep: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Final Amount").font(.headline).padding(.horizontal)
+                    Card {
+                        TextField("$0.00", text: amountBinding)
+                            #if os(iOS)
+                            .keyboardType(.decimalPad)
+                            #endif
+                            .focused($amountFieldFocused)
+                            .font(Font.system(size: 40, weight: .bold, design: .rounded))
+                            .multilineTextAlignment(TextAlignment.center)
+                            .foregroundStyle(Color.blue)
                     }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Payment Method").font(.headline).padding(.horizontal)
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(paymentOptions) { option in
+                            paymentCard(for: option)
+                        }
+                    }
+                    .padding(.horizontal)
                 }
 
                 if viewModel.requiresExternalReference {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(NSLocalizedString("checkout.transaction_reference", comment: ""))
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Reference Info").font(Font.subheadline.weight(.medium)).padding(.horizontal)
                         TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
                             .textFieldStyle(.roundedBorder)
+                            .padding(.horizontal)
                     }
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Summary").font(.headline).padding(.horizontal)
+                    Card {
+                        VStack(spacing: 10) {
+                            summaryRow(title: "Pet", value: viewModel.pet.name)
+                            summaryRow(title: "Duration", value: viewModel.sessionDurationString)
+                            summaryRow(title: "Services", value: selectedServicesSummary)
+                            Divider()
+                            summaryRow(title: "Total", value: viewModel.finalTotalString, isTotal: true)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical)
+        }
+    }
+
+    // MARK: - Components
+
+    private var headerCard: some View {
+        Card {
+            HStack(spacing: 16) {
+                AvatarView(.pet(species: viewModel.pet.species, gender: viewModel.pet.gender, name: viewModel.pet.name, imageData: viewModel.pet.photoData), size: .md)
+                VStack(alignment: .leading) {
+                    Text(viewModel.pet.name).font(.headline)
+                    Text(viewModel.pet.owner?.fullName ?? "Unknown Owner").font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing) {
+                    Text("Started").font(.caption).foregroundStyle(.secondary)
+                    Text(viewModel.visit.startedAt, style: .time).font(Font.subheadline.weight(.medium))
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 16) {
+                if currentStep != .services {
+                    Button {
+                        withAnimation { currentStep = CheckoutStep(rawValue: currentStep.rawValue - 1) ?? .services }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.headline)
+                            .frame(width: 50, height: 50)
+                            .background(Circle().fill(Color.gray.opacity(0.1)))
+                    }
+                }
+                
+                Button {
+                    if currentStep == .payment {
+                        confirmCheckout()
+                    } else {
+                        withAnimation { currentStep = CheckoutStep(rawValue: currentStep.rawValue + 1) ?? .payment }
+                    }
+                } label: {
+                    Text(currentStep == .payment ? "Confirm & Pay" : "Continue")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(RoundedRectangle(cornerRadius: 15).fill(isNextEnabled ? Color.blue : Color.gray.opacity(0.3)))
+                        .foregroundStyle(.white)
+                }
+                .disabled(!isNextEnabled)
+            }
+            .padding()
+            .background(DS.ColorToken.background)
+        }
+    }
+
+    private var isNextEnabled: Bool {
+        switch currentStep {
+        case .services: return !viewModel.selectedServiceIDs.isEmpty
+        case .details: return true
+        case .payment: return viewModel.isConfirmEnabled
+        }
+    }
+
+    private func confirmCheckout() {
+        #if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
+        Task {
+            await viewModel.processPayment()
+        }
+    }
+
+    private var overlayContent: some View {
+        ZStack {
+            Color.black.opacity(0.4).ignoresSafeArea()
+            VStack(spacing: 20) {
+                if viewModel.state == .confirmed {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 60))
+                        .foregroundStyle(.green)
+                    Text("Payment Successful").font(Font.title3.weight(.bold))
+                    Text(viewModel.finalTotalString).font(Font.title.bold())
+                } else {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Processing Payment...").font(.headline)
+                }
+            }
+            .padding(40)
+            .background(RoundedRectangle(cornerRadius: 25).fill(DS.ColorToken.surface))
+            .shadow(radius: 20)
+        }
+        .onChange(of: viewModel.state) { _, newValue in
+            if newValue == .confirmed {
+                #if os(iOS)
+                HapticManager.notify(.success)
+                #endif
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    dismiss()
                 }
             }
         }
     }
 
-    var summarySection: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionTitle("checkout.session_summary")
-                summaryRow(title: NSLocalizedString("checkout.summary.check_in", comment: ""), value: Formatters.timeOnly.string(from: viewModel.visit.startedAt))
-                summaryRow(title: NSLocalizedString("checkout.summary.duration", comment: ""), value: viewModel.sessionDurationString)
-                summaryRow(title: NSLocalizedString("checkout.summary.services", comment: ""), value: selectedServicesSummary)
-                Divider()
-                summaryRow(title: NSLocalizedString("checkout.total_amount", comment: ""), value: viewModel.finalTotalString, isTotal: true)
-            }
-        }
-    }
-
-    func sectionTitle(_ key: String) -> some View {
-        Text(NSLocalizedString(key, comment: ""))
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.primary)
-    }
-
-    func summaryRow(title: String, value: String, isTotal: Bool = false) -> some View {
-        HStack {
-            Text(title)
-                .font(isTotal ? .headline : .subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value.isEmpty ? "—" : value)
-                .font(isTotal ? .title3.weight(.bold) : .subheadline)
-                .foregroundStyle(isTotal ? .green : Color.primary)
-                .multilineTextAlignment(.trailing)
-                .monospacedDigit()
-        }
-    }
+    // MARK: - Helpers
 
     func serviceTag(for service: Service) -> some View {
         let isSelected = viewModel.isServiceSelected(service)
         return Button {
             viewModel.toggleService(service)
+            viewModel.updateVisitItems()
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: service.systemIcon ?? "pawprint.fill")
-                    .font(.footnote)
                 Text(service.name)
-                    .font(.footnote.weight(.medium))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(isSelected ? Color(red: 0.4, green: 0.85, blue: 0.97) : Color.gray.opacity(0.12))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(isSelected ? Color(red: 0.4, green: 0.85, blue: 0.97) : Color.clear, lineWidth: 1)
-            )
-            .foregroundColor(isSelected ? Color.primary : Color.secondary)
+            .font(Font.subheadline.weight(.medium))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(isSelected ? Color.blue.opacity(0.15) : Color.gray.opacity(0.05)))
+            .overlay(Capsule().stroke(isSelected ? Color.blue : Color.gray.opacity(0.2), lineWidth: 1))
+            .foregroundStyle(isSelected ? Color.blue : Color.primary)
         }
         .buttonStyle(.plain)
     }
@@ -387,27 +353,20 @@ private extension CheckoutView {
         let isSelected = viewModel.isAddOnSelected(service)
         return Button {
             viewModel.toggleAddOn(service)
+            viewModel.updateVisitItems()
         } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.accentColor.opacity(0.12))
-                    Image(systemName: service.systemIcon ?? "sparkles")
-                        .foregroundStyle(Color.accentColor)
-                }
-                .frame(width: 36, height: 36)
-                Text(service.name)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.primary)
+            HStack {
+                Image(systemName: service.systemIcon ?? "sparkles")
+                    .foregroundStyle(Color.blue)
+                    .frame(width: 30)
+                Text(service.name).font(.subheadline)
                 Spacer()
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? .green : .secondary)
+                    .foregroundStyle(isSelected ? Color.green : Color.gray)
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(isSelected ? Color.accentColor : Color.gray.opacity(0.2), lineWidth: 2)
-            )
+            .padding()
+            .background(RoundedRectangle(cornerRadius: 15).fill(DS.ColorToken.surface))
+            .overlay(RoundedRectangle(cornerRadius: 15).stroke(isSelected ? Color.green.opacity(0.5) : Color.clear, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -416,55 +375,20 @@ private extension CheckoutView {
         let isSelected = viewModel.tags.contains(raw)
         let display = BehaviorTagIcons.display(for: raw)
         return Button {
-            if isSelected {
-                viewModel.tags.remove(raw)
-            } else {
-                viewModel.tags.insert(raw)
-            }
+            if isSelected { viewModel.tags.remove(raw) } else { viewModel.tags.insert(raw) }
         } label: {
-            HStack(spacing: 6) {
-                if let emoji = display.emoji {
-                    Text(emoji)
-                        .font(.body)
-                }
+            HStack(spacing: 4) {
+                if let emoji = display.emoji { Text(emoji) }
                 Text(display.label)
-                    .font(.footnote.weight(.medium))
             }
-            .padding(.horizontal, 14)
+            .font(Font.caption.weight(.bold))
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(isSelected ? Color(red: 0.87, green: 0.95, blue: 0.99) : Color.clear)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(isSelected ? Color(red: 0.4, green: 0.85, blue: 0.97) : Color.gray.opacity(0.25), lineWidth: 2)
-            )
+            .background(Capsule().fill(isSelected ? Color.orange.opacity(0.15) : Color.clear))
+            .overlay(Capsule().stroke(isSelected ? Color.orange : Color.gray.opacity(0.3), lineWidth: 1))
+            .foregroundStyle(isSelected ? Color.orange : Color.secondary)
         }
         .buttonStyle(.plain)
-        .foregroundColor(Color.primary)
-    }
-
-    func notesEditor(text: Binding<String>, placeholder: String) -> some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(DS.ColorToken.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
-            TextEditor(text: text)
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 120)
-                .padding(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
-                .font(.body)
-            if text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(placeholder)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 20)
-                    .padding(.leading, 18)
-            }
-        }
     }
 
     func paymentCard(for option: PaymentOption) -> some View {
@@ -472,58 +396,42 @@ private extension CheckoutView {
         return Button {
             viewModel.choosePayment(option.method)
         } label: {
-            VStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(option.tint.opacity(0.12))
-                    Image(systemName: option.icon)
-                        .font(.title3)
-                        .foregroundStyle(option.tint)
-                }
-                .frame(width: 58, height: 58)
-                Text(option.label)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color.primary)
+            VStack(spacing: 12) {
+                Image(systemName: option.icon)
+                    .font(.title2)
+                Text(option.label).font(Font.caption.weight(.bold))
             }
-            .padding(12)
             .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isSelected ? option.tint.opacity(0.15) : DS.ColorToken.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(isSelected ? option.tint : Color.gray.opacity(0.2), lineWidth: 2)
-                    )
-            )
+            .padding(.vertical, 16)
+            .background(RoundedRectangle(cornerRadius: 15).fill(isSelected ? option.tint.opacity(0.1) : Color.gray.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 15).stroke(isSelected ? option.tint : Color.clear, lineWidth: 2))
+            .foregroundStyle(isSelected ? option.tint : Color.secondary)
         }
         .buttonStyle(.plain)
+    }
+
+    func summaryRow(title: String, value: String, isTotal: Bool = false) -> some View {
+        HStack {
+            Text(title).font(isTotal ? Font.headline : Font.subheadline).foregroundStyle(Color.secondary)
+            Spacer()
+            Text(value).font(isTotal ? Font.headline.bold() : Font.subheadline).foregroundStyle(isTotal ? Color.blue : Color.primary)
+        }
     }
 
     var amountBinding: Binding<String> {
         Binding(
             get: { viewModel.amountString },
             set: { newValue in
-                // Allow digits and the locale's decimal separator
                 let allowed = "0123456789" + (Locale.current.decimalSeparator ?? ".")
                 viewModel.amountString = newValue.filter { allowed.contains($0) }
             }
         )
     }
 
-    var selectedServicesList: [String] {
-        let serviceNames = viewModel.allServices
-            .filter { viewModel.selectedServiceIDs.contains($0.persistentModelID) }
-            .map(\.name)
-        let addOnNames = viewModel.addOnServices
-            .filter { viewModel.selectedAddOnIDs.contains($0.persistentModelID) }
-            .map(\.name)
-        return (serviceNames + addOnNames).sorted()
-    }
-
     var selectedServicesSummary: String {
-        let list = selectedServicesList
-        if list.isEmpty { return NSLocalizedString("checkout.none_selected", comment: "") }
-        return list.joined(separator: ", ")
+        let list = (viewModel.allServices.filter { viewModel.selectedServiceIDs.contains($0.persistentModelID) }.map(\.name) +
+                    viewModel.addOnServices.filter { viewModel.selectedAddOnIDs.contains($0.persistentModelID) }.map(\.name)).sorted()
+        return list.isEmpty ? "None" : list.joined(separator: ", ")
     }
 
     var paymentOptions: [PaymentOption] {
@@ -534,21 +442,12 @@ private extension CheckoutView {
             PaymentOption(method: .zelle, icon: "dollarsign.circle", tint: .yellow)
         ]
     }
-}
 
-private extension CheckoutView {
     struct PaymentOption: Identifiable {
         let id = UUID()
         let method: Payment.Method
         let icon: String
         let tint: Color
-
         var label: String { method.displayName }
     }
-}
-
-fileprivate func hideKeyboard() {
-    #if canImport(UIKit)
-    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    #endif
 }

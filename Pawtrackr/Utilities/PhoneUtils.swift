@@ -39,9 +39,6 @@ public enum PhoneUtils {
     public static func isValidUS(_ input: String) -> Bool {
         guard let digits = tenDigits(from: input) else { return false }
         
-        // Reject numbers where all digits are identical (e.g., "222-222-2222")
-        if Set(digits).count == 1 { return false }
-        
         // Reject N11 service codes
         let area = digits.prefix(3)
         let exchange = digits.dropFirst(3).prefix(3)
@@ -141,10 +138,10 @@ public enum PhoneUtils {
     /// Extracts the core 10 digits from a raw string, handling a leading "1".
     private static func tenDigits(from input: String) -> String? {
         let digits = normalize(input)
-        if digits.count == 11 && digits.first == "1" {
-            return String(digits.dropFirst())
-        } else if digits.count == 10 {
-            return digits
+        if digits.count >= 11 && digits.first == "1" {
+            return String(digits.dropFirst().prefix(10))
+        } else if digits.count >= 10 {
+            return String(digits.prefix(10))
         }
         return nil
     }

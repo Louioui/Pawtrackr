@@ -15,6 +15,7 @@ protocol VisitRepositoryProtocol: Sendable {
     func saveVisit(_ visit: Visit) async throws
     func deleteVisit(_ visit: Visit) async throws
     func checkIn(pet: Pet, date: Date) async throws -> Visit
+    func checkIn(from appointment: Appointment) async throws -> Visit
     func checkOut(visit: Visit, total: Decimal?, now: Date) async throws
 }
 
@@ -58,6 +59,16 @@ final class VisitRepository: VisitRepositoryProtocol {
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
         let visit = Visit(pet: pet, startedAt: date)
+        modelContext.insert(visit)
+        try modelContext.save()
+        return visit
+    }
+
+    func checkIn(from appointment: Appointment) async throws -> Visit {
+        let visit = Visit(pet: appointment.pet, startedAt: .now)
+        visit.appointment = appointment
+        appointment.status = .checkedIn
+        appointment.visit = visit
         modelContext.insert(visit)
         try modelContext.save()
         return visit

@@ -12,6 +12,7 @@ final class AppSettings: ObservableObject {
     // MARK: - Keys
 
     private enum Keys {
+        static let isLockEnabled = "isLockEnabled"
         static let biometricLockEnabled = "isBiometricLockEnabled"
         static let appPIN = "appPIN"
         static let lastPINChangeDate = "lastPINChangeDate"
@@ -24,6 +25,7 @@ final class AppSettings: ObservableObject {
     // MARK: - Defaults
 
     private enum Defaults {
+        static let isLockEnabled = true
         static let pin = "1994"
         static let biometricEnabled = true
         static let autoLockBackground = true
@@ -44,6 +46,12 @@ final class AppSettings: ObservableObject {
     @Published var currencySymbol: String {
         didSet {
             UserDefaults.standard.set(currencySymbol, forKey: Keys.currencySymbol)
+        }
+    }
+
+    @Published var isLockEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isLockEnabled, forKey: Keys.isLockEnabled)
         }
     }
 
@@ -90,6 +98,7 @@ final class AppSettings: ObservableObject {
     init() {
         // Register defaults first
         UserDefaults.standard.register(defaults: [
+            Keys.isLockEnabled: Defaults.isLockEnabled,
             Keys.biometricLockEnabled: Defaults.biometricEnabled,
             Keys.appPIN: Defaults.pin,
             Keys.autoLockOnBackground: Defaults.autoLockBackground,
@@ -99,6 +108,7 @@ final class AppSettings: ObservableObject {
         // Read values
         self.businessName = UserDefaults.standard.string(forKey: Keys.businessName) ?? Defaults.businessName
         self.currencySymbol = UserDefaults.standard.string(forKey: Keys.currencySymbol) ?? Defaults.currencySymbol
+        self.isLockEnabled = UserDefaults.standard.bool(forKey: Keys.isLockEnabled)
         self.isBiometricLockEnabled = UserDefaults.standard.bool(forKey: Keys.biometricLockEnabled)
         self.autoLockOnBackground = UserDefaults.standard.bool(forKey: Keys.autoLockOnBackground)
         self.autoLockAfterInactivity = UserDefaults.standard.bool(forKey: Keys.autoLockAfterInactivity)

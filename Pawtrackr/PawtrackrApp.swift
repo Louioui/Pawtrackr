@@ -116,11 +116,16 @@ struct PawtrackrApp: App {
 
         #if os(macOS)
         Settings {
-            SettingsView()
-                .environmentObject(appSettings)
-                .environmentObject(authViewModel)
-                .modelContainer(container!) 
-                .frame(width: 450, height: 500)
+            if let container = container {
+                SettingsView()
+                    .environmentObject(appSettings)
+                    .environmentObject(authViewModel)
+                    .modelContainer(container) 
+                    .frame(width: 450, height: 500)
+            } else {
+                Text("Database unavailable")
+                    .frame(width: 450, height: 500)
+            }
         }
         #endif
     }

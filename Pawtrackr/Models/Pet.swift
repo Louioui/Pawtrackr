@@ -52,6 +52,84 @@ final class Pet {
     var user: User?
     var activeVisit: Visit?
 
+    // MARK: - Prediction Engine (Business Intelligence)
+
+    /// Calculates the average time (in seconds) between completed visits.
+    var averageVisitInterval: TimeInterval? {
+        let completedVisits = visits
+            .filter { $0.isCompleted }
+            .sorted { $0.startedAt < $1.startedAt }
+        
+        guard completedVisits.count >= 2 else { return nil }
+        
+        var totalInterval: TimeInterval = 0
+        for i in 1..<completedVisits.count {
+            totalInterval += completedVisits[i].startedAt.timeIntervalSince(completedVisits[i-1].startedAt)
+        }
+        
+        return totalInterval / Double(completedVisits.count - 1)
+    }
+
+    /// Predicts the next suggested grooming date based on history or preferred frequency.
+    var suggestedNextVisitDate: Date? {
+        // 1. If there's an active visit or a future appointment, we don't need a suggestion
+        if isCheckedIn { return nil }
+        
+        // Ensure at least one completed visit exists to base prediction on
+        guard visits.contains(where: { $0.isCompleted }) else { return nil }
+        
+        let futureAppointments = appointments.filter { $0.date > .now }
+        if !futureAppointments.isEmpty { return nil }
+
+        // 2. Get the last visit date
+        guard let lastVisitDate = visits.compactMap({ $0.endedAt }).max() else {
+            return nil
+        }
+
+        // 3. Determine the interval to use
+        let interval: TimeInterval
+        if let avg = averageVisitInterval {
+            interval = avg
+        } else if let preferred = preferredGroomingFrequency {
+            switch preferred {
+            case .weekly: interval = 7 * 24 * 3600
+            case .biWeekly: interval = 14 * 24 * 3600
+            case .monthly: interval = 30 * 24 * 3600
+            case .quarterly: interval = 90 * 24 * 3600
+            case .asNeeded: return nil
+            }
+        } else {
+            // Default to 6 weeks if no history or preference
+            interval = 42 * 24 * 3600
+        }
+
+        return lastVisitDate.addingTimeInterval(interval)
+    }
+
+    /// Returns true if the pet is overdue for their next suggested visit.
+    var isOverdue: Bool {
+        guard let suggested = suggestedNextVisitDate else { return false }
+        return Date() > suggested
+    }
+
+    /// Human-readable string indicating when the next visit is expected or how overdue it is.
+    var nextVisitStatus: String? {
+        guard let suggested = suggestedNextVisitDate else { return nil }
+        
+        let now = Date()
+        let cal = Calendar.current
+        
+        if now > suggested {
+            let days = cal.dateComponents([.day], from: suggested, to: now).day ?? 0
+            return days == 0 ? "Due today" : "\(days)d overdue"
+        } else {
+            let days = cal.dateComponents([.day], from: now, to: suggested).day ?? 0
+            if days == 0 { return "Due today" }
+            if days == 1 { return "Due tomorrow" }
+            return "Due in \(days)d"
+        }
+    }
+
     // MARK: - Init
     init(name: String, species: Species, gender: PetGender = .male) {
         self.uuid = UUID()

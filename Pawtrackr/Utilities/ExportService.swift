@@ -55,7 +55,8 @@ class ExportService {
             let date = Formatters.dateOnly.string(from: visit.startedAt)
             let petName = visit.pet?.name ?? "Unknown"
             let clientName = visit.pet?.owner?.fullName ?? "Unknown"
-            let total = "\(visit.total)"
+            // Use a fixed format for numbers in CSV to avoid locale issues (commas as decimal separators)
+            let total = String(format: "%.2f", (visit.total as NSDecimalNumber).doubleValue)
             let payment = visit.payment?.method.displayName ?? "Pending"
             let status = visit.isCompleted ? "Completed" : "Active"
             let notes = visit.note ?? ""

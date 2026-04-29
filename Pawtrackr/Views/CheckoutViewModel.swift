@@ -42,7 +42,7 @@ final class CheckoutViewModel {
     var externalReference: String = ""
     var tags: Set<String> = []
     var selectedAddOnIDs: Set<PersistentIdentifier> = []
-
+    
     // MARK: State
     private(set) var isSaving: Bool = false
     var appError: AppError? = nil
@@ -164,17 +164,26 @@ final class CheckoutViewModel {
         selectedAddOnIDs.contains(service.persistentModelID)
     }
 
-    func syncSubtotal() {
-        let mainTotal = allServices
-            .filter { selectedServiceIDs.contains($0.persistentModelID) }
-            .reduce(Decimal.zero) { $0 + $1.effectiveBasePrice }
-        
-        let addOnTotal = addOnServices
-            .filter { selectedAddOnIDs.contains($0.persistentModelID) }
-            .reduce(Decimal.zero) { $0 + $1.effectiveBasePrice }
-        
-        let total = (mainTotal + addOnTotal).roundedMoney()
-        amountString = total.moneyString
+    func updateVisitItems() {
+        // Update visit items based on selection
+        let servicesToSnapshot = allServices.filter { selectedServiceIDs.contains($0.persistentModelID) }
+        let addOnsToSnapshot = addOnServices.filter { selectedAddOnIDs.contains($0.persistentModelID) }
+        let allSelectedServices = servicesToSnapshot + addOnsToSnapshot
+        let allSelectedIDs = Set(allSelectedServices.map { $0.persistentModelID })
+
+        // Remove items that were unselected
+        visit.items.removeAll { item in
+            guard let serviceID = item.service?.persistentModelID else { return false }
+            return !allSelectedIDs.contains(serviceID)
+        }
+
+        // Add missing items
+        let existingServiceIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
+        for service in allSelectedServices where !existingServiceIDs.contains(service.persistentModelID) {
+            visit.addItem(title: service.name, unitPrice: service.effectiveBasePrice, quantity: 1, service: service)
+        }
+
+        amountString = visit.calculatedTotal.moneyString
     }
 
     func toggleService(_ service: Service) {
@@ -193,6 +202,25 @@ final class CheckoutViewModel {
         } else {
             selectedAddOnIDs.insert(id)
         }
+    }
+    
+    func removeVisitItem(_ item: VisitItem) {
+        visit.removeItem(item)
+        hydrateStateFromVisit()
+        updateVisitItems()
+    }
+    
+    var subtotalDecimal: Decimal {
+        return visit.servicesSubtotal
+    }
+    
+    var servicesTotalDecimal: Decimal {
+        // If the user manually edited amountString, we respect that if it differs from the calculated total.
+        if let manual = Formatters.parseCurrency(amountString), 
+           manual != visit.calculatedTotal {
+            return manual
+        }
+        return visit.calculatedTotal
     }
     
     func choosePayment(_ method: Payment.Method) {
@@ -217,65 +245,86 @@ final class CheckoutViewModel {
     @MainActor
     func processPayment() async {
         guard !isSaving else { return }
-        guard let visitRepository = visitRepository else {
+        // Verify we have what we need
+        if visitRepository == nil {
             appError = .database("Internal error: data store unavailable")
             return
         }
 
         isSaving = true
         state = .processing
+        appError = nil
 
-        defer { isSaving = false }
+        // Snapshot necessary values for background processing
+        let notes = sessionNotes.trimmed.isEmpty ? nil : sessionNotes.trimmed
+        let sortedTags = Array(tags.sorted())
+        let before = beforePhotoData
+        let after = afterPhotoData
+        let total = servicesTotalDecimal
+        let method = selectedPaymentMethod
+        let ref = externalReference.trimmed
+        let endedAt = visit.endedAt ?? checkoutEndsAt ?? Date()
+        let visitID = visit.persistentModelID
+        let petID = pet.persistentModelID
+        
+        guard let modelContainer = visit.modelContext?.container else {
+            appError = .database("Internal error: Visit is not associated with a data store.")
+            isSaving = false
+            state = .failed(appError!)
+            return
+        }
 
-        await Task.yield()
+        Task.detached(priority: .userInitiated) { [visitID, petID] in
+            do {
+                let bgContext = ModelContext(modelContainer)
+                
+                // Fetch models in background context
+                guard let bgVisit = bgContext.model(for: visitID) as? Visit,
+                      let bgPet = bgContext.model(for: petID) as? Pet else {
+                    throw AppError.database("Could not retrieve visit data in background.")
+                }
 
-        do {
-            try validate()
+                // 1. Update background visit/pet state
+                bgVisit.note = notes
+                bgVisit.behaviorTags = sortedTags
+                bgPet.setBehaviorTags(sortedTags)
+                bgVisit.applyPhotos(before: before, after: after)
 
-            let servicesToSnapshot = allServices.filter { selectedServiceIDs.contains($0.persistentModelID) }
-            let addOnsToSnapshot = addOnServices.filter { selectedAddOnIDs.contains($0.persistentModelID) }
-            let allSelectedServices = servicesToSnapshot + addOnsToSnapshot
-            let allSelectedIDs = Set(allSelectedServices.map { $0.persistentModelID })
+                // 2. Create and attach payment
+                let payment = Payment(
+                    amount: total,
+                    method: method,
+                    paidAt: Date(),
+                    externalReference: ref.isEmpty ? nil : ref
+                )
+                bgVisit.attachPayment(payment)
 
-            let existingServiceIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
+                // 3. Finalize checkout logic
+                bgVisit.markCheckedOut(total: total, now: endedAt)
+                
+                // 4. Save background context
+                try bgContext.save()
 
-            visit.items.removeAll { item in
-                guard let serviceID = item.service?.persistentModelID else { return false }
-                return !allSelectedIDs.contains(serviceID)
+                // 5. Success UI Update
+                await MainActor.run {
+                    self.state = .confirmed
+                    self.isSaving = false
+                    
+                    // Trigger summary rebuild notification
+                    let userInfo: [String: Any] = [
+                        VisitDidCompleteKey.endedAt.rawValue: endedAt
+                    ]
+                    NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: userInfo)
+                }
+            } catch {
+                await MainActor.run {
+                    let appErr = AppError.database(error.localizedDescription)
+                    self.state = .failed(appErr)
+                    self.appError = appErr
+                    self.isSaving = false
+                    Logger.main.error("Checkout background save failed: \(error.localizedDescription)")
+                }
             }
-
-            for service in allSelectedServices where !existingServiceIDs.contains(service.persistentModelID) {
-                visit.addItem(title: service.name, unitPrice: service.effectiveBasePrice, quantity: 1, service: service)
-            }
-
-            visit.note = sessionNotes.trimmed.isEmpty ? nil : sessionNotes.trimmed
-            let sortedTags = Array(tags.sorted())
-            visit.behaviorTags = sortedTags
-            pet.setBehaviorTags(sortedTags)
-            visit.applyPhotos(before: beforePhotoData, after: afterPhotoData)
-
-            let cleanedRef = externalReference.trimmed
-            let payment = Payment(
-                amount: servicesTotalDecimal,
-                method: selectedPaymentMethod,
-                paidAt: Date(),
-                externalReference: cleanedRef.isEmpty ? nil : cleanedRef
-            )
-            visit.attachPayment(payment)
-
-            let finalEndedAt = visit.endedAt ?? checkoutEndsAt ?? Date()
-            try await visitRepository.checkOut(visit: visit, total: servicesTotalDecimal, now: finalEndedAt)
-
-            state = .confirmed
-        } catch let error as ValidationError {
-            let appErr = AppError.validation(error)
-            state = .failed(appErr)
-            appError = appErr
-        } catch {
-            let appErr = AppError.database(error.localizedDescription)
-            state = .failed(appErr)
-            appError = appErr
-            Logger.main.error("Checkout save failed: \(error.localizedDescription)")
         }
     }
     
@@ -287,10 +336,6 @@ final class CheckoutViewModel {
         if requiresExternalReference && externalReference.trimmed.isEmpty {
             throw ValidationError.custom(message: "A reference is required for this payment method.")
         }
-    }
-    
-    var servicesTotalDecimal: Decimal {
-        return Formatters.parseCurrency(amountString) ?? .zero
     }
     
     var finalTotalString: String {

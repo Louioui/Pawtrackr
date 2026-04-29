@@ -21,6 +21,9 @@ final class VisitItem {
     /// The name of the service, captured at the time the item was created.
     @Attribute var name: String
     
+    /// The category of the service, captured at the time the item was created.
+    var serviceCategoryRaw: String?
+    
     /// The price for a single unit of this service, captured at the time the item was created.
     var unitPrice: Decimal
     
@@ -51,6 +54,7 @@ final class VisitItem {
         self.service = service
         self.visit = visit
         self.name = service.name.trimmed
+        self.serviceCategoryRaw = service.category?.rawValue
         self.unitPrice = (priceOverride ?? service.effectiveBasePrice).roundedMoney()
         self.quantity = 1
         self.note = note
@@ -64,6 +68,7 @@ final class VisitItem {
         self.service = nil
         self.visit = visit
         self.name = name.trimmed
+        self.serviceCategoryRaw = nil
         self.unitPrice = unitPrice.roundedMoney()
         self.quantity = max(1, quantity)
         self.note = note

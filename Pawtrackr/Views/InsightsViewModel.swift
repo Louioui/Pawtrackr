@@ -1,431 +1,171 @@
-import SwiftUI
+//
+//  InsightsViewModel.swift
+//  Pawtrackr
+//
+
+import Foundation
 import SwiftData
-import Combine
-import OSLog
+import Observation
 
 @Observable
 @MainActor
-final class InsightsViewModel {
-    // MARK: - Nested Types
-
-    struct RevenuePoint: Identifiable {
+class InsightsViewModel {
+    struct RevenueData: Identifiable {
+        let id = UUID()
         let date: Date
         let amount: Decimal
-        var id: Date { date }
-        var amountDouble: Double { (amount as NSDecimalNumber).doubleValue }
     }
-
-    struct CountRow: Identifiable {
+    
+    struct DistributionData: Identifiable {
+        let id = UUID()
         let name: String
         let count: Int
-        let rank: Int
-        var id: String { name }
-        var countString: String { "\(count)x" }
+        var revenue: Decimal = .zero
     }
-
-    enum Scope: CaseIterable, Identifiable {
-        case today
-        case yesterday
-        case last7Days
-        case last30Days
-        case thisMonth
-        case yearToDate
-        case custom
-
-        var id: String { title }
-
-        var title: String {
-            switch self {
-            case .today:
-                return NSLocalizedString("insights.scope.today", comment: "Insights scope: today")
-            case .yesterday:
-                return NSLocalizedString("insights.scope.yesterday", comment: "Insights scope: yesterday")
-            case .last7Days:
-                return NSLocalizedString("7D", comment: "Insights scope: last 7 days")
-            case .last30Days:
-                return NSLocalizedString("30D", comment: "Insights scope: last 30 days")
-            case .thisMonth:
-                return NSLocalizedString("MTD", comment: "Insights scope: month to date")
-            case .yearToDate:
-                return NSLocalizedString("YTD", comment: "Insights scope: year to date")
-            case .custom:
-                return NSLocalizedString("Custom", comment: "Insights scope: custom range")
-            }
-        }
-
-        var displayDescription: String {
-            switch self {
-            case .today:
-                return NSLocalizedString("Today's Revenue", comment: "")
-            case .yesterday:
-                return NSLocalizedString("Yesterday's Revenue", comment: "")
-            case .last7Days:
-                return NSLocalizedString("Last 7 Days Revenue", comment: "")
-            case .last30Days:
-                return NSLocalizedString("Last 30 Days Revenue", comment: "")
-            case .thisMonth:
-                return NSLocalizedString("Month to Date Revenue", comment: "")
-            case .yearToDate:
-                return NSLocalizedString("Year to Date Revenue", comment: "")
-            case .custom:
-                return NSLocalizedString("Custom Period Revenue", comment: "")
-            }
-        }
-    }
-
-    // MARK: - Published state
-
-    var scope: Scope = .today { didSet { scopeDidChange(oldValue: oldValue) } }
-    var customDraftStart: Date
-    var customDraftEnd: Date
-
-    private(set) var revenueSeries: [RevenuePoint] = []
-    private(set) var revenueMovingAverage: [RevenuePoint] = []
-    private(set) var totalRevenue: Decimal = .zero
-    @MainActor var totalRevenueString: String { totalRevenue.moneyString }
-    private(set) var revenueToday: Decimal = .zero
-    private(set) var revenueYesterday: Decimal = .zero
-    @MainActor var revenueTodayString: String { revenueToday.moneyString }
-    @MainActor var revenueYesterdayString: String { revenueYesterday.moneyString }
-    private(set) var serviceLeaders: [CountRow] = []
-    private(set) var totalVisitsInPeriod: Int = 0
-    private(set) var activePeriodDays: Int = 0
-    private(set) var isLoading: Bool = false
-    var appError: AppError? = nil
-
-    // MARK: - Private state
-
-    @ObservationIgnored private let modelContext: ModelContext
-    @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "insights")
-    @ObservationIgnored private var cancellables: Set<AnyCancellable> = []
-    @ObservationIgnored private var customAppliedStart: Date?
-    @ObservationIgnored private var customAppliedEndExclusive: Date?
     
+    struct MonthlyGrowthData: Identifiable {
+        let id = UUID()
+        let month: String
+        let revenue: Decimal
+        let visitCount: Int
+    }
 
-    // MARK: - Lifecycle
+    struct TopClientData: Identifiable {
+        let id = UUID()
+        let name: String
+        let totalSpent: Decimal
+        let visitCount: Int
+    }
+
+    var revenueSeries: [RevenueData] = []
+    var serviceDistribution: [DistributionData] = []
+    var categoryDistribution: [DistributionData] = []
+    var topClients: [TopClientData] = []
+    var monthlyGrowth: [MonthlyGrowthData] = []
+    
+    var totalRevenue: Decimal = .zero
+    var averageVisitValue: Decimal = .zero
+    
+    private let repository: DashboardRepositoryProtocol
+    private let modelContext: ModelContext
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        
-        // Main dates
-        let mainDraftEnd = today
-        let mainDraftStart = calendar.date(byAdding: .day, value: -29, to: today) ?? today
-        self.customDraftEnd = mainDraftEnd
-        self.customDraftStart = mainDraftStart
-        self.customAppliedStart = mainDraftStart
-        self.customAppliedEndExclusive = calendar.date(byAdding: .day, value: 1, to: mainDraftEnd)
-
-        NotificationCenter.default.publisher(for: .visitDidComplete)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.refresh() }
-            .store(in: &cancellables)
-
-        refresh()
+        self.repository = DashboardRepository(modelContainer: modelContext.container)
     }
 
-    deinit {
-        cancellables.forEach { $0.cancel() }
-        cancellables.removeAll()
+    func refresh() async {
+        await fetchRevenue()
+        await fetchDistributions()
+        await fetchTopClients()
+        await fetchMonthlyGrowth()
     }
 
-    // MARK: - Intent
-
-    func applyCustomDates() {
-        guard customDraftEnd >= customDraftStart else { return }
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: customDraftStart)
-        let endExclusive = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: customDraftEnd))
-        customAppliedStart = start
-        customAppliedEndExclusive = endExclusive
-        if scope != .custom {
-            scope = .custom
-        } else {
-            refresh()
-        }
-    }
-
-    func refresh() {
-        let bounds = dateBounds(for: scope, customStart: customAppliedStart, customEnd: customAppliedEndExclusive)
-        isLoading = true
-        appError = nil
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try self.apply(bounds: bounds)
-            } catch {
-                self.logger.error("Insights refresh failed: \(error)")
-                self.appError = .database(error.localizedDescription)
-            }
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func scopeDidChange(oldValue: Scope) {
-        if scope == .custom, customAppliedStart == nil {
-            applyCustomDates()
-        } else {
-            refresh()
-        }
-    }
-
-    var activeBounds: (start: Date?, endExclusive: Date?) {
-        dateBounds(for: scope, customStart: customAppliedStart, customEnd: customAppliedEndExclusive)
-    }
-
-    @MainActor
-    var activeRangeLabel: String {
-        let bounds = activeBounds
-        guard let start = bounds.start, let endExclusive = bounds.endExclusive else { return scope.title }
-        let calendar = Calendar.current
-        let inclusiveEnd = calendar.date(byAdding: .day, value: -1, to: endExclusive) ?? endExclusive
-        let formatter = Formatters.dateOnly
-        if calendar.isDate(start, inSameDayAs: inclusiveEnd) {
-            return formatter.string(from: start)
-        }
-        return "\(formatter.string(from: start)) – \(formatter.string(from: inclusiveEnd))"
-    }
-
-    private func dateBounds(for scope: Scope, customStart: Date?, customEnd: Date?) -> (start: Date?, endExclusive: Date?) {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-
-        switch scope {
-        case .today:
-            return (today, calendar.date(byAdding: .day, value: 1, to: today))
-        case .yesterday:
-            let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
-            return (yesterday, today)
-        case .last7Days:
-            let start = calendar.date(byAdding: .day, value: -6, to: today)!
-            return (start, calendar.date(byAdding: .day, value: 1, to: today))
-        case .last30Days:
-            let start = calendar.date(byAdding: .day, value: -29, to: today)!
-            return (start, calendar.date(byAdding: .day, value: 1, to: today))
-        case .thisMonth:
-            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
-            return (start, calendar.date(byAdding: .day, value: 1, to: today))
-        case .yearToDate:
-            let start = calendar.date(from: calendar.dateComponents([.year], from: today))!
-            return (start, calendar.date(byAdding: .day, value: 1, to: today))
-        case .custom:
-            return (customStart, customEnd)
-        }
-    }
-
-    private func apply(bounds: (start: Date?, endExclusive: Date?)) throws {
-        defer { isLoading = false }
-        
-        let (daySummaries, serviceSummaries) = try fetchData(bounds: bounds)
-        
-        computeOverallStats(daySummaries: daySummaries, bounds: bounds)
-        
-        buildChartData(daySummaries: daySummaries, bounds: bounds)
-        
-        self.serviceLeaders = computeTopServices(summaries: serviceSummaries)
-        
-        updateHeadlineDailyRevenue()
-    }
-
-    private func fetchData(bounds: (start: Date?, endExclusive: Date?)) throws -> (daySummaries: [DaySummary], serviceSummaries: [ServiceDaySummary]) {
-        let daySummaries = try fetchDaySummaries(bounds: bounds)
-        let serviceSummaries = try fetchServiceDaySummaries(bounds: bounds)
-        return (daySummaries, serviceSummaries)
-    }
-
-    private func computeOverallStats(daySummaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) {
-        let totalVisits = daySummaries.reduce(0) { $0 + $1.visitCount }
-        let totalRev = daySummaries.reduce(Decimal.zero) { $0 + $1.revenue }
-        let periodDays = daysInRange(bounds)
-        
-        self.totalVisitsInPeriod = totalVisits
-        self.totalRevenue = totalRev
-        self.activePeriodDays = periodDays
-    }
-
-    private func buildChartData(daySummaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) {
-        self.revenueSeries = buildRevenueSeries(summaries: daySummaries, bounds: bounds)
-        self.revenueMovingAverage = buildMovingAverage(for: revenueSeries, window: min(7, max(3, revenueSeries.count)))
-    }
-    
-    private func fetchDaySummaries(bounds: (start: Date?, endExclusive: Date?)) throws -> [DaySummary] {
-        // SwiftData predicates don't support capturing tuple members, so fetch all and filter in memory
-        let descriptor = FetchDescriptor<DaySummary>(sortBy: [SortDescriptor(\.day)])
-        let all = try modelContext.fetch(descriptor)
-
-        let startDate = bounds.start ?? .distantPast
-        let endDate = bounds.endExclusive ?? .distantFuture
-
-        return all.filter { $0.day >= startDate && $0.day < endDate }
-    }
-
-    private func fetchServiceDaySummaries(bounds: (start: Date?, endExclusive: Date?)) throws -> [ServiceDaySummary] {
-        // SwiftData predicates don't support capturing tuple members, so fetch all and filter in memory
-        let descriptor = FetchDescriptor<ServiceDaySummary>()
-        let all = try modelContext.fetch(descriptor)
-
-        let startDate = bounds.start ?? .distantPast
-        let endDate = bounds.endExclusive ?? .distantFuture
-
-        return all.filter { $0.day >= startDate && $0.day < endDate }
-    }
-
-    private func fetchVisits(bounds: (start: Date?, endExclusive: Date?)) throws -> [Visit] {
-        // SwiftData predicates don't support capturing tuple members, so fetch all and filter in memory
-        let descriptor = FetchDescriptor<Visit>()
-        let all = try modelContext.fetch(descriptor)
-
-        let startDate = bounds.start ?? .distantPast
-        let endDate = bounds.endExclusive ?? .distantFuture
-
-        return all.filter { visit in
-            guard let endedAt = visit.endedAt else { return false }
-            return endedAt >= startDate && endedAt < endDate
-        }
-    }
-    
-    private func daysInRange(_ bounds: (start: Date?, endExclusive: Date?)) -> Int {
-        guard let start = bounds.start, let endExclusive = bounds.endExclusive else { return 0 }
-        return max(0, Calendar.current.dateComponents([.day], from: start, to: endExclusive).day ?? 0)
-    }
-    
-    private func buildRevenueSeries(summaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) -> [RevenuePoint] {
-        let periodDays = daysInRange(bounds)
-
-        if periodDays <= 90 {
-            return buildRevenueSeriesByDay(summaries: summaries, bounds: bounds)
-        } else if periodDays <= 365 {
-            return buildRevenueSeriesByWeek(summaries: summaries, bounds: bounds)
-        } else {
-            return buildRevenueSeriesByMonth(summaries: summaries, bounds: bounds)
-        }
-    }
-
-    private func buildRevenueSeriesByDay(summaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) -> [RevenuePoint] {
-        guard let endExclusive = bounds.endExclusive else { return [] }
-        let calendar = Calendar.current
-
-        // Fast lookup of revenue by day
-        let bucket = summaries.reduce(into: [Date: Decimal]()) { $0[$1.day] = $1.revenue }
-
-        guard let startDate = bounds.start.map({ calendar.startOfDay(for: $0) }) ?? summaries.first?.day else {
-            return []
-        }
-
-        var points: [RevenuePoint] = []
-        var cursor = startDate
-        while cursor < endExclusive {
-            let amount = bucket[cursor] ?? .zero
-            points.append(RevenuePoint(date: cursor, amount: amount.roundedMoney()))
-            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
-            cursor = next
-        }
-        return points
-    }
-
-    private func buildRevenueSeriesByWeek(summaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) -> [RevenuePoint] {
-        guard let start = bounds.start, let endExclusive = bounds.endExclusive else { return [] }
-        let calendar = Calendar.current
-
-        // Bucket revenue by the start of the week
-        let weeklyBuckets = summaries.reduce(into: [Date: Decimal]()) { result, summary in
-            guard let weekStartDate = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: summary.day)) else { return }
-            result[weekStartDate, default: .zero] += summary.revenue
-        }
-
-        var points: [RevenuePoint] = []
-        guard let iterStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: start)) else { return [] }
-        var cursor = iterStart
-        while cursor < endExclusive {
-            let amount = weeklyBuckets[cursor] ?? .zero
-            points.append(RevenuePoint(date: cursor, amount: amount.roundedMoney()))
-            guard let next = calendar.date(byAdding: .weekOfYear, value: 1, to: cursor) else { break }
-            cursor = next
-        }
-        return points
-    }
-
-    private func buildRevenueSeriesByMonth(summaries: [DaySummary], bounds: (start: Date?, endExclusive: Date?)) -> [RevenuePoint] {
-        guard let start = bounds.start, let endExclusive = bounds.endExclusive else { return [] }
-        let calendar = Calendar.current
-
-        // Bucket revenue by the start of the month
-        let monthlyBuckets = summaries.reduce(into: [Date: Decimal]()) { result, summary in
-            guard let monthStartDate = calendar.date(from: calendar.dateComponents([.year, .month], from: summary.day)) else { return }
-            result[monthStartDate, default: .zero] += summary.revenue
-        }
-
-        var points: [RevenuePoint] = []
-        guard let iterStart = calendar.date(from: calendar.dateComponents([.year, .month], from: start)) else { return [] }
-        var cursor = iterStart
-        while cursor < endExclusive {
-            let amount = monthlyBuckets[cursor] ?? .zero
-            points.append(RevenuePoint(date: cursor, amount: amount.roundedMoney()))
-            guard let next = calendar.date(byAdding: .month, value: 1, to: cursor) else { break }
-            cursor = next
-        }
-        return points
-    }
-    
-    private func buildMovingAverage(for points: [RevenuePoint], window: Int) -> [RevenuePoint] {
-        guard window > 1, points.count >= window else { return [] }
-        var result: [RevenuePoint] = []
-        var running: Decimal = .zero
-
-        for (index, point) in points.enumerated() {
-            running += point.amount
-            if index >= window {
-                running -= points[index - window].amount
-            }
-            if index >= window - 1 {
-                let avg = (running / Decimal(window)).roundedMoney()
-                result.append(RevenuePoint(date: point.date, amount: avg))
-            }
-        }
-
-        return result
-    }
-
-    private func computeTopServices(summaries: [ServiceDaySummary]) -> [CountRow] {
-        let serviceCounts = summaries.reduce(into: [String: Int]()) { result, summary in
-            result[summary.serviceName, default: 0] += summary.count
-        }
-        
-        let sorted = serviceCounts.sorted(by: {
-            if $0.value == $1.value {
-                return $0.key < $1.key
-            }
-            return $0.value > $1.value
-        })
-        
-        return sorted
-            .prefix(10)
-            .enumerated()
-            .map { index, pair in CountRow(name: pair.key, count: pair.value, rank: index + 1) }
-    }
-    
-    private func updateHeadlineDailyRevenue() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
-        revenueToday = revenueForDay(today)
-        revenueYesterday = revenueForDay(yesterday)
-    }
-
-    private func revenueForDay(_ day: Date) -> Decimal {
-        let calendar = Calendar.current
-        let targetDay = calendar.startOfDay(for: day)
-        let predicate = #Predicate<DaySummary> { $0.day == targetDay }
-        let descriptor = FetchDescriptor<DaySummary>(predicate: predicate)
+    private func fetchRevenue() async {
         do {
-            let summary = try modelContext.fetch(descriptor).first
-            return summary?.revenue ?? .zero
+            let bucket = try await repository.fetchRevenueSeries(days: 30)
+            revenueSeries = bucket.map { RevenueData(date: $0.key, amount: $0.value) }.sorted { $0.date < $1.date }
+            
+            totalRevenue = revenueSeries.reduce(.zero) { $0 + $1.amount }
+            
+            _ = try await repository.fetchKPIs()
         } catch {
-            logger.error("Insights daily summary fetch failed for \(targetDay): \(String(describing: error))")
-            return .zero
+            print("Insights error (revenue): \(error)")
         }
+    }
+
+    private func fetchDistributions() async {
+        do {
+            let svc = try await repository.fetchServiceDistribution(days: 30)
+            
+            // To get revenue per service, we need to fetch visits for the period
+            let cal = Calendar.current
+            let end = cal.startOfDay(for: .now).addingTimeInterval(86400)
+            let start = cal.date(byAdding: .day, value: -30, to: end) ?? end
+            
+            let descriptor = FetchDescriptor<Visit>(
+                predicate: #Predicate<Visit> { v in
+                    if let endedAt = v.endedAt {
+                        return endedAt >= start && endedAt < end
+                    } else {
+                        return false
+                    }
+                }
+            )
+            let visits = try modelContext.fetch(descriptor)
+            
+            var svcData: [String: (count: Int, revenue: Decimal)] = [:]
+            for v in visits {
+                for item in v.items {
+                    svcData[item.name, default: (0, .zero)].count += 1
+                    svcData[item.name, default: (0, .zero)].revenue += item.lineTotal
+                }
+            }
+            
+            serviceDistribution = svcData.map { name, stats in
+                DistributionData(name: name, count: stats.count, revenue: stats.revenue)
+            }.sorted { $0.revenue > $1.revenue }
+            
+            let cat = try await repository.fetchCategoryDistribution(days: 30)
+            categoryDistribution = cat.map { DistributionData(name: $0.key, count: $0.value) }.sorted { $0.count > $1.count }
+        } catch {
+            print("Insights error (dist): \(error)")
+        }
+    }
+
+    private func fetchTopClients() async {
+        let descriptor = FetchDescriptor<Client>()
+        do {
+            let clients = try modelContext.fetch(descriptor)
+            topClients = clients.map { client in
+                let visits = client.pets.flatMap { $0.visits }.filter { $0.isCompleted }
+                let spent = visits.reduce(Decimal.zero) { $0 + $1.total }
+                return TopClientData(name: client.fullName, totalSpent: spent, visitCount: visits.count)
+            }
+            .filter { $0.totalSpent > 0 }
+            .sorted { $0.totalSpent > $1.totalSpent }
+            .prefix(10)
+            .map { $0 }
+        } catch {
+            print("Insights error (top clients): \(error)")
+        }
+    }
+    
+    private func fetchMonthlyGrowth() async {
+        let cal = Calendar.current
+        let now = Date()
+        var growth: [MonthlyGrowthData] = []
+        
+        let monthFormatter = DateFormatter()
+        monthFormatter.dateFormat = "MMM"
+        
+        for i in (0..<6).reversed() {
+            guard let monthDate = cal.date(byAdding: .month, value: -i, to: now),
+                  let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: monthDate)),
+                  let monthEnd = cal.date(byAdding: .month, value: 1, to: monthStart) else { continue }
+            
+            let descriptor = FetchDescriptor<Visit>(
+                predicate: #Predicate<Visit> { v in
+                    if let endedAt = v.endedAt {
+                        return endedAt >= monthStart && endedAt < monthEnd
+                    } else {
+                        return false
+                    }
+                }
+            )
+            
+            do {
+                let visits = try modelContext.fetch(descriptor)
+                let revenue = visits.reduce(Decimal.zero) { $0 + $1.total }
+                growth.append(MonthlyGrowthData(
+                    month: monthFormatter.string(from: monthStart),
+                    revenue: revenue,
+                    visitCount: visits.count
+                ))
+            } catch {
+                print("Insights error (monthly growth): \(error)")
+            }
+        }
+        self.monthlyGrowth = growth
     }
 }

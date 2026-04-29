@@ -37,6 +37,10 @@ final class Visit {
 
     @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
     var payment: Payment?
+    
+    @Relationship(deleteRule: .nullify)
+    var appointment: Appointment?
+    
     var user: User?
 
     // MARK: - Init
@@ -97,8 +101,13 @@ final class Visit {
         }
     }
 
-    /// While active use the running subtotal; once completed use persisted total
-    var effectiveTotal: Decimal { isCompleted ? total : servicesSubtotal }
+    /// Calculates the total from line items.
+    var calculatedTotal: Decimal {
+        servicesSubtotal.roundedMoney()
+    }
+
+    /// While active use the calculated total; once completed use persisted total
+    var effectiveTotal: Decimal { isCompleted ? total : calculatedTotal }
 
     // MARK: - Formatting helpers (assumes you have Decimal.moneyString)
     @MainActor var totalCurrencyString: String { effectiveTotal.moneyString }
@@ -106,7 +115,7 @@ final class Visit {
     // MARK: - Operations
     
     func recalcTotal() {
-        total = servicesSubtotal
+        total = calculatedTotal
         didUpdate()
     }
 

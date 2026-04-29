@@ -55,6 +55,16 @@ final class Client {
             .joined(separator: " ")
     }
     
+    var smsURL: URL? {
+        guard let p = phone, let urlStr = PhoneUtils.smsURLString(p) else { return nil }
+        return URL(string: urlStr)
+    }
+    
+    var telURL: URL? {
+        guard let p = phone, let urlStr = PhoneUtils.telURLString(p) else { return nil }
+        return URL(string: urlStr)
+    }
+    
     /// Best-effort single-line contact summary.
     var primaryContact: String {
         if let info = primaryContactInfo, !info.isEmpty {

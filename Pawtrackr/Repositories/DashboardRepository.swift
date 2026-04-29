@@ -15,16 +15,21 @@ struct DashboardKPI {
 
 @MainActor
 protocol DashboardRepositoryProtocol: Sendable {
+    var modelContext: ModelContext { get }
     func fetchKPIs() async throws -> DashboardKPI
     func fetchActiveVisits() async throws -> [Visit]
+    func fetchUpcomingAppointments(limit: Int) async throws -> [Appointment]
     func fetchRecentClients(limit: Int) async throws -> [Client]
+    func fetchOverduePets(limit: Int) async throws -> [Pet]
+    func fetchServiceDistribution(days: Int) async throws -> [String: Int]
+    func fetchCategoryDistribution(days: Int) async throws -> [String: Int]
     func fetchRevenueSeries(days: Int) async throws -> [Date: Decimal]
     func fetchGalleryImages(days: Int, limit: Int) async throws -> [Data]
 }
 
 @MainActor
 final class DashboardRepository: DashboardRepositoryProtocol {
-    private let modelContext: ModelContext
+    let modelContext: ModelContext
     
     init(modelContainer: ModelContainer) {
         self.modelContext = modelContainer.mainContext
@@ -35,11 +40,11 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         let start = cal.startOfDay(for: .now)
         let end = cal.date(byAdding: .day, value: 1, to: start)!
         
-        // Today's appointments (visits started today)
-        let todayDesc = FetchDescriptor<Visit>(
-            predicate: #Predicate { v in v.startedAt >= start && v.startedAt < end }
+        // Today's appointments (scheduled appointments for today)
+        let todayApptDesc = FetchDescriptor<Appointment>(
+            predicate: #Predicate { a in a.date >= start && a.date < end }
         )
-        let todaysCount = try modelContext.fetchCount(todayDesc)
+        let todaysCount = try modelContext.fetchCount(todayApptDesc)
         
         // In progress
         let inProgDesc = FetchDescriptor<Visit>(
@@ -68,6 +73,18 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         )
         return try modelContext.fetch(descriptor)
     }
+
+    func fetchUpcomingAppointments(limit: Int) async throws -> [Appointment] {
+        let now = Date()
+        let scheduledStatus = Appointment.Status.scheduled
+        let descriptor = FetchDescriptor<Appointment>(
+            predicate: #Predicate { a in a.status == scheduledStatus && a.date >= now },
+            sortBy: [SortDescriptor(\.date, order: .forward)]
+        )
+        var desc = descriptor
+        desc.fetchLimit = limit
+        return try modelContext.fetch(desc)
+    }
     
     func fetchRecentClients(limit: Int) async throws -> [Client] {
         var descriptor = FetchDescriptor<Client>(
@@ -75,6 +92,37 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         )
         descriptor.fetchLimit = limit
         return try modelContext.fetch(descriptor)
+    }
+
+    func fetchOverduePets(limit: Int) async throws -> [Pet] {
+        let fourWeeksAgo = Calendar.current.date(byAdding: .day, value: -28, to: .now) ?? .now
+        let descriptor = FetchDescriptor<Pet>(
+            predicate: #Predicate { $0.updatedAt < fourWeeksAgo },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        // Fetch candidate pets and filter in memory for complex isOverdue logic
+        let candidates = try modelContext.fetch(descriptor)
+        return Array(candidates.filter { $0.isOverdue }.prefix(limit))
+    }
+
+    func fetchServiceDistribution(days: Int) async throws -> [String: Int] {
+        let cal = Calendar.current
+        let start = cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: .now)) ?? .now
+        let desc = FetchDescriptor<ServiceDaySummary>(
+            predicate: #Predicate { $0.day >= start }
+        )
+        let summaries = try modelContext.fetch(desc)
+        return summaries.reduce(into: [String: Int]()) { $0[$1.serviceName, default: 0] += $1.count }
+    }
+
+    func fetchCategoryDistribution(days: Int) async throws -> [String: Int] {
+        let cal = Calendar.current
+        let start = cal.date(byAdding: .day, value: -days, to: cal.startOfDay(for: .now)) ?? .now
+        let desc = FetchDescriptor<CategoryDaySummary>(
+            predicate: #Predicate { $0.day >= start }
+        )
+        let summaries = try modelContext.fetch(desc)
+        return summaries.reduce(into: [String: Int]()) { $0[$1.categoryRaw, default: 0] += $1.count }
     }
     
     func fetchRevenueSeries(days: Int) async throws -> [Date: Decimal] {

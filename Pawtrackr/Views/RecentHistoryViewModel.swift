@@ -88,11 +88,25 @@ final class RecentHistoryViewModel {
                 return (s, e)
             }
         }()
-        // SwiftData predicate with date bounds only (text search remains in-memory)
-        let predicate = #Predicate<Visit> { visit in
-            visit.endedAt != nil &&
-            (start == nil || visit.endedAt! >= start!) &&
-            (end == nil || visit.endedAt! < end!)
+        // Break down the predicate to help the compiler type-check faster.
+        let predicate: Predicate<Visit>
+        
+        if let s = start, let e = end {
+            predicate = #Predicate<Visit> { v in
+                (v.endedAt ?? Date.distantPast) >= s && (v.endedAt ?? Date.distantFuture) < e
+            }
+        } else if let s = start {
+            predicate = #Predicate<Visit> { v in
+                (v.endedAt ?? Date.distantPast) >= s
+            }
+        } else if let e = end {
+            predicate = #Predicate<Visit> { v in
+                (v.endedAt ?? Date.distantPast) != Date.distantPast && (v.endedAt ?? Date.distantFuture) < e
+            }
+        } else {
+            predicate = #Predicate<Visit> { v in
+                v.endedAt != nil
+            }
         }
 
         do {
@@ -140,21 +154,24 @@ final class RecentHistoryViewModel {
     
     func exportCSV() -> String {
         let allVisits = sortedDays.flatMap { groupedVisits[$0] ?? [] }
-        var lines: [String] = [
-            "VisitID,StartedAt,EndedAt,Pet,Owner,Services,Amount,Payment,Reference,Notes"
-        ]
+        var lines: [String] = []
+        lines.append("VisitID,StartedAt,EndedAt,Pet,Owner,Services,Amount,Payment,Reference,Notes")
+        
         for v in allVisits {
             let id = v.uuid.uuidString
             let started = Formatters.iso8601.string(from: v.startedAt)
             let ended = v.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
             let pet = (v.pet?.name ?? "Unknown").csvEscaped
-            let owner = v.pet?.owner?.fullName.csvEscaped ?? ""
-            let services = v.items.map { $0.displayName.csvEscaped }.joined(separator: "; ")
+            let owner = (v.pet?.owner?.fullName ?? "").csvEscaped
+            let serviceNames = v.items.map { $0.displayName.csvEscaped }
+            let services = "\"\(serviceNames.joined(separator: "; "))\""
             let amount = v.total.moneyString
-            let payment = v.payment?.method.displayName.csvEscaped ?? ""
-            let reference = v.payment?.externalReference?.csvEscaped ?? ""
-            let notes = v.note?.replacingOccurrences(of: "\n", with: " ").csvEscaped ?? ""
-            lines.append([id, started, ended, pet, owner, services, amount, payment, reference, notes].joined(separator: ","))
+            let payment = (v.payment?.method.displayName ?? "").csvEscaped
+            let reference = (v.payment?.externalReference ?? "").csvEscaped
+            let notes = (v.note ?? "").replacingOccurrences(of: "\n", with: " ").csvEscaped
+            
+            let row: [String] = [id, started, ended, pet, owner, services, amount, payment, reference, notes]
+            lines.append(row.joined(separator: ","))
         }
         return lines.joined(separator: "\n")
     }

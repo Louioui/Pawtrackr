@@ -28,10 +28,14 @@ struct SettingsView: View {
                     securityStatusCard
                         .listRowInsets(EdgeInsets())
                     
-                    Toggle("Biometric Lock", isOn: $appSettings.isBiometricLockEnabled)
+                    Toggle("Enable App Lock", isOn: $appSettings.isLockEnabled)
                     
-                    Button("Change PIN") {
-                        showChangePIN = true
+                    if appSettings.isLockEnabled {
+                        Toggle("Biometric Unlock", isOn: $appSettings.isBiometricLockEnabled)
+                        
+                        Button("Change PIN") {
+                            showChangePIN = true
+                        }
                     }
                 }
                 
@@ -76,15 +80,15 @@ struct SettingsView: View {
 
     private var securityStatusCard: some View {
         ZStack {
-            LinearGradient(colors: [DS.ColorToken.success, Color.green.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
+            LinearGradient(colors: [appSettings.isLockEnabled ? DS.ColorToken.success : Color.gray, appSettings.isLockEnabled ? Color.green.opacity(0.8) : Color.gray.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             HStack(spacing: 12) {
                 Circle().fill(Color.white.opacity(0.2)).frame(width: 48, height: 48)
-                    .overlay(Image(systemName: "checkmark.shield.fill").font(.title2).foregroundStyle(.white))
+                    .overlay(Image(systemName: appSettings.isLockEnabled ? "checkmark.shield.fill" : "lock.open.fill").font(.title2).foregroundStyle(.white))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.security.status.active_title" : "settings.security.status.inactive_title", comment: ""))
+                    Text(NSLocalizedString(appSettings.isLockEnabled ? "settings.security.status.active_title" : "settings.security.status.inactive_title", comment: ""))
                         .font(.headline).foregroundStyle(.white)
-                    Text(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.security.status.active_subtitle" : "settings.security.status.inactive_subtitle", comment: ""))
+                    Text(NSLocalizedString(appSettings.isLockEnabled ? "settings.security.status.active_subtitle" : "settings.security.status.inactive_subtitle", comment: ""))
                         .font(.caption).foregroundStyle(.white.opacity(0.9))
                 }
                 Spacer()

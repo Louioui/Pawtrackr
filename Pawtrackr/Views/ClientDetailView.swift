@@ -66,6 +66,7 @@ struct ClientDetailView: View {
     @State private var newContactRelation: String = ""
     @State private var newContactPhone: String = ""
     @State private var contactPendingDelete: EmergencyContact? = nil
+    @State private var validationError: String? = nil
     @FocusState private var contactNameFocused: Bool
 
     // Inline client edit state
@@ -191,6 +192,13 @@ struct ClientDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { showContactEditor = false } }
                 ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("common.save", comment: "")) { addOrUpdateContact() } }
+            }
+            .alert("Validation Error", isPresented: Binding(get: { validationError != nil }, set: { if !$0 { validationError = nil } })) {
+                Button("OK") { validationError = nil }
+            } message: {
+                if let error = validationError {
+                    Text(error)
+                }
             }
             .task { contactNameFocused = true }
         }
@@ -430,7 +438,17 @@ struct ClientDetailView: View {
         let name = newContactName.trimmingCharacters(in: .whitespacesAndNewlines)
         let relation = newContactRelation.trimmingCharacters(in: .whitespacesAndNewlines)
         let phone = newContactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, let e164 = PhoneUtils.toE164(phone) else { return }
+        
+        guard !name.isEmpty else {
+            validationError = "Name is required."
+            return
+        }
+        
+        guard let e164 = PhoneUtils.toE164(phone) else {
+            validationError = "A valid 10-digit US phone number is required."
+            return
+        }
+
         if let editing = editingContact {
             editing.name = name
             editing.relation = relation.isEmpty ? nil : relation
@@ -442,11 +460,12 @@ struct ClientDetailView: View {
         }
         do {
             try modelContext.save()
+            showContactEditor = false
+            newContactName = ""; newContactRelation = ""; newContactPhone = ""
         } catch {
             Logger.main.error("Failed to save contact: \(error.localizedDescription, privacy: .public)")
+            validationError = "Failed to save to database."
         }
-        showContactEditor = false
-        newContactName = ""; newContactRelation = ""; newContactPhone = ""
     }
 
     private func beginEditContact(_ c: EmergencyContact) {

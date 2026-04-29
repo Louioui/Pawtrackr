@@ -54,16 +54,20 @@ final class DashboardViewModel: ObservableObject {
 
   @Published var kpi = KPI()
   @Published var activeVisits: [Visit] = []
+  @Published var upcomingAppointments: [Appointment] = []
   @Published var recentClients: [Client] = []
+  @Published var overduePets: [Pet] = []
   @Published var revenueSeries: [RevenuePoint] = []
   @Published var gallery: [GalleryItem] = []
   @Published var appError: AppError? = nil
 
+  private var isRefreshing = false
   private let repository: DashboardRepositoryProtocol
   private var cancellables: Set<AnyCancellable> = []
   private let revenueWindowDays = 7
   private let galleryWindowDays = 14
   private let recentClientLimit = 5
+  private let overduePetLimit = 5
 
   init(modelContext: ModelContext, repository: DashboardRepositoryProtocol? = nil) {
     self.repository = repository ?? DashboardRepository(modelContainer: modelContext.container)
@@ -76,15 +80,39 @@ final class DashboardViewModel: ObservableObject {
   }
 
   func refresh() async {
+    guard !isRefreshing else { return }
+    isRefreshing = true
+    defer { isRefreshing = false }
+    
     appError = nil
     await fetchKPIs()
     await fetchActiveVisits()
+    await fetchUpcomingAppointments()
     await fetchRecentClients()
+    await fetchOverduePets()
     await buildRevenueSeries(days: revenueWindowDays)
     await buildGallery(days: galleryWindowDays)
   }
 
   // MARK: - Fetches
+
+  private func fetchUpcomingAppointments() async {
+    do {
+      upcomingAppointments = try await repository.fetchUpcomingAppointments(limit: 5)
+    } catch {
+      setDashboardError(error)
+      upcomingAppointments = []
+    }
+  }
+
+  private func fetchOverduePets() async {
+    do {
+      overduePets = try await repository.fetchOverduePets(limit: overduePetLimit)
+    } catch {
+      setDashboardError(error)
+      overduePets = []
+    }
+  }
 
   private func observeDashboardRefreshTriggers() {
     NotificationCenter.default.publisher(for: .visitDidComplete)
@@ -110,6 +138,16 @@ final class DashboardViewModel: ObservableObject {
 
   private func setDashboardError(_ error: Error) {
     appError = .database(error.localizedDescription)
+  }
+
+  func checkInFromAppointment(_ appointment: Appointment) async {
+    do {
+      let visitRepo = VisitRepository(modelContainer: repository.modelContext.container)
+      _ = try await visitRepo.checkIn(from: appointment)
+      await refresh()
+    } catch {
+      setDashboardError(error)
+    }
   }
 
   private func fetchKPIs() async {

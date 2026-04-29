@@ -3,27 +3,29 @@ import SwiftData
 
 @MainActor
 class DataSeeder {
-    // The single source of truth for all services that should exist in the app.
-    private static let allKnownServices: [Service] = [
-        // Packages
-        Service.fullPackage,
-        Service.basicPackage,
-        Service.spaPackage,
-        // Main Services
-        Service.bath,
-        Service.haircut,
-        // Add-Ons
-        Service.deshedding,
-        Service.analGlands,
-        Service.faceGrooming,
-        Service.pawTrim,
-        Service.hygieneTrim,
-        Service.knotsFee,
-        Service.fleaAndTick,
-        Service.hairDye
-    ]
+    /// Returns the source of truth for all services that should exist in the app.
+    private static func makeDesiredServices() -> [Service] {
+        return [
+            // Packages
+            Service(name: "Full Package", category: .package, systemIcon: "sparkles", isPackage: true),
+            Service(name: "Basic Package", category: .package, systemIcon: "archivebox.fill", isPackage: true),
+            Service(name: "Spa Package", category: .package, systemIcon: "leaf.fill", isPackage: true),
+            // Main Services
+            Service(name: "Bath", category: .groom, systemIcon: "shower.fill"),
+            Service(name: "Haircut", category: .groom, systemIcon: "scissors"),
+            // Add-Ons
+            Service(name: "De-shedding", category: .addOn, systemIcon: "line.3.crossed.swirl.circle.fill"),
+            Service(name: "Anal Glands Expression", category: .addOn, systemIcon: "dot.circle"),
+            Service(name: "Face Grooming", category: .addOn, systemIcon: "mustache.fill"),
+            Service(name: "Paw Trim", category: .addOn, systemIcon: "pawprint.fill"),
+            Service(name: "Hygiene Area Trim", category: .addOn, systemIcon: "person.fill.viewfinder"),
+            Service(name: "Knots and Matting Fee", category: .addOn, systemIcon: "exclamationmark.triangle.fill"),
+            Service(name: "Flea & Ticks Treatment", category: .addOn, systemIcon: "ladybug.fill"),
+            Service(name: "Hair Dye", category: .addOn, systemIcon: "paintpalette.fill")
+        ]
+    }
 
-    /// Synchronizes the services in the database with the `allKnownServices` source of truth.
+    /// Synchronizes the services in the database with the source of truth.
     /// It adds missing services, deletes obsolete ones, and updates existing ones if their properties have changed.
     static func seedServicesIfNeeded(in context: ModelContext) {
         do {
@@ -33,10 +35,11 @@ class DataSeeder {
                 existingServiceMap[service.name] = service
             }
 
+            let desiredServices = makeDesiredServices()
             var desiredServiceNames = Set<String>()
 
             // Update existing services and add new ones
-            for desiredService in allKnownServices {
+            for desiredService in desiredServices {
                 desiredServiceNames.insert(desiredService.name)
                 if let existing = existingServiceMap[desiredService.name] {
                     // Service exists, check if it needs an update

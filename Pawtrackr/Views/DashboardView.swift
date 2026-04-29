@@ -74,6 +74,8 @@ import Charts
             quickActionsSection
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             if !vm.activeVisits.isEmpty { activeSessionsSection(vm).transition(.move(edge: .leading).combined(with: .opacity)) }
+            if !vm.upcomingAppointments.isEmpty { upcomingSection(vm).transition(.move(edge: .trailing).combined(with: .opacity)) }
+            if !vm.overduePets.isEmpty { overduePetsSection(vm).transition(.move(edge: .leading).combined(with: .opacity)) }
             if !vm.recentClients.isEmpty { recentClientsSection(vm).transition(.move(edge: .trailing).combined(with: .opacity)) }
             revenueSection(vm)
                 .transition(.move(edge: .leading).combined(with: .opacity))
@@ -136,6 +138,83 @@ import Charts
       LazyVStack(spacing: 10) {
         ForEach(vm.activeVisits) { visit in
           ActiveVisitRow(visit: visit)
+        }
+      }
+    }
+  }
+
+  private func upcomingSection(_ vm: DashboardViewModel) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(NSLocalizedString("dashboard.upcoming", comment: "Upcoming Appointments")).font(.headline)
+      Card {
+        VStack(spacing: 0) {
+          ForEach(vm.upcomingAppointments) { appt in
+            upcomingRow(appt, vm: vm)
+            if appt != vm.upcomingAppointments.last { Divider().padding(.leading, 56) }
+          }
+        }
+      }
+    }
+  }
+
+  private func upcomingRow(_ appt: Appointment, vm: DashboardViewModel) -> some View {
+    HStack(spacing: 12) {
+      AvatarView(.pet(species: appt.pet.species, gender: appt.pet.gender, name: appt.pet.name, imageData: appt.pet.photoData), size: .sm)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(appt.pet.name).font(.subheadline.weight(.semibold))
+        Text(appt.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+      }
+      Spacer()
+      Button("Check In") {
+        Task { await vm.checkInFromAppointment(appt) }
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.small)
+    }
+    .padding(.vertical, 10)
+    .padding(.horizontal, 12)
+  }
+
+  private func overduePetsSection(_ vm: DashboardViewModel) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Needs Attention").font(.headline)
+      LazyVStack(spacing: 12) {
+        ForEach(vm.overduePets) { pet in
+            if let owner = pet.owner {
+                VStack(spacing: 0) {
+                    NavigationLink { ClientDetailView(client: owner) } label: {
+                        PetCard(pet: pet, activeVisit: nil, onViewDetails: {}, onCheckIn: {}, onCheckOut: {})
+                    }
+                    .buttonStyle(.plain)
+                    
+                    HStack(spacing: 16) {
+                        if let sms = owner.smsURL {
+                            Link(destination: sms) {
+                                Label("Message", systemImage: "message.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.vertical, 8)
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            }
+                        }
+                        
+                        if let tel = owner.telURL {
+                            Link(destination: tel) {
+                                Label("Call", systemImage: "phone.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.vertical, 8)
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                    .background(DS.ColorToken.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .offset(y: -8) // Pull it up to overlap slightly with the card's bottom
+                }
+            }
         }
       }
     }

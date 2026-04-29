@@ -23,7 +23,7 @@ struct ActiveVisitRow: View {
                     .foregroundStyle(.secondary)
 
                 if let pet = visit.pet {
-                    NavigationLink(destination: CheckoutView(pet: pet)) {
+                    NavigationLink(destination: CheckoutView(pet: pet, visit: visit)) {
                         Image(systemName: "ellipsis.circle").font(.title3)
                     }
                     .buttonStyle(.plain)

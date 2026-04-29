@@ -129,10 +129,27 @@ struct PetCard: View {
     private var sessionLine: some View {
         if isActive {
             liveTimer
-        } else if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
-            Text(String(format: NSLocalizedString("pet.last_visit_fmt", comment: ""), last.sortKeyDate.formatted(date: .abbreviated, time: .omitted)))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                if let status = pet.nextVisitStatus {
+                    HStack(spacing: 6) {
+                        Image(systemName: pet.isOverdue ? "exclamationmark.circle.fill" : "calendar")
+                            .foregroundStyle(pet.isOverdue ? .red : .blue)
+                        Text(status)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(pet.isOverdue ? .red : .blue)
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background((pet.isOverdue ? Color.red : Color.blue).opacity(0.1), in: Capsule())
+                }
+                
+                if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
+                    Text(String(format: NSLocalizedString("pet.last_visit_fmt", comment: ""), last.sortKeyDate.formatted(date: .abbreviated, time: .omitted)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

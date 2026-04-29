@@ -67,10 +67,12 @@ final class PetHistoryViewModel: ObservableObject {
             let date = v.startedAt.formatted(date: .abbreviated, time: .omitted)
             let services = v.items.map { $0.name }.joined(separator: ", ")
             let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
-            let amount = (v.isCompleted ? v.total : v.servicesSubtotal).moneyString
+            let amountValue = v.isCompleted ? v.total : v.servicesSubtotal
+            let amount = String(format: "%.2f", (amountValue as NSDecimalNumber).doubleValue)
             return [date, services, duration, amount]
         }
-        return Self.makeCSV(with: [header] + rows)
+        let lines = ([header] + rows).map { $0.map { $0.csvEscaped }.joined(separator: ",") }.joined(separator: "\n")
+        return Data(lines.utf8)
     }
 
     func exportPlainText() -> String {
@@ -90,8 +92,19 @@ final class PetHistoryViewModel: ObservableObject {
         let (start, end) = dateBounds(for: scope)
         // Push date bounds into the store-level predicate for performance
         let predicate = #Predicate<Visit> { v in
-            (start == nil || v.startedAt >= start!) &&
-            (end == nil || v.startedAt < end!)
+            if let s = start {
+                if let e = end {
+                    return v.startedAt >= s && v.startedAt < e
+                } else {
+                    return v.startedAt >= s
+                }
+            } else {
+                if let e = end {
+                    return v.startedAt < e
+                } else {
+                    return true
+                }
+            }
         }
         let descriptor = FetchDescriptor<Visit>(
             predicate: predicate,
@@ -158,18 +171,6 @@ final class PetHistoryViewModel: ObservableObject {
             }
             return (start, end)
         }
-    }
-
-    
-
-    static func makeCSV(with rows: [[String]]) -> Data {
-        let esc: (String) -> String = { s in
-            var v = s.replacingOccurrences(of: "\"", with: "\"\"")
-            if v.contains(",") || v.contains("\n") || v.contains("\"") { v = "\"\(v)\"" }
-            return v
-        }
-        let lines = rows.map { $0.map(esc).joined(separator: ",") }.joined(separator: "\n")
-        return Data(lines.utf8)
     }
 }
 

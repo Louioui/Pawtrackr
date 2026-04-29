@@ -36,7 +36,7 @@ final class ClientRepository: ClientRepositoryProtocol {
             predicate = #Predicate<Client> { client in
                 client.firstName.localizedStandardContains(trimmed) || 
                 client.lastName.localizedStandardContains(trimmed) ||
-                (client.phone != nil && client.phone!.localizedStandardContains(trimmed))
+                (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false)
             }
         }
         
@@ -52,16 +52,22 @@ final class ClientRepository: ClientRepositoryProtocol {
 
     func fetchActiveClients(query: String) async throws -> [Client] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasQuery = !trimmed.isEmpty
+        let predicate: Predicate<Client>
         
-        let predicate = #Predicate<Client> { client in
-            client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
-            (!hasQuery || (
-                client.firstName.localizedStandardContains(trimmed) ||
-                client.lastName.localizedStandardContains(trimmed) ||
-                (client.phone != nil && client.phone!.localizedStandardContains(trimmed)) ||
-                client.pets.contains { $0.name.localizedStandardContains(trimmed) }
-            ))
+        if trimmed.isEmpty {
+            predicate = #Predicate<Client> { client in
+                client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } }
+            }
+        } else {
+            predicate = #Predicate<Client> { client in
+                client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
+                (
+                    client.firstName.localizedStandardContains(trimmed) ||
+                    client.lastName.localizedStandardContains(trimmed) ||
+                    (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
+                    client.pets.contains { $0.name.localizedStandardContains(trimmed) }
+                )
+            }
         }
         
         let descriptor = FetchDescriptor<Client>(predicate: predicate)
@@ -71,16 +77,22 @@ final class ClientRepository: ClientRepositoryProtocol {
 
     func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([Client], Bool) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasQuery = !trimmed.isEmpty
+        let predicate: Predicate<Client>
         
-        let predicate = #Predicate<Client> { client in
-            !client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
-            (!hasQuery || (
-                client.firstName.localizedStandardContains(trimmed) ||
-                client.lastName.localizedStandardContains(trimmed) ||
-                (client.phone != nil && client.phone!.localizedStandardContains(trimmed)) ||
-                client.pets.contains { $0.name.localizedStandardContains(trimmed) }
-            ))
+        if trimmed.isEmpty {
+            predicate = #Predicate<Client> { client in
+                !client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } }
+            }
+        } else {
+            predicate = #Predicate<Client> { client in
+                !client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
+                (
+                    client.firstName.localizedStandardContains(trimmed) ||
+                    client.lastName.localizedStandardContains(trimmed) ||
+                    (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
+                    client.pets.contains { $0.name.localizedStandardContains(trimmed) }
+                )
+            }
         }
         
         var descriptor = FetchDescriptor<Client>(
