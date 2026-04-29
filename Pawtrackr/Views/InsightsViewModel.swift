@@ -76,7 +76,7 @@ class InsightsViewModel {
 
     private func fetchDistributions() async {
         do {
-            let svc = try await repository.fetchServiceDistribution(days: 30)
+            _ = try await repository.fetchServiceDistribution(days: 30)
             
             // To get revenue per service, we need to fetch visits for the period
             let cal = Calendar.current

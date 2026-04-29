@@ -29,6 +29,7 @@ struct IconCircle: View {
     /// Defines the content to be rendered, determined by priority in the initializer.
     private indirect enum GlyphContent {
         case remote(url: URL, fallback: GlyphContent)
+        case thumbnail(data: Data, original: Data?)
         case local(data: Data)
         case initials(String)
         case symbol(String)
@@ -49,12 +50,13 @@ struct IconCircle: View {
     
     /// Creates a versatile circular icon.
     ///
-    /// The content is determined by priority: `imageURL` > `imageData` > `initials` > `systemImage`.
+    /// The content is determined by priority: `imageURL` > `thumbnailData` > `imageData` > `initials` > `systemImage`.
     ///
     /// - Parameters:
     ///   - systemImage: The name of an SF Symbol to display.
     ///   - initials: A name or string to be converted into initials.
     ///   - imageData: Raw `Data` for a local image.
+    ///   - thumbnailData: Small pre-downsampled `Data` for performance.
     ///   - imageURL: A `URL` for a remote image to be loaded asynchronously.
     ///   - size: A predefined or custom size token.
     ///   - style: The color and fill style of the circle.
@@ -66,6 +68,7 @@ struct IconCircle: View {
     public init(systemImage: String? = nil,
                 initials: String? = nil,
                 imageData: Data? = nil,
+                thumbnailData: Data? = nil,
                 imageURL: URL? = nil,
                 size: SizeToken = .md,
                 style: Style = .tinted(Color.accentColor.opacity(0.15)),
@@ -89,6 +92,8 @@ struct IconCircle: View {
 
         if let url = imageURL {
             self.glyphContent = .remote(url: url, fallback: fallback)
+        } else if let thumb = thumbnailData {
+            self.glyphContent = .thumbnail(data: thumb, original: imageData)
         } else if let data = imageData {
             self.glyphContent = .local(data: data)
         } else {
@@ -137,6 +142,33 @@ struct IconCircle: View {
             }
             .frame(width: dim, height: dim)
             .clipShape(Circle())
+
+        case .thumbnail(let data, let original):
+            #if canImport(UIKit)
+            if let ui = ImageCache.shared.image(data: data, maxDimension: dim * 2) {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: dim, height: dim)
+                    .clipShape(Circle())
+            } else if let orig = original, let ui = ImageCache.shared.image(data: orig, maxDimension: dim * 2) {
+                Image(uiImage: ui)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: dim, height: dim)
+                    .clipShape(Circle())
+            } else {
+                fallbackSymbol(tints: tints)
+            }
+            #else
+            if let image = Image(platformImage: data) {
+                image.resizable().scaledToFill()
+                    .frame(width: dim, height: dim)
+                    .clipShape(Circle())
+            } else {
+                fallbackSymbol(tints: tints)
+            }
+            #endif
 
         case .local(let data):
             #if canImport(UIKit)

@@ -13,8 +13,8 @@ public struct AvatarView: View {
     // MARK: Public API
 
     public enum Kind: Equatable {
-        case client(name: String, imageData: Data? = nil, imageURL: URL? = nil)
-        case pet(species: Species?, gender: PetGender?, name: String? = nil, imageData: Data? = nil, imageURL: URL? = nil)
+        case client(name: String, imageData: Data? = nil, thumbnailData: Data? = nil, imageURL: URL? = nil)
+        case pet(species: Species?, gender: PetGender?, name: String? = nil, imageData: Data? = nil, thumbnailData: Data? = nil, imageURL: URL? = nil)
         case systemImage(_ name: String)
         case initials(_ text: String)
         case imageData(_ data: Data)
@@ -64,13 +64,14 @@ public struct AvatarView: View {
     /// Convenience for clients (owners).
     public init(clientName: String,
                 imageData: Data? = nil,
+                thumbnailData: Data? = nil,
                 imageURL: URL? = nil,
                 size: Size = .md,
                 ringWidth: CGFloat = 0,
                 badgeSystemImage: String? = nil,
                 badgeColor: Color? = nil,
                 accessibilityLabel: String? = nil) {
-        self.init(.client(name: clientName, imageData: imageData, imageURL: imageURL),
+        self.init(.client(name: clientName, imageData: imageData, thumbnailData: thumbnailData, imageURL: imageURL),
                   size: size,
                   ringWidth: ringWidth,
                   badgeSystemImage: badgeSystemImage,
@@ -83,13 +84,14 @@ public struct AvatarView: View {
                 species: Species?,
                 gender: PetGender?,
                 imageData: Data? = nil,
+                thumbnailData: Data? = nil,
                 imageURL: URL? = nil,
                 size: Size = .md,
                 ringWidth: CGFloat = 0,
                 badgeSystemImage: String? = nil,
                 badgeColor: Color? = nil,
                 accessibilityLabel: String? = nil) {
-        self.init(.pet(species: species, gender: gender, name: petName, imageData: imageData, imageURL: imageURL),
+        self.init(.pet(species: species, gender: gender, name: petName, imageData: imageData, thumbnailData: thumbnailData, imageURL: imageURL),
                   size: size,
                   ringWidth: ringWidth,
                   badgeSystemImage: badgeSystemImage,
@@ -102,11 +104,12 @@ public struct AvatarView: View {
     public var body: some View {
         Group {
             switch kind {
-            case .client(let name, let data, let url):
+            case .client(let name, let data, let thumb, let url):
                 IconCircle(
                     systemImage: "person.crop.circle.fill",
                     initials: initials(from: name),
                     imageData: data,
+                    thumbnailData: thumb,
                     imageURL: url,
                     size: size.token,
                     style: .tinted(Color.primary.opacity(0.10)),
@@ -116,11 +119,12 @@ public struct AvatarView: View {
                     accessibilityLabel: accessibilityLabel ?? name
                 )
 
-            case .pet(let species, let gender, let name, let data, let url):
+            case .pet(let species, let gender, let name, let data, let thumb, let url):
                 IconCircle(
                     systemImage: systemImageForPet(species: species),
                     initials: initials(from: name),
                     imageData: data,
+                    thumbnailData: thumb,
                     imageURL: url,
                     size: size.token,
                     style: .auto(species: species, gender: gender),

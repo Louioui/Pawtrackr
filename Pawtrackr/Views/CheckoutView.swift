@@ -305,6 +305,16 @@ struct CheckoutView: View {
                         .foregroundStyle(.green)
                     Text("Payment Successful").font(Font.title3.weight(.bold))
                     Text(viewModel.finalTotalString).font(Font.title.bold())
+                    
+                    ShareLink(item: ReceiptDocument(pdfData: PDFReceiptService.shared.generatePDF(for: viewModel.visit), filename: "Receipt_\(viewModel.pet.name).pdf")) {
+                        Label("Share Receipt", systemImage: "square.and.arrow.up")
+                            .font(.headline)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.top, 10)
                 } else {
                     ProgressView()
                         .scaleEffect(1.5)

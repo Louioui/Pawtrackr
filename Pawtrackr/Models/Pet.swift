@@ -28,6 +28,7 @@ final class Pet {
     var color: String?
     var birthdate: Date?
     @Attribute(.externalStorage) var photoData: Data?
+    @Attribute(.externalStorage) var thumbnailData: Data?
     
     // MARK: - Notes & Behavior
     var notes: String?
@@ -286,6 +287,17 @@ final class Pet {
     // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
+    }
+
+    func updateThumbnail() {
+        guard let data = photoData else {
+            thumbnailData = nil
+            return
+        }
+        // Downsample to a small 200px thumbnail for high-performance list rendering
+        #if canImport(UIKit) || canImport(AppKit)
+        thumbnailData = ImageCache.shared.downsampleToData(data: data, maxDimension: 200)
+        #endif
     }
 }
 

@@ -43,18 +43,21 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
     
     func deleteVisit(_ visit: Visit) async throws {
-        let dateToRebuild = visit.endedAt
+        let started = visit.startedAt
+        let ended = visit.endedAt
         modelContext.delete(visit)
         try modelContext.save()
         
-        // If it was a completed visit, rebuild summary for that day
-        if let ended = dateToRebuild {
+        let cal = Calendar.current
+        SummaryUpdater.rebuildDay(for: started, in: modelContext)
+        if let ended = ended, cal.startOfDay(for: ended) != cal.startOfDay(for: started) {
             SummaryUpdater.rebuildDay(for: ended, in: modelContext)
-            let userInfo: [String: Any] = [
-                VisitDidCompleteKey.endedAt.rawValue: ended
-            ]
-            NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: userInfo)
         }
+        
+        let userInfo: [String: Any] = [
+            VisitDidCompleteKey.endedAt.rawValue: ended ?? started
+        ]
+        NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: userInfo)
     }
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {

@@ -25,6 +25,8 @@ final class Client {
     var email: String?
     var address: String?
     var primaryContactInfo: String?
+    @Attribute(.externalStorage) var photoData: Data?
+    @Attribute(.externalStorage) var thumbnailData: Data?
     
     // MARK: - Notes & Emergency Contact
     var notes: String?
@@ -123,6 +125,16 @@ final class Client {
     // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
+    }
+
+    func updateThumbnail() {
+        guard let data = photoData else {
+            thumbnailData = nil
+            return
+        }
+        #if canImport(UIKit) || canImport(AppKit)
+        thumbnailData = ImageCache.shared.downsampleToData(data: data, maxDimension: 200)
+        #endif
     }
 
     private func updatePrimaryContact() {

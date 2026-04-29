@@ -15,6 +15,18 @@ struct ExportDocument: Transferable {
     }
 }
 
+struct ReceiptDocument: Transferable {
+    let pdfData: Data
+    let filename: String
+    
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .pdf) { doc in
+            doc.pdfData
+        }
+        .suggestedFileName { doc in doc.filename }
+    }
+}
+
 @MainActor
 class ExportService {
     static let shared = ExportService()

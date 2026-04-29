@@ -61,12 +61,10 @@ final class ClientRepository: ClientRepositoryProtocol {
         } else {
             predicate = #Predicate<Client> { client in
                 client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
-                (
-                    client.firstName.localizedStandardContains(trimmed) ||
-                    client.lastName.localizedStandardContains(trimmed) ||
-                    (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
-                    client.pets.contains { $0.name.localizedStandardContains(trimmed) }
-                )
+                (client.firstName.localizedStandardContains(trimmed) || 
+                 client.lastName.localizedStandardContains(trimmed) ||
+                 (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
+                 client.pets.contains { $0.name.localizedStandardContains(trimmed) })
             }
         }
         
@@ -86,12 +84,10 @@ final class ClientRepository: ClientRepositoryProtocol {
         } else {
             predicate = #Predicate<Client> { client in
                 !client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
-                (
-                    client.firstName.localizedStandardContains(trimmed) ||
-                    client.lastName.localizedStandardContains(trimmed) ||
-                    (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
-                    client.pets.contains { $0.name.localizedStandardContains(trimmed) }
-                )
+                (client.firstName.localizedStandardContains(trimmed) || 
+                 client.lastName.localizedStandardContains(trimmed) ||
+                 (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
+                 client.pets.contains { $0.name.localizedStandardContains(trimmed) })
             }
         }
         

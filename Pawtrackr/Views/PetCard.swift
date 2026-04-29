@@ -54,7 +54,7 @@ struct PetCard: View {
     // MARK: - Subviews
     private var cardContent: some View {
         HStack(alignment: .top, spacing: 12) {
-            AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md)
+            AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData, thumbnailData: pet.thumbnailData), size: .md)
             mainContent
             Spacer(minLength: 0)
         }

@@ -189,6 +189,7 @@ final class DashboardViewModel: ObservableObject {
 
     do {
         let bucket = try await repository.fetchRevenueSeries(days: days)
+        guard !Task.isCancelled else { return }
         
         // Build the series, filling in missing days with zero
         revenueSeries = makeRevenueSeries(from: bucket, days: days, calendar: cal, end: end)
@@ -201,6 +202,7 @@ final class DashboardViewModel: ObservableObject {
   private func buildGallery(days: Int) async {
     do {
       let photos = try await repository.fetchGalleryImages(days: days, limit: 12)
+      guard !Task.isCancelled else { return }
       gallery = photos.map { GalleryItem(imageData: $0) }
     } catch {
       setDashboardError(error)

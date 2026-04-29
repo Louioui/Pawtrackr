@@ -93,15 +93,15 @@ final class RecentHistoryViewModel {
         
         if let s = start, let e = end {
             predicate = #Predicate<Visit> { v in
-                (v.endedAt ?? Date.distantPast) >= s && (v.endedAt ?? Date.distantFuture) < e
+                v.endedAt.flatMap { $0 >= s && $0 < e } ?? false
             }
         } else if let s = start {
             predicate = #Predicate<Visit> { v in
-                (v.endedAt ?? Date.distantPast) >= s
+                v.endedAt.flatMap { $0 >= s } ?? false
             }
         } else if let e = end {
             predicate = #Predicate<Visit> { v in
-                (v.endedAt ?? Date.distantPast) != Date.distantPast && (v.endedAt ?? Date.distantFuture) < e
+                v.endedAt.flatMap { $0 < e } ?? false
             }
         } else {
             predicate = #Predicate<Visit> { v in
@@ -194,6 +194,7 @@ fileprivate struct HistoryVisitSnap: Sendable {
     let ownerLast: String
     let itemNames: [String]
     let total: Double
+}
 }
 
 fileprivate enum RecentHistoryComputer {
