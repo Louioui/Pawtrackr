@@ -2,6 +2,10 @@
 //  InsightsViewModel.swift
 //  Pawtrackr
 //
+//  Key fix: all fetches that traverse relationships now use
+//  relationshipKeyPathsForPrefetching to batch-load related objects in one
+//  SQL query instead of firing N individual queries (N+1 problem).
+//
 
 import Foundation
 import SwiftData
@@ -15,14 +19,14 @@ class InsightsViewModel {
         let date: Date
         let amount: Decimal
     }
-    
+
     struct DistributionData: Identifiable, Sendable {
         let id = UUID()
         let name: String
         let count: Int
         var revenue: Decimal = .zero
     }
-    
+
     struct MonthlyGrowthData: Identifiable, Sendable {
         let id = UUID()
         let month: String
@@ -37,12 +41,6 @@ class InsightsViewModel {
         let visitCount: Int
     }
 
-    var revenueSeries: [RevenueData] = []
-    var serviceDistribution: [DistributionData] = []
-    var categoryDistribution: [DistributionData] = []
-    var topClients: [TopClientData] = []
-    var monthlyGrowth: [MonthlyGrowthData] = []
-    
     struct RetentionData: Identifiable, Sendable {
         let id = UUID()
         let label: String
@@ -50,20 +48,27 @@ class InsightsViewModel {
         let color: String
     }
 
-    var retentionRate: Double = 0
-    var churnRiskCount: Int = 0
-    var retentionSeries: [RetentionData] = []
-    
-    var totalRevenue: Decimal = .zero
-    var averageVisitValue: Decimal = .zero
-    private(set) var isRefreshing = false
+    // MARK: - Published state
+    var revenueSeries:         [RevenueData]      = []
+    var serviceDistribution:   [DistributionData] = []
+    var categoryDistribution:  [DistributionData] = []
+    var topClients:            [TopClientData]    = []
+    var monthlyGrowth:         [MonthlyGrowthData] = []
+    var retentionRate:         Double = 0
+    var churnRiskCount:        Int    = 0
+    var retentionSeries:       [RetentionData]    = []
+    var totalRevenue:          Decimal = .zero
+    var averageVisitValue:     Decimal = .zero
+    private(set) var isRefreshing  = false
     private(set) var hasLoadedOnce = false
-    
+
     private let modelContext: ModelContext
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
+
+    // MARK: - Refresh
 
     func refresh() async {
         guard !isRefreshing else { return }
@@ -73,12 +78,12 @@ class InsightsViewModel {
             hasLoadedOnce = true
         }
 
-        async let rev: () = fetchRevenue()
-        async let dist: () = fetchDistributions()
-        async let top: () = fetchTopClients()
-        async let growth: () = fetchMonthlyGrowth()
+        async let rev:       () = fetchRevenue()
+        async let dist:      () = fetchDistributions()
+        async let top:       () = fetchTopClients()
+        async let growth:    () = fetchMonthlyGrowth()
         async let retention: () = fetchRetentionMetrics()
-        
+
         _ = await [rev, dist, top, growth, retention]
     }
 
@@ -86,22 +91,19 @@ class InsightsViewModel {
         let now = Date()
         let cal = Calendar.current
         let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
-        
-        let topSvc = serviceDistribution.prefix(5).map { 
-            (name: $0.name, count: $0.count, revenue: $0.revenue) 
+
+        let topSvc = serviceDistribution.prefix(5).map {
+            (name: $0.name, count: $0.count, revenue: $0.revenue)
         }
-        
-        // Calculate visits for the current month from monthlyGrowth if available, 
-        // or fallback to fetching from context.
+
         let currentMonthName = DateFormatter().monthSymbols[cal.component(.month, from: now) - 1].prefix(3)
         let monthlyVisits = monthlyGrowth.first(where: { $0.month == currentMonthName })?.visitCount ?? 0
-        
-        // Fetch new clients created this month
+
         let descriptor = FetchDescriptor<Client>(
             predicate: #Predicate<Client> { $0.createdAt >= startOfMonth }
         )
         let newClientsCount = (try? modelContext.fetchCount(descriptor)) ?? 0
-        
+
         return BusinessReportService.MonthlySummary(
             month: now,
             totalRevenue: totalRevenue,
@@ -112,44 +114,63 @@ class InsightsViewModel {
         )
     }
 
+    // MARK: - Private fetches
+
+    // FIXED: prefetch client→pets and pet→visits so the nested loops don't
+    // fire N separate SQL queries (was: 1 query per client for pets +
+    // 1 query per pet for visits = potentially thousands of round-trips).
     private func fetchRetentionMetrics() async {
         let container = modelContext.container
-        let result = await Task.detached(priority: .userInitiated) { () -> (rate: Double, churn: Int, recurring: Int, oneTime: Int)? in
-            let bgCtx = ModelContext(container)
-            let descriptor = FetchDescriptor<Client>()
-            guard let allClients = try? bgCtx.fetch(descriptor), !allClients.isEmpty else { return nil }
 
+        let result = await Task.detached(priority: .userInitiated) {
+            () -> (rate: Double, churn: Int, recurring: Int, oneTime: Int)? in
+
+            let bgCtx = ModelContext(container)
+
+            // Batch-load clients with their pets in one query.
+            var clientDesc = FetchDescriptor<Client>()
+            clientDesc.relationshipKeyPathsForPrefetching = [\.pets]
+            guard let allClients = try? bgCtx.fetch(clientDesc),
+                  !allClients.isEmpty else { return nil }
+
+            // Batch-load all pets with their visits in one query.
+            var petDesc = FetchDescriptor<Pet>()
+            petDesc.relationshipKeyPathsForPrefetching = [\.visits]
+            _ = try? bgCtx.fetch(petDesc)
+
+            // Now iterate fully in-memory — no per-row DB hits.
             var recurring = 0
-            var churn = 0
+            var churn     = 0
             for client in allClients {
-                var completedVisits = 0
-                for pet in client.pets {
+                var completedCount = 0
+                outer: for pet in client.pets {
                     for visit in pet.visits where visit.isCompleted {
-                        completedVisits += 1
-                        if completedVisits > 1 { break }
+                        completedCount += 1
+                        if completedCount > 1 { break outer }
                     }
-                    if completedVisits > 1 { break }
                 }
-                if completedVisits > 1 { recurring += 1 }
+                if completedCount > 1 { recurring += 1 }
                 if client.pets.contains(where: { $0.isOverdue }) { churn += 1 }
             }
+
             let rate = Double(recurring) / Double(allClients.count)
-            return (rate: rate, churn: churn, recurring: recurring, oneTime: allClients.count - recurring)
+            return (rate: rate, churn: churn,
+                    recurring: recurring, oneTime: allClients.count - recurring)
         }.value
 
         guard let result else { return }
-        self.retentionRate = result.rate
-        self.churnRiskCount = result.churn
-        self.retentionSeries = [
+        retentionRate  = result.rate
+        churnRiskCount = result.churn
+        retentionSeries = [
             RetentionData(label: "Recurring", value: Double(result.recurring), color: "blue"),
-            RetentionData(label: "One-time", value: Double(result.oneTime), color: "gray")
+            RetentionData(label: "One-time",  value: Double(result.oneTime),   color: "gray")
         ]
     }
 
     private func fetchRevenue() async {
         let container = modelContext.container
-        let cal = Calendar.current
-        let end = cal.startOfDay(for: .now)
+        let cal   = Calendar.current
+        let end   = cal.startOfDay(for: .now)
         guard let start = cal.date(byAdding: .day, value: -29, to: end) else { return }
 
         let points = await Task.detached(priority: .userInitiated) { () -> [(Date, Decimal)] in
@@ -159,7 +180,6 @@ class InsightsViewModel {
                     summary.day >= start && summary.day <= end
                 }
             )
-
             let summaries = (try? bgContext.fetch(descriptor)) ?? []
             return summaries
                 .map { ($0.day, $0.revenue) }
@@ -167,24 +187,28 @@ class InsightsViewModel {
         }.value
 
         revenueSeries = points.map { RevenueData(date: $0.0, amount: $0.1) }
-        totalRevenue = points.reduce(.zero) { $0 + $1.1 }
+        totalRevenue  = points.reduce(.zero) { $0 + $1.1 }
     }
 
+    // FIXED: prefetch visit.items so iterating items doesn't fire N queries.
     private func fetchDistributions() async {
         let container = modelContext.container
-        let cal = Calendar.current
-        let end = cal.startOfDay(for: .now).addingTimeInterval(86400)
+        let cal   = Calendar.current
+        let end   = cal.startOfDay(for: .now).addingTimeInterval(86400)
         let start = cal.date(byAdding: .day, value: -30, to: end) ?? end
 
-        let result = await Task.detached(priority: .userInitiated) { () -> (services: [DistributionData], categories: [DistributionData]) in
+        let result = await Task.detached(priority: .userInitiated) {
+            () -> (services: [DistributionData], categories: [DistributionData]) in
+
             let bgContext = ModelContext(container)
 
-            // Limit fetch to a reasonable window — visits are filtered to 30 days in memory.
+            // Batch-load visits with their items in one query.
             var visitsDescriptor = FetchDescriptor<Visit>(
                 predicate: #Predicate<Visit> { $0.endedAt != nil },
                 sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
             )
             visitsDescriptor.fetchLimit = 2000
+            visitsDescriptor.relationshipKeyPathsForPrefetching = [\.items]
 
             let categoryDescriptor = FetchDescriptor<CategoryDaySummary>(
                 predicate: #Predicate<CategoryDaySummary> { summary in
@@ -201,63 +225,70 @@ class InsightsViewModel {
             var serviceStats: [String: (count: Int, revenue: Decimal)] = [:]
             for visit in visits {
                 for item in visit.items {
-                    serviceStats[item.name, default: (0, .zero)].count += 1
+                    serviceStats[item.name, default: (0, .zero)].count   += 1
                     serviceStats[item.name, default: (0, .zero)].revenue += item.lineTotal
                 }
             }
 
-            let services = serviceStats.map { name, stats in
-                DistributionData(name: name, count: stats.count, revenue: stats.revenue)
-            }
-            .sorted { $0.revenue > $1.revenue }
+            let services = serviceStats
+                .map { name, stats in DistributionData(name: name, count: stats.count, revenue: stats.revenue) }
+                .sorted { $0.revenue > $1.revenue }
 
-            let categoryStats = categories.reduce(into: [String: Int]()) { partial, summary in
-                partial[summary.categoryRaw, default: 0] += summary.count
+            let categoryStats = categories.reduce(into: [String: Int]()) { acc, summary in
+                acc[summary.categoryRaw, default: 0] += summary.count
             }
-            let categoryDistribution = categoryStats.map { name, count in
-                DistributionData(name: name, count: count)
-            }
-            .sorted { $0.count > $1.count }
+            let categoryDist = categoryStats
+                .map { name, count in DistributionData(name: name, count: count) }
+                .sorted { $0.count > $1.count }
 
-            return (services: services, categories: categoryDistribution)
+            return (services: services, categories: categoryDist)
         }.value
 
-        serviceDistribution = result.services
+        serviceDistribution  = result.services
         categoryDistribution = result.categories
     }
 
+    // FIXED: prefetch client→pets and pet→visits in two batch queries.
     private func fetchTopClients() async {
         let container = modelContext.container
+
         let rows = await Task.detached(priority: .userInitiated) { () -> [TopClientData] in
             let bgContext = ModelContext(container)
-            let descriptor = FetchDescriptor<Client>()
-            let clients = (try? bgContext.fetch(descriptor)) ?? []
+
+            // Batch-load clients with their pets.
+            var clientDesc = FetchDescriptor<Client>()
+            clientDesc.relationshipKeyPathsForPrefetching = [\.pets]
+            let clients = (try? bgContext.fetch(clientDesc)) ?? []
+
+            // Batch-load all pets with their visits.
+            var petDesc = FetchDescriptor<Pet>()
+            petDesc.relationshipKeyPathsForPrefetching = [\.visits]
+            _ = try? bgContext.fetch(petDesc)
 
             return clients.map { client in
                 let visits = client.pets.flatMap { $0.visits }.filter { $0.isCompleted }
-                let spent = visits.reduce(Decimal.zero) { $0 + $1.total }
+                let spent  = visits.reduce(Decimal.zero) { $0 + $1.total }
                 return TopClientData(name: client.fullName, totalSpent: spent, visitCount: visits.count)
             }
-            .filter { $0.totalSpent > 0 }
-            .sorted { $0.totalSpent > $1.totalSpent }
+            .filter  { $0.totalSpent > 0 }
+            .sorted  { $0.totalSpent > $1.totalSpent }
             .prefix(10)
-            .map { $0 }
+            .map     { $0 }
         }.value
 
         topClients = rows
     }
-    
+
     private func fetchMonthlyGrowth() async {
         let cal = Calendar.current
         let now = Date()
-
         let monthFormatter = DateFormatter()
         monthFormatter.dateFormat = "MMM"
 
-        // Build the 6-month window in a single ranged fetch, then bucket in memory.
         guard let earliestMonthDate = cal.date(byAdding: .month, value: -5, to: now),
               let rangeStart = cal.date(from: cal.dateComponents([.year, .month], from: earliestMonthDate)),
-              let rangeEnd = cal.date(byAdding: .month, value: 1, to: cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now)
+              let rangeEnd   = cal.date(byAdding: .month, value: 1,
+                                        to: cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now)
         else { return }
 
         let container = modelContext.container
@@ -268,14 +299,15 @@ class InsightsViewModel {
                     summary.day >= rangeStart && summary.day < rangeEnd
                 }
             )
-
             let summaries = (try? bgContext.fetch(descriptor)) ?? []
 
             var buckets: [(start: Date, label: String, revenue: Decimal, count: Int)] = []
             for i in (0..<6).reversed() {
-                guard let monthDate = cal.date(byAdding: .month, value: -i, to: now),
-                      let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: monthDate)) else { continue }
-                buckets.append((start: monthStart, label: monthFormatter.string(from: monthStart), revenue: .zero, count: 0))
+                guard let monthDate  = cal.date(byAdding: .month, value: -i, to: now),
+                      let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: monthDate))
+                else { continue }
+                buckets.append((start: monthStart, label: monthFormatter.string(from: monthStart),
+                                revenue: .zero, count: 0))
             }
 
             for summary in summaries {
@@ -283,7 +315,7 @@ class InsightsViewModel {
                 guard let monthStart,
                       let index = buckets.firstIndex(where: { $0.start == monthStart }) else { continue }
                 buckets[index].revenue += summary.revenue
-                buckets[index].count += summary.visitCount
+                buckets[index].count   += summary.visitCount
             }
 
             return buckets.map {
