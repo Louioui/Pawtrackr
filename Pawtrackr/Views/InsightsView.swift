@@ -18,14 +18,20 @@ struct InsightsView: View {
         ScrollView {
             VStack(spacing: 24) {
                 if let vm = viewModel {
-                    revenueSection(vm)
-                    retentionSection(vm)
-                    growthSection(vm)
-                    serviceRevenueSection(vm)
-                    categorySection(vm)
-                    topClientsSection(vm)
+                    if vm.hasLoadedOnce || !vm.isRefreshing {
+                        revenueSection(vm)
+                        retentionSection(vm)
+                        growthSection(vm)
+                        serviceRevenueSection(vm)
+                        categorySection(vm)
+                        topClientsSection(vm)
+                    } else {
+                        ProgressView("Loading insights...")
+                            .frame(maxWidth: .infinity, minHeight: 240)
+                    }
                 } else {
-                    ProgressView()
+                    ProgressView("Loading insights...")
+                        .frame(maxWidth: .infinity, minHeight: 240)
                 }
             }
             .padding()
@@ -35,8 +41,8 @@ struct InsightsView: View {
         .task {
             if viewModel == nil {
                 let vm = InsightsViewModel(modelContext: modelContext)
-                await vm.refresh()
                 viewModel = vm
+                await vm.refresh()
             }
         }
         .refreshable {

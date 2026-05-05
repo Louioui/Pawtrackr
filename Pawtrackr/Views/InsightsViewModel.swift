@@ -56,9 +56,10 @@ class InsightsViewModel {
     
     var totalRevenue: Decimal = .zero
     var averageVisitValue: Decimal = .zero
+    private(set) var isRefreshing = false
+    private(set) var hasLoadedOnce = false
     
     private let modelContext: ModelContext
-    private var isRefreshing = false
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -67,7 +68,10 @@ class InsightsViewModel {
     func refresh() async {
         guard !isRefreshing else { return }
         isRefreshing = true
-        defer { isRefreshing = false }
+        defer {
+            isRefreshing = false
+            hasLoadedOnce = true
+        }
 
         async let rev: () = fetchRevenue()
         async let dist: () = fetchDistributions()
@@ -179,7 +183,9 @@ class InsightsViewModel {
                 predicate: #Predicate<Visit> { $0.endedAt != nil }
             )
             let categoryDescriptor = FetchDescriptor<CategoryDaySummary>(
-                predicate: #Predicate<CategoryDaySummary> { $0.day >= start }
+                predicate: #Predicate<CategoryDaySummary> { summary in
+                    summary.day >= start && summary.day < end
+                }
             )
 
             let visits = ((try? bgContext.fetch(visitsDescriptor)) ?? []).filter { visit in
@@ -253,14 +259,13 @@ class InsightsViewModel {
         let container = modelContext.container
         let rows = await Task.detached(priority: .userInitiated) { () -> [MonthlyGrowthData] in
             let bgContext = ModelContext(container)
-            let descriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { $0.endedAt != nil }
+            let descriptor = FetchDescriptor<DaySummary>(
+                predicate: #Predicate<DaySummary> { summary in
+                    summary.day >= rangeStart && summary.day < rangeEnd
+                }
             )
 
-            let visits = ((try? bgContext.fetch(descriptor)) ?? []).filter { visit in
-                guard let endedAt = visit.endedAt else { return false }
-                return endedAt >= rangeStart && endedAt < rangeEnd
-            }
+            let summaries = (try? bgContext.fetch(descriptor)) ?? []
 
             var buckets: [(start: Date, label: String, revenue: Decimal, count: Int)] = []
             for i in (0..<6).reversed() {
@@ -269,12 +274,12 @@ class InsightsViewModel {
                 buckets.append((start: monthStart, label: monthFormatter.string(from: monthStart), revenue: .zero, count: 0))
             }
 
-            for visit in visits {
-                guard let ended = visit.endedAt,
-                      let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: ended)),
+            for summary in summaries {
+                let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: summary.day))
+                guard let monthStart,
                       let index = buckets.firstIndex(where: { $0.start == monthStart }) else { continue }
-                buckets[index].revenue += visit.total
-                buckets[index].count += 1
+                buckets[index].revenue += summary.revenue
+                buckets[index].count += summary.visitCount
             }
 
             return buckets.map {
