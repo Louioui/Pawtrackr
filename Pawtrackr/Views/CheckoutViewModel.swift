@@ -99,18 +99,18 @@ final class CheckoutViewModel {
 
     @MainActor
     func loadServices(modelContext: ModelContext) {
-        Logger.main.info("CheckoutViewModel: Loading services")
+        Logger.checkout.info("CheckoutViewModel: Loading services")
         self.visitRepository = VisitRepository(modelContainer: modelContext.container)
         self.serviceRepository = ServiceRepository(modelContainer: modelContext.container)
         
         Task {
             do {
                 guard let serviceRepository = serviceRepository else { 
-                    Logger.main.error("CheckoutViewModel: Service repository is nil")
+                    Logger.checkout.error("CheckoutViewModel: Service repository is nil")
                     return 
                 }
                 let all = try await serviceRepository.fetchEnabledServices()
-                Logger.main.info("CheckoutViewModel: Fetched \(all.count) services")
+                Logger.checkout.info("CheckoutViewModel: Fetched \(all.count) services")
 
                 let mainServices = all.filter { $0.category != .addOn }
                 self.allServices = mainServices.sorted { svc1, svc2 in
@@ -121,9 +121,9 @@ final class CheckoutViewModel {
 
                 self.addOnServices = all.filter { $0.category == .addOn }
                 hydrateStateFromVisit()
-                Logger.main.info("CheckoutViewModel: Hydration complete")
+                Logger.checkout.info("CheckoutViewModel: Hydration complete")
             } catch {
-                Logger.main.error("CheckoutViewModel: Load failed - \(error.localizedDescription)")
+                Logger.checkout.error("CheckoutViewModel: Load failed - \(error.localizedDescription)")
                 appError = .database("Failed to load services: \(error.localizedDescription)")
             }
         }
@@ -131,7 +131,7 @@ final class CheckoutViewModel {
 
     @MainActor
     private func hydrateStateFromVisit() {
-        Logger.main.info("CheckoutViewModel: Hydrating from visit \(self.visit.uuid)")
+        Logger.checkout.info("CheckoutViewModel: Hydrating from visit \(self.visit.uuid)")
         sessionNotes = visit.note?.trimmed ?? ""
         if visit.behaviorTags.isEmpty {
             tags = Set(pet.behaviorTags)
@@ -322,7 +322,7 @@ final class CheckoutViewModel {
                     self.state = .failed(appErr)
                     self.appError = appErr
                     self.isSaving = false
-                    Logger.main.error("Checkout background save failed: \(error.localizedDescription)")
+                    Logger.checkout.error("Checkout background save failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -349,4 +349,8 @@ final class CheckoutViewModel {
         let sorted = (mainNames + addOnNames).sorted()
         return sorted.isEmpty ? "None" : sorted.joined(separator: ", ")
     }
+}
+
+private extension Logger {
+    static let checkout = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Checkout")
 }

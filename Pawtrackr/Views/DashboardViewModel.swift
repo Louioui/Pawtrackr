@@ -27,7 +27,7 @@ final class DashboardViewModel {
         var completedToday: Int = 0
 
         var appointmentsTodayText: String { "\(appointmentsToday)" }
-        var revenueTodayString: String { revenueToday.moneyString }
+        @MainActor var revenueTodayString: String { revenueToday.moneyString }
 
         var revenueTrend: Double? {
             guard revenueYesterday > 0 else { return nil }

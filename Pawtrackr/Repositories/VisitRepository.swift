@@ -78,7 +78,7 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
     
     func checkOut(visit: Visit, total: Decimal?, now: Date) async throws {
-        Logger.main.info("VisitRepository: Checking out visit \(visit.uuid)")
+        Logger.visits.info("VisitRepository: Checking out visit \(visit.uuid)")
         visit.markCheckedOut(total: total, now: now)
         
         // Save the visit and its payment
@@ -90,6 +90,10 @@ final class VisitRepository: VisitRepositoryProtocol {
             VisitDidCompleteKey.endedAt.rawValue: now
         ]
         NotificationCenter.default.post(name: .visitDidComplete, object: visit, userInfo: userInfo)
-        Logger.main.info("VisitRepository: Checkout complete, notification posted")
+        Logger.visits.info("VisitRepository: Checkout complete, notification posted")
     }
+}
+
+private extension Logger {
+    static let visits = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "VisitRepository")
 }
