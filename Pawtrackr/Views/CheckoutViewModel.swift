@@ -341,4 +341,12 @@ final class CheckoutViewModel {
     var finalTotalString: String {
         servicesTotalDecimal.moneyString
     }
+
+    // Cached summary so CheckoutView doesn't recompute on every render.
+    var selectedServicesSummary: String {
+        let mainNames  = allServices.filter  { selectedServiceIDs.contains($0.persistentModelID) }.map(\.name)
+        let addOnNames = addOnServices.filter { selectedAddOnIDs.contains($0.persistentModelID)  }.map(\.name)
+        let sorted = (mainNames + addOnNames).sorted()
+        return sorted.isEmpty ? "None" : sorted.joined(separator: ", ")
+    }
 }

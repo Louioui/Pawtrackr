@@ -465,11 +465,8 @@ struct CheckoutView: View {
         )
     }
 
-    var selectedServicesSummary: String {
-        let list = (viewModel.allServices.filter { viewModel.selectedServiceIDs.contains($0.persistentModelID) }.map(\.name) +
-                    viewModel.addOnServices.filter { viewModel.selectedAddOnIDs.contains($0.persistentModelID) }.map(\.name)).sorted()
-        return list.isEmpty ? "None" : list.joined(separator: ", ")
-    }
+    // Delegates to ViewModel so this is not recomputed on every render.
+    var selectedServicesSummary: String { viewModel.selectedServicesSummary }
 
     var paymentOptions: [PaymentOption] {
         [

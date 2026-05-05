@@ -441,7 +441,7 @@ struct ClientDetailView: View {
         do {
             try modelContext.save()
         } catch {
-            Logger.main.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
+            Logger.clientDetailView.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
         }
         viewModel?.refreshRecentVisits()
     }
@@ -476,7 +476,7 @@ struct ClientDetailView: View {
             showContactEditor = false
             newContactName = ""; newContactRelation = ""; newContactPhone = ""
         } catch {
-            Logger.main.error("Failed to save contact: \(error.localizedDescription, privacy: .public)")
+            Logger.clientDetailView.error("Failed to save contact: \(error.localizedDescription, privacy: .public)")
             validationError = "Failed to save to database."
         }
     }
@@ -685,7 +685,7 @@ struct ClientDetailView: View {
         } catch {
             isDeleting = false
             let message = String(describing: error)
-            Logger.main.error("Failed to delete client: \(message, privacy: .public)")
+            Logger.clientDetailView.error("Failed to delete client: \(message, privacy: .public)")
             alertDestination = .deleteError(message)
         }
     }
@@ -716,7 +716,7 @@ struct ClientDetailView: View {
         do {
             try modelContext.save()
         } catch {
-            Logger.main.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
+            Logger.clientDetailView.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
         }
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }
         // Optional: show a small saved toast for inline edits
@@ -841,10 +841,17 @@ private struct InitialsCircle: View {
 
 @ViewBuilder private func actionButton(title: String, systemImage: String, tint: Color = .blue, borderOnly: Bool = false, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-        HStack { Image(systemName: systemImage); Text(title) }.font(.caption.weight(.semibold))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+        VStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.callout)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.borderedProminent)
     .tint(borderOnly ? .clear : tint)
@@ -852,6 +859,10 @@ private struct InitialsCircle: View {
     .overlay(
         RoundedRectangle(cornerRadius: 8).stroke(borderOnly ? Color.gray.opacity(0.3) : .clear, lineWidth: 1)
     )
+}
+
+private extension Logger {
+    static let clientDetailView = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ClientDetailView")
 }
 
 // Nonisolated small helper for duration string to use inside TimelineView

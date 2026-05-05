@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var router = NavigationRouter()
     @State private var sidebarSelection: NavigationItem? = .clients
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Namespace private var sharedNamespace
 
     var body: some View {
         rootContent
@@ -102,7 +103,7 @@ struct ContentView: View {
             ClientDetailView(client: client)
 
         case .petDetail(let pet):
-            PetDetailView(pet: pet, namespace: Namespace().wrappedValue)
+            PetDetailView(pet: pet, namespace: sharedNamespace)
 
         case .visitDetail(let visit):
             VisitDetailView(visit: visit)

@@ -11,13 +11,19 @@ import SwiftData
 import OSLog
 import Combine
 
+// Holds Combine subscriptions that must outlive the App struct's value copies.
+private final class AppCancellables {
+    var bag: Set<AnyCancellable> = []
+}
+
 @main
 struct PawtrackrApp: App {
     let container: ModelContainer?
     private var scheduledTasks: ScheduledTasks?
     @State private var appSettings = AppSettings()
     @StateObject private var authViewModel: AuthenticationViewModel
-    private var cancellables: Set<AnyCancellable> = []
+    // Using a class wrapper so subscriptions survive struct copies.
+    private let cancellables = AppCancellables()
 
     init() {
         // 1. Initial local variables for all properties
@@ -88,7 +94,7 @@ struct PawtrackrApp: App {
                         SummaryUpdater.rebuildDay(for: targetDate, in: backgroundContext)
                     }
                 }
-                .store(in: &cancellables)
+                .store(in: &cancellables.bag)
         }
     }
     

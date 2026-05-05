@@ -43,9 +43,10 @@ import Charts
     } else {
       ProgressView()
         .task {
+          // Assign immediately so @Observable tracking is live while refresh runs.
           let model = DashboardViewModel(modelContext: modelContext)
-          await model.refresh()
           vm = model
+          await model.refresh()
         }
     }
   }
@@ -182,38 +183,36 @@ import Charts
       LazyVStack(spacing: 12) {
         ForEach(vm.overduePets) { pet in
             if let owner = pet.owner {
-                VStack(spacing: 0) {
-                    NavigationLink { ClientDetailView(client: owner) } label: {
-                        PetCard(pet: pet, activeVisit: nil, onViewDetails: {}, onCheckIn: {}, onCheckOut: {})
-                    }
-                    .buttonStyle(.plain)
-                    
-                    HStack(spacing: 16) {
-                        if let sms = owner.smsURL {
-                            Link(destination: sms) {
-                                Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.vertical, 8)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                Card {
+                    VStack(spacing: 8) {
+                        NavigationLink { ClientDetailView(client: owner) } label: {
+                            PetCard(pet: pet, activeVisit: nil, onViewDetails: {}, onCheckIn: {}, onCheckOut: {})
+                        }
+                        .buttonStyle(.plain)
+
+                        if owner.smsURL != nil || owner.telURL != nil {
+                            HStack(spacing: 12) {
+                                if let sms = owner.smsURL {
+                                    Link(destination: sms) {
+                                        Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.vertical, 8)
+                                            .frame(maxWidth: .infinity)
+                                            .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                    }
+                                }
+                                if let tel = owner.telURL {
+                                    Link(destination: tel) {
+                                        Label(NSLocalizedString("dashboard.call", comment: ""), systemImage: "phone.fill")
+                                            .font(.caption.weight(.semibold))
+                                            .padding(.vertical, 8)
+                                            .frame(maxWidth: .infinity)
+                                            .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                    }
+                                }
                             }
                         }
-                        
-                        if let tel = owner.telURL {
-                            Link(destination: tel) {
-                                Label(NSLocalizedString("dashboard.call", comment: ""), systemImage: "phone.fill")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.vertical, 8)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                            }
-                        }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
-                    .background(DS.ColorToken.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .offset(y: -8) // Pull it up to overlap slightly with the card's bottom
                 }
             }
         }
@@ -357,9 +356,13 @@ import Charts
     Card {
       VStack(spacing: 8) {
         IconCircle(systemImage: symbol, size: .lg)
-        Text(title).font(.body.weight(.medium))
+        Text(title)
+          .font(.body.weight(.medium))
+          .lineLimit(2)
+          .multilineTextAlignment(.center)
+          .minimumScaleFactor(0.8)
       }
-      .frame(width: 150, height: 110)
+      .frame(width: 130, height: 100)
     }
   }
 }

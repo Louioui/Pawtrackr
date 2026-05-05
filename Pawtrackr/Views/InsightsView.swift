@@ -66,7 +66,7 @@ struct InsightsView: View {
                             guard !isPreparingReport else { return }
                             isPreparingReport = true
                             Task {
-                                let summary = vm.generateReportSummary()
+                                let summary = await vm.generateReportSummary()
                                 let data = await BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
                                 reportPDFData = data
                                 isPreparingReport = false

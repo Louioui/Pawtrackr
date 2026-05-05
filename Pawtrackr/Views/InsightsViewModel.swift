@@ -82,7 +82,7 @@ class InsightsViewModel {
         _ = await [rev, dist, top, growth, retention]
     }
 
-    func generateReportSummary() -> BusinessReportService.MonthlySummary {
+    func generateReportSummary() async -> BusinessReportService.MonthlySummary {
         let now = Date()
         let cal = Calendar.current
         let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
@@ -179,9 +179,13 @@ class InsightsViewModel {
         let result = await Task.detached(priority: .userInitiated) { () -> (services: [DistributionData], categories: [DistributionData]) in
             let bgContext = ModelContext(container)
 
-            let visitsDescriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { $0.endedAt != nil }
+            // Limit fetch to a reasonable window — visits are filtered to 30 days in memory.
+            var visitsDescriptor = FetchDescriptor<Visit>(
+                predicate: #Predicate<Visit> { $0.endedAt != nil },
+                sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
             )
+            visitsDescriptor.fetchLimit = 2000
+
             let categoryDescriptor = FetchDescriptor<CategoryDaySummary>(
                 predicate: #Predicate<CategoryDaySummary> { summary in
                     summary.day >= start && summary.day < end

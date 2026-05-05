@@ -258,33 +258,38 @@ struct ClientsView: View {
 
     // MARK: - Header (Refined UI)
     private var headerBar: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text("Welcome Back!").font(.subheadline).foregroundStyle(.secondary)
-                Text("Pawtrackr").font(.largeTitle.weight(.bold))
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Welcome Back!")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Pawtrackr")
+                    .font(.title.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            Spacer()
+            Spacer(minLength: 8)
             Button { showNotifications = true } label: {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "bell.fill")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                    if notificationsCount > 0 {
-                        Text("\(min(notificationsCount, 9))")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                            .background(Color.red)
-                            .clipShape(Circle())
-                            .offset(x: 8, y: -8)
+                Image(systemName: "bell.fill")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .overlay(alignment: .topTrailing) {
+                        if notificationsCount > 0 {
+                            Text("\(min(notificationsCount, 9))")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(minWidth: 16, minHeight: 16)
+                                .padding(2)
+                                .background(Color.red, in: Circle())
+                                .offset(x: 6, y: -6)
+                        }
                     }
-                }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Notifications")
+            .accessibilityLabel("Notifications, \(notificationsCount) unread")
         }
         .padding(.horizontal)
-        .padding(.top, 20)
+        .padding(.top, 16)
     }
 
     private var notificationsCount: Int { storedNotifications.count }
