@@ -139,6 +139,23 @@ public enum PhoneUtils {
         return components.string
     }
 
+    /// Generates a WhatsApp URL string from a valid phone number, optionally with a message body.
+    public static func whatsappURLString(_ input: String, body: String? = nil) -> String? {
+        guard let digits = tenDigits(from: input) else { return nil }
+        // WhatsApp uses international format without the + (1##########)
+        let phone = "1" + digits
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "wa.me"
+        components.path = "/\(phone)"
+        
+        if let body = body, !body.isEmpty {
+            components.queryItems = [URLQueryItem(name: "text", value: body)]
+        }
+        
+        return components.string
+    }
+
     // MARK: - Private Helpers
 
     /// Extracts the core 10 digits from a raw string, handling a leading "1".

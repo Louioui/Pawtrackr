@@ -5,11 +5,9 @@ import SwiftData
 class ScheduledTasks {
     private var timer: Timer?
     private let modelContainer: ModelContainer
-    private var pruner: DataPruner?
 
     init(modelContainer: ModelContainer) {
         self.modelContainer = modelContainer
-        self.pruner = DataPruner(modelContainer: modelContainer)
     }
 
     func start() {
@@ -33,25 +31,13 @@ class ScheduledTasks {
     }
 
     private func runMaintenance() {
-        Task {
-            // 1. Rebuild summaries for the last 30 days to ensure accuracy
-            await MainActor.run {
-                let context = modelContainer.mainContext
-                SummaryUpdater.rebuildAllSummaries(in: context) // incremental
-            }
-
-            // 2. Prune old photos (older than 6 months, keep latest 3 per pet)
-            do {
-                let sixMonthsAgo = Calendar.current.date(byAdding: .month, value: -6, to: Date()) ?? Date()
-                try await pruner?.pruneVisitPhotos(olderThan: sixMonthsAgo, keepRecentPhotosPerPet: 3)
-            } catch {
-                print("Maintenance error (pruning): \(error)")
-            }
-
-            // 3. Compact summaries for the last year
-            let cal = Calendar.current
-            let yearAgo = cal.date(byAdding: .year, value: -1, to: Date()) ?? Date()
-            await pruner?.compactSummaries(in: yearAgo...Date())
+        let container = modelContainer
+        Task.detached(priority: .background) {
+            let context = ModelContext(container)
+            // 1. Incremental summary rebuild for changed days.
+            SummaryUpdater.rebuildAllSummaries(in: context)
+            // 2. Prune/downsample old photos (older than 6 months).
+            DataPruner.pruneOldPhotos(olderThan: 180, downsampleOnly: true, in: context)
         }
     }
 }

@@ -3,11 +3,14 @@
 //  Pawtrackr
 //
 //  Generates a professional PDF receipt for a Visit.
+//  Snapshot is built on the main actor (uses SwiftData + main-actor formatters);
+//  rendering runs nonisolated so it can execute off the main thread.
 //
 
 import Foundation
 import SwiftUI
 import PDFKit
+import SwiftData
 
 #if canImport(UIKit)
 import UIKit
@@ -19,47 +22,40 @@ typealias PlatformColor = NSColor
 typealias PlatformFont = NSFont
 #endif
 
-@MainActor
-class PDFReceiptService {
-    static let shared = PDFReceiptService()
-    
-    func generatePDF(for visit: Visit) -> Data {
-        let bounds = CGRect(x: 0, y: 0, width: 612, height: 792)
-        
-        #if canImport(UIKit)
-        let pdfRenderer = UIGraphicsPDFRenderer(bounds: bounds)
-        
-        return pdfRenderer.pdfData { rendererContext in
-            rendererContext.beginPage()
-            drawContent(in: rendererContext.cgContext, for: visit, bounds: bounds)
-        }
-        #else
-        let data = NSMutableData()
-        guard let consumer = CGDataConsumer(data: data),
-              let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
-            return Data()
-        }
-        
-        context.beginPDFPage(nil)
-        
-        // On macOS, the coordinate system is bottom-left. We flip it to match iOS top-down.
-        context.translateBy(x: 0, y: bounds.height)
-        context.scaleBy(x: 1, y: -1)
-        
-        drawContent(in: context, for: visit, bounds: bounds)
-        
-        context.endPDFPage()
-        context.closePDF()
-        
-        return data as Data
-        #endif
+struct ReceiptSnapshot: Sendable {
+    struct Item: Sendable {
+        let name: String
+        let priceString: String
     }
-    
-    private func drawContent(in context: CGContext, for visit: Visit, bounds: CGRect) {
-        let margin: CGFloat = 50
-        var currentY: CGFloat = 60
-        
-        // Fetch Business Config
+    struct PaymentInfo: Sendable {
+        let infoLine: String
+        let referenceLine: String?
+    }
+
+    let businessName: String
+    let businessAddress: String?
+    let contactLine: String?
+    let receiptNumber: String
+    let clientName: String
+    let clientPhoneFormatted: String?
+    let petLine: String
+    let dateLine: String
+    let items: [Item]
+    let totalString: String
+    let payment: PaymentInfo?
+}
+
+final class PDFReceiptService {
+    static let shared = PDFReceiptService()
+
+    @MainActor
+    func generatePDF(for visit: Visit) -> Data {
+        let snapshot = makeSnapshot(for: visit)
+        return Self.render(snapshot: snapshot)
+    }
+
+    @MainActor
+    func makeSnapshot(for visit: Visit) -> ReceiptSnapshot {
         let config: BusinessConfig
         if let modelContext = visit.modelContext {
             let descriptor = FetchDescriptor<BusinessConfig>()
@@ -67,34 +63,107 @@ class PDFReceiptService {
         } else {
             config = .default
         }
-        
+
+        let contactParts = [config.email, config.phone].compactMap { $0 }.filter { !$0.isEmpty }
+        let contactLine = contactParts.isEmpty ? nil : contactParts.joined(separator: " | ")
+
+        let dateSource = visit.endedAt ?? visit.startedAt
+        let dateLine = "Date: " + dateSource.formatted(date: .long, time: .shortened)
+
+        let phone = visit.pet?.owner?.phone
+        let phoneFormatted = phone.flatMap { PhoneUtils.display($0) ?? $0 }
+
+        let items = visit.items.map { item in
+            ReceiptSnapshot.Item(name: item.name, priceString: item.lineTotal.moneyString)
+        }
+
+        let payment: ReceiptSnapshot.PaymentInfo?
+        if let p = visit.payment {
+            let infoLine = "Paid via \(p.method.displayName) on \(p.paidAt.formatted(date: .abbreviated, time: .omitted))"
+            let refLine = p.externalReference.map { "Reference: \($0)" }
+            payment = .init(infoLine: infoLine, referenceLine: refLine)
+        } else {
+            payment = nil
+        }
+
+        return ReceiptSnapshot(
+            businessName: config.name,
+            businessAddress: config.address?.isEmpty == false ? config.address : nil,
+            contactLine: contactLine,
+            receiptNumber: "RECEIPT: #\(visit.uuid.uuidString.prefix(8).uppercased())",
+            clientName: visit.pet?.owner?.fullName ?? "Valued Customer",
+            clientPhoneFormatted: phoneFormatted,
+            petLine: "Pet: \(visit.pet?.name ?? "Unknown") (\(visit.pet?.breed ?? "General"))",
+            dateLine: dateLine,
+            items: items,
+            totalString: visit.total.moneyString,
+            payment: payment
+        )
+    }
+
+    /// Pre-render PDF off the main actor. Builds the snapshot on main, then renders on a background task.
+    @MainActor
+    func generatePDFAsync(for visit: Visit) async -> Data {
+        let snapshot = makeSnapshot(for: visit)
+        return await Task.detached(priority: .userInitiated) {
+            Self.render(snapshot: snapshot)
+        }.value
+    }
+
+    nonisolated static func render(snapshot: ReceiptSnapshot) -> Data {
+        let bounds = CGRect(x: 0, y: 0, width: 612, height: 792)
+
+        #if canImport(UIKit)
+        let pdfRenderer = UIGraphicsPDFRenderer(bounds: bounds)
+        return pdfRenderer.pdfData { rendererContext in
+            rendererContext.beginPage()
+            drawContent(in: rendererContext.cgContext, snapshot: snapshot, bounds: bounds)
+        }
+        #else
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data),
+              let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
+            return Data()
+        }
+        context.beginPDFPage(nil)
+        // macOS coordinate system flip to match iOS top-down drawing.
+        context.translateBy(x: 0, y: bounds.height)
+        context.scaleBy(x: 1, y: -1)
+        drawContent(in: context, snapshot: snapshot, bounds: bounds)
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
+        #endif
+    }
+
+    private nonisolated static func drawContent(in context: CGContext, snapshot: ReceiptSnapshot, bounds: CGRect) {
+        let margin: CGFloat = 50
+        var currentY: CGFloat = 60
+
         // --- HEADER ---
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 28, weight: .black),
             .foregroundColor: PlatformColor.systemBlue
         ]
-        let title = config.name.uppercased()
-        title.draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
-        
+        snapshot.businessName.uppercased().draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
+
         let receiptNumAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 12, weight: .medium),
             .foregroundColor: PlatformColor.darkGray
         ]
-        let receiptNum = "RECEIPT: #\(visit.uuid.uuidString.prefix(8).uppercased())"
-        let receiptNumSize = receiptNum.size(withAttributes: receiptNumAttributes)
-        receiptNum.draw(at: CGPoint(x: 612 - margin - receiptNumSize.width, y: currentY + 10), withAttributes: receiptNumAttributes)
-        
+        let receiptNumSize = snapshot.receiptNumber.size(withAttributes: receiptNumAttributes)
+        snapshot.receiptNumber.draw(at: CGPoint(x: 612 - margin - receiptNumSize.width, y: currentY + 10), withAttributes: receiptNumAttributes)
+
         currentY += 45
-        
-        // Draw a thick header line
+
         context.setStrokeColor(PlatformColor.systemBlue.cgColor)
         context.setLineWidth(2)
         context.move(to: CGPoint(x: margin, y: currentY))
         context.addLine(to: CGPoint(x: 612 - margin, y: currentY))
         context.strokePath()
-        
+
         currentY += 25
-        
+
         // --- BUSINESS INFO ---
         let businessNameAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 14, weight: .bold)
@@ -102,93 +171,83 @@ class PDFReceiptService {
         let bodyAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 11)
         ]
-        
-        config.name.draw(at: CGPoint(x: margin, y: currentY), withAttributes: businessNameAttributes)
+
+        snapshot.businessName.draw(at: CGPoint(x: margin, y: currentY), withAttributes: businessNameAttributes)
         currentY += 18
-        
-        if let address = config.address, !address.isEmpty {
+
+        if let address = snapshot.businessAddress {
             address.draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
             currentY += 15
         }
-        
-        let contactParts = [config.email, config.phone].compactMap { $0 }.filter { !$0.isEmpty }
-        if !contactParts.isEmpty {
-            contactParts.joined(separator: " | ").draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
+
+        if let contact = snapshot.contactLine {
+            contact.draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
             currentY += 15
         }
-        
+
         currentY += 30
-        
+
         // --- CLIENT & PET INFO ---
         let sectionHeaderAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 12, weight: .bold),
             .foregroundColor: PlatformColor.gray
         ]
-        
+
         "BILL TO".draw(at: CGPoint(x: margin, y: currentY), withAttributes: sectionHeaderAttributes)
         "DETAILS".draw(at: CGPoint(x: 350, y: currentY), withAttributes: sectionHeaderAttributes)
-        
+
         currentY += 20
-        
-        let clientName = visit.pet?.owner?.fullName ?? "Valued Customer"
+
         let clientAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 14, weight: .semibold)
         ]
-        clientName.draw(at: CGPoint(x: margin, y: currentY), withAttributes: clientAttributes)
-        
-        let dateStr = "Date: " + (visit.endedAt?.formatted(date: .long, time: .shortened) ?? visit.startedAt.formatted(date: .long, time: .shortened))
-        dateStr.draw(at: CGPoint(x: 350, y: currentY), withAttributes: bodyAttributes)
-        
+        snapshot.clientName.draw(at: CGPoint(x: margin, y: currentY), withAttributes: clientAttributes)
+        snapshot.dateLine.draw(at: CGPoint(x: 350, y: currentY), withAttributes: bodyAttributes)
+
         currentY += 18
-        if let phone = visit.pet?.owner?.phone {
-            let formattedPhone = PhoneUtils.display(phone) ?? phone
-            formattedPhone.draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
+        if let phone = snapshot.clientPhoneFormatted {
+            phone.draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
             currentY += 15
         }
-        
-        let petStr = "Pet: \(visit.pet?.name ?? "Unknown") (\(visit.pet?.breed ?? "General"))"
-        petStr.draw(at: CGPoint(x: 350, y: currentY), withAttributes: bodyAttributes)
-        
+        snapshot.petLine.draw(at: CGPoint(x: 350, y: currentY), withAttributes: bodyAttributes)
+
         currentY += 50
-        
+
         // --- SERVICES TABLE ---
         let tableHeaderAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 12, weight: .bold),
             .foregroundColor: PlatformColor.white
         ]
-        
-        // Draw table header background
+
         let tableHeaderRect = CGRect(x: margin, y: currentY, width: 512, height: 25)
         context.setFillColor(PlatformColor.darkGray.cgColor)
         context.fill(tableHeaderRect)
-        
+
         "SERVICE DESCRIPTION".draw(at: CGPoint(x: margin + 10, y: currentY + 6), withAttributes: tableHeaderAttributes)
         let priceHeader = "AMOUNT"
         let priceHeaderSize = priceHeader.size(withAttributes: tableHeaderAttributes)
         priceHeader.draw(at: CGPoint(x: 612 - margin - 10 - priceHeaderSize.width, y: currentY + 6), withAttributes: tableHeaderAttributes)
-        
+
         currentY += 35
-        
-        for item in visit.items {
+
+        for item in snapshot.items {
             item.name.draw(at: CGPoint(x: margin + 10, y: currentY), withAttributes: bodyAttributes)
-            let priceStr = item.lineTotal.moneyString
-            let priceSize = priceStr.size(withAttributes: bodyAttributes)
-            priceStr.draw(at: CGPoint(x: 612 - margin - 10 - priceSize.width, y: currentY), withAttributes: bodyAttributes)
-            
+            let priceSize = item.priceString.size(withAttributes: bodyAttributes)
+            item.priceString.draw(at: CGPoint(x: 612 - margin - 10 - priceSize.width, y: currentY), withAttributes: bodyAttributes)
+
             currentY += 20
-            
-            // Draw a very light line between items
+
             context.setStrokeColor(PlatformColor.lightGray.withAlphaComponent(0.3).cgColor)
             context.setLineWidth(0.5)
             context.move(to: CGPoint(x: margin, y: currentY))
             context.addLine(to: CGPoint(x: 612 - margin, y: currentY))
             context.strokePath()
-            
+
             currentY += 10
         }
-        
+
         currentY += 20
-        
+
         // --- TOTAL ---
         let totalLabelAttributes: [NSAttributedString.Key: Any] = [
             .font: PlatformFont.systemFont(ofSize: 16, weight: .bold)
@@ -197,39 +256,37 @@ class PDFReceiptService {
             .font: PlatformFont.systemFont(ofSize: 20, weight: .black),
             .foregroundColor: PlatformColor.systemBlue
         ]
-        
+
         "GRAND TOTAL".draw(at: CGPoint(x: 350, y: currentY + 5), withAttributes: totalLabelAttributes)
-        
-        let totalStr = visit.total.moneyString
-        let totalSize = totalStr.size(withAttributes: totalValueAttributes)
-        totalStr.draw(at: CGPoint(x: 612 - margin - 10 - totalSize.width, y: currentY), withAttributes: totalValueAttributes)
-        
+
+        let totalSize = snapshot.totalString.size(withAttributes: totalValueAttributes)
+        snapshot.totalString.draw(at: CGPoint(x: 612 - margin - 10 - totalSize.width, y: currentY), withAttributes: totalValueAttributes)
+
         currentY += 60
-        
+
         // --- PAYMENT INFO ---
-        if let payment = visit.payment {
+        if let payment = snapshot.payment {
             let payTitleAttributes: [NSAttributedString.Key: Any] = [
                 .font: PlatformFont.systemFont(ofSize: 12, weight: .bold)
             ]
             "PAYMENT INFORMATION".draw(at: CGPoint(x: margin, y: currentY), withAttributes: payTitleAttributes)
             currentY += 20
-            
-            let payInfo = "Paid via \(payment.method.displayName) on \(payment.paidAt.formatted(date: .abbreviated, time: .omitted))"
-            payInfo.draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
-            
-            if let ref = payment.externalReference {
+
+            payment.infoLine.draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
+
+            if let ref = payment.referenceLine {
                 currentY += 15
-                "Reference: \(ref)".draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
+                ref.draw(at: CGPoint(x: margin, y: currentY), withAttributes: bodyAttributes)
             }
         }
-        
+
         // --- FOOTER ---
         #if canImport(UIKit)
         let italicFont = PlatformFont.italicSystemFont(ofSize: 10)
         #else
         let italicFont = NSFontManager.shared.convert(PlatformFont.systemFont(ofSize: 10), toHaveTrait: .italicFontMask)
         #endif
-        
+
         let footerAttributes: [NSAttributedString.Key: Any] = [
             .font: italicFont,
             .foregroundColor: PlatformColor.gray

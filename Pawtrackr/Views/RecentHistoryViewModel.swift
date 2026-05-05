@@ -88,30 +88,17 @@ final class RecentHistoryViewModel {
                 return (s, e)
             }
         }()
-        // Break down the predicate to help the compiler type-check faster.
-        let predicate: Predicate<Visit>
-        
-        if let s = start, let e = end {
-            predicate = #Predicate<Visit> { v in
-                v.endedAt.flatMap { $0 >= s && $0 < e } ?? false
-            }
-        } else if let s = start {
-            predicate = #Predicate<Visit> { v in
-                v.endedAt.flatMap { $0 >= s } ?? false
-            }
-        } else if let e = end {
-            predicate = #Predicate<Visit> { v in
-                v.endedAt.flatMap { $0 < e } ?? false
-            }
-        } else {
-            predicate = #Predicate<Visit> { v in
-                v.endedAt != nil
-            }
-        }
-
         do {
-            let descriptor = FetchDescriptor<Visit>(predicate: predicate, sortBy: [SortDescriptor(\.endedAt, order: .reverse)])
-            let fetchedVisits = try modelContext.fetch(descriptor)
+            let descriptor = FetchDescriptor<Visit>(
+                predicate: #Predicate<Visit> { $0.endedAt != nil },
+                sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+            )
+            let fetchedVisits = try modelContext.fetch(descriptor).filter { visit in
+                guard let endedAt = visit.endedAt else { return false }
+                if let s = start, endedAt < s { return false }
+                if let e = end, endedAt >= e { return false }
+                return true
+            }
 
             // Snapshot minimal data for off-main filtering and summary
             let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in

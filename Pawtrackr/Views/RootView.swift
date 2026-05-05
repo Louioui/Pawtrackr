@@ -13,12 +13,13 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query private var businessConfigs: [BusinessConfig]
     @State private var showOnboarding = false
+    @State private var didRunStartupMaintenance = false
 
     var body: some View {
         PinLockGate {
             MainTabView()
         }
-        .fullScreenCover(isPresented: $showOnboarding) {
+        .adaptiveCover(isPresented: $showOnboarding) {
             OnboardingView {
                 showOnboarding = false
             }
@@ -27,12 +28,18 @@ struct RootView: View {
             if businessConfigs.isEmpty || !businessConfigs[0].isSetupComplete {
                 showOnboarding = true
             }
-            
-            DataMigrations.coercePets(in: modelContext)
-            DataMigrations.ensureServiceCatalog(in: modelContext)
-            DataMigrations.ensureMessageTemplates(in: modelContext)
 
-            DataMigrations.backfillDaySummaries(in: modelContext)
+            guard !didRunStartupMaintenance else { return }
+            didRunStartupMaintenance = true
+
+            let container = modelContext.container
+            Task.detached(priority: .utility) {
+                let backgroundContext = ModelContext(container)
+                DataMigrations.coercePets(in: backgroundContext)
+                DataMigrations.ensureServiceCatalog(in: backgroundContext)
+                DataMigrations.ensureMessageTemplates(in: backgroundContext)
+                DataMigrations.backfillDaySummaries(in: backgroundContext)
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

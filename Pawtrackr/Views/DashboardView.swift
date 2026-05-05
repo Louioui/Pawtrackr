@@ -17,6 +17,7 @@ import Charts
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
     @State private var showContent = false
+    @State private var selectedRevenueDate: Date?
     @Namespace var namespace
 
   var body: some View {
@@ -108,7 +109,7 @@ import Charts
         }
         GridRow {
           NavigationLink { InsightsView() } label: {
-            kpiCard(title: NSLocalizedString("dashboard.revenue", comment: ""),     value: vm.kpi.revenueTodayString,      symbol: "dollarsign.circle")
+            kpiCard(title: NSLocalizedString("dashboard.revenue", comment: ""),     value: vm.kpi.revenueTodayString,      symbol: "dollarsign.circle", trend: vm.kpi.revenueTrend)
           }
           NavigationLink { RecentHistoryView(initialScope: .today) } label: {
             kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""),   value: "\(vm.kpi.completedToday)",      symbol: "checkmark.circle")
@@ -240,26 +241,55 @@ import Charts
   @ViewBuilder
   private func revenueSection(_ vm: DashboardViewModel) -> some View {
     #if canImport(Charts)
+    let selectedPoint = selectedRevenuePoint(in: vm)
     VStack(alignment: .leading, spacing: 8) {
-      Text(NSLocalizedString("dashboard.revenue_7d", comment: "")).font(.headline)
+      HStack {
+        Text(NSLocalizedString("dashboard.revenue_7d", comment: "")).font(.headline)
+        Spacer()
+        if let selected = selectedPoint {
+            Text("\(selected.date.formatted(.dateTime.weekday(.abbreviated))): \(selected.amount.moneyString)")
+                .font(.subheadline.bold())
+                .foregroundStyle(DS.ColorToken.primary)
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
+        }
+      }
       Card {
         if vm.revenueSeries.isEmpty {
           ContentUnavailableView(NSLocalizedString("dashboard.no_revenue_yet", comment: ""), systemImage: "chart.bar.xaxis", description: Text(NSLocalizedString("dashboard.no_revenue_desc", comment: "")))
             .frame(height: 180)
         } else {
-          Chart(vm.revenueSeries) { point in
-            BarMark(
-              x: .value("Day", point.date, unit: .day),
-              y: .value("Revenue", point.amountDouble)
-            )
+          Chart {
+            ForEach(vm.revenueSeries) { point in
+              BarMark(
+                x: .value("Day", point.date, unit: .day),
+                y: .value("Revenue", point.amountDouble)
+              )
+              .foregroundStyle(DS.ColorToken.primary.gradient)
+              .opacity(selectedPoint == nil || selectedPoint?.id == point.id ? 1 : 0.4)
+            }
+
+            if let selected = selectedPoint {
+                RuleMark(x: .value("Selected", selected.date, unit: .day))
+                    .foregroundStyle(.gray.opacity(0.3))
+                    .offset(y: -10)
+                    .zIndex(-1)
+            }
           }
+          .chartXSelection(value: $selectedRevenueDate)
           .frame(height: 180)
+          .animation(.spring(), value: selectedRevenueDate)
         }
       }
     }
     #else
     EmptyView()
     #endif
+  }
+
+  private func selectedRevenuePoint(in vm: DashboardViewModel) -> DashboardViewModel.RevenuePoint? {
+    guard let selectedRevenueDate else { return nil }
+    let calendar = Calendar.current
+    return vm.revenueSeries.first { calendar.isDate($0.date, inSameDayAs: selectedRevenueDate) }
   }
 
   private func gallerySection(_ vm: DashboardViewModel) -> some View {
@@ -274,6 +304,7 @@ import Charts
                 .frame(height: 120).clipped().cornerRadius(8)
             } else {
               LabelContent(title: NSLocalizedString("dashboard.no_photo", comment: ""), systemImage: "photo")
+                .frame(height: 120)
             }
             #elseif canImport(AppKit)
             if let nsImage = item.nsImage {
@@ -281,6 +312,7 @@ import Charts
                 .frame(height: 120).clipped().cornerRadius(8)
             } else {
               LabelContent(title: NSLocalizedString("dashboard.no_photo", comment: ""), systemImage: "photo")
+                .frame(height: 120)
             }
             #endif
           }
@@ -289,16 +321,27 @@ import Charts
     }
   }
 
-  private func kpiCard(title: String, value: String, symbol: String) -> some View {
+  private func kpiCard(title: String, value: String, symbol: String, trend: Double? = nil) -> some View {
     Card {
       HStack(alignment: .top) {
         IconCircle(systemImage: symbol, size: .md)
         VStack(alignment: .leading, spacing: 4) {
           Text(title).font(.footnote).foregroundStyle(.secondary)
-          Text(value)
-            .font(.title3.weight(.semibold))
-            .monospacedDigit()
-            .contentTransition(.numericText())
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(value)
+                .font(.title3.weight(.semibold))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+            
+            if let trend = trend {
+                HStack(spacing: 2) {
+                    Image(systemName: trend >= 0 ? "arrow.up.right" : "arrow.down.right")
+                    Text(Formatters.percentString(abs(trend), showSign: false) ?? "")
+                }
+                .font(.caption2.bold())
+                .foregroundStyle(trend >= 0 ? .green : .red)
+            }
+          }
         }
         Spacer()
       }

@@ -21,11 +21,19 @@ final class DashboardViewModel: ObservableObject {
     var appointmentsToday: Int = 0
     var inProgressCount: Int = 0
     var revenueToday: Decimal = .zero
+    var revenueYesterday: Decimal = .zero
     var completedToday: Int = 0
 
     var appointmentsTodayText: String { "\(appointmentsToday)" }
     @MainActor
     var revenueTodayString: String { revenueToday.moneyString }
+
+    var revenueTrend: Double? {
+        guard revenueYesterday > 0 else { return nil }
+        let today = (revenueToday as NSDecimalNumber).doubleValue
+        let yesterday = (revenueYesterday as NSDecimalNumber).doubleValue
+        return (today - yesterday) / yesterday
+    }
   }
 
   struct RevenuePoint: Identifiable {
@@ -35,20 +43,12 @@ final class DashboardViewModel: ObservableObject {
     var amountDouble: Double { (amount as NSDecimalNumber).doubleValue }
   }
 
-  struct GalleryItem: Identifiable {
+  struct GalleryItem: Identifiable, @unchecked Sendable {
     let id = UUID()
-    let imageData: Data?
-
     #if canImport(UIKit)
-    var uiImage: UIImage? {
-      guard let imageData else { return nil }
-      return ImageCache.shared.image(data: imageData, maxDimension: 300)
-    }
+    let uiImage: UIImage?
     #elseif canImport(AppKit)
-    var nsImage: NSImage? {
-      guard let imageData else { return nil }
-      return ImageCache.shared.image(data: imageData, maxDimension: 300)
-    }
+    let nsImage: NSImage?
     #endif
   }
 
@@ -126,7 +126,7 @@ final class DashboardViewModel: ObservableObject {
       .store(in: &cancellables)
 
     NotificationCenter.default.publisher(for: ModelContext.didSave)
-      .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+      .debounce(for: .milliseconds(750), scheduler: RunLoop.main)
       .sink { [weak self] _ in
         self?.scheduleRefresh()
       }
@@ -160,6 +160,7 @@ final class DashboardViewModel: ObservableObject {
         appointmentsToday: stats.appointmentsToday,
         inProgressCount: stats.inProgressCount,
         revenueToday: stats.revenueToday,
+        revenueYesterday: stats.revenueYesterday,
         completedToday: stats.completedToday
       )
     } catch {
@@ -206,7 +207,18 @@ final class DashboardViewModel: ObservableObject {
     do {
       let photos = try await repository.fetchGalleryImages(days: days, limit: 12)
       guard !Task.isCancelled else { return }
-      gallery = photos.map { GalleryItem(imageData: $0) }
+      let items = await Task.detached(priority: .userInitiated) {
+        photos.map { data -> GalleryItem in
+          let decoded = ImageCache.shared.image(data: data, maxDimension: 300)
+          #if canImport(UIKit)
+          return GalleryItem(uiImage: decoded)
+          #elseif canImport(AppKit)
+          return GalleryItem(nsImage: decoded)
+          #endif
+        }
+      }.value
+      guard !Task.isCancelled else { return }
+      gallery = items
     } catch {
       setDashboardError(error)
       gallery = []

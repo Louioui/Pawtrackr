@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import SwiftData
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -144,52 +145,24 @@ struct IconCircle: View {
             .clipShape(Circle())
 
         case .thumbnail(let data, let original):
-            #if canImport(UIKit)
-            if let ui = ImageCache.shared.image(data: data, maxDimension: dim * 2) {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: dim, height: dim)
-                    .clipShape(Circle())
-            } else if let orig = original, let ui = ImageCache.shared.image(data: orig, maxDimension: dim * 2) {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: dim, height: dim)
-                    .clipShape(Circle())
-            } else {
+            AsyncDecodedImage(
+                dataSources: [data, original].compactMap { $0 },
+                maxDimension: dim * 2
+            ) {
                 fallbackSymbol(tints: tints)
             }
-            #else
-            if let image = Image(platformImage: data) {
-                image.resizable().scaledToFill()
-                    .frame(width: dim, height: dim)
-                    .clipShape(Circle())
-            } else {
-                fallbackSymbol(tints: tints)
-            }
-            #endif
+            .frame(width: dim, height: dim)
+            .clipShape(Circle())
 
         case .local(let data):
-            #if canImport(UIKit)
-            if let ui = ImageCache.shared.image(data: data, maxDimension: dim * 2) {
-                Image(uiImage: ui)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: dim, height: dim)
-                    .clipShape(Circle())
-            } else {
+            AsyncDecodedImage(
+                dataSources: [data],
+                maxDimension: dim * 2
+            ) {
                 fallbackSymbol(tints: tints)
             }
-            #else
-            if let image = Image(platformImage: data) {
-                image.resizable().scaledToFill()
-                    .frame(width: dim, height: dim)
-                    .clipShape(Circle())
-            } else {
-                fallbackSymbol(tints: tints)
-            }
-            #endif
+            .frame(width: dim, height: dim)
+            .clipShape(Circle())
 
         case .initials(let text):
             Text(text)
@@ -249,7 +222,7 @@ struct IconCircle: View {
         case .tinted(let bg):
             return (bg, .white, .white.opacity(0.9))
 
-        case .auto(_, let gender):
+        case .auto(let species, let gender):
             if let gender {
                 let base = DS.ColorToken.gender(gender)
                 return (base.opacity(0.15), .white, .white.opacity(0.9))
@@ -274,7 +247,7 @@ extension IconCircle {
     /// Creates a pet-specific avatar using the `.auto` style for gender-aware tinting.
     init(pet: Pet, size: SizeToken = .md, badge: String? = nil) {
         self.init(
-            systemImage: (pet.species == .cat) ? "cat.fill" : "dog.fill", // More specific icons
+            systemImage: (pet.species == Species.cat) ? "cat.fill" : "dog.fill", // More specific icons
             initials: pet.name,
             imageData: pet.photoData,
             size: size,
@@ -326,3 +299,80 @@ private extension Image {
         #endif
     }
 }
+
+// MARK: - Async-decoded image (off-main decode, cached via ImageCache)
+
+private struct AsyncDecodedImage<Fallback: View>: View {
+    let dataSources: [Data]
+    let maxDimension: CGFloat
+    @ViewBuilder var fallback: () -> Fallback
+
+    #if canImport(UIKit)
+    @State private var decoded: UIImage?
+    #elseif canImport(AppKit)
+    @State private var decoded: NSImage?
+    #endif
+
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if let decoded {
+                Image(uiImage: decoded)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                fallback()
+            }
+            #elseif canImport(AppKit)
+            if let decoded {
+                Image(nsImage: decoded)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                fallback()
+            }
+            #endif
+        }
+        .task(id: cacheKey) {
+            await decode()
+        }
+    }
+
+    private var cacheKey: String {
+        let sizes = dataSources.map { String($0.count) }.joined(separator: "-")
+        return "\(sizes)|\(Int(maxDimension.rounded()))"
+    }
+
+    private func decode() async {
+        let sources = dataSources
+        let dim = maxDimension
+        #if canImport(UIKit)
+        let result: UIImage? = await Task.detached(priority: .userInitiated) {
+            for data in sources {
+                if let img = ImageCache.shared.image(data: data, maxDimension: dim) {
+                    return img
+                }
+            }
+            return nil
+        }.value
+        #elseif canImport(AppKit)
+        let boxed: SendableImageBox = await Task.detached(priority: .userInitiated) {
+            for data in sources {
+                if let img = ImageCache.shared.image(data: data, maxDimension: dim) {
+                    return SendableImageBox(image: img)
+                }
+            }
+            return SendableImageBox(image: nil)
+        }.value
+        let result: NSImage? = boxed.image
+        #endif
+        decoded = result
+    }
+}
+
+#if canImport(AppKit)
+/// NSImage is not Sendable; this box transports an immutable decoded NSImage across actors.
+private struct SendableImageBox: @unchecked Sendable {
+    let image: NSImage?
+}
+#endif

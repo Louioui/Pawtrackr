@@ -5,12 +5,14 @@
 
 import SwiftUI
 import SwiftData
+import CoreTransferable
 
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: CheckoutViewModel
     @State private var currentStep: CheckoutStep = .services
+    @State private var receiptPDFData: Data?
     @FocusState private var amountFieldFocused: Bool
 
     enum CheckoutStep: Int, CaseIterable {
@@ -305,17 +307,33 @@ struct CheckoutView: View {
                         .foregroundStyle(.green)
                     Text(NSLocalizedString("checkout.complete_title", comment: "")).font(Font.title3.weight(.bold))
                     Text(viewModel.finalTotalString).font(Font.title.bold())
-                    
-                    ShareLink(item: ReceiptDocument(pdfData: PDFReceiptService.shared.generatePDF(for: viewModel.visit), filename: "Receipt_\(viewModel.pet.name).pdf")) {
-                        Label(NSLocalizedString("receipt.share", comment: ""), systemImage: "square.and.arrow.up")
-                            .font(.headline)
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
-                            .foregroundStyle(.white)
+
+                    if let pdfData = receiptPDFData {
+                        ShareLink(
+                            item: ReceiptDocument(
+                                pdfData: pdfData,
+                                filename: "Receipt_\(viewModel.pet.name).pdf"
+                            ),
+                            preview: SharePreview("Receipt", image: Image(systemName: "doc.pdf"))
+                        ) {
+                            Label(NSLocalizedString("receipt.share", comment: ""), systemImage: "square.and.arrow.up")
+                                .font(.headline)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.top, 10)
+                    } else {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text(NSLocalizedString("receipt.preparing", comment: "Preparing receipt…"))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 10)
                     }
-                    .padding(.top, 10)
-                    
+
                     Button(NSLocalizedString("common.done", comment: "")) {
                         dismiss()
                     }
@@ -338,6 +356,10 @@ struct CheckoutView: View {
                 #if os(iOS)
                 HapticManager.notify(.success)
                 #endif
+                Task {
+                    let data = await PDFReceiptService.shared.generatePDFAsync(for: viewModel.visit)
+                    receiptPDFData = data
+                }
             }
         }
     }

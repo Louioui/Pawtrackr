@@ -326,9 +326,9 @@ struct NewClientSheet: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
-                    viewModel.createClient()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if viewModel.appError == nil && !viewModel.showDuplicateAlert {
+                    Task {
+                        let outcome = await viewModel.createClient()
+                        if outcome == .created {
                             dismiss()
                         }
                     }

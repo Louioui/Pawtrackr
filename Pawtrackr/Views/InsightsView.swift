@@ -6,10 +6,13 @@
 import SwiftUI
 import Charts
 import SwiftData
+import CoreTransferable
 
 struct InsightsView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: InsightsViewModel?
+    @State private var reportPDFData: Data?
+    @State private var isPreparingReport = false
 
     var body: some View {
         ScrollView {
@@ -42,14 +45,41 @@ struct InsightsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if let vm = viewModel {
-                    ShareLink(item: ReportDocument(
-                        pdfData: BusinessReportService.shared.generateMonthlyReport(summary: vm.generateReportSummary()),
-                        filename: "Pawtrackr_Report_\(Date().formatted(.dateTime.month().year())).pdf"
-                    )) {
-                        Label("Export Report", systemImage: "doc.badge.arrow.up")
+                    if let pdfData = reportPDFData {
+                        ShareLink(
+                            item: ReportDocument(
+                                pdfData: pdfData,
+                                filename: "Pawtrackr_Report_\(Date().formatted(.dateTime.month().year())).pdf"
+                            ),
+                            preview: SharePreview("Monthly Report", image: Image(systemName: "doc.pdf"))
+                        ) {
+                            Label("Export Report", systemImage: "doc.badge.arrow.up")
+                        }
+                    } else {
+                        Button {
+                            guard !isPreparingReport else { return }
+                            isPreparingReport = true
+                            Task {
+                                let summary = vm.generateReportSummary()
+                                let data = await BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
+                                reportPDFData = data
+                                isPreparingReport = false
+                            }
+                        } label: {
+                            if isPreparingReport {
+                                ProgressView()
+                            } else {
+                                Label("Export Report", systemImage: "doc.badge.arrow.up")
+                            }
+                        }
+                        .disabled(isPreparingReport)
                     }
                 }
             }
+        }
+        .onChange(of: viewModel?.totalRevenue) { _, _ in
+            // Invalidate cached PDF when underlying data changes.
+            reportPDFData = nil
         }
     }
 

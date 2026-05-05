@@ -100,15 +100,12 @@ enum SummaryUpdater {
 
     private static func fetchVisitsEndedInRange(start: Date, end: Date, in context: ModelContext) throws -> [Visit] {
         let descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate<Visit> { visit in
-                if let endedAt = visit.endedAt {
-                    return endedAt >= start && endedAt < end
-                } else {
-                    return false
-                }
-            }
+            predicate: #Predicate<Visit> { $0.endedAt != nil }
         )
-        return try context.fetch(descriptor)
+        return try context.fetch(descriptor).filter { visit in
+            guard let endedAt = visit.endedAt else { return false }
+            return endedAt >= start && endedAt < end
+        }
     }
 
     private static func fetchPaymentsInRange(start: Date, end: Date, in context: ModelContext) throws -> [Payment] {

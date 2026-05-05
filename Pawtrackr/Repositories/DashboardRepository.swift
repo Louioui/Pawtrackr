@@ -10,6 +10,7 @@ struct DashboardKPI {
     var appointmentsToday: Int = 0
     var inProgressCount: Int = 0
     var revenueToday: Decimal = .zero
+    var revenueYesterday: Decimal = .zero
     var completedToday: Int = 0
 }
 
@@ -58,10 +59,19 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         )
         let summary = try modelContext.fetch(summaryDesc).first
         
+        // Yesterday's revenue for trend
+        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: start) ?? start
+        let yesterdayEnd = start
+        let yesterdayDesc = FetchDescriptor<DaySummary>(
+            predicate: #Predicate { summary in summary.day >= yesterdayStart && summary.day < yesterdayEnd }
+        )
+        let yesterdaySummary = try modelContext.fetch(yesterdayDesc).first
+        
         return DashboardKPI(
             appointmentsToday: todaysCount,
             inProgressCount: inProgCount,
             revenueToday: summary?.revenue ?? .zero,
+            revenueYesterday: yesterdaySummary?.revenue ?? .zero,
             completedToday: summary?.visitCount ?? 0
         )
     }
@@ -95,12 +105,15 @@ final class DashboardRepository: DashboardRepositoryProtocol {
     }
 
     func fetchOverduePets(limit: Int) async throws -> [Pet] {
-        let fourWeeksAgo = Calendar.current.date(byAdding: .day, value: -28, to: .now) ?? .now
+        // Fetch pets that haven't been updated in a while as candidates.
+        // We use 1 week as a safe threshold to catch anyone who might be coming due soon
+        // according to their specific frequency.
+        let oneWeekAgo = Calendar.current.date(byAdding: .day, value: -7, to: .now) ?? .now
         let descriptor = FetchDescriptor<Pet>(
-            predicate: #Predicate { $0.updatedAt < fourWeeksAgo },
+            predicate: #Predicate { $0.updatedAt < oneWeekAgo },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        // Fetch candidate pets and filter in memory for complex isOverdue logic
+        // Fetch candidate pets and filter in memory for precise isOverdue logic
         let candidates = try modelContext.fetch(descriptor)
         return Array(candidates.filter { $0.isOverdue }.prefix(limit))
     }
@@ -145,17 +158,17 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         let cal = Calendar.current
         let end = cal.startOfDay(for: .now)
         guard let start = cal.date(byAdding: .day, value: -days, to: end) else { return [] }
-        
-        let desc = FetchDescriptor<Visit>(
+
+        var descriptor = FetchDescriptor<Visit>(
             predicate: #Predicate { v in v.startedAt >= start && v.startedAt < end },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        // Note: fetchLimit doesn't always work as expected with complex predicates in SwiftData 
-        // if the underlying storage is CloudKit, but for local it should be fine.
-        var descriptor = desc
-        descriptor.fetchLimit = limit * 2 // Fetch a bit more to account for visits without photos
-        
+        descriptor.fetchLimit = limit * 2
+
         let visits = try modelContext.fetch(descriptor)
-        return visits.compactMap { $0.afterPhotoData ?? $0.beforePhotoData }.prefix(limit).map { $0 }
+        return visits
+            .compactMap { $0.afterThumbnailData ?? $0.beforeThumbnailData }
+            .prefix(limit)
+            .map { $0 }
     }
 }

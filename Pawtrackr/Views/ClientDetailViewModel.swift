@@ -63,19 +63,10 @@ final class ClientDetailViewModel: ObservableObject {
             }
         }()
 
-        // Fetch most-recent visits for this client's pets using a predicate
+        // Fetch completed visits only, then apply client/date filtering in memory to avoid
+        // SwiftData generating invalid SQL for optional-date comparisons.
         let descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate<Visit> { v in
-                if let endedAt = v.endedAt {
-                    if let start = startBound {
-                        return endedAt >= start
-                    } else {
-                        return true
-                    }
-                } else {
-                    return false
-                }
-            },
+            predicate: #Predicate<Visit> { $0.endedAt != nil },
             sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
         )
         
@@ -88,7 +79,10 @@ final class ClientDetailViewModel: ObservableObject {
             let results = try modelContext.fetch(descriptor)
             let filtered = results.filter { v in
                 guard let pet = v.pet else { return false }
-                return petIDs.contains(pet.persistentModelID)
+                guard petIDs.contains(pet.persistentModelID) else { return false }
+                guard let endedAt = v.endedAt else { return false }
+                if let start = startBound, endedAt < start { return false }
+                return true
             }
             
             self.lastTotalForClient = filtered.count

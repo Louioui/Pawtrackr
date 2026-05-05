@@ -29,6 +29,7 @@ final class MessageTemplate {
         self.type = type
     }
     
+    @MainActor
     func processedContent(pet: Pet?, visit: Visit?) -> String {
         var result = content
         if let pet = pet {

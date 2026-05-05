@@ -26,16 +26,15 @@ final class ClientsViewModel {
     var appError: AppError? = nil
     
     // MARK: - Private Properties
-    private var modelContext: ModelContext
     private let repository: ClientRepositoryProtocol
     private var searchTask: Task<Void, Never>? = nil
+    private var refreshTask: Task<Void, Never>? = nil
     private var cancellables: Set<AnyCancellable> = []
     private var pageSize: Int = 100
     private var fetchOffset: Int = 0
     
     // MARK: - Lifecycle
     init(modelContext: ModelContext, repository: ClientRepositoryProtocol? = nil) {
-        self.modelContext = modelContext
         self.repository = repository ?? ClientRepository(modelContainer: modelContext.container)
         fetchClients() // Initial fetch
         
@@ -60,19 +59,32 @@ final class ClientsViewModel {
     
     func fetchClients() {
         searchTask?.cancel()
+        refreshTask?.cancel()
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Reset state
-        fetchOffset = 0
-        canLoadMore = false
         isLoadingMore = false
-        inProgressClients = []
-        otherClients = []
         appError = nil
 
-        Task {
-            await refreshInProgressClients(query: trimmedSearch)
-            await loadMoreOthers(query: trimmedSearch, resetOffset: true)
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let inProgress = try await repository.fetchActiveClients(query: trimmedSearch)
+                guard !Task.isCancelled else { return }
+
+                let (page, hasMore) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: pageSize, offset: 0)
+                guard !Task.isCancelled else { return }
+
+                inProgressClients = inProgress
+                otherClients = page
+                fetchOffset = page.count
+                canLoadMore = hasMore
+                isLoadingMore = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                appError = .database(error.localizedDescription)
+                canLoadMore = false
+                isLoadingMore = false
+            }
         }
     }
 
@@ -109,9 +121,9 @@ final class ClientsViewModel {
             canLoadMore = false
             isLoadingMore = false
         }
-        }
+    }
 
-        func deleteClient(_ client: Client) {
+    func deleteClient(_ client: Client) {
         Task {
             do {
                 try await repository.deleteClient(client)
@@ -120,15 +132,5 @@ final class ClientsViewModel {
                 appError = .database(error.localizedDescription)
             }
         }
-        }
-
-        // MARK: - Private Helpers
-
-        private func refreshInProgressClients(query: String) async {
-        do {
-            inProgressClients = try await repository.fetchActiveClients(query: query)
-        } catch {
-            appError = .database(error.localizedDescription)
-        }
-        }
-        }
+    }
+}

@@ -22,6 +22,8 @@ final class Visit {
     var behaviorTags: [String] = []
     @Attribute(.externalStorage) var beforePhotoData: Data?
     @Attribute(.externalStorage) var afterPhotoData: Data?
+    @Attribute(.externalStorage) var beforeThumbnailData: Data?
+    @Attribute(.externalStorage) var afterThumbnailData: Data?
 
     // MARK: - Money
     /// Persisted grand total for this visit (non-optional, stored).
@@ -137,14 +139,18 @@ final class Visit {
     func applyPhotos(before: Data?, after: Data?) {
         if let before = before {
             self.beforePhotoData = ImageCache.shared.downsampleToData(data: before, maxDimension: 1024)
+            self.beforeThumbnailData = ImageCache.shared.downsampleToData(data: before, maxDimension: 200)
         } else {
             self.beforePhotoData = nil
+            self.beforeThumbnailData = nil
         }
         
         if let after = after {
             self.afterPhotoData = ImageCache.shared.downsampleToData(data: after, maxDimension: 1024)
+            self.afterThumbnailData = ImageCache.shared.downsampleToData(data: after, maxDimension: 200)
         } else {
             self.afterPhotoData = nil
+            self.afterThumbnailData = nil
         }
         didUpdate()
     }

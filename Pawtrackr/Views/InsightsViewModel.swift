@@ -10,27 +10,27 @@ import Observation
 @Observable
 @MainActor
 class InsightsViewModel {
-    struct RevenueData: Identifiable {
+    struct RevenueData: Identifiable, Sendable {
         let id = UUID()
         let date: Date
         let amount: Decimal
     }
     
-    struct DistributionData: Identifiable {
+    struct DistributionData: Identifiable, Sendable {
         let id = UUID()
         let name: String
         let count: Int
         var revenue: Decimal = .zero
     }
     
-    struct MonthlyGrowthData: Identifiable {
+    struct MonthlyGrowthData: Identifiable, Sendable {
         let id = UUID()
         let month: String
         let revenue: Decimal
         let visitCount: Int
     }
 
-    struct TopClientData: Identifiable {
+    struct TopClientData: Identifiable, Sendable {
         let id = UUID()
         let name: String
         let totalSpent: Decimal
@@ -43,7 +43,7 @@ class InsightsViewModel {
     var topClients: [TopClientData] = []
     var monthlyGrowth: [MonthlyGrowthData] = []
     
-    struct RetentionData: Identifiable {
+    struct RetentionData: Identifiable, Sendable {
         let id = UUID()
         let label: String
         let value: Double
@@ -57,15 +57,18 @@ class InsightsViewModel {
     var totalRevenue: Decimal = .zero
     var averageVisitValue: Decimal = .zero
     
-    private let repository: DashboardRepositoryProtocol
     private let modelContext: ModelContext
+    private var isRefreshing = false
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
-        self.repository = DashboardRepository(modelContainer: modelContext.container)
     }
 
     func refresh() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+
         async let rev: () = fetchRevenue()
         async let dist: () = fetchDistributions()
         async let top: () = fetchTopClients()
@@ -77,103 +80,150 @@ class InsightsViewModel {
 
     func generateReportSummary() -> BusinessReportService.MonthlySummary {
         let now = Date()
+        let cal = Calendar.current
+        let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+        
         let topSvc = serviceDistribution.prefix(5).map { 
             (name: $0.name, count: $0.count, revenue: $0.revenue) 
         }
         
+        // Calculate visits for the current month from monthlyGrowth if available, 
+        // or fallback to fetching from context.
+        let currentMonthName = DateFormatter().monthSymbols[cal.component(.month, from: now) - 1].prefix(3)
+        let monthlyVisits = monthlyGrowth.first(where: { $0.month == currentMonthName })?.visitCount ?? 0
+        
+        // Fetch new clients created this month
+        let descriptor = FetchDescriptor<Client>(
+            predicate: #Predicate<Client> { $0.createdAt >= startOfMonth }
+        )
+        let newClientsCount = (try? modelContext.fetchCount(descriptor)) ?? 0
+        
         return BusinessReportService.MonthlySummary(
             month: now,
             totalRevenue: totalRevenue,
-            visitCount: revenueSeries.reduce(0) { _ , _ in 0 }, // This needs real visit count
-            newClients: 0, // Placeholder
+            visitCount: monthlyVisits,
+            newClients: newClientsCount,
             topServices: topSvc,
             retentionRate: retentionRate
         )
     }
 
     private func fetchRetentionMetrics() async {
-        let descriptor = FetchDescriptor<Client>()
-        do {
-            let allClients = try modelContext.fetch(descriptor)
-            guard !allClients.isEmpty else { return }
-            
-            let recurring = allClients.filter { client in
-                let visits = client.pets.flatMap { $0.visits }.filter { $0.isCompleted }
-                return visits.count > 1
+        let container = modelContext.container
+        let result = await Task.detached(priority: .userInitiated) { () -> (rate: Double, churn: Int, recurring: Int, oneTime: Int)? in
+            let bgCtx = ModelContext(container)
+            let descriptor = FetchDescriptor<Client>()
+            guard let allClients = try? bgCtx.fetch(descriptor), !allClients.isEmpty else { return nil }
+
+            var recurring = 0
+            var churn = 0
+            for client in allClients {
+                var completedVisits = 0
+                for pet in client.pets {
+                    for visit in pet.visits where visit.isCompleted {
+                        completedVisits += 1
+                        if completedVisits > 1 { break }
+                    }
+                    if completedVisits > 1 { break }
+                }
+                if completedVisits > 1 { recurring += 1 }
+                if client.pets.contains(where: { $0.isOverdue }) { churn += 1 }
             }
-            
-            self.retentionRate = Double(recurring.count) / Double(allClients.count)
-            
-            self.churnRiskCount = allClients.filter { client in
-                client.pets.contains { $0.isOverdue }
-            }.count
-            
-            self.retentionSeries = [
-                RetentionData(label: "Recurring", value: Double(recurring.count), color: "blue"),
-                RetentionData(label: "One-time", value: Double(allClients.count - recurring.count), color: "gray")
-            ]
-        } catch {
-            print("Insights error (retention): \(error)")
-        }
+            let rate = Double(recurring) / Double(allClients.count)
+            return (rate: rate, churn: churn, recurring: recurring, oneTime: allClients.count - recurring)
+        }.value
+
+        guard let result else { return }
+        self.retentionRate = result.rate
+        self.churnRiskCount = result.churn
+        self.retentionSeries = [
+            RetentionData(label: "Recurring", value: Double(result.recurring), color: "blue"),
+            RetentionData(label: "One-time", value: Double(result.oneTime), color: "gray")
+        ]
     }
 
     private func fetchRevenue() async {
-        do {
-            let bucket = try await repository.fetchRevenueSeries(days: 30)
-            revenueSeries = bucket.map { RevenueData(date: $0.key, amount: $0.value) }.sorted { $0.date < $1.date }
-            
-            totalRevenue = revenueSeries.reduce(.zero) { $0 + $1.amount }
-            
-            _ = try await repository.fetchKPIs()
-        } catch {
-            print("Insights error (revenue): \(error)")
-        }
+        let container = modelContext.container
+        let cal = Calendar.current
+        let end = cal.startOfDay(for: .now)
+        guard let start = cal.date(byAdding: .day, value: -29, to: end) else { return }
+
+        let points = await Task.detached(priority: .userInitiated) { () -> [(Date, Decimal)] in
+            let bgContext = ModelContext(container)
+            let descriptor = FetchDescriptor<DaySummary>(
+                predicate: #Predicate<DaySummary> { summary in
+                    summary.day >= start && summary.day <= end
+                }
+            )
+
+            let summaries = (try? bgContext.fetch(descriptor)) ?? []
+            return summaries
+                .map { ($0.day, $0.revenue) }
+                .sorted { $0.0 < $1.0 }
+        }.value
+
+        revenueSeries = points.map { RevenueData(date: $0.0, amount: $0.1) }
+        totalRevenue = points.reduce(.zero) { $0 + $1.1 }
     }
 
     private func fetchDistributions() async {
-        do {
-            _ = try await repository.fetchServiceDistribution(days: 30)
-            
-            // To get revenue per service, we need to fetch visits for the period
-            let cal = Calendar.current
-            let end = cal.startOfDay(for: .now).addingTimeInterval(86400)
-            let start = cal.date(byAdding: .day, value: -30, to: end) ?? end
-            
-            let descriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { v in
-                    if let endedAt = v.endedAt {
-                        return endedAt >= start && endedAt < end
-                    } else {
-                        return false
-                    }
-                }
+        let container = modelContext.container
+        let cal = Calendar.current
+        let end = cal.startOfDay(for: .now).addingTimeInterval(86400)
+        let start = cal.date(byAdding: .day, value: -30, to: end) ?? end
+
+        let result = await Task.detached(priority: .userInitiated) { () -> (services: [DistributionData], categories: [DistributionData]) in
+            let bgContext = ModelContext(container)
+
+            let visitsDescriptor = FetchDescriptor<Visit>(
+                predicate: #Predicate<Visit> { $0.endedAt != nil }
             )
-            let visits = try modelContext.fetch(descriptor)
-            
-            var svcData: [String: (count: Int, revenue: Decimal)] = [:]
-            for v in visits {
-                for item in v.items {
-                    svcData[item.name, default: (0, .zero)].count += 1
-                    svcData[item.name, default: (0, .zero)].revenue += item.lineTotal
+            let categoryDescriptor = FetchDescriptor<CategoryDaySummary>(
+                predicate: #Predicate<CategoryDaySummary> { $0.day >= start }
+            )
+
+            let visits = ((try? bgContext.fetch(visitsDescriptor)) ?? []).filter { visit in
+                guard let endedAt = visit.endedAt else { return false }
+                return endedAt >= start && endedAt < end
+            }
+            let categories = (try? bgContext.fetch(categoryDescriptor)) ?? []
+
+            var serviceStats: [String: (count: Int, revenue: Decimal)] = [:]
+            for visit in visits {
+                for item in visit.items {
+                    serviceStats[item.name, default: (0, .zero)].count += 1
+                    serviceStats[item.name, default: (0, .zero)].revenue += item.lineTotal
                 }
             }
-            
-            serviceDistribution = svcData.map { name, stats in
+
+            let services = serviceStats.map { name, stats in
                 DistributionData(name: name, count: stats.count, revenue: stats.revenue)
-            }.sorted { $0.revenue > $1.revenue }
-            
-            let cat = try await repository.fetchCategoryDistribution(days: 30)
-            categoryDistribution = cat.map { DistributionData(name: $0.key, count: $0.value) }.sorted { $0.count > $1.count }
-        } catch {
-            print("Insights error (dist): \(error)")
-        }
+            }
+            .sorted { $0.revenue > $1.revenue }
+
+            let categoryStats = categories.reduce(into: [String: Int]()) { partial, summary in
+                partial[summary.categoryRaw, default: 0] += summary.count
+            }
+            let categoryDistribution = categoryStats.map { name, count in
+                DistributionData(name: name, count: count)
+            }
+            .sorted { $0.count > $1.count }
+
+            return (services: services, categories: categoryDistribution)
+        }.value
+
+        serviceDistribution = result.services
+        categoryDistribution = result.categories
     }
 
     private func fetchTopClients() async {
-        let descriptor = FetchDescriptor<Client>()
-        do {
-            let clients = try modelContext.fetch(descriptor)
-            topClients = clients.map { client in
+        let container = modelContext.container
+        let rows = await Task.detached(priority: .userInitiated) { () -> [TopClientData] in
+            let bgContext = ModelContext(container)
+            let descriptor = FetchDescriptor<Client>()
+            let clients = (try? bgContext.fetch(descriptor)) ?? []
+
+            return clients.map { client in
                 let visits = client.pets.flatMap { $0.visits }.filter { $0.isCompleted }
                 let spent = visits.reduce(Decimal.zero) { $0 + $1.total }
                 return TopClientData(name: client.fullName, totalSpent: spent, visitCount: visits.count)
@@ -182,46 +232,56 @@ class InsightsViewModel {
             .sorted { $0.totalSpent > $1.totalSpent }
             .prefix(10)
             .map { $0 }
-        } catch {
-            print("Insights error (top clients): \(error)")
-        }
+        }.value
+
+        topClients = rows
     }
     
     private func fetchMonthlyGrowth() async {
         let cal = Calendar.current
         let now = Date()
-        var growth: [MonthlyGrowthData] = []
-        
+
         let monthFormatter = DateFormatter()
         monthFormatter.dateFormat = "MMM"
-        
-        for i in (0..<6).reversed() {
-            guard let monthDate = cal.date(byAdding: .month, value: -i, to: now),
-                  let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: monthDate)),
-                  let monthEnd = cal.date(byAdding: .month, value: 1, to: monthStart) else { continue }
-            
+
+        // Build the 6-month window in a single ranged fetch, then bucket in memory.
+        guard let earliestMonthDate = cal.date(byAdding: .month, value: -5, to: now),
+              let rangeStart = cal.date(from: cal.dateComponents([.year, .month], from: earliestMonthDate)),
+              let rangeEnd = cal.date(byAdding: .month, value: 1, to: cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now)
+        else { return }
+
+        let container = modelContext.container
+        let rows = await Task.detached(priority: .userInitiated) { () -> [MonthlyGrowthData] in
+            let bgContext = ModelContext(container)
             let descriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { v in
-                    if let endedAt = v.endedAt {
-                        return endedAt >= monthStart && endedAt < monthEnd
-                    } else {
-                        return false
-                    }
-                }
+                predicate: #Predicate<Visit> { $0.endedAt != nil }
             )
-            
-            do {
-                let visits = try modelContext.fetch(descriptor)
-                let revenue = visits.reduce(Decimal.zero) { $0 + $1.total }
-                growth.append(MonthlyGrowthData(
-                    month: monthFormatter.string(from: monthStart),
-                    revenue: revenue,
-                    visitCount: visits.count
-                ))
-            } catch {
-                print("Insights error (monthly growth): \(error)")
+
+            let visits = ((try? bgContext.fetch(descriptor)) ?? []).filter { visit in
+                guard let endedAt = visit.endedAt else { return false }
+                return endedAt >= rangeStart && endedAt < rangeEnd
             }
-        }
-        self.monthlyGrowth = growth
+
+            var buckets: [(start: Date, label: String, revenue: Decimal, count: Int)] = []
+            for i in (0..<6).reversed() {
+                guard let monthDate = cal.date(byAdding: .month, value: -i, to: now),
+                      let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: monthDate)) else { continue }
+                buckets.append((start: monthStart, label: monthFormatter.string(from: monthStart), revenue: .zero, count: 0))
+            }
+
+            for visit in visits {
+                guard let ended = visit.endedAt,
+                      let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: ended)),
+                      let index = buckets.firstIndex(where: { $0.start == monthStart }) else { continue }
+                buckets[index].revenue += visit.total
+                buckets[index].count += 1
+            }
+
+            return buckets.map {
+                MonthlyGrowthData(month: $0.label, revenue: $0.revenue, visitCount: $0.count)
+            }
+        }.value
+
+        monthlyGrowth = rows
     }
 }

@@ -107,23 +107,17 @@ struct ClientsView: View {
         #endif
         .onReceive(NotificationCenter.default.publisher(for: .clientOpenRequested)) { notification in
             guard let id = notification.requestedClientID else { return }
-            viewModel?.fetchClients()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                guard let vm = viewModel else { return }
-                let all = vm.inProgressClients + vm.otherClients
-                if let client = all.first(where: { $0.persistentModelID == id }) {
-                    withAnimation(Animations.gentleSpring) {
-                        router.navigateToClient(client)
-                    }
-                    NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
-                        ClientDidCreateKey.clientID.rawValue: id,
-                        ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.navigated.rawValue
-                    ])
+            Task { @MainActor in
+                if openClientIfAvailable(id) {
+                    return
                 }
+
+                viewModel?.fetchClients()
+                try? await Task.sleep(for: .milliseconds(350))
+                _ = openClientIfAvailable(id)
             }
         }
         .sheet(isPresented: $showingNewClientSheet) {
-            viewModel?.fetchClients()
         } content: {
             NewClientSheet(modelContext: modelContext)
         }
@@ -142,6 +136,22 @@ struct ClientsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .visitDidComplete)) { note in
             storedNotifications.insert(NotificationItem(title: "Visit Completed", message: "A visit was checked out.", date: Date(), relatedID: note.visitID), at: 0)
         }
+    }
+
+    @MainActor
+    private func openClientIfAvailable(_ id: PersistentIdentifier) -> Bool {
+        guard let vm = viewModel else { return false }
+        let all = vm.inProgressClients + vm.otherClients
+        guard let client = all.first(where: { $0.persistentModelID == id }) else { return false }
+
+        withAnimation(Animations.gentleSpring) {
+            router.navigateToClient(client)
+        }
+        NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
+            ClientDidCreateKey.clientID.rawValue: id,
+            ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.navigated.rawValue
+        ])
+        return true
     }
 
     @ViewBuilder

@@ -52,55 +52,51 @@ final class ClientRepository: ClientRepositoryProtocol {
 
     func fetchActiveClients(query: String) async throws -> [Client] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let predicate: Predicate<Client>
-        
-        if trimmed.isEmpty {
-            predicate = #Predicate<Client> { client in
-                client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } }
-            }
-        } else {
-            predicate = #Predicate<Client> { client in
-                client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
-                (client.firstName.localizedStandardContains(trimmed) || 
-                 client.lastName.localizedStandardContains(trimmed) ||
-                 (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
-                 client.pets.contains { $0.name.localizedStandardContains(trimmed) })
-            }
+        let predicate = #Predicate<Client> { client in
+            client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } }
         }
-        
+
         let descriptor = FetchDescriptor<Client>(predicate: predicate)
-        let results = try modelContext.fetch(descriptor)
+        var results = try modelContext.fetch(descriptor)
+        if !trimmed.isEmpty {
+            results = results.filter { Self.matches(client: $0, query: trimmed) }
+        }
         return results.sorted { $0.sortKeyMostRecentVisit > $1.sortKeyMostRecentVisit }
     }
 
     func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([Client], Bool) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let predicate: Predicate<Client>
-        
-        if trimmed.isEmpty {
-            predicate = #Predicate<Client> { client in
-                !client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } }
-            }
-        } else {
-            predicate = #Predicate<Client> { client in
-                !client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } } &&
-                (client.firstName.localizedStandardContains(trimmed) || 
-                 client.lastName.localizedStandardContains(trimmed) ||
-                 (client.phone.flatMap { $0.localizedStandardContains(trimmed) } ?? false) ||
-                 client.pets.contains { $0.name.localizedStandardContains(trimmed) })
-            }
+        let predicate = #Predicate<Client> { client in
+            !client.pets.contains { pet in pet.visits.contains { visit in visit.endedAt == nil } }
         }
-        
+
         var descriptor = FetchDescriptor<Client>(
             predicate: predicate,
             sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
         )
-        descriptor.fetchLimit = limit
-        descriptor.fetchOffset = offset
-        
-        let results = try modelContext.fetch(descriptor)
-        let canLoadMore = results.count == limit
-        return (results, canLoadMore)
+        if trimmed.isEmpty {
+            descriptor.fetchLimit = limit
+            descriptor.fetchOffset = offset
+            let results = try modelContext.fetch(descriptor)
+            let canLoadMore = results.count == limit
+            return (results, canLoadMore)
+        }
+
+        // Searching: filter in memory then paginate.
+        let all = try modelContext.fetch(descriptor)
+        let filtered = all.filter { Self.matches(client: $0, query: trimmed) }
+        let pageStart = min(offset, filtered.count)
+        let pageEnd = min(offset + limit, filtered.count)
+        let page = Array(filtered[pageStart..<pageEnd])
+        let canLoadMore = pageEnd < filtered.count
+        return (page, canLoadMore)
+    }
+
+    private static func matches(client: Client, query: String) -> Bool {
+        if client.firstName.localizedStandardContains(query) { return true }
+        if client.lastName.localizedStandardContains(query) { return true }
+        if let phone = client.phone, phone.localizedStandardContains(query) { return true }
+        return client.pets.contains { $0.name.localizedStandardContains(query) }
     }
 
     func findClient(byPhone phone: String) async throws -> Client? {

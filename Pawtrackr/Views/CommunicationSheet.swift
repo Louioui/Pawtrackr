@@ -55,12 +55,22 @@ struct CommunicationSheet: View {
                 }
                 
                 if !customMessage.isEmpty {
-                    Button(action: sendMessage) {
-                        Label("Send via SMS", systemImage: "message.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
-                            .foregroundStyle(.white)
+                    HStack(spacing: 12) {
+                        Button(action: { sendMessage(method: .sms) }) {
+                            Label("SMS", systemImage: "message.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(.white)
+                        }
+                        
+                        Button(action: { sendMessage(method: .whatsapp) }) {
+                            Label("WhatsApp", systemImage: "bubble.left.fill")
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.green, in: RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(.white)
+                        }
                     }
                     .padding()
                 }
@@ -74,10 +84,22 @@ struct CommunicationSheet: View {
         }
     }
     
-    private func sendMessage() {
-        guard let phone = pet.owner?.phone,
-              let urlString = PhoneUtils.smsURLString(phone, body: customMessage),
-              let url = URL(string: urlString) else { return }
+    enum MessageMethod {
+        case sms, whatsapp
+    }
+    
+    private func sendMessage(method: MessageMethod) {
+        guard let phone = pet.owner?.phone else { return }
+        
+        let urlString: String?
+        switch method {
+        case .sms:
+            urlString = PhoneUtils.smsURLString(phone, body: customMessage)
+        case .whatsapp:
+            urlString = PhoneUtils.whatsappURLString(phone, body: customMessage)
+        }
+        
+        guard let urlString = urlString, let url = URL(string: urlString) else { return }
         
         #if canImport(UIKit)
         UIApplication.shared.open(url)

@@ -42,8 +42,8 @@ struct OnboardingView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         
-                        Button("Choose Logo") {
-                            showingImagePicker = true
+                        ImagePicker(imageData: $logoData) {
+                            Text("Choose Logo")
                         }
                         .buttonStyle(.bordered)
                     }
@@ -54,14 +54,21 @@ struct OnboardingView: View {
                     Text("Your logo and business name will appear on receipts and reports.")
                 }
                 
-                Section("Basic Info") {
+                Section {
                     TextField("Business Name", text: $name)
                     TextField("Email", text: $email)
+                        #if os(iOS)
                         .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        #endif
                         .autocorrectionDisabled()
                     TextField("Phone", text: $phone)
+                        #if os(iOS)
                         .keyboardType(.phonePad)
+                        #endif
                     TextField("Address", text: $address)
+                } header: {
+                    Text("Basic Info")
                 }
             }
             .navigationTitle("Setup Your Business")
@@ -72,9 +79,6 @@ struct OnboardingView: View {
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-            }
-            .sheet(isPresented: $showingImagePicker) {
-                ImagePicker(data: $logoData)
             }
         }
     }

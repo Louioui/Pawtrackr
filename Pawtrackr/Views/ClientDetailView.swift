@@ -75,6 +75,7 @@ struct ClientDetailView: View {
     @State private var editLast: String = ""
     @State private var editPhone: String = ""
     @State private var editEmail: String = ""
+    @State private var showCommunication = false
 
     @Environment(NavigationRouter.self) private var router
     @Namespace private var namespace
@@ -100,6 +101,13 @@ struct ClientDetailView: View {
                 let ctx = client.modelContext ?? modelContext
                 viewModel = ClientDetailViewModel(client: client, modelContext: ctx)
                 viewModel?.refreshRecentVisits()
+            }
+        }
+        .sheet(isPresented: $showCommunication) {
+            if let firstPet = client.pets.first {
+                CommunicationSheet(pet: firstPet, visit: nil)
+            } else {
+                Text("No pets available to message about.")
             }
         }
     }
@@ -283,9 +291,14 @@ struct ClientDetailView: View {
                         }
                         .font(.title3)
                     } else {
-                        Button { beginInlineEdit(client) } label: { Image(systemName: "ellipsis.circle") }
-                            .font(.title3)
-                            .accessibilityLabel(NSLocalizedString("a11y.more_actions", comment: ""))
+                        HStack(spacing: 12) {
+                            Button { showCommunication = true } label: { Image(systemName: "message.circle.fill") }
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                            Button { beginInlineEdit(client) } label: { Image(systemName: "ellipsis.circle") }
+                                .font(.title3)
+                                .accessibilityLabel(NSLocalizedString("a11y.more_actions", comment: ""))
+                        }
                     }
                 }
 
