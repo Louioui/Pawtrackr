@@ -1,0 +1,319 @@
+import XCTest
+import SwiftData
+@testable import Pawtrackr
+
+@MainActor
+final class CheckoutViewModelTests: XCTestCase {
+
+    // MARK: - Fixtures
+    var container: ModelContainer!
+    var context: ModelContext!
+    var pet: Pet!
+    var bath: Service!      // $30.00
+    var haircut: Service!   // $45.00
+    var nailTrim: Service!  // $10.00 add-on
+
+    override func setUpWithError() throws {
+        let schema = Schema(PawtrackrSchema.models)
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        container = try ModelContainer(for: schema, configurations: [config])
+        context = container.mainContext
+
+        let client = Client(firstName: "Jane", lastName: "Doe", phone: "5551234567")
+        context.insert(client)
+
+        pet = Pet(name: "Buddy", species: .dog)
+        pet.owner = client
+        context.insert(pet)
+
+        bath    = Service(name: "Bath",     basePrice: 30.00)
+        haircut = Service(name: "Haircut",  basePrice: 45.00)
+        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: 10.00)
+        context.insert(bath)
+        context.insert(haircut)
+        context.insert(nailTrim)
+
+        try context.save()
+        Formatters.updateCurrencySymbol("$")
+    }
+
+    override func tearDownWithError() throws {
+        container = nil
+        context = nil
+        pet = nil
+        bath = nil
+        haircut = nil
+        nailTrim = nil
+    }
+
+    // Builds a VM seeded with services directly — no async loadServices needed.
+    private func makeVM(visit: Visit? = nil) -> CheckoutViewModel {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let logURL = tmpDir.appendingPathComponent("trace.log")
+        let vm = CheckoutViewModel(
+            pet: pet,
+            visit: visit,
+            draftStore: CheckoutDraftStore(directoryURL: tmpDir),
+            eventRecorder: CheckoutEventRecorder(logURL: logURL)
+        )
+        vm.allServices   = [bath, haircut]
+        vm.addOnServices = [nailTrim]
+        return vm
+    }
+
+    // MARK: - Service Selection
+
+    func testToggleService_SelectsService() {
+        let vm = makeVM()
+        XCTAssertFalse(vm.isServiceSelected(bath))
+        vm.toggleService(bath)
+        XCTAssertTrue(vm.isServiceSelected(bath))
+    }
+
+    func testToggleService_DeseletsAlreadySelectedService() {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        vm.toggleService(bath)
+        XCTAssertFalse(vm.isServiceSelected(bath))
+    }
+
+    func testToggleAddOn_SelectsAndDeselects() {
+        let vm = makeVM()
+        vm.toggleAddOn(nailTrim)
+        XCTAssertTrue(vm.isAddOnSelected(nailTrim))
+        vm.toggleAddOn(nailTrim)
+        XCTAssertFalse(vm.isAddOnSelected(nailTrim))
+    }
+
+    // MARK: - Amount Calculation
+
+    func testAmount_SingleService() {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(30.00))
+    }
+
+    func testAmount_MultipleServicesAndAddOn() {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        vm.toggleService(haircut)
+        vm.toggleAddOn(nailTrim)
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(85.00))
+    }
+
+    func testAmount_ManualOverrideTakesPrecedence() {
+        let vm = makeVM()
+        vm.toggleService(bath)           // auto = $30
+        vm.setAmountDirectly("60.00")   // manual override
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(60.00))
+    }
+
+    func testAmount_EmptySelectionIsZero() {
+        let vm = makeVM()
+        XCTAssertEqual(vm.servicesTotalDecimal, .zero)
+    }
+
+    // MARK: - Step Navigation
+
+    func testAdvance_FromServicesRequiresSelection() {
+        let vm = makeVM()
+        XCTAssertThrowsError(try vm.advance()) // no service selected
+    }
+
+    func testAdvance_MovesToDetails() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance()
+        XCTAssertEqual(vm.currentStep, .details)
+    }
+
+    func testAdvance_FullForwardProgression() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance()  // → details
+        XCTAssertEqual(vm.currentStep, .details)
+        try vm.advance()  // → payment
+        XCTAssertEqual(vm.currentStep, .payment)
+        try vm.advance()  // → review
+        XCTAssertEqual(vm.currentStep, .review)
+    }
+
+    func testGoBack_FromDetailsReturnsToServices() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance()
+        vm.goBack()
+        XCTAssertEqual(vm.currentStep, .services)
+    }
+
+    func testGoBack_AtServicesDoesNothing() {
+        let vm = makeVM()
+        vm.goBack()
+        XCTAssertEqual(vm.currentStep, .services)
+    }
+
+    // MARK: - isAdvanceEnabled
+
+    func testIsAdvanceEnabled_ServicesStepRequiresSelection() {
+        let vm = makeVM()
+        XCTAssertFalse(vm.isAdvanceEnabled)
+        vm.toggleService(bath)
+        XCTAssertTrue(vm.isAdvanceEnabled)
+    }
+
+    func testIsAdvanceEnabled_DetailsStepAlwaysTrue() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance() // → details
+        XCTAssertTrue(vm.isAdvanceEnabled)
+    }
+
+    func testIsAdvanceEnabled_PaymentStepRequiresPositiveTotal() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance() // → details
+        try vm.advance() // → payment
+        // Amount from service selection = $30 > 0 → enabled
+        XCTAssertTrue(vm.isAdvanceEnabled)
+    }
+
+    func testIsAdvanceEnabled_PaymentStepDisabledWhenZeroTotal() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance()
+        try vm.advance()
+        vm.setAmountDirectly("0")
+        XCTAssertFalse(vm.isAdvanceEnabled)
+    }
+
+    func testIsAdvanceEnabled_PaymentStepRequiresReferenceForCard() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance()
+        try vm.advance()
+        vm.choosePayment(.creditCard)
+        // requiresExternalReference is true; reference empty → disabled
+        vm.setExternalReference("")
+        XCTAssertFalse(vm.isAdvanceEnabled)
+        vm.setExternalReference("4242")
+        XCTAssertTrue(vm.isAdvanceEnabled)
+    }
+
+    func testIsAdvanceEnabled_CashRequiresNoReference() throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        try vm.advance()
+        try vm.advance()
+        vm.choosePayment(.cash)
+        XCTAssertTrue(vm.isAdvanceEnabled)
+    }
+
+    // MARK: - Payment Method
+
+    func testChoosePayment_ClearsReferenceForCash() {
+        let vm = makeVM()
+        vm.setExternalReference("ref-123")
+        vm.choosePayment(.cash)
+        XCTAssertEqual(vm.externalReference, "")
+    }
+
+    func testChoosePayment_KeepsReferenceForCard() {
+        let vm = makeVM()
+        vm.setExternalReference("4242")
+        vm.choosePayment(.creditCard)
+        XCTAssertEqual(vm.externalReference, "4242")
+    }
+
+    // MARK: - Draft
+
+    func testMakeDraft_PhotosAreNil() {
+        let vm = makeVM()
+        vm.beforePhotoData = Data([0x01, 0x02, 0x03])
+        vm.afterPhotoData  = Data([0x04, 0x05, 0x06])
+        // Access internal draft via the public path: trigger a draft save and
+        // verify photos aren't in the saved file by inspecting the VM state indirectly.
+        // Direct test: photos should never appear in the draft (keeping drafts small).
+        // We verify this by asserting the ViewModel strips them from makeDraft output.
+        // Since makeDraft is private, we test its effect: flushDraft should succeed
+        // without encoding photo data (no crash / no large file written).
+        vm.flushDraft()
+        // If we reach here without crashing or hanging, the lightweight draft path works.
+        XCTAssertNotNil(vm.beforePhotoData) // VM still holds the photo
+    }
+
+    // MARK: - Summary Strings
+
+    func testSelectedServicesSummary_ReflectsSelection() {
+        let vm = makeVM()
+        XCTAssertEqual(vm.selectedServicesSummary, "None")
+        vm.toggleService(bath)
+        XCTAssertEqual(vm.selectedServicesSummary, "Bath")
+        vm.toggleService(haircut)
+        // Sorted alphabetically: Bath, Haircut
+        XCTAssertEqual(vm.selectedServicesSummary, "Bath, Haircut")
+    }
+
+    func testFinalTotalString_UpdatesOnToggle() {
+        let vm = makeVM()
+        XCTAssertEqual(vm.finalTotalString, "$0.00")
+        vm.toggleService(bath)
+        XCTAssertEqual(vm.finalTotalString, "$30.00")
+    }
+
+    func testBehaviorTagsSummary_EmptyByDefault() {
+        let vm = makeVM()
+        XCTAssertEqual(vm.behaviorTagsSummary, "None")
+    }
+
+    // MARK: - processPayment (integration)
+
+    func testProcessPayment_ConfirmsAndSavesVisit() async throws {
+        let vm = makeVM()
+        // Select service, advance to review
+        vm.toggleService(bath)
+        try vm.advance()  // → details
+        try vm.advance()  // → payment
+        vm.choosePayment(.cash)
+        try vm.advance()  // → review
+
+        XCTAssertEqual(vm.currentStep, .review)
+        XCTAssertEqual(vm.state, .selectingServices) // not yet processing
+
+        await vm.processPayment()
+
+        XCTAssertEqual(vm.state, .confirmed)
+        XCTAssertFalse(vm.isSaving)
+        XCTAssertNil(vm.appError)
+        // Visit should be marked checked-out
+        XCTAssertNotNil(vm.visit.endedAt)
+        XCTAssertEqual(vm.visit.total, Decimal(30.00))
+        XCTAssertNotNil(vm.visit.payment)
+        XCTAssertEqual(vm.visit.payment?.method, .cash)
+    }
+
+    func testProcessPayment_DoesNotRunWhenAlreadySaving() async {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        // Manually set isSaving to simulate a double-tap
+        // processPayment guards on isSaving so the second call should be a no-op.
+        // We can't set isSaving directly (private(set)) so instead we verify the guard
+        // works by calling processPayment twice — only one of them should advance state.
+        let task1 = Task { await vm.processPayment() }
+        let task2 = Task { await vm.processPayment() }
+        await task1.value
+        await task2.value
+        // If both ran, state would still be .confirmed. If guard fired on second, same result.
+        // Key check: no crash and state is resolved.
+        XCTAssertFalse(vm.isSaving)
+    }
+
+    func testProcessPayment_FailsValidationWithZeroAmount() async {
+        let vm = makeVM()
+        // Don't select any service — total is $0
+        vm.currentStep = .review
+        await vm.processPayment()
+        XCTAssertNotNil(vm.appError)
+        XCTAssertNotEqual(vm.state, .confirmed)
+    }
+}

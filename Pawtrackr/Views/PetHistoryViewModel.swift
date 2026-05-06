@@ -3,15 +3,14 @@
 //  PetHistoryViewModel.swift
 //  Pawtrackr
 //
-//  Created by mac on 9/3/25.
-//
 
 import Foundation
 import SwiftUI
 import SwiftData
 
+@Observable
 @MainActor
-final class PetHistoryViewModel: ObservableObject {
+final class PetHistoryViewModel {
     // MARK: - Types
     enum Scope: String, CaseIterable, Identifiable {
         case all = "All"
@@ -23,36 +22,45 @@ final class PetHistoryViewModel: ObservableObject {
 
     // MARK: - Inputs / Environment
     private let modelContext: ModelContext
-    @Published var pet: Pet
+    var pet: Pet
 
     // MARK: - Filtering
-    @Published var scope: Scope = .thisMonth { didSet { Task { await refresh() } } }
-    @Published var searchText: String = "" { didSet { applyFilters() } }
+    var scope: Scope = .thisMonth { didSet { Task { await refresh() } } }
+    var searchText: String = "" { didSet { applyFilters() } }
 
     // MARK: - Output
-    @Published private(set) var visits: [Visit] = []              // raw fetch (date range)
-    @Published private(set) var filtered: [Visit] = []            // search-applied
+    private(set) var visits: [Visit] = []
+    private(set) var filtered: [Visit] = []
 
     // MARK: - KPIs
-    @Published private(set) var totalVisits: Int = 0
-    @Published private(set) var totalSpent: Decimal = .zero
-    @Published private(set) var averageDuration: TimeInterval = 0
+    private(set) var totalVisits: Int = 0
+    private(set) var totalSpent: Decimal = .zero
+    private(set) var averageDuration: TimeInterval = 0
 
     var totalSpentString: String { totalSpent.moneyString }
     var averageDurationString: String { Formatters.durationString(from: Date(), to: Date().addingTimeInterval(averageDuration)) }
+
+    // nonisolated(unsafe) so deinit (which is nonisolated) can read and clear it.
+    nonisolated(unsafe) private var visitCompleteObserver: NSObjectProtocol?
 
     // MARK: - Init
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
         self.modelContext = modelContext
-        NotificationCenter.default.addObserver(forName: .visitDidComplete, object: nil, queue: .main) { [weak self] _ in
+        visitCompleteObserver = NotificationCenter.default.addObserver(
+            forName: .visitDidComplete, object: nil, queue: .main
+        ) { [weak self] _ in
             guard let self else { return }
             Task { await self.refresh() }
         }
         Task { await refresh() }
     }
 
-    deinit { NotificationCenter.default.removeObserver(self) }
+    deinit {
+        if let obs = visitCompleteObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+    }
 
     // MARK: - Public
     func refresh() async {
@@ -62,7 +70,7 @@ final class PetHistoryViewModel: ObservableObject {
     }
 
     func exportCSV() -> Data {
-        let header = ["Date","Services","Duration","Amount"]
+        let header = ["Date", "Services", "Duration", "Amount"]
         let rows: [[String]] = filtered.map { v in
             let date = v.startedAt.formatted(date: .abbreviated, time: .omitted)
             let services = v.items.map { $0.name }.joined(separator: ", ")
@@ -90,7 +98,6 @@ final class PetHistoryViewModel: ObservableObject {
     // MARK: - Private
     private func fetchVisits() async {
         let (start, end) = dateBounds(for: scope)
-        // Push date bounds into the store-level predicate for performance
         let predicate = #Predicate<Visit> { v in
             if let s = start {
                 if let e = end {
@@ -112,7 +119,6 @@ final class PetHistoryViewModel: ObservableObject {
         )
         do {
             var fetched = try modelContext.fetch(descriptor)
-            // Filter by pet identity and require fully completed checkouts (paid visits only)
             let petID = pet.persistentModelID
             fetched = fetched.filter { $0.pet?.persistentModelID == petID && $0.isCompleted && $0.isPaid }
             visits = fetched
@@ -126,7 +132,6 @@ final class PetHistoryViewModel: ObservableObject {
         guard !q.isEmpty else { filtered = visits; return }
         let lc = q.localizedLowercase
         filtered = visits.filter { v in
-            // match on item names, payment reference, or note
             if v.items.contains(where: { $0.name.localizedCaseInsensitiveContains(lc) }) { return true }
             if let note = v.note, note.localizedCaseInsensitiveContains(lc) { return true }
             if let ref = v.payment?.externalReference, ref.localizedCaseInsensitiveContains(lc) { return true }

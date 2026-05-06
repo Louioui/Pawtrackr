@@ -176,36 +176,6 @@
             endingLineNumber = "47"
             landmarkName = "InsightsView"
             landmarkType = "14">
-            <Locations>
-               <Location
-                  uuid = "7506B4A8-AF78-4B40-B30F-D63A7ADBBE45 - 5557d32e514b74dc"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "(1) suspend resume partial function for closure #2 @Sendable () async -&gt; () in Pawtrackr.InsightsView.body.getter : some"
-                  moduleName = "Pawtrackr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/mac/Desktop/Pawtrackr/Pawtrackr/Views/InsightsView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "47"
-                  endingLineNumber = "47">
-               </Location>
-               <Location
-                  uuid = "7506B4A8-AF78-4B40-B30F-D63A7ADBBE45 - 9333c0ffd7238de"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "(3) suspend resume partial function for closure #2 @Sendable () async -&gt; () in Pawtrackr.InsightsView.body.getter : some"
-                  moduleName = "Pawtrackr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/mac/Desktop/Pawtrackr/Pawtrackr/Views/InsightsView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "47"
-                  endingLineNumber = "47">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

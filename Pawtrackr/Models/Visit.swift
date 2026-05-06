@@ -135,23 +135,12 @@ final class Visit {
         didUpdate()
     }
 
-    // NEWLY ADDED: This function was missing, causing the build error in CheckoutViewModel.
-    func applyPhotos(before: Data?, after: Data?) {
-        if let before = before {
-            self.beforePhotoData = ImageCache.shared.downsampleToData(data: before, maxDimension: 1024)
-            self.beforeThumbnailData = ImageCache.shared.downsampleToData(data: before, maxDimension: 200)
-        } else {
-            self.beforePhotoData = nil
-            self.beforeThumbnailData = nil
-        }
-        
-        if let after = after {
-            self.afterPhotoData = ImageCache.shared.downsampleToData(data: after, maxDimension: 1024)
-            self.afterThumbnailData = ImageCache.shared.downsampleToData(data: after, maxDimension: 200)
-        } else {
-            self.afterPhotoData = nil
-            self.afterThumbnailData = nil
-        }
+    /// Store pre-processed photo data. Callers must downsample off the main thread before calling.
+    func applyPhotos(before: Data?, beforeThumb: Data?, after: Data?, afterThumb: Data?) {
+        self.beforePhotoData = before
+        self.beforeThumbnailData = beforeThumb
+        self.afterPhotoData = after
+        self.afterThumbnailData = afterThumb
         didUpdate()
     }
 

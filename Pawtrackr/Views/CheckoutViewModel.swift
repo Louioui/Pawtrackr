@@ -3,9 +3,7 @@
 //  Pawtrackr
 //
 //  View-model for CheckoutView: owns selection state, totals math, photos, payment,
-//  and visit/payment persistence. Now uses modern @Observable.
-//
-//  Updated by Assistant on 2025-09-03
+//  and visit/payment persistence. Uses modern @Observable.
 //
 
 import SwiftUI
@@ -15,6 +13,31 @@ import OSLog
 @Observable
 @MainActor
 final class CheckoutViewModel {
+    enum CheckoutFlowStep: Int, CaseIterable {
+        case services = 0
+        case details = 1
+        case payment = 2
+        case review = 3
+
+        var title: String {
+            switch self {
+            case .services: return "Services"
+            case .details: return "Notes & Photos"
+            case .payment: return "Payment"
+            case .review: return "Review"
+            }
+        }
+
+        var primaryButtonTitle: String {
+            switch self {
+            case .services: return "Continue to Notes"
+            case .details: return "Continue to Payment"
+            case .payment: return "Review Checkout"
+            case .review: return "Confirm & Pay"
+            }
+        }
+    }
+
     enum CheckoutState: Equatable {
         case selectingServices
         case addingPhotos
@@ -27,37 +50,44 @@ final class CheckoutViewModel {
     // MARK: Dependencies
     private var visitRepository: VisitRepositoryProtocol?
     private var serviceRepository: ServiceRepositoryProtocol?
-    
+    private let draftStore: CheckoutDraftStore
+    private let eventRecorder: CheckoutEventRecorder
+
     // MARK: Models
     var pet: Pet
-    var visit: Visit 
-    
+    var visit: Visit
+    var currentStep: CheckoutFlowStep = .services
+
     // MARK: UI State
     var sessionNotes: String = ""
     var amountString: String = ""
-    var selectedServiceIDs: Set<PersistentIdentifier> = []
-    var selectedPaymentMethod: Payment.Method = .creditCard
-    var beforePhotoData: Data?
-    var afterPhotoData: Data?
+    var selectedServiceIDs: Set<PersistentIdentifier> = [] { didSet { scheduleDraftSave(reason: "services_changed") } }
+    var selectedPaymentMethod: Payment.Method = .creditCard { didSet { scheduleDraftSave(reason: "payment_method_changed") } }
+    var beforePhotoData: Data? { didSet { scheduleDraftSave(reason: "before_photo_changed") } }
+    var afterPhotoData: Data? { didSet { scheduleDraftSave(reason: "after_photo_changed") } }
     var externalReference: String = ""
-    var tags: Set<String> = []
-    var selectedAddOnIDs: Set<PersistentIdentifier> = []
-    
+    var tags: Set<String> = [] { didSet { scheduleDraftSave(reason: "tags_changed") } }
+    var selectedAddOnIDs: Set<PersistentIdentifier> = [] { didSet { scheduleDraftSave(reason: "addons_changed") } }
+
     // MARK: State
     private(set) var isSaving: Bool = false
+    private(set) var isLoadingServices: Bool = false
     var appError: AppError? = nil
     var state: CheckoutState = .selectingServices
-    
+
     // MARK: Private State
     var allServices: [Service] = []
     var addOnServices: [Service] = []
     private let checkoutEndsAt: Date?
-    
+    private var autosaveTask: Task<Void, Never>?
+    private var suppressDraftAutosave = false
+    private var lastSavedDraftFingerprint: String?
+
     // MARK: Computed State
     var requiresExternalReference: Bool {
         selectedPaymentMethod.requiresExternalReference
     }
-    
+
     var referencePlaceholder: String {
         switch selectedPaymentMethod {
         case .cash: return "Optional note"
@@ -66,7 +96,7 @@ final class CheckoutViewModel {
         case .other: return "Reference"
         }
     }
-    
+
     var isConfirmEnabled: Bool {
         let ref = externalReference.trimmed
         let hasValidAmount = servicesTotalDecimal > 0
@@ -82,21 +112,45 @@ final class CheckoutViewModel {
     }
 
     var sessionEndedAt: Date { visit.endedAt ?? checkoutEndsAt ?? Date() }
+    var hasSelectedServices: Bool { !selectedServiceIDs.isEmpty || !selectedAddOnIDs.isEmpty }
+    var beforePhotoCount: Int { beforePhotoData == nil ? 0 : 1 }
+    var afterPhotoCount: Int { afterPhotoData == nil ? 0 : 1 }
+    var totalPhotoCount: Int { beforePhotoCount + afterPhotoCount }
+    var paymentMethodLabel: String { selectedPaymentMethod.displayName }
+    var paymentReferenceSummary: String {
+        let reference = externalReference.trimmed
+        return reference.isEmpty ? "None" : reference
+    }
+    var notesPreview: String {
+        let trimmed = sessionNotes.trimmed
+        return trimmed.isEmpty ? "No notes added" : trimmed
+    }
+    var behaviorTagsSummary: String {
+        let values = tags.sorted()
+        return values.isEmpty ? "None" : values.joined(separator: ", ")
+    }
 
     // MARK: - Cached Computed Properties
     private(set) var selectedServicesSummary: String = "None"
     private(set) var finalTotalString: String = "$0.00"
 
-    init(pet: Pet, visit: Visit?) {
+    init(
+        pet: Pet,
+        visit: Visit?,
+        draftStore: CheckoutDraftStore = .shared,
+        eventRecorder: CheckoutEventRecorder = .shared
+    ) {
         self.pet = pet
         self.visit = visit ?? Visit(pet: pet)
         self.checkoutEndsAt = Date()
+        self.draftStore = draftStore
+        self.eventRecorder = eventRecorder
     }
 
     convenience init(pet: Pet) {
         self.init(pet: pet, visit: nil)
     }
-    
+
     private static let serviceOrder: [String] = [
         "Full Package", "Basic Package", "Spa Package", "Bath", "Haircut"
     ]
@@ -106,12 +160,14 @@ final class CheckoutViewModel {
         Logger.checkout.info("CheckoutViewModel: Loading services")
         self.visitRepository = VisitRepository(modelContainer: modelContext.container)
         self.serviceRepository = ServiceRepository(modelContainer: modelContext.container)
-        
+        isLoadingServices = true
+
         Task {
             do {
-                guard let serviceRepository = serviceRepository else { 
+                guard let serviceRepository = serviceRepository else {
                     Logger.checkout.error("CheckoutViewModel: Service repository is nil")
-                    return 
+                    isLoadingServices = false
+                    return
                 }
                 let all = try await serviceRepository.fetchEnabledServices()
                 Logger.checkout.info("CheckoutViewModel: Fetched \(all.count) services")
@@ -125,8 +181,11 @@ final class CheckoutViewModel {
 
                 self.addOnServices = all.filter { $0.category == .addOn }
                 hydrateStateFromVisit()
+                await restoreDraftIfAvailable()
+                isLoadingServices = false
                 Logger.checkout.info("CheckoutViewModel: Hydration complete")
             } catch {
+                isLoadingServices = false
                 Logger.checkout.error("CheckoutViewModel: Load failed - \(error.localizedDescription)")
                 appError = .database("Failed to load services: \(error.localizedDescription)")
             }
@@ -136,38 +195,49 @@ final class CheckoutViewModel {
     @MainActor
     private func hydrateStateFromVisit() {
         Logger.checkout.info("CheckoutViewModel: Hydrating from visit \(self.visit.uuid)")
+        suppressDraftAutosave = true
         sessionNotes = visit.note?.trimmed ?? ""
-        
-        // Use tags from visit if present, otherwise fallback to pet's current tags
+
         if visit.behaviorTags.isEmpty {
             tags = Set(pet.behaviorTags)
         } else {
             tags = Set(visit.behaviorTags)
         }
-        
+
         beforePhotoData = visit.beforePhotoData
         afterPhotoData  = visit.afterPhotoData
-        
-        // Load existing items into selection sets
+
         let allIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
         selectedServiceIDs = allIDs.filter { id in allServices.contains(where: { $0.persistentModelID == id }) }
         selectedAddOnIDs = allIDs.filter { id in addOnServices.contains(where: { $0.persistentModelID == id }) }
 
-        // Set amount based on existing total if completed, or calculated total if active
         if visit.isCompleted && visit.total > 0 {
             amountString = visit.total.moneyString
         } else {
             updateAmountString()
         }
-        
+
         recalculateCachedStrings()
+        suppressDraftAutosave = false
+        trace("hydrated_from_visit")
     }
-    
+
     func setAmountDirectly(_ text: String) {
         amountString = text
         recalculateCachedStrings()
+        scheduleDraftSave(reason: "amount_changed")
     }
-    
+
+    func setSessionNotes(_ text: String) {
+        sessionNotes = text
+        scheduleDraftSave(reason: "session_notes_changed")
+    }
+
+    func setExternalReference(_ text: String) {
+        externalReference = text
+        scheduleDraftSave(reason: "reference_changed")
+    }
+
     func isServiceSelected(_ service: Service) -> Bool {
         selectedServiceIDs.contains(service.persistentModelID)
     }
@@ -176,8 +246,6 @@ final class CheckoutViewModel {
         selectedAddOnIDs.contains(service.persistentModelID)
     }
 
-    /// Updates the local amountString based on current selection. 
-    /// No longer mutates visit.items on the main thread.
     func updateVisitItems() {
         updateAmountString()
         recalculateCachedStrings()
@@ -189,14 +257,13 @@ final class CheckoutViewModel {
     }
 
     private func calculateTotalLocally() -> Decimal {
-        // Combined selection set for single-pass filtering
         let allSelected = selectedServiceIDs.union(selectedAddOnIDs)
         if allSelected.isEmpty { return .zero }
-        
+
         let total = (allServices + addOnServices)
             .filter { allSelected.contains($0.persistentModelID) }
             .reduce(Decimal.zero) { $0 + $1.effectiveBasePrice }
-            
+
         return total.roundedMoney()
     }
 
@@ -209,6 +276,7 @@ final class CheckoutViewModel {
         }
         updateAmountString()
         recalculateCachedStrings()
+        trace("service_toggled_\(service.name)")
     }
 
     func toggleAddOn(_ service: Service) {
@@ -220,10 +288,10 @@ final class CheckoutViewModel {
         }
         updateAmountString()
         recalculateCachedStrings()
+        trace("addon_toggled_\(service.name)")
     }
-    
+
     func removeVisitItem(_ item: VisitItem) {
-        // If it's a known service, remove from selection sets
         if let serviceID = item.service?.persistentModelID {
             selectedServiceIDs.remove(serviceID)
             selectedAddOnIDs.remove(serviceID)
@@ -231,23 +299,28 @@ final class CheckoutViewModel {
         updateAmountString()
         recalculateCachedStrings()
     }
-    
+
     var subtotalDecimal: Decimal {
         calculateTotalLocally()
     }
-    
+
     var servicesTotalDecimal: Decimal {
         if let manual = Formatters.parseCurrency(amountString) {
             return manual
         }
         return calculateTotalLocally()
     }
-    
+
+    func toggleTag(_ raw: String) {
+        if tags.contains(raw) { tags.remove(raw) } else { tags.insert(raw) }
+    }
+
     func choosePayment(_ method: Payment.Method) {
         selectedPaymentMethod = method
         if !method.requiresExternalReference { externalReference = "" }
+        trace("payment_method_selected_\(method.rawValue)")
     }
-    
+
     @MainActor
     func formatAmountInput() {
         let trimmed = amountString.trimmed
@@ -261,29 +334,54 @@ final class CheckoutViewModel {
             amountString = trimmed
         }
         recalculateCachedStrings()
+        scheduleDraftSave(reason: "amount_formatted")
     }
 
-    /// Pre-calculates heavy strings to avoid blocking the UI during transitions.
     private func recalculateCachedStrings() {
-        // 1. Total
         finalTotalString = servicesTotalDecimal.moneyString
-        
-        // 2. Summary
+
         let allSelected = selectedServiceIDs.union(selectedAddOnIDs)
         let sortedNames = (allServices + addOnServices)
             .filter { allSelected.contains($0.persistentModelID) }
             .map(\.name)
             .sorted()
-            
+
         selectedServicesSummary = sortedNames.isEmpty ? "None" : sortedNames.joined(separator: ", ")
+    }
+
+    var isAdvanceEnabled: Bool {
+        switch currentStep {
+        case .services:
+            return hasSelectedServices
+        case .details:
+            return true
+        case .payment:
+            return isConfirmEnabled
+        case .review:
+            return isConfirmEnabled && !isSaving
+        }
+    }
+
+    func goBack() {
+        guard currentStep.rawValue > CheckoutFlowStep.services.rawValue else { return }
+        currentStep = CheckoutFlowStep(rawValue: currentStep.rawValue - 1) ?? .services
+        trace("step_back_to_\(currentStep.rawValue)")
+    }
+
+    func advance() throws {
+        try validate(step: currentStep)
+        guard currentStep != .review else { return }
+        currentStep = CheckoutFlowStep(rawValue: currentStep.rawValue + 1) ?? .review
+        trace("step_advanced_to_\(currentStep.rawValue)")
+        scheduleDraftSave(reason: "step_advanced")
     }
 
     @MainActor
     func processPayment() async {
         guard !isSaving else { return }
-        
+
         do {
-            try validate()
+            try validate(step: .review)
         } catch {
             self.appError = .validation(error as? ValidationError ?? .custom(message: error.localizedDescription))
             return
@@ -293,9 +391,29 @@ final class CheckoutViewModel {
         state = .processing
         appError = nil
         Logger.checkout.info("CheckoutViewModel: Checkout started")
+        trace("confirm_pay_tapped")
+
+        // Capture photo data on main actor before going to background.
+        let rawBefore = self.beforePhotoData
+        let rawAfter = self.afterPhotoData
+
+        // Process all four image variants (full + thumb × before + after) in parallel
+        // on a background thread so the main thread stays free during checkout.
+        let (pBefore, pBeforeThumb, pAfter, pAfterThumb) = await Task.detached(priority: .userInitiated) { () -> (Data?, Data?, Data?, Data?) in
+            let b = rawBefore.flatMap { ImageCache.shared.downsampleToData(data: $0, maxDimension: 1024) }
+            let bt = rawBefore.flatMap { ImageCache.shared.downsampleToData(data: $0, maxDimension: 200) }
+            let a = rawAfter.flatMap  { ImageCache.shared.downsampleToData(data: $0, maxDimension: 1024) }
+            let at = rawAfter.flatMap  { ImageCache.shared.downsampleToData(data: $0, maxDimension: 200) }
+            return (b, bt, a, at)
+        }.value
 
         do {
-            let endedAt = try persistCheckout()
+            let endedAt = try persistCheckout(
+                processedBefore: pBefore, processedBeforeThumb: pBeforeThumb,
+                processedAfter: pAfter, processedAfterThumb: pAfterThumb
+            )
+            autosaveTask?.cancel()
+            try? await draftStore.deleteDraft(for: visit.uuid)
             state = .confirmed
             isSaving = false
 
@@ -304,16 +422,31 @@ final class CheckoutViewModel {
             ]
             NotificationCenter.default.post(name: .visitDidComplete, object: visit, userInfo: userInfo)
             Logger.checkout.info("CheckoutViewModel: Checkout saved successfully")
+            trace("checkout_saved")
         } catch {
             Logger.checkout.error("CheckoutViewModel: Persistence failed - \(error.localizedDescription)")
             let appErr = AppError.database("Persistence failed: \(error.localizedDescription)")
             state = .failed(appErr)
             appError = appErr
             isSaving = false
+            trace("checkout_save_failed")
         }
     }
 
-    private func persistCheckout() throws -> Date {
+    func flushDraft() {
+        if state == .confirmed {
+            Task { try? await draftStore.deleteDraft(for: visit.uuid) }
+            return
+        }
+        scheduleDraftSave(reason: "view_disappeared", immediate: true)
+    }
+
+    private func persistCheckout(
+        processedBefore: Data?,
+        processedBeforeThumb: Data?,
+        processedAfter: Data?,
+        processedAfterThumb: Data?
+    ) throws -> Date {
         guard let context = visit.modelContext ?? pet.modelContext else {
             throw AppError.database("Internal error: Data store unavailable.")
         }
@@ -333,7 +466,10 @@ final class CheckoutViewModel {
         visit.note = notes
         visit.behaviorTags = sortedTags
         pet.setBehaviorTags(sortedTags)
-        visit.applyPhotos(before: beforePhotoData, after: afterPhotoData)
+        visit.applyPhotos(
+            before: processedBefore, beforeThumb: processedBeforeThumb,
+            after: processedAfter, afterThumb: processedAfterThumb
+        )
 
         if let payment = visit.payment {
             payment.setAmount(total)
@@ -382,14 +518,137 @@ final class CheckoutViewModel {
             }
         }
     }
-    
-    private func validate() throws {
-        let total = servicesTotalDecimal
-        guard total > 0 else {
-            throw ValidationError.custom(message: "Cannot check out with a total amount of zero.")
+
+    private func validate(step: CheckoutFlowStep) throws {
+        switch step {
+        case .services:
+            guard hasSelectedServices else {
+                throw ValidationError.custom(message: "Select at least one service before continuing.")
+            }
+        case .details:
+            break
+        case .payment, .review:
+            let total = servicesTotalDecimal
+            guard total > 0 else {
+                throw ValidationError.custom(message: "Cannot check out with a total amount of zero.")
+            }
+            if requiresExternalReference && externalReference.trimmed.isEmpty {
+                throw ValidationError.custom(message: "A reference is required for this payment method.")
+            }
         }
-        if requiresExternalReference && externalReference.trimmed.isEmpty {
-            throw ValidationError.custom(message: "A reference is required for this payment method.")
+    }
+
+    private func restoreDraftIfAvailable() async {
+        guard !visit.isCompleted else { return }
+        guard let draft = await draftStore.loadDraft(for: visit.uuid), draft.petID == pet.uuid else { return }
+
+        suppressDraftAutosave = true
+        sessionNotes = draft.sessionNotes
+        amountString = draft.amountString
+        externalReference = draft.externalReference
+        tags = Set(draft.tags)
+        // Photos are intentionally not restored from draft (see makeDraft).
+        // beforePhotoData / afterPhotoData come from hydrateStateFromVisit only.
+
+        if let method = Payment.Method(rawValue: draft.selectedPaymentMethodRawValue) {
+            selectedPaymentMethod = method
+        }
+
+        let mainIDs = Set(allServices.filter { draft.selectedServiceUUIDs.contains($0.uuid) }.map(\.persistentModelID))
+        let addOnIDs = Set(addOnServices.filter { draft.selectedAddOnUUIDs.contains($0.uuid) }.map(\.persistentModelID))
+        selectedServiceIDs = mainIDs
+        selectedAddOnIDs = addOnIDs
+        currentStep = CheckoutFlowStep(rawValue: draft.currentStepRawValue) ?? .services
+        recalculateCachedStrings()
+        lastSavedDraftFingerprint = currentFingerprint()
+        suppressDraftAutosave = false
+        trace("draft_restored")
+    }
+
+    // MARK: - Draft Fingerprint
+
+    /// Fingerprint of mutable checkout state used to skip redundant draft saves.
+    private func currentFingerprint() -> String {
+        let serviceUUIDs = allServices
+            .filter { selectedServiceIDs.contains($0.persistentModelID) }
+            .map(\.uuid.uuidString).sorted().joined(separator: "|")
+        let addOnUUIDs = addOnServices
+            .filter { selectedAddOnIDs.contains($0.persistentModelID) }
+            .map(\.uuid.uuidString).sorted().joined(separator: "|")
+        let tagList = tags.sorted().joined(separator: "|")
+        let parts: [String] = [
+            visit.uuid.uuidString,
+            pet.uuid.uuidString,
+            String(currentStep.rawValue),
+            sessionNotes,
+            amountString,
+            serviceUUIDs,
+            addOnUUIDs,
+            selectedPaymentMethod.rawValue,
+            externalReference,
+            tagList,
+            String(beforePhotoData?.count ?? 0),
+            String(afterPhotoData?.count ?? 0)
+        ]
+        return parts.joined(separator: "||")
+    }
+
+    private func scheduleDraftSave(reason: String, immediate: Bool = false) {
+        guard !suppressDraftAutosave, state != .confirmed, !visit.isCompleted else { return }
+
+        let fingerprint = currentFingerprint()
+        if fingerprint == lastSavedDraftFingerprint { return }
+
+        autosaveTask?.cancel()
+
+        let draft = makeDraft()
+
+        autosaveTask = Task { [draft, fingerprint, draftStore, eventRecorder, visitID = visit.uuid, petName = pet.name] in
+            if !immediate {
+                do {
+                    try await Task.sleep(for: .milliseconds(450))
+                } catch {
+                    return
+                }
+            }
+            if Task.isCancelled { return }
+            do {
+                try await draftStore.saveDraft(draft)
+                await MainActor.run {
+                    self.lastSavedDraftFingerprint = fingerprint
+                }
+                await eventRecorder.record("draft_saved:\(reason)", visitID: visitID, petName: petName)
+            } catch {
+                Logger.checkout.error("Checkout draft save failed - \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Builds a lightweight draft. Photos are intentionally excluded:
+    /// - Full-res photos can be several MB, making draft JSON huge and writes slow.
+    /// - Photos are restored from the Visit model on re-open (hydrateStateFromVisit),
+    ///   so they don't need to live in the draft for the common session-recovery case.
+    private func makeDraft() -> CheckoutDraft {
+        CheckoutDraft(
+            visitID: visit.uuid,
+            petID: pet.uuid,
+            updatedAt: .now,
+            currentStepRawValue: currentStep.rawValue,
+            sessionNotes: sessionNotes,
+            amountString: amountString,
+            selectedServiceUUIDs: allServices.filter { selectedServiceIDs.contains($0.persistentModelID) }.map(\.uuid),
+            selectedAddOnUUIDs: addOnServices.filter { selectedAddOnIDs.contains($0.persistentModelID) }.map(\.uuid),
+            selectedPaymentMethodRawValue: selectedPaymentMethod.rawValue,
+            beforePhotoData: nil,
+            afterPhotoData: nil,
+            externalReference: externalReference,
+            tags: Array(tags.sorted())
+        )
+    }
+
+    private func trace(_ event: String) {
+        Task {
+            await eventRecorder.record(event, visitID: visit.uuid, petName: pet.name)
         }
     }
 }
