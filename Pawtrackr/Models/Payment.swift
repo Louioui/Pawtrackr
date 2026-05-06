@@ -17,13 +17,11 @@ final class Payment {
     var amount: Decimal
 
     var method: Method
-    @Attribute var paidAt: Date
+    var paidAt: Date
     var note: String?
-    @Attribute var externalReference: String?
+    var externalReference: String?
 
     // MARK: - Relationships
-
-    // The inverse side of a relationship is a plain property, with NO @Relationship macro.
     var visit: Visit?
 
     // MARK: - Init
@@ -33,7 +31,6 @@ final class Payment {
          paidAt: Date = .now,
          note: String? = nil,
          externalReference: String? = nil) {
-        // Ensure amount is non-negative and properly rounded at init time
         self.amount = max(0, amount).roundedMoney()
         self.method = method
         self.paidAt = paidAt
@@ -42,8 +39,6 @@ final class Payment {
     }
 
     // MARK: - Mutating API
-
-    /// Sets the payment amount, ensuring it's non-negative and properly rounded.
     func setAmount(_ newAmount: Decimal) {
         amount = max(0, newAmount).roundedMoney()
     }

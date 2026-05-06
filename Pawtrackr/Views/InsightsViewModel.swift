@@ -26,6 +26,13 @@ class InsightsViewModel {
         var revenue: Decimal = .zero
     }
 
+    struct PaymentMethodData: Identifiable, Sendable {
+        let id = UUID()
+        let method: Payment.Method
+        let count: Int
+        let amount: Decimal
+    }
+
     struct MonthlyGrowthData: Identifiable, Sendable {
         let id = UUID()
         let month: String
@@ -50,6 +57,7 @@ class InsightsViewModel {
     var revenueSeries:          [RevenueData]       = []
     var serviceDistribution:    [DistributionData]  = []
     var categoryDistribution:   [DistributionData]  = []
+    var paymentMethodDistribution: [PaymentMethodData] = []
     var topClients:             [TopClientData]     = []
     var monthlyGrowth:          [MonthlyGrowthData] = []
     var retentionRate:          Double  = 0
@@ -159,7 +167,7 @@ class InsightsViewModel {
         let start = cal.date(byAdding: .day, value: -30, to: end) ?? end
 
         let result = await Task.detached(priority: .userInitiated) {
-            () -> (services: [DistributionData], categories: [DistributionData]) in
+            () -> (services: [DistributionData], categories: [DistributionData], payments: [PaymentMethodData]) in
 
             let bgContext = ModelContext(container)
 
@@ -176,11 +184,18 @@ class InsightsViewModel {
                 }
             )
 
+            let paymentDescriptor = FetchDescriptor<Payment>(
+                predicate: #Predicate<Payment> { payment in
+                    payment.paidAt >= start && payment.paidAt < end
+                }
+            )
+
             let visits = ((try? bgContext.fetch(visitsDescriptor)) ?? []).filter { visit in
                 guard let endedAt = visit.endedAt else { return false }
                 return endedAt >= start && endedAt < end
             }
             let categories = (try? bgContext.fetch(categoryDescriptor)) ?? []
+            let payments = (try? bgContext.fetch(paymentDescriptor)) ?? []
 
             var serviceStats: [String: (count: Int, revenue: Decimal)] = [:]
             for visit in visits {
@@ -201,11 +216,22 @@ class InsightsViewModel {
                 .map { name, count in DistributionData(name: name, count: count) }
                 .sorted { $0.count > $1.count }
 
-            return (services: services, categories: categoryDist)
+            let paymentStats = Dictionary(grouping: payments, by: \.method)
+                .map { method, rows in
+                    PaymentMethodData(
+                        method: method,
+                        count: rows.count,
+                        amount: rows.reduce(.zero) { $0 + $1.amount }
+                    )
+                }
+                .sorted { $0.amount > $1.amount }
+
+            return (services: services, categories: categoryDist, payments: paymentStats)
         }.value
 
         serviceDistribution  = result.services
         categoryDistribution = result.categories
+        paymentMethodDistribution = result.payments
     }
 
     private func fetchTopClients() async {

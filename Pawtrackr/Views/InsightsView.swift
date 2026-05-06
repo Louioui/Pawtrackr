@@ -54,6 +54,7 @@ struct InsightsView: View {
                 revenueCard(vm)
                 monthlyPerformanceCard(vm)
                 serviceRevenueCard(vm)
+                paymentMixCard(vm)
                 categoryCard(vm)
                 retentionCard(vm)
                 topClientsCard(vm)
@@ -263,6 +264,38 @@ struct InsightsView: View {
                     }
                     .chartXAxis(.hidden)
                     .frame(height: CGFloat(top5.count) * 44)
+                }
+            }
+        }
+    }
+
+    // MARK: - Payment Mix
+
+    private func paymentMixCard(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Payment Mix").font(.headline)
+                    Text("Last 30 days by collected revenue")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if vm.paymentMethodDistribution.isEmpty {
+                    emptyState(icon: "creditcard", message: "No payments recorded yet")
+                } else {
+                    ForEach(vm.paymentMethodDistribution) { item in
+                        HStack(spacing: 12) {
+                            Label(item.method.displayName, systemImage: item.method.systemImage)
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Text("\(item.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(item.amount.moneyString)
+                                .font(.subheadline.weight(.bold))
+                        }
+                    }
                 }
             }
         }

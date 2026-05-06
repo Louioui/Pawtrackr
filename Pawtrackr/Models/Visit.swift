@@ -179,7 +179,10 @@ final class Visit {
 
     private func didUpdate() {
         updatedAt = .now
-        // Also update the client's last visit date to reflect the most recent activity.
-        pet?.owner?.lastVisitDate = sortKeyDate
+        // Only attempt to update the client's last visit date if we can safely reach it.
+        // In background contexts, we avoid forcing a load of the entire owner hierarchy.
+        if let owner = pet?.owner {
+            owner.lastVisitDate = sortKeyDate
+        }
     }
 }

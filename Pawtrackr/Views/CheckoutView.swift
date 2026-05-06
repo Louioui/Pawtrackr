@@ -13,7 +13,13 @@ struct CheckoutView: View {
     @State private var viewModel: CheckoutViewModel
     @State private var currentStep: CheckoutStep = .services
     @State private var receiptPDFData: Data?
-    @FocusState private var amountFieldFocused: Bool
+    @FocusState private var focusedField: FocusField?
+
+    private enum FocusField: Hashable {
+        case sessionNotes
+        case amount
+        case externalReference
+    }
 
     enum CheckoutStep: Int, CaseIterable {
         case services = 0
@@ -36,17 +42,10 @@ struct CheckoutView: View {
     var body: some View {
         VStack(spacing: 0) {
             stepIndicator
-            
-            TabView(selection: $currentStep) {
-                servicesStep.tag(CheckoutStep.services)
-                detailsStep.tag(CheckoutStep.details)
-                paymentStep.tag(CheckoutStep.payment)
-            }
-            #if os(iOS)
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            #endif
-            .animation(.spring(), value: currentStep)
-            
+
+            stepContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
             bottomBar
         }
         .background(DS.ColorToken.background.ignoresSafeArea())
@@ -73,7 +72,19 @@ struct CheckoutView: View {
     }
 
     // MARK: - Steps
-    
+
+    @ViewBuilder
+    private var stepContent: some View {
+        switch currentStep {
+        case .services:
+            servicesStep
+        case .details:
+            detailsStep
+        case .payment:
+            paymentStep
+        }
+    }
+
     private var stepIndicator: some View {
         HStack(spacing: 0) {
             ForEach(CheckoutStep.allCases, id: \.self) { step in
@@ -104,6 +115,11 @@ struct CheckoutView: View {
         ScrollView {
             VStack(spacing: 20) {
                 headerCard
+                stepHero(
+                    eyebrow: "Step 1",
+                    title: "Pick the services",
+                    message: "Choose the main service and any add-ons before you move to notes and photos."
+                )
                 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Main Services").font(.headline).padding(.horizontal)
@@ -135,6 +151,12 @@ struct CheckoutView: View {
     private var detailsStep: some View {
         ScrollView {
             VStack(spacing: 24) {
+                stepHero(
+                    eyebrow: "Step 2",
+                    title: "Add notes and photos",
+                    message: "Capture behavior, grooming notes, and before/after photos without leaving checkout."
+                )
+
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Behavior & Notes").font(.headline).padding(.horizontal)
                     Card {
@@ -149,6 +171,7 @@ struct CheckoutView: View {
                                 #if os(iOS)
                                 .scrollContentBackground(.hidden)
                                 #endif
+                                .focused($focusedField, equals: .sessionNotes)
                                 .frame(minHeight: 120)
                                 .padding(8)
                                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.05)))
@@ -160,20 +183,41 @@ struct CheckoutView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Photos").font(.headline).padding(.horizontal)
                     Card {
-                        HStack(spacing: 20) {
-                            PhotoWell(imageData: $viewModel.beforePhotoData, title: "Before")
-                            PhotoWell(imageData: $viewModel.afterPhotoData, title: "After")
-                        }
+                        photoLayout
                     }
                 }
             }
             .padding(.vertical)
         }
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
+    }
+
+    @ViewBuilder
+    private var photoLayout: some View {
+        #if os(iOS)
+        VStack(spacing: 16) {
+            PhotoWell(imageData: $viewModel.beforePhotoData, title: "Before")
+            PhotoWell(imageData: $viewModel.afterPhotoData, title: "After")
+        }
+        #else
+        HStack(spacing: 20) {
+            PhotoWell(imageData: $viewModel.beforePhotoData, title: "Before")
+            PhotoWell(imageData: $viewModel.afterPhotoData, title: "After")
+        }
+        #endif
     }
 
     private var paymentStep: some View {
         ScrollView {
             VStack(spacing: 24) {
+                stepHero(
+                    eyebrow: "Step 3",
+                    title: "Confirm payment",
+                    message: "Review the total, choose the payment method, and finish checkout."
+                )
+
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Final Amount").font(.headline).padding(.horizontal)
                     Card {
@@ -181,10 +225,15 @@ struct CheckoutView: View {
                             #if os(iOS)
                             .keyboardType(.decimalPad)
                             #endif
-                            .focused($amountFieldFocused)
+                            .focused($focusedField, equals: .amount)
                             .font(Font.system(size: 40, weight: .bold, design: .rounded))
                             .multilineTextAlignment(TextAlignment.center)
                             .foregroundStyle(Color.blue)
+
+                        Text("Auto-filled from selected services. You can adjust the total before charging the client.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
 
@@ -202,6 +251,7 @@ struct CheckoutView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Reference Info").font(Font.subheadline.weight(.medium)).padding(.horizontal)
                         TextField(viewModel.referencePlaceholder, text: $viewModel.externalReference)
+                            .focused($focusedField, equals: .externalReference)
                             .textFieldStyle(.roundedBorder)
                             .padding(.horizontal)
                     }
@@ -222,6 +272,9 @@ struct CheckoutView: View {
             }
             .padding(.vertical)
         }
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
     }
 
     // MARK: - Components
@@ -260,13 +313,9 @@ struct CheckoutView: View {
                 }
                 
                 Button {
-                    if currentStep == .payment {
-                        confirmCheckout()
-                    } else {
-                        withAnimation { currentStep = CheckoutStep(rawValue: currentStep.rawValue + 1) ?? .payment }
-                    }
+                    advance()
                 } label: {
-                    Text(currentStep == .payment ? "Confirm & Pay" : "Continue")
+                    Text(primaryButtonTitle)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
@@ -280,6 +329,32 @@ struct CheckoutView: View {
         }
     }
 
+    private var primaryButtonTitle: String {
+        switch currentStep {
+        case .services: "Continue to Notes"
+        case .details: "Continue to Payment"
+        case .payment: "Confirm & Pay"
+        }
+    }
+
+    private func advance() {
+        if currentStep == .payment {
+            confirmCheckout()
+            return
+        }
+
+        focusedField = nil
+
+        Task { @MainActor in
+            #if canImport(UIKit)
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            #endif
+
+            try? await Task.sleep(for: .milliseconds(120))
+            currentStep = CheckoutStep(rawValue: currentStep.rawValue + 1) ?? .payment
+        }
+    }
+
     private var isNextEnabled: Bool {
         switch currentStep {
         case .services: return !viewModel.selectedServiceIDs.isEmpty
@@ -289,12 +364,30 @@ struct CheckoutView: View {
     }
 
     private func confirmCheckout() {
+        focusedField = nil
         #if canImport(UIKit)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         #endif
         Task {
             await viewModel.processPayment()
         }
+    }
+
+    private func stepHero(eyebrow: String, title: String, message: String) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(eyebrow)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.blue)
+                Text(title)
+                    .font(.title3.weight(.bold))
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal)
     }
 
     private var overlayContent: some View {

@@ -99,20 +99,24 @@ enum SummaryUpdater {
     // MARK: - Optimized Fetch Helpers
 
     private static func fetchVisitsEndedInRange(start: Date, end: Date, in context: ModelContext) throws -> [Visit] {
+        // SwiftData #Predicate supports date comparisons. Using a precise predicate 
+        // ensures the database (SQLite) does the heavy lifting, not the main CPU.
         let descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate<Visit> { $0.endedAt != nil }
+            predicate: #Predicate<Visit> { v in
+                if let ended = v.endedAt {
+                    return ended >= start && ended < end
+                } else {
+                    return false
+                }
+            }
         )
-        return try context.fetch(descriptor).filter { visit in
-            guard let endedAt = visit.endedAt else { return false }
-            return endedAt >= start && endedAt < end
-        }
+        return try context.fetch(descriptor)
     }
 
     private static func fetchPaymentsInRange(start: Date, end: Date, in context: ModelContext) throws -> [Payment] {
         let descriptor = FetchDescriptor<Payment>(
-            predicate: #Predicate<Payment> {
-                $0.paidAt >= start &&
-                $0.paidAt < end
+            predicate: #Predicate<Payment> { p in
+                p.paidAt >= start && p.paidAt < end
             }
         )
         return try context.fetch(descriptor)

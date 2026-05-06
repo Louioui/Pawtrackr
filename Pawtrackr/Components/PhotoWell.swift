@@ -25,24 +25,11 @@ struct PhotoWell: View {
         self.allowsEditing = allowsEditing
     }
 
-    private var maxImageDimension: CGFloat {
-        #if canImport(UIKit)
-        return UIScreen.main.bounds.width * UIScreen.main.scale
-        #elseif canImport(AppKit)
-        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
-        return (NSScreen.main?.frame.width ?? 1200) * scale
-        #else
-        return 1600
-        #endif
-    }
-
     var body: some View {
         ImagePicker(imageData: $imageData, allowsEditing: allowsEditing) {
             ZStack {
-                if let data = imageData, let image = Image(fromData: data, maxDimension: maxImageDimension) {
-                    image
-                        .resizable()
-                        .scaledToFill()
+                if let data = imageData {
+                    LazyImageDataImage(data: data, maxDimension: 512)
                 } else {
                     #if os(macOS)
                     AddPhotoPlaceholder(title: title, subtitle: "Click to add")
@@ -51,7 +38,8 @@ struct PhotoWell: View {
                     #endif
                 }
             }
-            .frame(maxWidth: .infinity, idealHeight: 160)
+            .frame(maxWidth: .infinity)
+            .frame(height: 160)
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .contextMenu {
@@ -62,6 +50,50 @@ struct PhotoWell: View {
                     Label("Remove Photo", systemImage: "trash")
                 }
             }
+        }
+    }
+}
+
+/// Decodes image data asynchronously to keep the UI perfectly fluid.
+struct LazyImageDataImage: View {
+    let data: Data
+    let maxDimension: CGFloat
+    
+    @State private var image: Image? = nil
+    
+    var body: some View {
+        ZStack {
+            if let image = image {
+                image
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ProgressView()
+                    .scaleEffect(0.8)
+            }
+        }
+        .task(id: data) {
+            // Decode off the main thread
+            await loadImage()
+        }
+    }
+    
+    private func loadImage() async {
+        let decoded = await Task.detached(priority: .userInitiated) { () -> Image? in
+            #if canImport(UIKit)
+            if let ui = ImageCache.shared.image(data: data, maxDimension: maxDimension) {
+                return Image(uiImage: ui)
+            }
+            #elseif canImport(AppKit)
+            if let ns = ImageCache.shared.image(data: data, maxDimension: maxDimension) {
+                return Image(nsImage: ns)
+            }
+            #endif
+            return nil
+        }.value
+        
+        await MainActor.run {
+            self.image = decoded
         }
     }
 }

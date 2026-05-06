@@ -62,6 +62,12 @@ struct VisitRow: View {
     private var footer: some View {
         HStack {
             Label(visit.durationString, systemImage: "clock")
+            if let note = visit.note, !note.trimmed.isEmpty {
+                Label("Note", systemImage: "note.text")
+            }
+            if visit.beforePhotoData != nil || visit.afterPhotoData != nil {
+                Label("Photos", systemImage: "photo.on.rectangle")
+            }
             Spacer()
             if let paymentMethod = visit.payment?.method {
                 Label(paymentMethod.displayName, systemImage: paymentMethod.systemImage)

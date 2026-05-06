@@ -7,10 +7,11 @@
 //
 
 import Foundation
+import CoreGraphics
+import ImageIO
 
 #if canImport(UIKit)
 import UIKit
-import ImageIO
 
 final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
@@ -23,8 +24,10 @@ final class ImageCache: @unchecked Sendable {
         cache.totalCostLimit = 50 * 1024 * 1024 // 50MB limit
 
         // Clear cache on memory warning
+        // We do this on the main queue to safely access UIApplication if needed,
+        // but here we just need to clear the cache which is thread-safe.
         NotificationCenter.default.addObserver(
-            forName: UIApplication.didReceiveMemoryWarningNotification,
+            forName: NSNotification.Name("UIApplicationDidReceiveMemoryWarningNotification"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -44,7 +47,7 @@ final class ImageCache: @unchecked Sendable {
         if let hit = cachedImage { return hit }
 
         // Decode image (can happen on any thread, outside lock)
-        guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
+        guard let image = downsampleForDisplay(data: data, maxDimension: maxDimension) else { return nil }
 
         // Store in cache
         let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
@@ -71,19 +74,45 @@ final class ImageCache: @unchecked Sendable {
     }
 
     private func cacheKey(for data: Data, maxDimension: CGFloat) -> String {
-        // Use a quick hash composed of count + a stable NSData hash + dimension
-        let h = (data as NSData).hash
-        return "\(data.count)-\(h)-\(Int(maxDimension.rounded()))"
+        // Use a quick hash composed of count + a few bytes from start/end + dimension.
+        // Avoid (data as NSData).hash which is O(N) and causes main-thread freezes.
+        let count = data.count
+        var quickHash = count
+        if count > 16 {
+            data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
+                if let base = ptr.baseAddress {
+                    let start = base.assumingMemoryBound(to: Int.self).pointee
+                    let end = base.advanced(by: count - 8).assumingMemoryBound(to: Int.self).pointee
+                    quickHash = quickHash ^ start ^ end
+                }
+            }
+        }
+        return "\(count)-\(quickHash)-\(Int(maxDimension.rounded()))"
     }
 
-    /// Efficient downsampling using CGImageSource; avoids decoding full-resolution into memory.
-    private func downsample(data: Data, maxDimension: CGFloat) -> UIImage? {
-        let options: [CFString: Any] = [
-            kCGImageSourceShouldCache: false
-        ]
+    /// Decodes and downsamples image data to a smaller Data representation for storage.
+    /// This method is safe to call from background threads and does not access MainActor properties.
+    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
+        let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
         guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
 
-        let scale = UIScreen.main.scale
+        let downsampleOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension)
+        ]
+        
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg).jpegData(compressionQuality: 0.7)
+    }
+
+    /// Efficient downsampling using CGImageSource for display purposes.
+    private func downsampleForDisplay(data: Data, maxDimension: CGFloat) -> UIImage? {
+        let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
+        guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
+
+        // Safely determine scale without accessing UIScreen.main if on background thread.
+        let scale: CGFloat = Thread.isMainThread ? UIScreen.main.scale : 2.0
         let maxPixels = max(1, Int(maxDimension * scale))
 
         let downsampleOptions: [CFString: Any] = [
@@ -91,19 +120,14 @@ final class ImageCache: @unchecked Sendable {
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixels
         ]
+        
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
         return UIImage(cgImage: cg, scale: scale, orientation: .up)
     }
-
-    /// Resizes image data to a smaller Data representation for storage.
-    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
-        guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
-        return image.jpegData(compressionQuality: 0.7)
-    }
 }
+
 #elseif canImport(AppKit)
 import AppKit
-import ImageIO
 
 final class ImageCache: @unchecked Sendable {
     static let shared = ImageCache()
@@ -116,21 +140,16 @@ final class ImageCache: @unchecked Sendable {
         cache.totalCostLimit = 50 * 1024 * 1024 // 50MB limit
     }
 
-    /// Returns a decoded, downsampled NSImage for the given data and max dimension.
-    /// Thread-safe: can be called from any thread.
     func image(data: Data, maxDimension: CGFloat) -> NSImage? {
         let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
 
-        // Check cache first (fast lock-based read)
         lock.lock()
         let cachedImage = cache.object(forKey: key)
         lock.unlock()
         if let hit = cachedImage { return hit }
 
-        // Decode image (can happen on any thread, outside lock)
-        guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
+        guard let image = downsampleForDisplay(data: data, maxDimension: maxDimension) else { return nil }
 
-        // Store in cache
         let cost = Int(image.size.width * image.size.height * 4)
         lock.lock()
         cache.setObject(image, forKey: key, cost: cost)
@@ -139,14 +158,12 @@ final class ImageCache: @unchecked Sendable {
         return image
     }
 
-    /// Clears all cached images. Thread-safe.
     func clearCache() {
         lock.lock()
         cache.removeAllObjects()
         lock.unlock()
     }
 
-    /// Removes a specific image from cache. Thread-safe.
     func removeImage(for data: Data, maxDimension: CGFloat) {
         let key = cacheKey(for: data, maxDimension: maxDimension) as NSString
         lock.lock()
@@ -155,18 +172,40 @@ final class ImageCache: @unchecked Sendable {
     }
 
     private func cacheKey(for data: Data, maxDimension: CGFloat) -> String {
-        let h = (data as NSData).hash
-        return "\(data.count)-\(h)-\(Int(maxDimension.rounded()))"
+        let count = data.count
+        var quickHash = count
+        if count > 16 {
+            data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
+                if let base = ptr.baseAddress {
+                    let start = base.assumingMemoryBound(to: Int.self).pointee
+                    let end = base.advanced(by: count - 8).assumingMemoryBound(to: Int.self).pointee
+                    quickHash = quickHash ^ start ^ end
+                }
+            }
+        }
+        return "\(count)-\(quickHash)-\(Int(maxDimension.rounded()))"
     }
 
-    /// Efficient downsampling using CGImageSource; avoids decoding full-resolution into memory.
-    private func downsample(data: Data, maxDimension: CGFloat) -> NSImage? {
-        let options: [CFString: Any] = [
-            kCGImageSourceShouldCache: false
-        ]
+    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
+        let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
         guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
 
-        let scale = NSScreen.main?.backingScaleFactor ?? 2.0
+        let downsampleOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension)
+        ]
+        
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
+        let bitmap = NSBitmapImageRep(cgImage: cg)
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
+    }
+
+    private func downsampleForDisplay(data: Data, maxDimension: CGFloat) -> NSImage? {
+        let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
+        guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
+
+        let scale: CGFloat = Thread.isMainThread ? (NSScreen.main?.backingScaleFactor ?? 2.0) : 2.0
         let maxPixels = max(1, Int(maxDimension * scale))
 
         let downsampleOptions: [CFString: Any] = [
@@ -174,21 +213,9 @@ final class ImageCache: @unchecked Sendable {
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixels
         ]
+        
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
-
-        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
-    }
-
-    /// Resizes image data to a smaller Data representation for storage.
-    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
-        guard let image = downsample(data: data, maxDimension: maxDimension) else { return nil }
-        guard let tiffData = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
-            return nil
-        }
-        return jpegData
+        return NSImage(cgImage: cg, size: NSSize(width: CGFloat(cg.width) / scale, height: CGFloat(cg.height) / scale))
     }
 }
 #endif
-
