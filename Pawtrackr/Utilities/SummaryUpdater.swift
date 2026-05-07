@@ -10,6 +10,45 @@ import SwiftData
 import OSLog
 
 enum SummaryUpdater {
+    struct DayAggregate: Equatable {
+        let day: Date
+        let revenue: Decimal
+        let visitCount: Int
+    }
+
+    static func collapsedDayAggregates(from summaries: [DaySummary]) -> [Date: DayAggregate] {
+        summaries.reduce(into: [Date: DayAggregate]()) { result, summary in
+            let candidate = DayAggregate(day: summary.day, revenue: summary.revenue, visitCount: summary.visitCount)
+            guard let existing = result[summary.day] else {
+                result[summary.day] = candidate
+                return
+            }
+            if isPreferred(candidate, over: existing) {
+                result[summary.day] = candidate
+            }
+        }
+    }
+
+    static func collapsedServiceCounts(from summaries: [ServiceDaySummary]) -> [String: Int] {
+        let perDayAndService = summaries.reduce(into: [SummaryNameKey: Int]()) { result, summary in
+            let key = SummaryNameKey(day: summary.day, name: summary.serviceName)
+            result[key] = max(result[key] ?? 0, summary.count)
+        }
+        return perDayAndService.reduce(into: [String: Int]()) { result, entry in
+            result[entry.key.name, default: 0] += entry.value
+        }
+    }
+
+    static func collapsedCategoryCounts(from summaries: [CategoryDaySummary]) -> [String: Int] {
+        let perDayAndCategory = summaries.reduce(into: [SummaryNameKey: Int]()) { result, summary in
+            let key = SummaryNameKey(day: summary.day, name: summary.categoryRaw)
+            result[key] = max(result[key] ?? 0, summary.count)
+        }
+        return perDayAndCategory.reduce(into: [String: Int]()) { result, entry in
+            result[entry.key.name, default: 0] += entry.value
+        }
+    }
+
     /// Recalculate the DaySummary for the calendar day that contains `date`.
     /// Optimized to fetch only the data needed for the specific day.
     static func rebuildDay(for date: Date, in context: ModelContext) {
@@ -31,7 +70,8 @@ enum SummaryUpdater {
             }
 
             // Upsert DaySummary - fetch only for this day
-            let existingSummary = try fetchDaySummary(for: start, in: context)
+            let existingSummaries = try fetchDaySummaries(for: start, in: context)
+            let existingSummary = canonicalDaySummary(from: existingSummaries, in: context)
             if let s = existingSummary {
                 s.revenue = revenue
                 s.visitCount = count
@@ -46,7 +86,7 @@ enum SummaryUpdater {
             }
 
             let existingSvc = try fetchServiceDaySummaries(for: start, in: context)
-            var existingSvcDict = existingSvc.reduce(into: [String: ServiceDaySummary]()) { $0[$1.serviceName] = $1 }
+            var existingSvcDict = canonicalServiceSummaries(from: existingSvc, in: context)
 
             for (name, svcCount) in svcCounts {
                 if let summary = existingSvcDict[name] {
@@ -72,7 +112,7 @@ enum SummaryUpdater {
             }
 
             let existingCat = try fetchCategoryDaySummaries(for: start, in: context)
-            var existingCatDict = existingCat.reduce(into: [String: CategoryDaySummary]()) { $0[$1.categoryRaw] = $1 }
+            var existingCatDict = canonicalCategorySummaries(from: existingCat, in: context)
 
             for (raw, catCount) in catCounts {
                 if let summary = existingCatDict[raw] {
@@ -93,6 +133,28 @@ enum SummaryUpdater {
             Logger.summaries.info("Summary rebuilt for \(start, privacy: .public): \(count) visits, \(revenue) revenue")
         } catch {
             Logger.summaries.error("Summary rebuild failed for \(start, privacy: .public): \(String(describing: error))")
+        }
+    }
+
+    /// Deletes duplicate CloudKit-imported cache rows. The summaries are
+    /// derived data, so for duplicate keys we keep the highest-count/highest-
+    /// revenue row until the next rebuild can recompute from visits.
+    static func dedupeSummaryCaches(in context: ModelContext) {
+        do {
+            let dayRows = try context.fetch(FetchDescriptor<DaySummary>())
+            _ = canonicalDaySummaries(from: dayRows, in: context)
+
+            let serviceRows = try context.fetch(FetchDescriptor<ServiceDaySummary>())
+            _ = canonicalServiceSummariesByDayAndName(from: serviceRows, in: context)
+
+            let categoryRows = try context.fetch(FetchDescriptor<CategoryDaySummary>())
+            _ = canonicalCategorySummariesByDayAndName(from: categoryRows, in: context)
+
+            if context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            Logger.summaries.error("Summary cache de-dupe failed: \(String(describing: error))")
         }
     }
 
@@ -122,11 +184,11 @@ enum SummaryUpdater {
         return try context.fetch(descriptor)
     }
 
-    private static func fetchDaySummary(for day: Date, in context: ModelContext) throws -> DaySummary? {
+    private static func fetchDaySummaries(for day: Date, in context: ModelContext) throws -> [DaySummary] {
         let descriptor = FetchDescriptor<DaySummary>(
             predicate: #Predicate<DaySummary> { $0.day == day }
         )
-        return try context.fetch(descriptor).first
+        return try context.fetch(descriptor)
     }
 
     private static func fetchServiceDaySummaries(for day: Date, in context: ModelContext) throws -> [ServiceDaySummary] {
@@ -235,6 +297,116 @@ enum SummaryUpdater {
         for summary in existingSvcDict.values {
             context.delete(summary)
         }
+    }
+
+    private struct SummaryNameKey: Hashable {
+        let day: Date
+        let name: String
+    }
+
+    private static func isPreferred(_ candidate: DayAggregate, over existing: DayAggregate) -> Bool {
+        if candidate.visitCount != existing.visitCount {
+            return candidate.visitCount > existing.visitCount
+        }
+        return candidate.revenue > existing.revenue
+    }
+
+    private static func isPreferred(_ candidate: DaySummary, over existing: DaySummary) -> Bool {
+        if candidate.visitCount != existing.visitCount {
+            return candidate.visitCount > existing.visitCount
+        }
+        return candidate.revenue > existing.revenue
+    }
+
+    private static func canonicalDaySummary(from summaries: [DaySummary], in context: ModelContext) -> DaySummary? {
+        canonicalDaySummaries(from: summaries, in: context).values.first
+    }
+
+    private static func canonicalDaySummaries(from summaries: [DaySummary], in context: ModelContext) -> [Date: DaySummary] {
+        var result: [Date: DaySummary] = [:]
+        for summary in summaries {
+            if let existing = result[summary.day] {
+                if isPreferred(summary, over: existing) {
+                    context.delete(existing)
+                    result[summary.day] = summary
+                } else {
+                    context.delete(summary)
+                }
+            } else {
+                result[summary.day] = summary
+            }
+        }
+        return result
+    }
+
+    private static func canonicalServiceSummaries(from summaries: [ServiceDaySummary], in context: ModelContext) -> [String: ServiceDaySummary] {
+        var result: [String: ServiceDaySummary] = [:]
+        for summary in summaries {
+            if let existing = result[summary.serviceName] {
+                if summary.count > existing.count {
+                    context.delete(existing)
+                    result[summary.serviceName] = summary
+                } else {
+                    context.delete(summary)
+                }
+            } else {
+                result[summary.serviceName] = summary
+            }
+        }
+        return result
+    }
+
+    private static func canonicalCategorySummaries(from summaries: [CategoryDaySummary], in context: ModelContext) -> [String: CategoryDaySummary] {
+        var result: [String: CategoryDaySummary] = [:]
+        for summary in summaries {
+            if let existing = result[summary.categoryRaw] {
+                if summary.count > existing.count {
+                    context.delete(existing)
+                    result[summary.categoryRaw] = summary
+                } else {
+                    context.delete(summary)
+                }
+            } else {
+                result[summary.categoryRaw] = summary
+            }
+        }
+        return result
+    }
+
+    private static func canonicalServiceSummariesByDayAndName(from summaries: [ServiceDaySummary], in context: ModelContext) -> [SummaryNameKey: ServiceDaySummary] {
+        var result: [SummaryNameKey: ServiceDaySummary] = [:]
+        for summary in summaries {
+            let key = SummaryNameKey(day: summary.day, name: summary.serviceName)
+            if let existing = result[key] {
+                if summary.count > existing.count {
+                    context.delete(existing)
+                    result[key] = summary
+                } else {
+                    context.delete(summary)
+                }
+            } else {
+                result[key] = summary
+            }
+        }
+        return result
+    }
+
+    private static func canonicalCategorySummariesByDayAndName(from summaries: [CategoryDaySummary], in context: ModelContext) -> [SummaryNameKey: CategoryDaySummary] {
+        var result: [SummaryNameKey: CategoryDaySummary] = [:]
+        for summary in summaries {
+            let key = SummaryNameKey(day: summary.day, name: summary.categoryRaw)
+            if let existing = result[key] {
+                if summary.count > existing.count {
+                    context.delete(existing)
+                    result[key] = summary
+                } else {
+                    context.delete(summary)
+                }
+            } else {
+                result[key] = summary
+            }
+        }
+        return result
     }
 }
 

@@ -147,8 +147,11 @@ class InsightsViewModel {
                 }
             )
             let summaries   = (try? bgContext.fetch(descriptor)) ?? []
-            let points      = summaries.map { ($0.day, $0.revenue) }.sorted { $0.0 < $1.0 }
-            let totalVisits = summaries.reduce(0) { $0 + $1.visitCount }
+            let collapsed = SummaryUpdater.collapsedDayAggregates(from: summaries)
+            let points = collapsed.values
+                .map { ($0.day, $0.revenue) }
+                .sorted { $0.0 < $1.0 }
+            let totalVisits = collapsed.values.reduce(0) { $0 + $1.visitCount }
             return (points: points, totalVisits: totalVisits)
         }.value
 
@@ -209,9 +212,7 @@ class InsightsViewModel {
                 .map { name, stats in DistributionData(name: name, count: stats.count, revenue: stats.revenue) }
                 .sorted { $0.revenue > $1.revenue }
 
-            let categoryStats = categories.reduce(into: [String: Int]()) { acc, s in
-                acc[s.categoryRaw, default: 0] += s.count
-            }
+            let categoryStats = SummaryUpdater.collapsedCategoryCounts(from: categories)
             let categoryDist = categoryStats
                 .map { name, count in DistributionData(name: name, count: count) }
                 .sorted { $0.count > $1.count }
@@ -334,6 +335,7 @@ class InsightsViewModel {
                 }
             )
             let summaries = (try? bgContext.fetch(descriptor)) ?? []
+            let collapsed = SummaryUpdater.collapsedDayAggregates(from: summaries)
 
             var buckets: [(start: Date, label: String, revenue: Decimal, count: Int)] = []
             for i in (0..<6).reversed() {
@@ -345,7 +347,7 @@ class InsightsViewModel {
                                 revenue: .zero, count: 0))
             }
 
-            for summary in summaries {
+            for summary in collapsed.values {
                 let ms = cal.date(from: cal.dateComponents([.year, .month], from: summary.day))
                 guard let ms, let idx = buckets.firstIndex(where: { $0.start == ms }) else { continue }
                 buckets[idx].revenue += summary.revenue

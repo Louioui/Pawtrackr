@@ -60,6 +60,7 @@ struct RootView: View {
                 DataMigrations.coercePets(in: backgroundContext)
                 DataMigrations.ensureServiceCatalog(in: backgroundContext)
                 DataMigrations.ensureMessageTemplates(in: backgroundContext)
+                SummaryUpdater.dedupeSummaryCaches(in: backgroundContext)
                 DataMigrations.backfillDaySummaries(in: backgroundContext)
             }
         }

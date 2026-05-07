@@ -58,14 +58,16 @@ final class DashboardRepository: DashboardRepositoryProtocol {
             let summaryDesc = FetchDescriptor<DaySummary>(
                 predicate: #Predicate { summary in summary.day >= start && summary.day < end }
             )
-            let summary = try modelContext.fetch(summaryDesc).first
+            let summaries = try modelContext.fetch(summaryDesc)
+            let summary = SummaryUpdater.collapsedDayAggregates(from: summaries).values.first
 
             let yesterdayStart = cal.date(byAdding: .day, value: -1, to: start) ?? start
             let yesterdayEnd = start
             let yesterdayDesc = FetchDescriptor<DaySummary>(
                 predicate: #Predicate { summary in summary.day >= yesterdayStart && summary.day < yesterdayEnd }
             )
-            let yesterdaySummary = try modelContext.fetch(yesterdayDesc).first
+            let yesterdaySummaries = try modelContext.fetch(yesterdayDesc)
+            let yesterdaySummary = SummaryUpdater.collapsedDayAggregates(from: yesterdaySummaries).values.first
 
             return DashboardKPI(
                 appointmentsToday: todaysCount,
@@ -145,7 +147,7 @@ final class DashboardRepository: DashboardRepositoryProtocol {
             predicate: #Predicate { $0.day >= start }
         )
         let summaries = try modelContext.fetch(desc)
-        return summaries.reduce(into: [String: Int]()) { $0[$1.serviceName, default: 0] += $1.count }
+        return SummaryUpdater.collapsedServiceCounts(from: summaries)
     }
 
     func fetchCategoryDistribution(days: Int) async throws -> [String: Int] {
@@ -155,7 +157,7 @@ final class DashboardRepository: DashboardRepositoryProtocol {
             predicate: #Predicate { $0.day >= start }
         )
         let summaries = try modelContext.fetch(desc)
-        return summaries.reduce(into: [String: Int]()) { $0[$1.categoryRaw, default: 0] += $1.count }
+        return SummaryUpdater.collapsedCategoryCounts(from: summaries)
     }
     
     func fetchRevenueSeries(days: Int) async throws -> [Date: Decimal] {
@@ -169,8 +171,8 @@ final class DashboardRepository: DashboardRepositoryProtocol {
             }
         )
         let summaries = try modelContext.fetch(desc)
-        return summaries.reduce(into: [Date: Decimal]()) { dict, summary in
-            dict[summary.day] = summary.revenue
+        return SummaryUpdater.collapsedDayAggregates(from: summaries).reduce(into: [Date: Decimal]()) { dict, entry in
+            dict[entry.key] = entry.value.revenue
         }
     }
     

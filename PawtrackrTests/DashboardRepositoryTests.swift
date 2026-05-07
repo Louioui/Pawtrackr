@@ -43,6 +43,50 @@ final class DashboardRepositoryTests: XCTestCase {
         XCTAssertEqual(kpis.completedToday, 5)
     }
 
+    func testSummaryFetches_CollapseDuplicateCloudKitCacheRows() async throws {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: .now)
+
+        context.insert(DaySummary(day: today, revenue: 100.0, visitCount: 5))
+        context.insert(DaySummary(day: today, revenue: 80.0, visitCount: 4))
+        context.insert(ServiceDaySummary(day: today, serviceName: "Bath", count: 3))
+        context.insert(ServiceDaySummary(day: today, serviceName: "Bath", count: 2))
+        context.insert(CategoryDaySummary(day: today, categoryRaw: "Grooming", count: 3))
+        context.insert(CategoryDaySummary(day: today, categoryRaw: "Grooming", count: 2))
+        try context.save()
+
+        let kpis = try await repository.fetchKPIs()
+        XCTAssertEqual(kpis.revenueToday, 100.0)
+        XCTAssertEqual(kpis.completedToday, 5)
+
+        let services = try await repository.fetchServiceDistribution(days: 1)
+        XCTAssertEqual(services["Bath"], 3)
+
+        let categories = try await repository.fetchCategoryDistribution(days: 1)
+        XCTAssertEqual(categories["Grooming"], 3)
+
+        let revenue = try await repository.fetchRevenueSeries(days: 1)
+        XCTAssertEqual(revenue[today], 100.0)
+    }
+
+    func testDedupeSummaryCaches_DeletesDuplicateRows() throws {
+        let today = Calendar.current.startOfDay(for: .now)
+
+        context.insert(DaySummary(day: today, revenue: 100.0, visitCount: 5))
+        context.insert(DaySummary(day: today, revenue: 80.0, visitCount: 4))
+        context.insert(ServiceDaySummary(day: today, serviceName: "Bath", count: 3))
+        context.insert(ServiceDaySummary(day: today, serviceName: "Bath", count: 2))
+        context.insert(CategoryDaySummary(day: today, categoryRaw: "Grooming", count: 3))
+        context.insert(CategoryDaySummary(day: today, categoryRaw: "Grooming", count: 2))
+        try context.save()
+
+        SummaryUpdater.dedupeSummaryCaches(in: context)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<DaySummary>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ServiceDaySummary>()).count, 1)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<CategoryDaySummary>()).count, 1)
+    }
+
     func testFetchOverduePets_UsesModelLogic() async throws {
         let pet = Pet(name: "OldTimer", species: .dog)
         pet.preferredGroomingFrequency = .weekly

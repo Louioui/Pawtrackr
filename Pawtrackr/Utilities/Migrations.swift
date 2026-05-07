@@ -156,14 +156,26 @@ enum DataMigrations {
                 byDay[day] = agg
             }
 
+            SummaryUpdater.dedupeSummaryCaches(in: context)
+
             // Fetch existing summaries to upsert
-            let existing = try context.fetch(FetchDescriptor<DaySummary>()) 
-            var index: [Date: DaySummary] = [:]
-            for s in existing { index[s.day] = s }
+            let existing = try context.fetch(FetchDescriptor<DaySummary>())
+            let index = SummaryUpdater.collapsedDayAggregates(from: existing)
+            var rowsByDay: [Date: DaySummary] = [:]
+            for row in existing where index[row.day] != nil {
+                if let current = rowsByDay[row.day] {
+                    if row.visitCount > current.visitCount ||
+                        (row.visitCount == current.visitCount && row.revenue > current.revenue) {
+                        rowsByDay[row.day] = row
+                    }
+                } else {
+                    rowsByDay[row.day] = row
+                }
+            }
 
             var updated = 0, inserted = 0
             for (day, (rev, cnt)) in byDay {
-                if let s = index[day] {
+                if let s = rowsByDay[day] {
                     if s.revenue != rev || s.visitCount != cnt { s.revenue = rev; s.visitCount = cnt; updated += 1 }
                 } else {
                     context.insert(DaySummary(day: day, revenue: rev, visitCount: cnt)); inserted += 1

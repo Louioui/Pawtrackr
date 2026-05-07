@@ -59,7 +59,7 @@ public enum PhoneUtils {
     /// - Parameter input: The raw phone number string (e.g., "(555) 123-4567 x123").
     /// - Returns: The number in "+1##########" format, or `nil` if the input is invalid. The extension is ignored.
     public static func toE164(_ input: String) -> String? {
-        guard let digits = tenDigits(from: input) else { return nil }
+        guard isValidUS(input), let digits = tenDigits(from: input) else { return nil }
         return "+1" + digits
     }
 
@@ -68,6 +68,7 @@ public enum PhoneUtils {
     /// - Parameter includeExtension: If `true`, any parsed extension will be appended.
     /// - Returns: A formatted string like "(555) 123-4567 x123", or `nil` if the input is invalid.
     public static func display(_ input: String, includeExtension: Bool = true) -> String? {
+        guard isValidUS(input) else { return nil }
         let (main, ext) = splitExtension(from: input)
         guard let digits = tenDigits(from: main) else { return nil }
         
@@ -113,7 +114,7 @@ public enum PhoneUtils {
     /// Masks a phone number for privacy, showing only the last 4 digits.
     /// - Returns: A formatted string like "(555) BBB-••••", or `nil` if the input is invalid.
     public static func displayMasked(_ input: String) -> String? {
-        guard let ten = tenDigits(from: input) else { return nil }
+        guard isValidUS(input), let ten = tenDigits(from: input) else { return nil }
         let area = ten.prefix(3)
         let last = ten.suffix(4)
         return "(\(area)) •••-\(last)"
@@ -141,7 +142,7 @@ public enum PhoneUtils {
 
     /// Generates a WhatsApp URL string from a valid phone number, optionally with a message body.
     public static func whatsappURLString(_ input: String, body: String? = nil) -> String? {
-        guard let digits = tenDigits(from: input) else { return nil }
+        guard isValidUS(input), let digits = tenDigits(from: input) else { return nil }
         // WhatsApp uses international format without the + (1##########)
         let phone = "1" + digits
         var components = URLComponents()
@@ -160,11 +161,12 @@ public enum PhoneUtils {
 
     /// Extracts the core 10 digits from a raw string, handling a leading "1".
     private static func tenDigits(from input: String) -> String? {
-        let digits = normalize(input)
-        if digits.count >= 11 && digits.first == "1" {
-            return String(digits.dropFirst().prefix(10))
-        } else if digits.count >= 10 {
-            return String(digits.prefix(10))
+        let (main, _) = splitExtension(from: input)
+        let digits = normalize(main)
+        if digits.count == 11 && digits.first == "1" {
+            return String(digits.dropFirst())
+        } else if digits.count == 10 {
+            return digits
         }
         return nil
     }
