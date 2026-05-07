@@ -35,7 +35,7 @@ struct ClientRow: View {
     }
 
     var body: some View {
-        let primaryPet = client.pets.sorted(by: { $0.name < $1.name }).first
+        let primaryPet = (client.pets ?? []).sorted(by: { $0.name < $1.name }).first
         Card(
             elevation: .regular,
             accent: inProgress ? .leading(.color(DS.ColorToken.success), thickness: 4) : nil
@@ -43,7 +43,7 @@ struct ClientRow: View {
             HStack(spacing: 12) {
                 // Avatars (up to 3 pets)
                 HStack(spacing: -8) {
-                    ForEach(Array(client.pets.sorted(by: { $0.name < $1.name }).prefix(3)), id: \.persistentModelID) { pet in
+                    ForEach(Array((client.pets ?? []).sorted(by: { $0.name < $1.name }).prefix(3)), id: \.persistentModelID) { pet in
                         IconCircle(size: .sm, style: .auto(species: pet.species, gender: pet.gender), lineWidth: 1)
                     }
                 }
@@ -120,8 +120,8 @@ struct ClientRow: View {
 
     // Naive inference: any pet with a Visit that has no endedAt means "in progress"
     private static func hasActiveVisit(client: Client) -> Bool {
-        for pet in client.pets {
-            if pet.visits.contains(where: { $0.endedAt == nil }) { return true }
+        for pet in client.pets ?? [] {
+            if (pet.visits ?? []).contains(where: { $0.endedAt == nil }) { return true }
         }
         return false
     }

@@ -43,6 +43,9 @@ struct CheckoutView: View {
             bottomBar
         }
         .background(DS.ColorToken.background.ignoresSafeArea())
+        #if os(macOS)
+        .frame(minWidth: 480, minHeight: 560)
+        #endif
         .navigationTitle(viewModel.currentStep.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -58,8 +61,7 @@ struct CheckoutView: View {
                 Spacer()
                 Button("Done") {
                     if focusedField == .amount {
-                        viewModel.formatAmountInput()
-                        amountEditorText = viewModel.amountString
+                        commitAmountInput()
                     }
                     focusedField = nil
                 }
@@ -103,12 +105,43 @@ struct CheckoutView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: shouldShowOverlay)
+        #if os(macOS)
+        .onChange(of: viewModel.currentStep) { _, newStep in
+            guard !isGoingBack else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                switch newStep {
+                case .payment: focusedField = .amount
+                case .details: focusedField = .sessionNotes
+                default: break
+                }
+            }
+        }
+        #endif
     }
 
     // MARK: - Overlay condition
 
     private var shouldShowOverlay: Bool {
         viewModel.isSaving || viewModel.state == .confirmed
+    }
+
+    // MARK: - Platform Adapters
+
+    private var primaryButtonHeight: CGFloat {
+        #if os(macOS)
+        return 38
+        #else
+        return 50
+        #endif
+    }
+
+    private var paymentGridColumns: [GridItem] {
+        #if os(macOS)
+        return [GridItem(.adaptive(minimum: 120, maximum: 160))]
+        #else
+        return [GridItem(.flexible()), GridItem(.flexible())]
+        #endif
     }
 
     // MARK: - Steps
@@ -305,8 +338,11 @@ struct CheckoutView: View {
                             .multilineTextAlignment(TextAlignment.center)
                             .foregroundStyle(Color.blue)
                             .onSubmit {
-                                viewModel.formatAmountInput()
-                                amountEditorText = viewModel.amountString
+                                commitAmountInput()
+                                #if os(macOS)
+                                focusedField = nil
+                                if viewModel.isAdvanceEnabled { advance() }
+                                #endif
                             }
 
                         Text("Auto-filled from selected services. You can adjust the total before charging the client.")
@@ -318,7 +354,7 @@ struct CheckoutView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Payment Method").font(.headline).padding(.horizontal)
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    LazyVGrid(columns: paymentGridColumns, spacing: 12) {
                         ForEach(Self.paymentOptions) { option in
                             paymentCard(for: option)
                         }
@@ -344,6 +380,13 @@ struct CheckoutView: View {
                                     viewModel.setExternalReference(newValue)
                                 }
                             }
+                            #if os(macOS)
+                            .onSubmit {
+                                referenceSyncTask?.cancel()
+                                viewModel.setExternalReference(referenceEditorText)
+                                if viewModel.isAdvanceEnabled { advance() }
+                            }
+                            #endif
                     }
                 }
                 
@@ -444,7 +487,7 @@ struct CheckoutView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.headline)
-                            .frame(width: 50, height: 50)
+                            .frame(width: primaryButtonHeight, height: primaryButtonHeight)
                             .background(Circle().fill(Color.gray.opacity(0.1)))
                     }
                 }
@@ -455,13 +498,16 @@ struct CheckoutView: View {
                     Text(viewModel.currentStep.primaryButtonTitle)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: primaryButtonHeight)
                         .background(RoundedRectangle(cornerRadius: 15).fill(viewModel.isAdvanceEnabled ? Color.blue : Color.gray.opacity(0.3)))
                         .foregroundStyle(.white)
                         .scaleEffect(viewModel.isAdvanceEnabled ? 1.0 : 0.97)
                 }
                 .disabled(!viewModel.isAdvanceEnabled)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isAdvanceEnabled)
+                #if os(macOS)
+                .keyboardShortcut(.return)
+                #endif
             }
             .padding()
             .background(DS.ColorToken.background)
@@ -514,6 +560,13 @@ struct CheckoutView: View {
         viewModel.setExternalReference(referenceEditorText)
     }
 
+    private func commitAmountInput() {
+        amountSyncTask?.cancel()
+        viewModel.setAmountDirectly(amountEditorText)
+        viewModel.formatAmountInput()
+        amountEditorText = viewModel.amountString
+    }
+
     private func stepHero(eyebrow: String, title: String, message: String) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
@@ -556,10 +609,13 @@ struct CheckoutView: View {
                 #if os(iOS)
                 HapticManager.notify(.success)
                 #endif
+                let receiptSnapshot = PDFReceiptService.shared.makeSnapshot(for: viewModel.visit)
                 Task {
                     let data: Data? = await withTaskGroup(of: Data?.self) { group in
                         group.addTask {
-                            await PDFReceiptService.shared.generatePDFAsync(for: viewModel.visit)
+                            await Task.detached(priority: .userInitiated) {
+                                PDFReceiptService.render(snapshot: receiptSnapshot)
+                            }.value
                         }
                         group.addTask {
                             try? await Task.sleep(for: .seconds(10))

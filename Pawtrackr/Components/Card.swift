@@ -230,6 +230,11 @@ private struct ScaleOnPressStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(reduceMotion ? .none : .spring(response: 0.25, dampingFraction: 0.75), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed {
+                    HapticManager.impact(.light)
+                }
+            }
     }
 }
 

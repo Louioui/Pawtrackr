@@ -68,7 +68,12 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
 
     func checkIn(from appointment: Appointment) async throws -> Visit {
-        let visit = Visit(pet: appointment.pet, startedAt: .now)
+        // `appointment.pet` is optional under CloudKit-compatible schema.
+        // If the pet record can't be resolved, we can't materialize a visit.
+        guard let pet = appointment.pet else {
+            throw AppError.database("Appointment is missing its pet reference and cannot be checked in.")
+        }
+        let visit = Visit(pet: pet, startedAt: .now)
         visit.appointment = appointment
         appointment.status = .checkedIn
         appointment.visit = visit

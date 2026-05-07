@@ -15,7 +15,7 @@ final class CheckoutViewModelTests: XCTestCase {
 
     override func setUpWithError() throws {
         let schema = Schema(PawtrackrSchema.models)
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, configurations: [config])
         context = container.mainContext
 
@@ -135,6 +135,7 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.currentStep, .details)
         try vm.advance()  // → payment
         XCTAssertEqual(vm.currentStep, .payment)
+        vm.choosePayment(.cash)
         try vm.advance()  // → review
         XCTAssertEqual(vm.currentStep, .review)
     }
@@ -174,6 +175,7 @@ final class CheckoutViewModelTests: XCTestCase {
         vm.toggleService(bath)
         try vm.advance() // → details
         try vm.advance() // → payment
+        vm.choosePayment(.cash)
         // Amount from service selection = $30 > 0 → enabled
         XCTAssertTrue(vm.isAdvanceEnabled)
     }

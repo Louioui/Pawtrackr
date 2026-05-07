@@ -49,9 +49,9 @@ struct VisitRow: View {
 
     @ViewBuilder
     private var services: some View {
-        if !visit.items.isEmpty {
+        if !(visit.items ?? []).isEmpty {
             FlowLayout(spacing: 6) {
-                ForEach(visit.items) { item in
+                ForEach(visit.items ?? []) { item in
                     // FIX: Replaced 'Pill' with the correct 'Chip' component.
                     Chip(item.displayName, style: .tinted, size: .xs)
                 }

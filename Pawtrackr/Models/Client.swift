@@ -14,13 +14,15 @@ import SwiftData
 @Model
 final class Client {
     // MARK: - Identity & Timestamps
-    var uuid: UUID
-    var createdAt: Date
-    var updatedAt: Date
+    // NOTE: Non-optional properties have defaults so CloudKit can rehydrate
+    // partial records. App init paths always overwrite these.
+    var uuid: UUID = UUID()
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     // MARK: - Contact Information
-    var firstName: String
-    var lastName: String
+    var firstName: String = ""
+    var lastName: String = ""
     var phone: String?
     var email: String?
     var address: String?
@@ -33,8 +35,8 @@ final class Client {
     var lastVisitDate: Date?
 
     // MARK: - Relationships
-    @Relationship(deleteRule: .cascade) var pets: [Pet] = []
-    @Relationship(deleteRule: .cascade) var emergencyContacts: [EmergencyContact] = []
+    @Relationship(deleteRule: .cascade, inverse: \Pet.owner) var pets: [Pet]? = []
+    @Relationship(deleteRule: .cascade, inverse: \EmergencyContact.owner) var emergencyContacts: [EmergencyContact]? = []
     var user: User?
 
     // MARK: - Init
@@ -97,12 +99,13 @@ final class Client {
     }
     func setEmail(_ value: String?) {
         let trimmed = value?.trimmed
-        email = trimmed?.lowercased()
+        email = trimmed?.isEmpty == false ? trimmed?.lowercased() : nil
         updatePrimaryContact()
         didUpdate()
     }
     func setAddress(_ value: String?) {
-        address = value?.trimmed
+        let trimmed = value?.trimmed
+        address = trimmed?.isEmpty == false ? trimmed : nil
         didUpdate()
     }
     func setNotes(_ value: String?) {
@@ -110,14 +113,18 @@ final class Client {
         didUpdate()
     }
     func addPet(_ pet: Pet) {
-        if !pets.contains(where: { $0 === pet }) {
-            pets.append(pet)
+        var currentPets = pets ?? []
+        if !currentPets.contains(where: { $0 === pet }) {
+            currentPets.append(pet)
+            pets = currentPets
             didUpdate()
         }
     }
     func removePet(_ pet: Pet) {
-        if let idx = pets.firstIndex(where: { $0 === pet }) {
-            pets.remove(at: idx)
+        var currentPets = pets ?? []
+        if let idx = currentPets.firstIndex(where: { $0 === pet }) {
+            currentPets.remove(at: idx)
+            pets = currentPets
             didUpdate()
         }
     }
@@ -125,6 +132,11 @@ final class Client {
     // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
+        // Spotlight indexing is nonisolated; it self-dispatches to a utility queue.
+        let id = uuid
+        let title = fullName
+        let description = "Client with \((pets ?? []).count) pets • Phone: \(phone ?? "N/A")"
+        SpotlightIndexer.shared.indexClient(id: id, title: title, description: description)
     }
 
     func updateThumbnail() {

@@ -207,7 +207,7 @@ final class CheckoutViewModel {
         beforePhotoData = visit.beforePhotoData
         afterPhotoData  = visit.afterPhotoData
 
-        let allIDs = Set(visit.items.compactMap { $0.service?.persistentModelID })
+        let allIDs = Set((visit.items ?? []).compactMap { $0.service?.persistentModelID })
         selectedServiceIDs = allIDs.filter { id in allServices.contains(where: { $0.persistentModelID == id }) }
         selectedAddOnIDs = allIDs.filter { id in addOnServices.contains(where: { $0.persistentModelID == id }) }
 
@@ -496,7 +496,7 @@ final class CheckoutViewModel {
         let selectedIDs = selectedServiceIDs.union(selectedAddOnIDs)
 
         var existingItemsByServiceID: [PersistentIdentifier: VisitItem] = [:]
-        for item in visit.items {
+        for item in visit.items ?? [] {
             if let serviceID = item.service?.persistentModelID {
                 existingItemsByServiceID[serviceID] = item
             }
@@ -603,7 +603,11 @@ final class CheckoutViewModel {
 
         let draft = makeDraft()
 
-        autosaveTask = Task { [draft, fingerprint, draftStore, eventRecorder, visitID = visit.uuid, petName = pet.name] in
+        // Capture only the values we need so the autosave task can outlive
+        // the view-model's view without retaining `self`. The fingerprint write
+        // hops onto MainActor with a fresh weak self capture and bails if the
+        // VM is gone.
+        autosaveTask = Task { [draft, fingerprint, draftStore, eventRecorder, visitID = visit.uuid, petName = pet.name, weak self] in
             if !immediate {
                 do {
                     try await Task.sleep(for: .milliseconds(450))
@@ -614,8 +618,8 @@ final class CheckoutViewModel {
             if Task.isCancelled { return }
             do {
                 try await draftStore.saveDraft(draft)
-                await MainActor.run {
-                    self.lastSavedDraftFingerprint = fingerprint
+                await MainActor.run { [weak self] in
+                    self?.lastSavedDraftFingerprint = fingerprint
                 }
                 await eventRecorder.record("draft_saved:\(reason)", visitID: visitID, petName: petName)
             } catch {
@@ -623,6 +627,13 @@ final class CheckoutViewModel {
             }
         }
     }
+
+    // No deinit needed: the autosave task captures `draft`, `draftStore`,
+    // `eventRecorder` strongly and uses `[weak self]` for the fingerprint write.
+    // If the VM deallocates mid-flight, the draft still persists (the user's data
+    // is saved) and the MainActor write is a no-op against a nil self. New
+    // schedule calls cancel the previous task explicitly, so leaks are bounded
+    // to a single in-flight save.
 
     /// Builds a lightweight draft. Photos are intentionally excluded:
     /// - Full-res photos can be several MB, making draft JSON huge and writes slow.
@@ -647,8 +658,10 @@ final class CheckoutViewModel {
     }
 
     private func trace(_ event: String) {
-        Task {
-            await eventRecorder.record(event, visitID: visit.uuid, petName: pet.name)
+        let visitID = visit.uuid
+        let petName = pet.name
+        Task { [eventRecorder] in
+            await eventRecorder.record(event, visitID: visitID, petName: petName)
         }
     }
 }

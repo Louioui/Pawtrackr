@@ -15,7 +15,9 @@ struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthenticationViewModel
 
     @State private var router = NavigationRouter()
-    @State private var sidebarSelection: NavigationItem? = .clients
+    @State private var sidebarSelection: NavigationItem? = .dashboard
+    @State private var tabSelection: NavigationItem = .dashboard
+    @State private var showingNewClientSheet = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Namespace private var sharedNamespace
 
@@ -25,6 +27,110 @@ struct ContentView: View {
             .onChange(of: appSettings.currencySymbol) { _, newValue in
                 Formatters.updateCurrencySymbol(newValue)
             }
+            .onChange(of: sidebarSelection) { _, newValue in
+                if let newValue {
+                    router.activeNavigationItem = newValue
+                }
+            }
+            .onChange(of: tabSelection) { _, newValue in
+                router.activeNavigationItem = newValue
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showNewClientSheet)) { _ in
+                consumePendingNewClientRequest()
+                showingNewClientSheet = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .navigateToPet)) { notification in
+                handleNavigation(notification, type: .pet)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .navigateToClient)) { notification in
+                handleNavigation(notification, type: .client)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .clientOpenRequested)) { notification in
+                guard let id = notification.requestedClientID,
+                      let client = modelContext.model(for: id) as? Client else { return }
+                selectClientsSurface()
+                router.popClientsToRoot()
+                router.navigateToClient(client)
+                NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
+                    ClientDidCreateKey.clientID.rawValue: id,
+                    ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.navigated.rawValue
+                ])
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .selectNavigationItem)) { notification in
+                guard let item = notification.requestedNavigationItem else { return }
+                selectSurface(item, resetPath: notification.shouldResetNavigationPath)
+            }
+            .sheet(isPresented: $showingNewClientSheet) {
+                NewClientSheet(modelContext: modelContext)
+            }
+            .onAppear {
+                router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
+                consumePendingNewClientRequest()
+                consumePendingNavigation()
+            }
+    }
+
+    private enum NavigationType { case pet, client }
+
+    private func handleNavigation(_ notification: Notification, type: NavigationType) {
+        guard let uuid = notification.userInfo?["uuid"] as? UUID else { return }
+
+        switch type {
+        case .client:
+            let descriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.uuid == uuid })
+            if let client = try? modelContext.fetch(descriptor).first {
+                selectClientsSurface()
+                router.popClientsToRoot()
+                router.navigateToClient(client)
+                clearPendingNavigation(kind: .client, uuid: uuid)
+            }
+
+        case .pet:
+            let petDescriptor = FetchDescriptor<Pet>(predicate: #Predicate { $0.uuid == uuid })
+            if let pet = try? modelContext.fetch(petDescriptor).first, let owner = pet.owner {
+                selectClientsSurface()
+                router.popClientsToRoot()
+                router.navigateToClient(owner)
+                router.navigateToPet(pet)
+                clearPendingNavigation(kind: .pet, uuid: uuid)
+            }
+        }
+    }
+
+    private func selectClientsSurface() {
+        selectSurface(.clients)
+    }
+
+    private func selectSurface(_ item: NavigationItem, resetPath: Bool = false) {
+        sidebarSelection = item
+        tabSelection = item
+        router.activeNavigationItem = item
+        if resetPath {
+            router.popToRoot()
+        }
+    }
+
+    private func consumePendingNewClientRequest() {
+        guard UserDefaults.standard.string(forKey: AppMenuCommand.pendingNewClientRequestKey) != nil else { return }
+        UserDefaults.standard.removeObject(forKey: AppMenuCommand.pendingNewClientRequestKey)
+        showingNewClientSheet = true
+    }
+
+    private func consumePendingNavigation() {
+        guard let kindRaw = UserDefaults.standard.string(forKey: PendingNavigationCommand.kindKey),
+              let kind = PendingNavigationCommand.Kind(rawValue: kindRaw),
+              let uuidRaw = UserDefaults.standard.string(forKey: PendingNavigationCommand.uuidKey),
+              let uuid = UUID(uuidString: uuidRaw) else { return }
+
+        let type: NavigationType = kind == .pet ? .pet : .client
+        handleNavigation(Notification(name: .navigateToClient, object: nil, userInfo: ["uuid": uuid]), type: type)
+    }
+
+    private func clearPendingNavigation(kind: PendingNavigationCommand.Kind, uuid: UUID) {
+        guard UserDefaults.standard.string(forKey: PendingNavigationCommand.kindKey) == kind.rawValue,
+              UserDefaults.standard.string(forKey: PendingNavigationCommand.uuidKey) == uuid.uuidString else { return }
+        UserDefaults.standard.removeObject(forKey: PendingNavigationCommand.kindKey)
+        UserDefaults.standard.removeObject(forKey: PendingNavigationCommand.uuidKey)
     }
 
     // MARK: - Views
@@ -43,7 +149,16 @@ struct ContentView: View {
     }
 
     private var tabView: some View {
-        TabView {
+        TabView(selection: $tabSelection) {
+            NavigationStack(path: $router.dashboardPath) {
+                DashboardView()
+                    .navigationDestination(for: AppDestination.self) { destination in
+                        destinationView(for: destination)
+                    }
+            }
+            .tabItem { Label("Dashboard", systemImage: "square.grid.2x2.fill") }
+            .tag(NavigationItem.dashboard)
+
             NavigationStack(path: $router.clientsPath) {
                 ClientsView()
                     .navigationDestination(for: AppDestination.self) { destination in
@@ -51,16 +166,25 @@ struct ContentView: View {
                     }
             }
             .tabItem { Label("Clients", systemImage: "person.3.fill") }
+            .tag(NavigationItem.clients)
 
             NavigationStack(path: $router.insightsPath) {
                 InsightsView()
+                    .navigationDestination(for: AppDestination.self) { destination in
+                        destinationView(for: destination)
+                    }
             }
             .tabItem { Label("Insights", systemImage: "chart.bar.fill") }
+            .tag(NavigationItem.insights)
 
             NavigationStack(path: $router.settingsPath) {
-                SettingsView()
+                SettingsView(wrapsInNavigationStack: false)
+                    .navigationDestination(for: AppDestination.self) { destination in
+                        destinationView(for: destination)
+                    }
             }
             .tabItem { Label("Settings", systemImage: "gear") }
+            .tag(NavigationItem.settings)
         }
     }
 
@@ -68,12 +192,7 @@ struct ContentView: View {
         NavigationSplitView {
             SidebarView(selection: $sidebarSelection)
         } detail: {
-            NavigationStack(path: $router.clientsPath) {
-                splitViewDetail
-                .navigationDestination(for: AppDestination.self) { destination in
-                    destinationView(for: destination)
-                }
-            }
+            splitViewDetail
         }
         #if os(macOS)
         .frame(minWidth: 1000, minHeight: 700)
@@ -83,12 +202,34 @@ struct ContentView: View {
     @ViewBuilder
     private var splitViewDetail: some View {
         switch sidebarSelection {
+        case .dashboard:
+            NavigationStack(path: $router.dashboardPath) {
+                DashboardView()
+                    .navigationDestination(for: AppDestination.self) { destination in
+                        destinationView(for: destination)
+                    }
+            }
         case .clients:
-            ClientsView()
+            NavigationStack(path: $router.clientsPath) {
+                ClientsView()
+                    .navigationDestination(for: AppDestination.self) { destination in
+                        destinationView(for: destination)
+                    }
+            }
         case .insights:
-            InsightsView()
+            NavigationStack(path: $router.insightsPath) {
+                InsightsView()
+                    .navigationDestination(for: AppDestination.self) { destination in
+                        destinationView(for: destination)
+                    }
+            }
         case .settings:
-            SettingsView()
+            NavigationStack(path: $router.settingsPath) {
+                SettingsView(wrapsInNavigationStack: false)
+                    .navigationDestination(for: AppDestination.self) { destination in
+                        destinationView(for: destination)
+                    }
+            }
         case .none:
             Text("Select an item")
         }
@@ -109,7 +250,7 @@ struct ContentView: View {
             VisitDetailView(visit: visit)
 
         case .petHistory(let pet):
-            PetHistoryView(pet: pet)
+            PetHistoryView(pet: pet, wrapsInNavigationStack: false)
 
         case .checkout(let pet):
             CheckoutView(pet: pet, visit: pet.activeVisit)

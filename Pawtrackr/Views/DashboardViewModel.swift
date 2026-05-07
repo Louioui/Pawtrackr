@@ -6,6 +6,9 @@
 import Foundation
 import SwiftData
 import Combine
+import OSLog
+
+private let dashboardLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Dashboard")
 
 #if canImport(UIKit)
 import UIKit
@@ -103,7 +106,19 @@ final class DashboardViewModel {
             _ = try await visitRepo.checkIn(from: appointment)
             await refresh()
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
+        }
+    }
+
+    func checkInPet(_ pet: Pet) async {
+        guard pet.activeVisit == nil else { return }
+
+        do {
+            let visitRepo = VisitRepository(modelContainer: repository.modelContext.container)
+            _ = try await visitRepo.checkIn(pet: pet, date: .now)
+            await refresh()
+        } catch {
+            setDashboardError(error, source: #function)
         }
     }
 
@@ -113,7 +128,7 @@ final class DashboardViewModel {
         do {
             upcomingAppointments = try await repository.fetchUpcomingAppointments(limit: 5)
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
             upcomingAppointments = []
         }
     }
@@ -122,7 +137,7 @@ final class DashboardViewModel {
         do {
             overduePets = try await repository.fetchOverduePets(limit: overduePetLimit)
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
             overduePets = []
         }
     }
@@ -145,8 +160,14 @@ final class DashboardViewModel {
         }
     }
 
-    private func setDashboardError(_ error: Error) {
-        appError = .database(error.localizedDescription)
+    private func setDashboardError(_ error: Error, source: String = #function) {
+        // Log the underlying error so we can identify which fetch failed
+        // (the alert message from SwiftData is unhelpful by itself).
+        dashboardLog.error("[\(source)] \(String(describing: error))")
+        // Don't surface partial fetch failures as a blocking alert — sections
+        // that fail simply render empty. We still log so issues are visible.
+        // If you want to re-enable the alert for a specific source, uncomment:
+        // appError = .database("\(source): \(error.localizedDescription)")
     }
 
     private func fetchKPIs() async {
@@ -160,7 +181,7 @@ final class DashboardViewModel {
                 completedToday:    stats.completedToday
             )
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
             kpi = KPI()
         }
     }
@@ -169,7 +190,7 @@ final class DashboardViewModel {
         do {
             activeVisits = try await repository.fetchActiveVisits()
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
             activeVisits = []
         }
     }
@@ -178,7 +199,7 @@ final class DashboardViewModel {
         do {
             recentClients = try await repository.fetchRecentClients(limit: recentClientLimit)
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
             recentClients = []
         }
     }
@@ -191,7 +212,7 @@ final class DashboardViewModel {
             guard !Task.isCancelled else { return }
             revenueSeries = makeRevenueSeries(from: bucket, days: days, calendar: cal, end: end)
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
             revenueSeries = []
         }
     }
@@ -213,7 +234,7 @@ final class DashboardViewModel {
             guard !Task.isCancelled else { return }
             gallery = items
         } catch {
-            setDashboardError(error)
+            setDashboardError(error, source: #function)
             gallery = []
         }
     }

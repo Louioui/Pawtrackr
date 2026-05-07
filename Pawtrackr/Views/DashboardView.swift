@@ -59,40 +59,197 @@ import Charts
   private var insightsToolbarItem: some ToolbarContent {
     ToolbarItem(placement: .primaryAction) {
       Button {
+          showNewClient = true
       } label: {
-        Image(systemName: "chart.bar")
+        Label("New Client", systemImage: "person.badge.plus")
       }
-      .accessibilityLabel("Open Insights")
+      .keyboardShortcut("n", modifiers: .command)
+    }
+
+    ToolbarItem(placement: .primaryAction) {
+      CloudKitStatusView()
+    }
+
+    #if os(macOS)
+    ToolbarItem(placement: .navigation) {
+        Button {
+            Task { await vm?.refresh() }
+        } label: {
+            Label("Refresh", systemImage: "arrow.clockwise")
+        }
+        .keyboardShortcut("r", modifiers: .command)
+    }
+    #endif
+
+    ToolbarItem(placement: .status) {
+        if let vm = vm, !vm.activeVisits.isEmpty {
+            Text("\(vm.activeVisits.count) Active Sessions")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
   }
 
   @ViewBuilder
   private func content(_ vm: DashboardViewModel) -> some View {
     ScrollView {
-      LazyVStack(spacing: 16) {
+      LazyVStack(spacing: 24) {
         if showContent {
-            kpiSection(vm)
-                .transition(.move(edge: .leading).combined(with: .opacity))
-            quickActionsSection
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            if !vm.activeVisits.isEmpty { activeSessionsSection(vm).transition(.move(edge: .leading).combined(with: .opacity)) }
-            if !vm.upcomingAppointments.isEmpty { upcomingSection(vm).transition(.move(edge: .trailing).combined(with: .opacity)) }
-            if !vm.overduePets.isEmpty { overduePetsSection(vm).transition(.move(edge: .leading).combined(with: .opacity)) }
-            if !vm.recentClients.isEmpty { recentClientsSection(vm).transition(.move(edge: .trailing).combined(with: .opacity)) }
-            revenueSection(vm)
-                .transition(.move(edge: .leading).combined(with: .opacity))
-            if !vm.gallery.isEmpty { gallerySection(vm).transition(.move(edge: .trailing).combined(with: .opacity)) }
+            smartSummary(vm)
+                .transition(.move(edge: .top).combined(with: .opacity))
+
+            #if os(macOS)
+            HStack(alignment: .top, spacing: 20) {
+                VStack(spacing: 24) {
+                    kpiSection(vm)
+                    activeSessionsSection(vm)
+                    reengagementSection(vm)
+                    revenueSection(vm)
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(spacing: 24) {
+                    quickActionsSection
+                    upcomingSection(vm)
+                    overduePetsSection(vm)
+                    recentClientsSection(vm)
+                    gallerySection(vm)
+                }
+                .frame(maxWidth: 350)
+            }
+            #else
+            VStack(spacing: 24) {
+                kpiSection(vm)
+                quickActionsSection
+                if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
+                reengagementSection(vm)
+                if !vm.upcomingAppointments.isEmpty { upcomingSection(vm) }
+                if !vm.overduePets.isEmpty { overduePetsSection(vm) }
+                if !vm.recentClients.isEmpty { recentClientsSection(vm) }
+                revenueSection(vm)
+                if !vm.gallery.isEmpty { gallerySection(vm) }
+            }
+            #endif
         }
       }
       .padding(.horizontal, 16)
-      .padding(.bottom, 24)
+      .padding(.vertical, 24)
     }
     .onAppear {
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
             showContent = true
         }
     }
-    .refreshable { await vm.refresh() }
+    .refreshable {
+      // Pull-to-refresh runs both: local data refresh + iCloud sync trigger.
+      // The two run concurrently because they're independent.
+      async let local: Void = vm.refresh()
+      async let cloud: Void = CloudKitMonitor.shared.forceSync()
+      _ = await (local, cloud)
+    }
+  }
+
+  private func reengagementSection(_ vm: DashboardViewModel) -> some View {
+      VStack(alignment: .leading, spacing: 12) {
+          if !vm.overduePets.isEmpty {
+              HStack {
+                  Text("Re-engagement Suggestions")
+                      .font(.headline)
+                  Spacer()
+                  Chip("\(vm.overduePets.count) Actionable", style: .tinted, size: .sm, tint: .orange)
+              }
+
+              ScrollView(.horizontal, showsIndicators: false) {
+                  HStack(spacing: 12) {
+                      ForEach(vm.overduePets.prefix(3)) { pet in
+                          reengagementCard(pet)
+                      }
+                  }
+              }
+          }
+      }
+  }
+
+  private func reengagementCard(_ pet: Pet) -> some View {
+      Card(elevation: .regular) {
+          VStack(alignment: .leading, spacing: 10) {
+              HStack {
+                  AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
+                  VStack(alignment: .leading) {
+                      Text(pet.name).font(.subheadline.weight(.bold))
+                      Text(pet.owner?.fullName ?? "").font(.caption).foregroundStyle(.secondary)
+                  }
+              }
+
+              Text(pet.isOverdue ? "Overdue for visit" : "Due soon")
+                  .font(.caption2.weight(.semibold))
+                  .padding(.horizontal, 6)
+                  .padding(.vertical, 2)
+                  .background(Color.orange.opacity(0.1))
+                  .foregroundColor(.orange)
+                  .clipShape(Capsule())
+
+              HStack {
+                  if let sms = pet.owner?.smsURL {
+                      Link(destination: sms) {
+                          Label("Message", systemImage: "message.fill")
+                              .font(.caption.weight(.bold))
+                      }
+                      .buttonStyle(.borderedProminent)
+                      .controlSize(.small)
+	                  } else if let owner = pet.owner {
+	                      Button {
+	                          openClient(owner)
+	                      } label: {
+	                          Label("View Owner", systemImage: "person.fill")
+	                              .font(.caption.weight(.bold))
+                      }
+                      .buttonStyle(.bordered)
+                      .controlSize(.small)
+                  }
+
+                  Spacer()
+              }
+          }
+          .frame(width: 180)
+      }
+  }
+
+  private func smartSummary(_ vm: DashboardViewModel) -> some View {
+      VStack(alignment: .leading, spacing: 4) {
+          Text(Calendar.current.component(.hour, from: .now) < 12 ? "Good Morning" : "Good Afternoon")
+              .font(.title2.weight(.bold))
+
+          let summary = generateSummaryText(vm)
+          Text(summary)
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.bottom, 8)
+  }
+
+  private func generateSummaryText(_ vm: DashboardViewModel) -> String {
+      var parts: [String] = []
+
+      if vm.kpi.appointmentsToday > 0 {
+          parts.append("\(vm.kpi.appointmentsToday) appointments scheduled for today")
+      } else {
+          parts.append("No appointments scheduled for today")
+      }
+
+      if vm.kpi.inProgressCount > 0 {
+          parts.append("\(vm.kpi.inProgressCount) active sessions in progress")
+      }
+
+      if let trend = vm.kpi.revenueTrend {
+          let direction = trend >= 0 ? "up" : "down"
+          let pct = Formatters.percentString(abs(trend), showSign: false) ?? ""
+          parts.append("revenue is \(direction) \(pct) from yesterday")
+      }
+
+      return parts.joined(separator: ", ") + "."
   }
 
   // MARK: Sections
@@ -109,12 +266,15 @@ import Charts
           }
         }
         GridRow {
-          NavigationLink { InsightsView() } label: {
-            kpiCard(title: NSLocalizedString("dashboard.revenue", comment: ""),     value: vm.kpi.revenueTodayString,      symbol: "dollarsign.circle", trend: vm.kpi.revenueTrend)
-          }
-          NavigationLink { RecentHistoryView(initialScope: .today) } label: {
-            kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""),   value: "\(vm.kpi.completedToday)",      symbol: "checkmark.circle")
-          }
+	          Button {
+	            selectSurface(.insights, resetPath: true)
+	          } label: {
+	            kpiCard(title: NSLocalizedString("dashboard.revenue", comment: ""),     value: vm.kpi.revenueTodayString,      symbol: "dollarsign.circle", trend: vm.kpi.revenueTrend)
+	          }
+	          .buttonStyle(.plain)
+	          NavigationLink { RecentHistoryView(initialScope: .today) } label: {
+	            kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""),   value: "\(vm.kpi.completedToday)",      symbol: "checkmark.circle")
+	          }
         }
       }
     }
@@ -124,14 +284,18 @@ import Charts
     VStack(alignment: .leading, spacing: 8) {
       Text(NSLocalizedString("dashboard.quick_actions", comment: "")).font(.headline)
       ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 12) {
-          actionCard(title: NSLocalizedString("dashboard.new_client", comment: ""), symbol: "person.crop.circle.badge.plus") { showNewClient = true }
-          NavigationLink { ClientsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") }
-          NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
-          NavigationLink { InsightsView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "doc.chart") }
-        }
-      }
-    }
+	        HStack(spacing: 12) {
+	          actionCard(title: NSLocalizedString("dashboard.new_client", comment: ""), symbol: "person.crop.circle.badge.plus") { showNewClient = true }
+	          actionCard(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") {
+	            selectSurface(.clients, resetPath: true)
+	          }
+	          NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
+	          actionCard(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "doc.chart") {
+	            selectSurface(.insights, resetPath: true)
+	          }
+	        }
+	      }
+	    }
   }
 
   private func activeSessionsSection(_ vm: DashboardViewModel) -> some View {
@@ -161,10 +325,20 @@ import Charts
 
   private func upcomingRow(_ appt: Appointment, vm: DashboardViewModel) -> some View {
     HStack(spacing: 12) {
-      AvatarView(.pet(species: appt.pet.species, gender: appt.pet.gender, name: appt.pet.name, imageData: appt.pet.photoData), size: .sm)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(appt.pet.name).font(.subheadline.weight(.semibold))
-        Text(appt.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+      if let pet = appt.pet {
+        AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(pet.name).font(.subheadline.weight(.semibold))
+          Text(appt.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+        }
+      } else {
+        // Pet was deleted but the appointment record remains. Show a placeholder
+        // rather than crashing or hiding the row entirely.
+        Image(systemName: "questionmark.circle.fill").foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(NSLocalizedString("common.unknown_pet", comment: "")).font(.subheadline.weight(.semibold))
+          Text(appt.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+        }
       }
       Spacer()
       Button("Check In") {
@@ -172,6 +346,7 @@ import Charts
       }
       .buttonStyle(.borderedProminent)
       .controlSize(.small)
+      .disabled(appt.pet == nil)
     }
     .padding(.vertical, 10)
     .padding(.horizontal, 12)
@@ -181,14 +356,17 @@ import Charts
     VStack(alignment: .leading, spacing: 8) {
       Text(NSLocalizedString("dashboard.needs_attention", comment: "")).font(.headline)
       LazyVStack(spacing: 12) {
-        ForEach(vm.overduePets) { pet in
+        ForEach(vm.overduePets, id: \.uuid) { pet in
             if let owner = pet.owner {
                 Card {
                     VStack(spacing: 8) {
-                        NavigationLink { ClientDetailView(client: owner) } label: {
-                            PetCard(pet: pet, activeVisit: nil, onViewDetails: {}, onCheckIn: {}, onCheckOut: {})
-                        }
-                        .buttonStyle(.plain)
+	                        PetCard(
+	                            pet: pet,
+	                            activeVisit: pet.activeVisit,
+	                            onViewDetails: { openClient(owner) },
+	                            onCheckIn: { Task { await vm.checkInPet(pet) } },
+	                            onCheckOut: { router.navigateToCheckout(pet) }
+	                        )
 
                         if owner.smsURL != nil || owner.telURL != nil {
                             HStack(spacing: 12) {
@@ -222,18 +400,24 @@ import Charts
 
   private func recentClientsSection(_ vm: DashboardViewModel) -> some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Text(NSLocalizedString("dashboard.recent_clients", comment: "")).font(.headline)
-        Spacer()
-        NavigationLink(NSLocalizedString("dashboard.view_all", comment: ""), destination: ClientsView())
-          .font(.footnote)
-      }
-      LazyVStack(spacing: 10) {
-        ForEach(vm.recentClients.prefix(5)) { client in
-          NavigationLink { ClientDetailView(client: client) } label: { ClientRow(client: client) }
-            .buttonStyle(.plain)
-        }
-      }
+	      HStack {
+	        Text(NSLocalizedString("dashboard.recent_clients", comment: "")).font(.headline)
+	        Spacer()
+	        Button(NSLocalizedString("dashboard.view_all", comment: "")) {
+	          selectSurface(.clients, resetPath: true)
+	        }
+	          .font(.footnote)
+	      }
+	      LazyVStack(spacing: 10) {
+	        ForEach(vm.recentClients.prefix(5)) { client in
+	          Button {
+	            openClient(client)
+	          } label: {
+	            ClientRow(client: client)
+	          }
+	            .buttonStyle(.plain)
+	        }
+	      }
     }
   }
 
@@ -331,7 +515,7 @@ import Charts
                 .font(.title3.weight(.semibold))
                 .monospacedDigit()
                 .contentTransition(.numericText())
-            
+
             if let trend = trend {
                 HStack(spacing: 2) {
                     Image(systemName: trend >= 0 ? "arrow.up.right" : "arrow.down.right")
@@ -352,10 +536,10 @@ import Charts
       .buttonStyle(.plain)
   }
 
-  private func actionCardLabel(title: String, symbol: String) -> some View {
-    Card {
-      VStack(spacing: 8) {
-        IconCircle(systemImage: symbol, size: .lg)
+	  private func actionCardLabel(title: String, symbol: String) -> some View {
+	    Card {
+	      VStack(spacing: 8) {
+	        IconCircle(systemImage: symbol, size: .lg)
         Text(title)
           .font(.body.weight(.medium))
           .lineLimit(2)
@@ -363,6 +547,19 @@ import Charts
           .minimumScaleFactor(0.8)
       }
       .frame(width: 130, height: 100)
-    }
-  }
-}
+	    }
+	  }
+
+	  private func selectSurface(_ item: NavigationItem, resetPath: Bool = false) {
+	    NotificationCenter.default.post(name: .selectNavigationItem, object: nil, userInfo: [
+	      NavigationSelectionKey.item.rawValue: item.rawValue,
+	      NavigationSelectionKey.resetPath.rawValue: resetPath
+	    ])
+	  }
+
+	  private func openClient(_ client: Client) {
+	    NotificationCenter.default.post(name: .navigateToClient, object: nil, userInfo: [
+	      "uuid": client.uuid
+	    ])
+	  }
+	}

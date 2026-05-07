@@ -14,21 +14,24 @@ import SwiftData
 @Model
 final class VisitItem {
     // MARK: - Properties
-    @Attribute(.unique) var uuid: UUID
-    var createdAt: Date
-    var updatedAt: Date
+    // NOTE: Do not use @Attribute(.unique) — CloudKit-backed SwiftData stores reject
+    // unique constraints. Identity is enforced by the SwiftData persistentModelID.
+    // Non-optional properties have defaults for CloudKit compatibility.
+    var uuid: UUID = UUID()
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     /// The name of the service, captured at the time the item was created.
-    @Attribute var name: String
-    
+    var name: String = ""
+
     /// The category of the service, captured at the time the item was created.
     var serviceCategoryRaw: String?
-    
+
     /// The price for a single unit of this service, captured at the time the item was created.
-    var unitPrice: Decimal
-    
+    var unitPrice: Decimal = Decimal.zero
+
     /// The quantity of this service provided. Must be at least 1.
-    var quantity: Int
+    var quantity: Int = 1
     
     /// Optional notes specific to this line item.
     var note: String?
@@ -42,7 +45,7 @@ final class VisitItem {
     
     /// An optional link to the original `Service` in the catalog.
     /// If the `Service` is deleted, this link becomes `nil` but the historical record remains.
-    @Relationship(deleteRule: .nullify) var service: Service?
+    var service: Service?
 
     // MARK: - Initializers
     

@@ -88,7 +88,7 @@ final class NewClientViewModel {
                 guard !name.isEmpty, let e164c = PhoneUtils.toE164(ph) else { continue }
                 let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
                 ec.owner = client
-                client.emergencyContacts.append(ec)
+                client.emergencyContacts = (client.emergencyContacts ?? []) + [ec]
             }
             
             try await repository.saveClient(client)

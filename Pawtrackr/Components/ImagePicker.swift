@@ -60,9 +60,11 @@ public struct ImagePicker<Label: View>: View {
             label()
         }
         .confirmationDialog("Choose Photo Source", isPresented: $isPrompting, titleVisibility: .visible) {
-            Button("Camera") {
-                resolvedSource = .camera
-                isPresenting = true
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Camera") {
+                    resolvedSource = .camera
+                    isPresenting = true
+                }
             }
             Button("Photo Library") {
                 resolvedSource = .library
@@ -150,7 +152,10 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
                     let md = parent.maxDimension ?? DeviceConfig.imageMaxDimension
                     let jq = parent.jpegQuality ?? DeviceConfig.jpegQuality
                     let processor = ImageProcessor(maxDimension: md, jpegQuality: jq)
-                    parent.imageData = await processor.process(image: image)
+                    let data = await processor.process(image: image)
+                    await MainActor.run {
+                        parent.imageData = data
+                    }
                 }
             }
         }
@@ -164,7 +169,10 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
                 let md = parent.maxDimension ?? DeviceConfig.imageMaxDimension
                 let jq = parent.jpegQuality ?? DeviceConfig.jpegQuality
                 let processor = ImageProcessor(maxDimension: md, jpegQuality: jq)
-                parent.imageData = await processor.process(image: image)
+                let data = await processor.process(image: image)
+                await MainActor.run {
+                    parent.imageData = data
+                }
             }
         }
         

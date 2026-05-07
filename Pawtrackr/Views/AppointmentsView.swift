@@ -9,42 +9,55 @@ struct AppointmentsView: View {
     @State private var showingAddSheet = false
     @State private var selectedDate = Date()
     @State private var selectedPet: Pet?
+    private let wrapsInNavigationStack: Bool
+
+    init(wrapsInNavigationStack: Bool = true) {
+        self.wrapsInNavigationStack = wrapsInNavigationStack
+    }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if appointments.isEmpty {
-                    ContentUnavailableView("No Appointments", systemImage: "calendar.badge.plus", description: Text("Schedule your first appointment by tapping the plus button."))
-                } else {
-                    ForEach(appointments) { appointment in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(appointment.pet.name)
-                                    .font(.headline)
-                                Text(appointment.date, style: .date)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(appointment.date, style: .time)
-                                .font(.caption)
+        if wrapsInNavigationStack {
+            NavigationStack {
+                appointmentsContent
+            }
+        } else {
+            appointmentsContent
+        }
+    }
+
+    private var appointmentsContent: some View {
+        List {
+            if appointments.isEmpty {
+                ContentUnavailableView("No Appointments", systemImage: "calendar.badge.plus", description: Text("Schedule your first appointment by tapping the plus button."))
+            } else {
+                ForEach(appointments) { appointment in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(appointment.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
+                                .font(.headline)
+                            Text(appointment.date, style: .date)
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
-                    }
-                    .onDelete(perform: deleteAppointment)
-                }
-            }
-            .navigationTitle(NSLocalizedString("appointments.title", comment: ""))
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingAddSheet = true }) {
-                        Label(NSLocalizedString("appointments.add", comment: ""), systemImage: "plus")
+                        Spacer()
+                        Text(appointment.date, style: .time)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .onDelete(perform: deleteAppointment)
             }
-            .sheet(isPresented: $showingAddSheet) {
-                AddAppointmentView(isPresented: $showingAddSheet, onSave: addAppointment)
+        }
+        .navigationTitle(NSLocalizedString("appointments.title", comment: ""))
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { showingAddSheet = true }) {
+                    Label(NSLocalizedString("appointments.add", comment: ""), systemImage: "plus")
+                }
             }
+        }
+        .sheet(isPresented: $showingAddSheet) {
+            AddAppointmentView(isPresented: $showingAddSheet, onSave: addAppointment)
         }
     }
 

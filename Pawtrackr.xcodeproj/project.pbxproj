@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		A1B2C3D42E60000100000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04B7B90B2E4F07A900823E8F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 04B7B9122E4F07A900823E8F;
+			remoteInfo = Pawtrackr;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		04B7B9132E4F07A900823E8F /* Pawtrackr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pawtrackr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D42E60000100000001 /* PawtrackrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PawtrackrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = Pawtrackr;
 			sourceTree = "<group>";
 		};
+		A1B2C3D42E60000100000002 /* PawtrackrTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PawtrackrTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		04B7B9102E4F07A900823E8F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D42E60000100000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				04B7B9152E4F07A900823E8F /* Pawtrackr */,
+				A1B2C3D42E60000100000002 /* PawtrackrTests */,
 				04B7B9142E4F07A900823E8F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				04B7B9132E4F07A900823E8F /* Pawtrackr.app */,
+				A1B2C3D42E60000100000001 /* PawtrackrTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = 04B7B9132E4F07A900823E8F /* Pawtrackr.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A1B2C3D42E60000100000005 /* PawtrackrTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B2C3D42E60000100000006 /* Build configuration list for PBXNativeTarget "PawtrackrTests" */;
+			buildPhases = (
+				A1B2C3D42E60000100000007 /* Sources */,
+				A1B2C3D42E60000100000004 /* Frameworks */,
+				A1B2C3D42E60000100000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1B2C3D42E60000100000009 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A1B2C3D42E60000100000002 /* PawtrackrTests */,
+			);
+			name = PawtrackrTests;
+			packageProductDependencies = (
+			);
+			productName = PawtrackrTests;
+			productReference = A1B2C3D42E60000100000001 /* PawtrackrTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					04B7B9122E4F07A900823E8F = {
 						CreatedOnToolsVersion = 16.4;
+					};
+					A1B2C3D42E60000100000005 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 04B7B9122E4F07A900823E8F;
 					};
 				};
 			};
@@ -102,12 +154,20 @@
 			projectRoot = "";
 			targets = (
 				04B7B9122E4F07A900823E8F /* Pawtrackr */,
+				A1B2C3D42E60000100000005 /* PawtrackrTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		04B7B9112E4F07A900823E8F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B2C3D42E60000100000008 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -124,7 +184,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1B2C3D42E60000100000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1B2C3D42E60000100000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 04B7B9122E4F07A900823E8F /* Pawtrackr */;
+			targetProxy = A1B2C3D42E60000100000003 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		04B7B91F2E4F07AB00823E8F /* Debug */ = {
@@ -253,6 +328,10 @@
 				DEVELOPMENT_TEAM = 6ALS97634D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				"GENERATE_INFOPLIST_FILE[sdk=iphoneos*]" = NO;
+				"GENERATE_INFOPLIST_FILE[sdk=iphonesimulator*]" = NO;
+					"INFOPLIST_FILE[sdk=iphoneos*]" = "Pawtrackr-iOS-Info.plist";
+					"INFOPLIST_FILE[sdk=iphonesimulator*]" = "Pawtrackr-iOS-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Pawtrackr needs camera access to take photos of pets during grooming sessions.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Pawtrackr uses Face ID to secure your data.";
@@ -268,7 +347,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -282,7 +361,6 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
-				XROS_DEPLOYMENT_TARGET = 2.5;
 			};
 			name = Debug;
 		};
@@ -299,6 +377,10 @@
 				DEVELOPMENT_TEAM = 6ALS97634D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				"GENERATE_INFOPLIST_FILE[sdk=iphoneos*]" = NO;
+				"GENERATE_INFOPLIST_FILE[sdk=iphonesimulator*]" = NO;
+					"INFOPLIST_FILE[sdk=iphoneos*]" = "Pawtrackr-iOS-Info.plist";
+					"INFOPLIST_FILE[sdk=iphonesimulator*]" = "Pawtrackr-iOS-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Pawtrackr needs camera access to take photos of pets during grooming sessions.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Pawtrackr uses Face ID to secure your data.";
@@ -314,7 +396,7 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
@@ -328,7 +410,60 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
-				XROS_DEPLOYMENT_TARGET = 2.5;
+			};
+			name = Release;
+		};
+		A1B2C3D42E6000010000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6ALS97634D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = PartnerShipWithMedia.PawtrackrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pawtrackr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pawtrackr";
+			};
+			name = Debug;
+		};
+		A1B2C3D42E6000010000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6ALS97634D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = PartnerShipWithMedia.PawtrackrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pawtrackr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Pawtrackr";
 			};
 			name = Release;
 		};
@@ -349,6 +484,15 @@
 			buildConfigurations = (
 				04B7B9222E4F07AB00823E8F /* Debug */,
 				04B7B9232E4F07AB00823E8F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B2C3D42E60000100000006 /* Build configuration list for PBXNativeTarget "PawtrackrTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B2C3D42E6000010000000A /* Debug */,
+				A1B2C3D42E6000010000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

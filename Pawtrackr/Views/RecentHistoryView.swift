@@ -24,20 +24,18 @@ struct RecentHistoryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            recentHistoryContent
-                .navigationTitle("Recent History")
-                .toolbar { if let viewModel { toolbarContent(viewModel) } }
-                .refreshable { viewModel?.fetchVisits() }
-                .task {
-                    if viewModel == nil {
-                        let vm = RecentHistoryViewModel(modelContext: modelContext)
-                        if let s = initialScope { vm.scope = s }
-                        if let q = initialQuery { vm.query = q }
-                        viewModel = vm
-                    }
+        recentHistoryContent
+            .navigationTitle("Recent History")
+            .toolbar { if let viewModel { toolbarContent(viewModel) } }
+            .refreshable { viewModel?.fetchVisits() }
+            .task {
+                if viewModel == nil {
+                    let vm = RecentHistoryViewModel(modelContext: modelContext)
+                    if let s = initialScope { vm.scope = s }
+                    if let q = initialQuery { vm.query = q }
+                    viewModel = vm
                 }
-        }
+            }
     }
 
     @ViewBuilder

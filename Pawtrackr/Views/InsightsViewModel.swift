@@ -199,7 +199,7 @@ class InsightsViewModel {
 
             var serviceStats: [String: (count: Int, revenue: Decimal)] = [:]
             for visit in visits {
-                for item in visit.items {
+                for item in visit.items ?? [] {
                     serviceStats[item.name, default: (0, .zero)].count   += 1
                     serviceStats[item.name, default: (0, .zero)].revenue += item.lineTotal
                 }
@@ -249,7 +249,7 @@ class InsightsViewModel {
             _ = try? bgContext.fetch(petDesc)
 
             return clients.map { client in
-                let visits = client.pets.flatMap { $0.visits }.filter { $0.isCompleted }
+                let visits = (client.pets ?? []).flatMap { $0.visits ?? [] }.filter { $0.isCompleted }
                 let spent  = visits.reduce(Decimal.zero) { $0 + $1.total }
                 return TopClientData(name: client.fullName, totalSpent: spent, visitCount: visits.count)
             }
@@ -283,14 +283,14 @@ class InsightsViewModel {
             var churn     = 0
             for client in allClients {
                 var completedCount = 0
-                outer: for pet in client.pets {
-                    for visit in pet.visits where visit.isCompleted {
+                outer: for pet in client.pets ?? [] {
+                    for visit in pet.visits ?? [] where visit.isCompleted {
                         completedCount += 1
                         if completedCount > 1 { break outer }
                     }
                 }
                 if completedCount > 1 { recurring += 1 }
-                if client.pets.contains(where: { $0.isOverdue }) { churn += 1 }
+                if (client.pets ?? []).contains(where: { $0.isOverdue }) { churn += 1 }
             }
 
             let rate = Double(recurring) / Double(allClients.count)

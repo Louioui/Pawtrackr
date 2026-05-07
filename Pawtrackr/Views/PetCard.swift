@@ -17,6 +17,7 @@ struct PetCard: View {
     let onViewDetails: () -> Void
     let onCheckIn: () -> Void
     let onCheckOut: () -> Void
+    var namespace: Namespace.ID? = nil
 
     // MARK: - State / Environment
     @Environment(\.scenePhase) private var scenePhase
@@ -54,7 +55,14 @@ struct PetCard: View {
     // MARK: - Subviews
     private var cardContent: some View {
         HStack(alignment: .top, spacing: 12) {
-            AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData, thumbnailData: pet.thumbnailData), size: .md)
+            let avatar = AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData, thumbnailData: pet.thumbnailData), size: .md)
+
+            if let namespace = namespace {
+                avatar.matchedGeometryEffect(id: pet.id, in: namespace)
+            } else {
+                avatar
+            }
+
             mainContent
             Spacer(minLength: 0)
         }
@@ -143,8 +151,8 @@ struct PetCard: View {
                     .padding(.horizontal, 8)
                     .background((pet.isOverdue ? Color.red : Color.blue).opacity(0.1), in: Capsule())
                 }
-                
-                if let last = pet.visits.filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
+
+                if let last = (pet.visits ?? []).filter({ $0.isCompleted }).sorted(by: { $0.sortKeyDate > $1.sortKeyDate }).first {
                     Text(String(format: NSLocalizedString("pet.last_visit_fmt", comment: ""), last.sortKeyDate.formatted(date: .abbreviated, time: .omitted)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -199,11 +207,18 @@ struct PetCard: View {
 
     private var actionRow: some View {
         HStack(spacing: 8) {
-            Button(action: onCheckIn) {
-                Label("Check In", systemImage: "play.circle.fill")
+            if isActive {
+                Button(action: onCheckOut) {
+                    Label("Check Out", systemImage: "creditcard.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            } else {
+                Button(action: onCheckIn) {
+                    Label("Check In", systemImage: "play.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(isActive)
 
             Button(action: onViewDetails) {
                 Label("View Details", systemImage: "chevron.right")
@@ -252,7 +267,7 @@ struct PetCard_Previews: PreviewProvider {
         let owner = Client(firstName: "Sarah", lastName: "Johnson", phone: "+15551234567")
         let pet1 = Pet(name: "Max", species: .dog, gender: .male)
         let pet2 = Pet(name: "Bella", species: .cat, gender: .female)
-        owner.pets.append(contentsOf: [pet1, pet2])
+        owner.pets = (owner.pets ?? []) + [pet1, pet2]
 
         let active = Visit(pet: pet1)
 

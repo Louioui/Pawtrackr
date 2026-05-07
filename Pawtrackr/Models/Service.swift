@@ -16,16 +16,17 @@ import SwiftData
 @Model
 final class Service {
     // MARK: - Properties
-    var uuid: UUID
-    var createdAt: Date
-    var updatedAt: Date
-    
+    // Non-optional properties have defaults for CloudKit compatibility.
+    var uuid: UUID = UUID()
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+
     /// The display name for the service (e.g., "Full Groom").
-    @Attribute var name: String
-    
+    var name: String = ""
+
     /// The category this service belongs to.
-    @Attribute var category: Category?
-    
+    var category: Category?
+
     /// The name of an SF Symbol to display next to the service.
     var systemIcon: String?
 
@@ -42,10 +43,13 @@ final class Service {
     var defaultDurationMinutes: Int?
     
     /// If `false`, this service will not appear in selection lists for new visits.
-    var isEnabled: Bool
+    var isEnabled: Bool = true
 
     /// If `true`, this service is considered a package deal.
-    var isPackage: Bool
+    var isPackage: Bool = false
+
+    // MARK: - Relationships
+    @Relationship(deleteRule: .nullify, inverse: \VisitItem.service) var visitItems: [VisitItem]? = []
 
     // MARK: - Init
     init(name: String,

@@ -104,7 +104,7 @@ struct ClientDetailView: View {
             }
         }
         .sheet(isPresented: $showCommunication) {
-            if let firstPet = client.pets.first {
+            if let firstPet = (client.pets ?? []).first {
                 CommunicationSheet(pet: firstPet, visit: nil)
             } else {
                 Text("No pets available to message about.")
@@ -118,6 +118,11 @@ struct ClientDetailView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .userActivity("com.pawtrackr.viewClient") { activity in
+                activity.title = "Viewing \(client.fullName)"
+                activity.userInfo = ["clientID": client.uuid.uuidString]
+                activity.isEligibleForHandoff = true
+            }
             .toolbar {
                 toolbarContent(vm)
                 macAddPetToolbarItem
@@ -135,6 +140,9 @@ struct ClientDetailView: View {
             .modifier(CheckoutPresentationModifier(checkoutPet: $checkoutPet, vm: vm))
             .alert(item: $alertDestination) { destination in
                 destinationAlert(destination, vm: vm)
+            }
+            .onChange(of: (vm.client.pets ?? []).count) { _, _ in
+                vm.refreshPets()
             }
             .task { vm.refreshRecentVisits() }
     }
@@ -326,38 +334,28 @@ struct ClientDetailView: View {
                 } else {
                     VStack(spacing: 10) {
                         contactRow(icon: "phone.fill", text: PhoneUtils.display(client.phone ?? "") ?? "—") {
-                            #if canImport(UIKit)
-                            if let tel = PhoneUtils.telURLString(client.phone ?? ""), let url = URL(string: tel) { UIApplication.shared.open(url) }
-                            #endif
+                            if let tel = PhoneUtils.telURLString(client.phone ?? ""), let url = URL(string: tel) { URLOpener.open(url) }
                         } trailing: {
                             HStack(spacing: 8) {
-                                #if canImport(UIKit)
                                 if let sms = PhoneUtils.smsURLString(client.phone ?? ""), let smsURL = URL(string: sms) {
-                                    Button { UIApplication.shared.open(smsURL) } label: { Image(systemName: "message.fill") }
+                                    Button { URLOpener.open(smsURL) } label: { Image(systemName: "message.fill") }
                                 }
                                 if let tel = PhoneUtils.telURLString(client.phone ?? ""), let telURL = URL(string: tel) {
-                                    Button { UIApplication.shared.open(telURL) } label: { Image(systemName: "phone.fill") }
+                                    Button { URLOpener.open(telURL) } label: { Image(systemName: "phone.fill") }
                                 }
-                                #endif
                             }
                         }
                         contactRow(icon: "envelope.fill", text: (client.email ?? "—")) {
-                            #if canImport(UIKit)
-                            if let email = client.email, let url = URL(string: "mailto:\(email)") { UIApplication.shared.open(url) }
-                            #endif
+                            if let email = client.email, let url = URL(string: "mailto:\(email)") { URLOpener.open(url) }
                         } trailing: {
-                            #if canImport(UIKit)
                             if let email = client.email, let url = URL(string: "mailto:\(email)") {
-                                Button { UIApplication.shared.open(url) } label: { Image(systemName: "envelope.fill") }
+                                Button { URLOpener.open(url) } label: { Image(systemName: "envelope.fill") }
                             }
-                            #endif
                         }
                         contactRow(icon: "mappin.and.ellipse", text: (client.address ?? "—")) {} trailing: {
-                            #if canImport(UIKit)
                             if let addr = client.address?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed), let url = URL(string: "http://maps.apple.com/?q=\(addr)") {
-                                Button { UIApplication.shared.open(url) } label: { Image(systemName: "map.fill") }
+                                Button { URLOpener.open(url) } label: { Image(systemName: "map.fill") }
                             }
-                            #endif
                         }
                     }
                 }
@@ -405,10 +403,10 @@ struct ClientDetailView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(NSLocalizedString("client_detail.add_contact", comment: ""))
                 }
-                if client.emergencyContacts.isEmpty {
+                if (client.emergencyContacts ?? []).isEmpty {
                     Text(NSLocalizedString("client_detail.no_emergency_contacts", comment: "")).font(.footnote).foregroundStyle(.secondary)
                 } else {
-                    ForEach(client.emergencyContacts, id: \.uuid) { c in
+                    ForEach(client.emergencyContacts ?? [], id: \.uuid) { c in
                         HStack(spacing: 10) {
                             Image(systemName: "phone.fill").foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 2) {
@@ -469,7 +467,8 @@ struct ClientDetailView: View {
         } else {
             let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164)
             ec.owner = vm.client
-            vm.client.emergencyContacts.append(ec)
+            modelContext.insert(ec)
+            vm.client.emergencyContacts = (vm.client.emergencyContacts ?? []) + [ec]
         }
         do {
             try modelContext.save()
@@ -658,8 +657,8 @@ struct ClientDetailView: View {
 
         let client = vm.client
         // Gather affected dates before deletion for summary updates
-        let pets = client.pets
-        let visits = pets.flatMap { $0.visits }
+        let pets = client.pets ?? []
+        let visits = pets.flatMap { $0.visits ?? [] }
         let paymentDates = visits.compactMap { $0.payment?.paidAt }
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
 
@@ -712,7 +711,7 @@ struct ClientDetailView: View {
         } else {
             return
         }
-        client.setEmail(editEmail)
+        client.setEmail(editEmail.trimmed.isEmpty ? nil : editEmail)
         do {
             try modelContext.save()
         } catch {

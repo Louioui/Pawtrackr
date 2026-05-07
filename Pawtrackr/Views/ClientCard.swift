@@ -71,12 +71,12 @@ struct ClientCard: View {
     private var petsInfo: some View {
         HStack(alignment: .center) {
             HStack(spacing: -12) { // Tighter stacking for avatars
-                ForEach(client.pets.prefix(3)) { pet in
+                ForEach((client.pets ?? []).prefix(3)) { pet in
                     AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name), size: .sm, ringWidth: 2)
                 }
             }
             
-            Text(client.pets.map(\.name).joined(separator: ", "))
+            Text((client.pets ?? []).map(\.name).joined(separator: ", "))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

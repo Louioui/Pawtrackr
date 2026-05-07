@@ -12,6 +12,10 @@ extension String {
     var trimmed: String {
         self.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
     
     /// Returns a version of the string formatted for names (e.g. "o'brien" -> "O'Brien", "smith-jones" -> "Smith-Jones")
     var capitalizedName: String {

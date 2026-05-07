@@ -7,8 +7,8 @@ final class PetBITests: XCTestCase {
     var context: ModelContext!
 
     override func setUpWithError() throws {
-        let schema = Schema([Pet.self, Visit.self, VisitItem.self, Client.self, Payment.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let schema = Schema(PawtrackrSchema.models)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, configurations: [config])
         context = ModelContext(container)
     }

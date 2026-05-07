@@ -11,10 +11,11 @@ import SwiftData
 @Model
 final class Visit {
     // MARK: - Identity & Timestamps
-    var uuid: UUID
-    var createdAt: Date
-    var updatedAt: Date
-    var startedAt: Date
+    // NOTE: Non-optional properties have defaults for CloudKit compatibility.
+    var uuid: UUID = UUID()
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var startedAt: Date = Date()
     var endedAt: Date?
 
     // MARK: - Notes & Media
@@ -28,19 +29,19 @@ final class Visit {
     // MARK: - Money
     /// Persisted grand total for this visit (non-optional, stored).
     /// IMPORTANT: do not duplicate/extend this with another property named `total`.
-    var total: Decimal
+    var total: Decimal = Decimal.zero
 
     // MARK: - Relationships
     /// The pet this visit belongs to. Optional to allow SwiftData cascade deletes to work properly.
     var pet: Pet?
 
     @Relationship(deleteRule: .cascade, inverse: \VisitItem.visit)
-    var items: [VisitItem] = []
+    var items: [VisitItem]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
     var payment: Payment?
     
-    @Relationship(deleteRule: .nullify)
+    @Relationship(deleteRule: .nullify, inverse: \Appointment.visit)
     var appointment: Appointment?
     
     var user: User?
@@ -57,7 +58,6 @@ final class Visit {
         self.afterPhotoData = nil
         self.total = .zero
         self.pet = pet
-        pet.activeVisit = self
     }
 
     /// Convenience initializer when pet may not be available yet
@@ -98,7 +98,7 @@ final class Visit {
 
     /// Sum of line items (snapshot math). Coalesces optional unitPrice to 0.
     var servicesSubtotal: Decimal {
-        items.reduce(Decimal.zero) { acc, line in
+        (items ?? []).reduce(Decimal.zero) { acc, line in
             acc + (line.unitPrice * Decimal(line.quantity))
         }
     }
@@ -124,14 +124,12 @@ final class Visit {
     func markCheckedIn(now: Date = .now) {
         if startedAt > now { startedAt = now }
         endedAt = nil
-        pet?.activeVisit = self
         didUpdate()
     }
 
     func markCheckedOut(total customTotal: Decimal? = nil, now: Date = .now) {
         if let custom = customTotal { total = custom.roundedMoney() } else { recalcTotal() }
         if endedAt == nil { endedAt = now }
-        pet?.activeVisit = nil
         didUpdate()
     }
 
@@ -149,13 +147,17 @@ final class Visit {
         let price = unitPrice ?? 0
         let item = VisitItem(name: title, unitPrice: price, quantity: qty, visit: self)
         item.service = service
-        items.append(item)
+        var currentItems = items ?? []
+        currentItems.append(item)
+        items = currentItems
         recalcTotal()
     }
 
     func removeItem(_ item: VisitItem) {
-        if let idx = items.firstIndex(where: { $0 === item }) {
-            items.remove(at: idx)
+        var currentItems = items ?? []
+        if let idx = currentItems.firstIndex(where: { $0 === item }) {
+            currentItems.remove(at: idx)
+            items = currentItems
             recalcTotal()
         }
     }

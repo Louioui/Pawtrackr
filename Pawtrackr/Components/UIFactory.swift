@@ -84,6 +84,11 @@ private struct PressScaleStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(reduceMotion ? nil : Animations.quickSpring, value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed {
+                    HapticManager.impact(.light)
+                }
+            }
     }
 }
 

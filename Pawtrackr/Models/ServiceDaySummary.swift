@@ -10,9 +10,10 @@ import SwiftData
 
 @Model
 final class ServiceDaySummary {
-    var day: Date
-    var serviceName: String
-    var count: Int
+    // Defaults for CloudKit compatibility.
+    var day: Date = Date()
+    var serviceName: String = ""
+    var count: Int = 0
 
     init(day: Date, serviceName: String, count: Int) {
         self.day = day

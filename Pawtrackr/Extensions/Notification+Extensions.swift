@@ -15,6 +15,10 @@ extension Notification.Name {
     static let clientDidCreate = Notification.Name("clientDidCreate")
     /// Request to open an existing client by ID (e.g., duplicate detected)
     static let clientOpenRequested = Notification.Name("clientOpenRequested")
+    /// Request to select a top-level navigation surface.
+    static let selectNavigationItem = Notification.Name("selectNavigationItem")
+    /// Posted by CloudKitMonitor when sync state changes (idle/syncing/error/account).
+    static let cloudKitStateDidChange = Notification.Name("cloudKitStateDidChange")
 }
 
 // Strongly-typed keys for .visitDidComplete userInfo payloads.
@@ -52,4 +56,18 @@ enum ClientOpenKey: String { case clientID }
 
 extension Notification {
     var requestedClientID: PersistentIdentifier? { userInfo?[ClientOpenKey.clientID.rawValue] as? PersistentIdentifier }
+}
+
+// Top-level navigation selection payload
+enum NavigationSelectionKey: String { case item, resetPath }
+
+extension Notification {
+    var requestedNavigationItem: NavigationItem? {
+        guard let rawValue = userInfo?[NavigationSelectionKey.item.rawValue] as? String else { return nil }
+        return NavigationItem(rawValue: rawValue)
+    }
+
+    var shouldResetNavigationPath: Bool {
+        userInfo?[NavigationSelectionKey.resetPath.rawValue] as? Bool ?? false
+    }
 }

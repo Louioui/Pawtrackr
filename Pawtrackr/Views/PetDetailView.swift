@@ -29,16 +29,16 @@ final class PetDetailViewModel {
     }
     
     var sortedVisits: [Visit] {
-        pet.visits.sorted { $0.sortKeyDate > $1.sortKeyDate }
+        (pet.visits ?? []).sorted { $0.sortKeyDate > $1.sortKeyDate }
     }
 
     // MARK: - Stats
     var completedVisits: [Visit] {
-        pet.visits.filter { $0.isCompleted }
+        (pet.visits ?? []).filter { $0.isCompleted }
             .sorted { $0.sortKeyDate > $1.sortKeyDate }
     }
     
-    var totalVisits: Int { pet.visits.count }
+    var totalVisits: Int { (pet.visits ?? []).count }
     
     var totalSpent: Decimal {
         completedVisits.reduce(0) { $0 + $1.effectiveTotal }
@@ -151,6 +151,11 @@ struct PetDetailView: View {
 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
 #endif
+                .userActivity("com.pawtrackr.viewPet") { activity in
+                    activity.title = "Viewing \(vm.pet.name)"
+                    activity.userInfo = ["petID": vm.pet.uuid.uuidString]
+                    activity.isEligibleForHandoff = true
+                }
                 .alert(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), vm.pet.name), isPresented: $confirmCheckIn) {
                     Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
                     Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { vm.checkIn() }
@@ -165,11 +170,11 @@ struct PetDetailView: View {
                         }
                     case .history(let petForHistory):
                         NavigationStack {
-                            PetHistoryView(pet: petForHistory)
+                            PetHistoryView(pet: petForHistory, wrapsInNavigationStack: false)
                         }
                     }
                 }
-                .onChange(of: vm.pet.visits.count) {
+                .onChange(of: (vm.pet.visits ?? []).count) {
                     vm.updateTimer()
                 }
                 .alert(item: $bvm.appError) { error in
@@ -408,9 +413,9 @@ struct PetDetailView: View {
                     }
 
                     // Services
-                    if !visit.items.isEmpty {
+                    if !(visit.items ?? []).isEmpty {
                         FlowLayout(spacing: 6) {
-                            ForEach(visit.items) { item in
+                            ForEach(visit.items ?? []) { item in
                                 Chip(item.displayName, style: .tinted, size: .sm)
                             }
                         }

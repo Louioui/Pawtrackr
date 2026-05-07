@@ -14,59 +14,163 @@ struct SettingsView: View {
     @State private var pinChangeError: String? = nil
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var cloudKitMonitor = CloudKitMonitor.shared
+    @State private var versionTapCount = 0
+    @State private var showDiagnostics = false
+    private let wrapsInNavigationStack: Bool
+
+    init(wrapsInNavigationStack: Bool = true) {
+        self.wrapsInNavigationStack = wrapsInNavigationStack
+    }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section(header: Text("Business Profile")) {
-                    TextField("Business Name", text: $appSettings.businessName)
-                    TextField("Currency Symbol", text: $appSettings.currencySymbol)
-                        .frame(width: 50)
-                }
-                
-                Section(header: Text("Security")) {
-                    securityStatusCard
-                        .listRowInsets(EdgeInsets())
-                    
-                    Toggle("Enable App Lock", isOn: $appSettings.isLockEnabled)
-                    
-                    if appSettings.isLockEnabled {
-                        Toggle("Biometric Unlock", isOn: $appSettings.isBiometricLockEnabled)
-                        
-                        Button("Change PIN") {
-                            showChangePIN = true
-                        }
-                    }
-                }
-                
-                Section(header: Text("Data Export")) {
-                    if let clientsExport = try? ExportService.shared.exportClientsToCSV(modelContext: modelContext) {
-                        ShareLink(item: clientsExport, preview: SharePreview("Clients Export", image: Image(systemName: "person.3.fill"))) {
-                            Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
-                        }
-                    }
-                    
-                    if let visitsExport = try? ExportService.shared.exportVisitsToCSV(modelContext: modelContext) {
-                        ShareLink(item: visitsExport, preview: SharePreview("Visits Export", image: Image(systemName: "calendar"))) {
-                            Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
-                        }
-                    }
-                }
+        if wrapsInNavigationStack {
+            NavigationStack {
+                settingsContent
             }
-            .navigationTitle(NSLocalizedString("settings.title", comment: ""))
-#if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
-#endif
-            .sheet(isPresented: $showChangePIN) {
-                ChangePINSheet(isPresented: $showChangePIN, errorMessage: $pinChangeError)
-                    .environmentObject(appSettings)
-            }
-            .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
-                Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-            } message: { Text(pinChangeError ?? "") }
+        } else {
+            settingsContent
         }
     }
-    
+
+    private var iCloudStatusRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: cloudKitMonitor.statusIconName)
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(cloudKitTintColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(cloudKitMonitor.accountState.displayLabel)
+                    .font(.subheadline.weight(.medium))
+                Text(syncStateLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var cloudKitTintColor: Color {
+        switch cloudKitMonitor.statusTint {
+        case .success: return .green
+        case .neutral: return .secondary
+        case .warning: return .orange
+        case .danger: return .red
+        }
+    }
+
+    private var syncStateLabel: String {
+        switch cloudKitMonitor.syncState {
+        case .syncing: return NSLocalizedString("cloudkit.status.syncing", value: "Syncing…", comment: "")
+        case .error: return NSLocalizedString("cloudkit.status.error", value: "Sync error", comment: "")
+        case .idle: return NSLocalizedString("cloudkit.status.idle", value: "Idle", comment: "")
+        }
+    }
+
+    private var appVersionString: String {
+        let dict = Bundle.main.infoDictionary ?? [:]
+        let version = (dict["CFBundleShortVersionString"] as? String) ?? "—"
+        let build = (dict["CFBundleVersion"] as? String) ?? "—"
+        return "\(version) (\(build))"
+    }
+
+    private var settingsContent: some View {
+        Form {
+            Section(header: Text("Business Profile")) {
+                TextField("Business Name", text: $appSettings.businessName)
+                TextField("Currency Symbol", text: $appSettings.currencySymbol)
+                    .frame(width: 50)
+            }
+
+            Section(header: Text("Security")) {
+                securityStatusCard
+                    .listRowInsets(EdgeInsets())
+
+                Toggle("Enable App Lock", isOn: $appSettings.isLockEnabled)
+
+                if appSettings.isLockEnabled {
+                    Toggle("Biometric Unlock", isOn: $appSettings.isBiometricLockEnabled)
+
+                    Button("Change PIN") {
+                        showChangePIN = true
+                    }
+                }
+            }
+
+            Section(header: Text("Data Export")) {
+                if let clientsExport = try? ExportService.shared.exportClientsToCSV(modelContext: modelContext) {
+                    ShareLink(item: clientsExport, preview: SharePreview("Clients Export", image: Image(systemName: "person.3.fill"))) {
+                        Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
+                    }
+                }
+
+                if let visitsExport = try? ExportService.shared.exportVisitsToCSV(modelContext: modelContext) {
+                    ShareLink(item: visitsExport, preview: SharePreview("Visits Export", image: Image(systemName: "calendar"))) {
+                        Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+
+            Section {
+                iCloudStatusRow
+                if cloudKitMonitor.accountState.isAvailable {
+                    Button {
+                        Task { await cloudKitMonitor.forceSync() }
+                    } label: {
+                        Label(NSLocalizedString("cloudkit.action.sync_now", value: "Sync Now", comment: ""),
+                              systemImage: "arrow.clockwise.icloud")
+                    }
+                    .disabled({
+                        if case .syncing = cloudKitMonitor.syncState { return true }
+                        return false
+                    }())
+                }
+                if showDiagnostics {
+                    NavigationLink {
+                        CloudKitDiagnosticsView()
+                    } label: {
+                        Label(NSLocalizedString("cloudkit.diagnostics.title", value: "iCloud Diagnostics", comment: ""),
+                              systemImage: "stethoscope")
+                    }
+                }
+            } header: {
+                Text(NSLocalizedString("settings.section.icloud", value: "iCloud", comment: ""))
+            } footer: {
+                if let err = cloudKitMonitor.lastErrorMessage, case .error = cloudKitMonitor.syncState {
+                    Text(err).foregroundStyle(.red)
+                } else {
+                    Text(cloudKitMonitor.lastSyncSummary).font(.caption)
+                }
+            }
+
+            Section {
+                HStack {
+                    Text(NSLocalizedString("settings.version", value: "Version", comment: ""))
+                    Spacer()
+                    Text(appVersionString).foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    versionTapCount += 1
+                    if versionTapCount >= 7 {
+                        showDiagnostics = true
+                        versionTapCount = 0
+                    }
+                }
+            }
+        }
+        .navigationTitle(NSLocalizedString("settings.title", comment: ""))
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.large)
+#endif
+        .sheet(isPresented: $showChangePIN) {
+            ChangePINSheet(isPresented: $showChangePIN, errorMessage: $pinChangeError)
+                .environmentObject(appSettings)
+        }
+        .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
+        } message: { Text(pinChangeError ?? "") }
+    }
+
     // MARK: - UI Sections
     private var headerBar: some View {
         HStack {

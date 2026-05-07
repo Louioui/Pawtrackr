@@ -33,37 +33,22 @@ struct PetHistoryView: View {
     @Environment(\.modelContext) private var envModelContext
     @State private var viewModel: PetHistoryViewModel? = nil
     private let pet: Pet
+    private let wrapsInNavigationStack: Bool
 
-    init(pet: Pet) { self.pet = pet }
+    init(pet: Pet, wrapsInNavigationStack: Bool = true) {
+        self.pet = pet
+        self.wrapsInNavigationStack = wrapsInNavigationStack
+    }
 
     var body: some View {
         Group {
             if let vm = viewModel {
-                NavigationStack {
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            headerCard(vm)
-                        .padding(.horizontal)
-
-                            if vm.visits.isEmpty {
-                        ContentUnavailableView(
-                            NSLocalizedString("pet_history.empty_title", comment: ""),
-                            systemImage: "clock.arrow.circlepath",
-                                    description: Text(String(format: NSLocalizedString("pet_history.empty_desc_fmt", comment: ""), vm.pet.name))
-                        )
-                        .padding(.top, 40)
-                    } else {
-                                visitList(vm)
+                if wrapsInNavigationStack {
+                    NavigationStack {
+                        historyContent(vm)
                     }
-                }
-                .padding(.top, 8)
-            }
-                    .navigationTitle(vm.pet.name)
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-                    .toolbar { toolbarContent(vm) }
-                    .task { await vm.refresh() }
+                } else {
+                    historyContent(vm)
                 }
             } else {
                 ProgressView()
@@ -74,6 +59,33 @@ struct PetHistoryView: View {
                     }
             }
         }
+    }
+
+    private func historyContent(_ vm: PetHistoryViewModel) -> some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                headerCard(vm)
+                    .padding(.horizontal)
+
+                if vm.visits.isEmpty {
+                    ContentUnavailableView(
+                        NSLocalizedString("pet_history.empty_title", comment: ""),
+                        systemImage: "clock.arrow.circlepath",
+                        description: Text(String(format: NSLocalizedString("pet_history.empty_desc_fmt", comment: ""), vm.pet.name))
+                    )
+                    .padding(.top, 40)
+                } else {
+                    visitList(vm)
+                }
+            }
+            .padding(.top, 8)
+        }
+        .navigationTitle(vm.pet.name)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar { toolbarContent(vm) }
+        .task { await vm.refresh() }
     }
 
     private func visitList(_ vm: PetHistoryViewModel) -> some View {
@@ -133,8 +145,10 @@ struct PetHistoryView: View {
     
     @ToolbarContentBuilder
     private func toolbarContent(_ vm: PetHistoryViewModel) -> some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button(NSLocalizedString("common.done", comment: "")) { dismiss() }
+        if wrapsInNavigationStack {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(NSLocalizedString("common.done", comment: "")) { dismiss() }
+            }
         }
         ToolbarItem(placement: .primaryAction) {
             Menu {

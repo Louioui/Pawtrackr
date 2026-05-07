@@ -222,7 +222,7 @@ struct IconCircle: View {
         case .tinted(let bg):
             return (bg, .white, .white.opacity(0.9))
 
-        case .auto(let species, let gender):
+        case .auto(_, let gender):
             if let gender {
                 let base = DS.ColorToken.gender(gender)
                 return (base.opacity(0.15), .white, .white.opacity(0.9))

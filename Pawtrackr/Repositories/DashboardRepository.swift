@@ -5,6 +5,9 @@
 
 import Foundation
 import SwiftData
+import OSLog
+
+private let dashboardRepoLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "DashboardRepository")
 
 struct DashboardKPI {
     var appointmentsToday: Int = 0
@@ -40,40 +43,41 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         let cal = Calendar.current
         let start = cal.startOfDay(for: .now)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return DashboardKPI() }
-        
-        // Today's appointments (scheduled appointments for today)
-        let todayApptDesc = FetchDescriptor<Appointment>(
-            predicate: #Predicate { a in a.date >= start && a.date < end }
-        )
-        let todaysCount = try modelContext.fetchCount(todayApptDesc)
-        
-        // In progress
-        let inProgDesc = FetchDescriptor<Visit>(
-            predicate: #Predicate { v in v.endedAt == nil }
-        )
-        let inProgCount = try modelContext.fetchCount(inProgDesc)
-        
-        // Revenue and completed count from DaySummary
-        let summaryDesc = FetchDescriptor<DaySummary>(
-            predicate: #Predicate { summary in summary.day >= start && summary.day < end }
-        )
-        let summary = try modelContext.fetch(summaryDesc).first
-        
-        // Yesterday's revenue for trend
-        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: start) ?? start
-        let yesterdayEnd = start
-        let yesterdayDesc = FetchDescriptor<DaySummary>(
-            predicate: #Predicate { summary in summary.day >= yesterdayStart && summary.day < yesterdayEnd }
-        )
-        let yesterdaySummary = try modelContext.fetch(yesterdayDesc).first
-        
-        return DashboardKPI(
-            appointmentsToday: todaysCount,
-            inProgressCount: inProgCount,
-            revenueToday: summary?.revenue ?? .zero,
-            revenueYesterday: yesterdaySummary?.revenue ?? .zero,
-            completedToday: summary?.visitCount ?? 0
-        )
+
+        do {
+            let todayApptDesc = FetchDescriptor<Appointment>(
+                predicate: #Predicate { a in a.date >= start && a.date < end }
+            )
+            let todaysCount = try modelContext.fetchCount(todayApptDesc)
+
+            let inProgDesc = FetchDescriptor<Visit>(
+                predicate: #Predicate { v in v.endedAt == nil }
+            )
+            let inProgCount = try modelContext.fetchCount(inProgDesc)
+
+            let summaryDesc = FetchDescriptor<DaySummary>(
+                predicate: #Predicate { summary in summary.day >= start && summary.day < end }
+            )
+            let summary = try modelContext.fetch(summaryDesc).first
+
+            let yesterdayStart = cal.date(byAdding: .day, value: -1, to: start) ?? start
+            let yesterdayEnd = start
+            let yesterdayDesc = FetchDescriptor<DaySummary>(
+                predicate: #Predicate { summary in summary.day >= yesterdayStart && summary.day < yesterdayEnd }
+            )
+            let yesterdaySummary = try modelContext.fetch(yesterdayDesc).first
+
+            return DashboardKPI(
+                appointmentsToday: todaysCount,
+                inProgressCount: inProgCount,
+                revenueToday: summary?.revenue ?? .zero,
+                revenueYesterday: yesterdaySummary?.revenue ?? .zero,
+                completedToday: summary?.visitCount ?? 0
+            )
+        } catch {
+            dashboardRepoLog.error("fetchKPIs failed: \(String(describing: error))")
+            throw error
+        }
     }
     
     func fetchActiveVisits() async throws -> [Visit] {
@@ -81,19 +85,31 @@ final class DashboardRepository: DashboardRepositoryProtocol {
             predicate: #Predicate { v in v.endedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        return try modelContext.fetch(descriptor)
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            dashboardRepoLog.error("fetchActiveVisits failed: \(String(describing: error))")
+            throw error
+        }
     }
 
     func fetchUpcomingAppointments(limit: Int) async throws -> [Appointment] {
         let now = Date()
-        let scheduledStatus = Appointment.Status.scheduled
+        // Filter by date in the predicate; filter status in memory.
+        // SwiftData's #Predicate compiler does not reliably translate
+        // captured enum comparisons into SQL, so doing the status filter
+        // in memory is the safe path.
         let descriptor = FetchDescriptor<Appointment>(
-            predicate: #Predicate { a in a.status == scheduledStatus && a.date >= now },
+            predicate: #Predicate { a in a.date >= now },
             sortBy: [SortDescriptor(\.date, order: .forward)]
         )
-        var desc = descriptor
-        desc.fetchLimit = limit
-        return try modelContext.fetch(desc)
+        do {
+            let upcoming = try modelContext.fetch(descriptor)
+            return Array(upcoming.filter { $0.status == .scheduled }.prefix(limit))
+        } catch {
+            dashboardRepoLog.error("fetchUpcomingAppointments failed: \(String(describing: error))")
+            throw error
+        }
     }
     
     func fetchRecentClients(limit: Int) async throws -> [Client] {
@@ -101,21 +117,25 @@ final class DashboardRepository: DashboardRepositoryProtocol {
             sortBy: [SortDescriptor(\.lastVisitDate, order: .reverse)]
         )
         descriptor.fetchLimit = limit
-        return try modelContext.fetch(descriptor)
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            dashboardRepoLog.error("fetchRecentClients failed: \(String(describing: error))")
+            throw error
+        }
     }
 
     func fetchOverduePets(limit: Int) async throws -> [Pet] {
-        // Fetch pets that haven't been updated in a while as candidates.
-        // We use 1 week as a safe threshold to catch anyone who might be coming due soon
-        // according to their specific frequency.
-        let oneWeekAgo = Calendar.current.date(byAdding: .day, value: -7, to: .now) ?? .now
         let descriptor = FetchDescriptor<Pet>(
-            predicate: #Predicate { $0.updatedAt < oneWeekAgo },
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        // Fetch candidate pets and filter in memory for precise isOverdue logic
-        let candidates = try modelContext.fetch(descriptor)
-        return Array(candidates.filter { $0.isOverdue }.prefix(limit))
+        do {
+            let pets = try modelContext.fetch(descriptor)
+            return Array(pets.filter { $0.isOverdue }.prefix(limit))
+        } catch {
+            dashboardRepoLog.error("fetchOverduePets failed: \(String(describing: error))")
+            throw error
+        }
     }
 
     func fetchServiceDistribution(days: Int) async throws -> [String: Int] {

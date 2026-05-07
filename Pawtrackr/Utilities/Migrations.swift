@@ -9,9 +9,30 @@ import Foundation
 import SwiftData
 import OSLog
 
-// MARK: - Schema Migration Plan
+// MARK: - Schema Versions
+//
+// Schemas are versioned so existing users' on-disk stores can be migrated
+// safely when we change models. The pattern:
+//
+//   1. Each shipped schema is a frozen `VersionedSchema` enum (V1, V2, ...).
+//   2. The newest one is aliased to `PawtrackrSchema` so the rest of the
+//      codebase always points at "current".
+//   3. `PawtrackrMigrationPlan.schemas` lists every version that has ever
+//      shipped, in order.
+//   4. For each transition between versions, add a `MigrationStage` —
+//      `.lightweight` for purely additive changes, `.custom` for renames /
+//      type changes / data backfills.
+//
+// When you change a model:
+//   - If the change is a property addition with a default → still V1
+//     compatible (lightweight). Bump the version's patch number.
+//   - If the change renames a property, deletes one, or changes a type →
+//     define V2 below, change the typealias, and add a custom stage.
+//
+// IMPORTANT: never delete a version once it has shipped to users; it must
+// remain in the chain so their store can climb forward to the latest.
 
-enum PawtrackrSchema: VersionedSchema {
+enum PawtrackrSchemaV1: VersionedSchema {
     static var versionIdentifier: Schema.Version = .init(1, 0, 0)
 
     static var models: [any PersistentModel.Type] {
@@ -37,20 +58,31 @@ enum PawtrackrSchema: VersionedSchema {
             MessageTemplate.self
         ]
     }
-    
-    // Define V1 (initial) and V2 (adds lastVisitDate) as needed.
-    // For this case, a single schema definition is sufficient as we'll use a lightweight migration.
 }
 
+/// Always points at the most recent shipped schema. The rest of the app
+/// references this name; only the migration plan distinguishes versions.
+typealias PawtrackrSchema = PawtrackrSchemaV1
+
+
+// MARK: - Migration Plan
 
 enum PawtrackrMigrationPlan: SchemaMigrationPlan {
+    /// Ordered list of every schema we've ever shipped. Append new versions;
+    /// never remove or reorder.
     static var schemas: [any VersionedSchema.Type] {
-        [PawtrackrSchema.self]
+        [PawtrackrSchemaV1.self]
     }
 
+    /// Transitions between adjacent schema versions. Empty for now because
+    /// V1 is the only version. When V2 ships, add:
+    ///
+    ///   .lightweight(fromVersion: PawtrackrSchemaV1.self,
+    ///                toVersion:   PawtrackrSchemaV2.self)
+    ///
+    /// or a `.custom` stage with `willMigrate` / `didMigrate` closures for
+    /// data transformations (e.g., backfilling a new required field).
     static var stages: [MigrationStage] {
-        // For now, we only have lightweight migrations (adding optional properties).
-        // If a more complex migration is needed in the future, we would define a custom stage here.
         []
     }
 }

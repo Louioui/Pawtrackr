@@ -42,7 +42,7 @@ enum SummaryUpdater {
             // Rebuild per-service counts
             var svcCounts: [String: Int] = [:]
             for v in visits {
-                for item in v.items { svcCounts[item.displayName, default: 0] += 1 }
+                for item in v.items ?? [] { svcCounts[item.displayName, default: 0] += 1 }
             }
 
             let existingSvc = try fetchServiceDaySummaries(for: start, in: context)
@@ -64,7 +64,7 @@ enum SummaryUpdater {
             // Rebuild per-category counts
             var catCounts: [String: Int] = [:]
             for v in visits {
-                for item in v.items {
+                for item in v.items ?? [] {
                     if let raw = item.serviceCategoryRaw ?? item.service?.category?.rawValue {
                         catCounts[raw, default: 0] += 1
                     }
@@ -218,7 +218,7 @@ enum SummaryUpdater {
         // Rebuild per-service counts
         var svcCounts: [String: Int] = [:]
         for v in visits {
-            for item in v.items { svcCounts[item.displayName, default: 0] += 1 }
+            for item in v.items ?? [] { svcCounts[item.displayName, default: 0] += 1 }
         }
 
         var existingSvcDict = existingServiceSummaries.reduce(into: [String: ServiceDaySummary]()) { $0[$1.serviceName] = $1 }

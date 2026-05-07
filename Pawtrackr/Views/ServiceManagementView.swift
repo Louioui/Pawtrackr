@@ -20,7 +20,7 @@ struct ServiceManagementView: View {
     var body: some View {
         List {
             ForEach(viewModel.services) { service in
-                NavigationLink(destination: EditServiceView(service: service, modelContext: modelContext)) {
+                NavigationLink(destination: EditServiceView(service: service, modelContext: modelContext, wrapsInNavigationStack: false)) {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(service.name).font(.headline)
@@ -77,65 +77,77 @@ struct ServiceManagementView: View {
 // Placeholder for EditServiceView
 struct EditServiceView: View {
     @Environment(\.dismiss) private var dismiss
-    
+
     @State private var viewModel: EditServiceViewModel
-    
-    init(service: Service? = nil, modelContext: ModelContext) {
+    private let wrapsInNavigationStack: Bool
+
+    init(service: Service? = nil, modelContext: ModelContext, wrapsInNavigationStack: Bool = true) {
         _viewModel = State(initialValue: EditServiceViewModel(modelContext: modelContext, service: service))
+        self.wrapsInNavigationStack = wrapsInNavigationStack
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section(NSLocalizedString("service.details", comment: "")) {
-                    TextField(NSLocalizedString("service.name", comment: ""), text: $viewModel.name)
-                    Picker(NSLocalizedString("service.category", comment: ""), selection: $viewModel.category) {
-                        ForEach(Service.Category.allCases) { category in
-                            Text(category.rawValue).tag(category)
-                        }
-                    }
-                    HStack {
-                        Text(NSLocalizedString("service.icon", comment: ""))
-                        Spacer()
-                        Image(systemName: viewModel.systemIcon)
+        if wrapsInNavigationStack {
+            NavigationStack {
+                editContent
+            }
+        } else {
+            editContent
+        }
+    }
+
+    private var editContent: some View {
+        Form {
+            Section(NSLocalizedString("service.details", comment: "")) {
+                TextField(NSLocalizedString("service.name", comment: ""), text: $viewModel.name)
+                Picker(NSLocalizedString("service.category", comment: ""), selection: $viewModel.category) {
+                    ForEach(Service.Category.allCases) { category in
+                        Text(category.rawValue).tag(category)
                     }
                 }
-
-                Section(NSLocalizedString("service.pricing_duration", comment: "")) {
-                    TextField(NSLocalizedString("service.price", comment: ""), value: $viewModel.price, format: .currency(code: "USD"))
-                        #if os(iOS)
-                        .keyboardType(.decimalPad)
-                        #endif
-
-                    Stepper(
-                        String(format: NSLocalizedString("service.duration_minutes_fmt", comment: ""), viewModel.duration),
-                        value: $viewModel.duration,
-                        in: 5...480,
-                        step: 5
-                    )
-                }
-
-                Section(NSLocalizedString("service.status", comment: "")) {
-                    Toggle(NSLocalizedString("service.enabled_in_app", comment: ""), isOn: $viewModel.isEnabled)
-                    Toggle(NSLocalizedString("service.is_package", comment: ""), isOn: $viewModel.isPackage)
+                HStack {
+                    Text(NSLocalizedString("service.icon", comment: ""))
+                    Spacer()
+                    Image(systemName: viewModel.systemIcon)
                 }
             }
-            .navigationTitle(viewModel.service == nil ? NSLocalizedString("service.add_service", comment: "") : NSLocalizedString("service.edit_service", comment: ""))
-            .toolbar {
+
+            Section(NSLocalizedString("service.pricing_duration", comment: "")) {
+                TextField(NSLocalizedString("service.price", comment: ""), value: $viewModel.price, format: .currency(code: "USD"))
+                    #if os(iOS)
+                    .keyboardType(.decimalPad)
+                    #endif
+
+                Stepper(
+                    String(format: NSLocalizedString("service.duration_minutes_fmt", comment: ""), viewModel.duration),
+                    value: $viewModel.duration,
+                    in: 5...480,
+                    step: 5
+                )
+            }
+
+            Section(NSLocalizedString("service.status", comment: "")) {
+                Toggle(NSLocalizedString("service.enabled_in_app", comment: ""), isOn: $viewModel.isEnabled)
+                Toggle(NSLocalizedString("service.is_package", comment: ""), isOn: $viewModel.isPackage)
+            }
+        }
+        .navigationTitle(viewModel.service == nil ? NSLocalizedString("service.add_service", comment: "") : NSLocalizedString("service.edit_service", comment: ""))
+        .toolbar {
+            if wrapsInNavigationStack {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("common.cancel", comment: "")) { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(NSLocalizedString("common.save", comment: "")) { saveService() }
-                }
             }
-            .alert(item: $viewModel.appError) { error in
-                Alert(
-                    title: Text(NSLocalizedString("common.error", comment: "")),
-                    message: Text(error.localizedDescription),
-                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
-                )
+            ToolbarItem(placement: .confirmationAction) {
+                Button(NSLocalizedString("common.save", comment: "")) { saveService() }
             }
+        }
+        .alert(item: $viewModel.appError) { error in
+            Alert(
+                title: Text(NSLocalizedString("common.error", comment: "")),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+            )
         }
     }
 

@@ -43,7 +43,7 @@ final class ClientDetailViewModel {
         self.client        = client
         self.modelContext  = modelContext
         self.visitRepository = VisitRepository(modelContainer: modelContext.container)
-        self.pets          = client.pets
+        self.pets          = client.pets ?? []
         self.currentLimit  = max(initialLimit, pageSize)
         refreshRecentVisits()
     }
@@ -51,7 +51,11 @@ final class ClientDetailViewModel {
     // MARK: - Queries
 
     func activeVisit(for pet: Pet) -> Visit? {
-        pet.visits.first(where: { $0.endedAt == nil })
+        (pet.visits ?? []).first(where: { $0.endedAt == nil })
+    }
+
+    func refreshPets() {
+        pets = client.pets ?? []
     }
 
     // Non-async entry-point — creates an internal Task for background work.
@@ -72,7 +76,7 @@ final class ClientDetailViewModel {
     private func fetchVisitsAsync() async {
         guard !Task.isCancelled else { return }
 
-        let petIDs     = Set(client.pets.map { $0.persistentModelID })
+        let petIDs     = Set((client.pets ?? []).map { $0.persistentModelID })
         let startBound = computeStartBound()
         let fetchLimit = currentLimit
         let container  = modelContext.container
@@ -145,7 +149,7 @@ final class ClientDetailViewModel {
         Task {
             do {
                 _ = try await visitRepository.checkIn(pet: pet, date: date)
-                self.pets = client.pets
+                self.pets = client.pets ?? []
             } catch {
                 appError = .database(error.localizedDescription)
                 Logger.clientDetail.error("Failed to check in: \(String(describing: error))")
@@ -172,7 +176,7 @@ final class ClientDetailViewModel {
         Task {
             do {
                 try await visitRepository.checkOut(visit: visit, total: customTotal, now: date)
-                self.pets = client.pets
+                self.pets = client.pets ?? []
             } catch {
                 appError = .database(error.localizedDescription)
                 Logger.clientDetail.error("Failed to check out: \(String(describing: error))")

@@ -17,9 +17,11 @@ public struct PinLockGate<Content: View>: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appSettings: AppSettings
     @State private var inactivityTimer: Timer? = nil
+    private let onUnlock: () -> Void
     private let content: Content
 
-    public init(@ViewBuilder content: () -> Content) {
+    public init(onUnlock: @escaping () -> Void = {}, @ViewBuilder content: () -> Content) {
+        self.onUnlock = onUnlock
         self.content = content()
     }
 
@@ -36,10 +38,22 @@ public struct PinLockGate<Content: View>: View {
             }
             .onChange(of: appSettings.autoLockAfterInactivity) { _, _ in resetInactivityLock() }
             .onChange(of: appSettings.isBiometricLockEnabled) { _, _ in resetInactivityLock() }
-            .onChange(of: isUnlocked) { _, unlocked in
-                unlocked ? resetInactivityLock() : invalidateInactivityTimer()
+            .onChange(of: appSettings.isLockEnabled) { _, enabled in
+                if !enabled { onUnlock() }
+                resetInactivityLock()
             }
-            .onAppear { resetInactivityLock() }
+            .onChange(of: isUnlocked) { _, unlocked in
+                if unlocked {
+                    onUnlock()
+                    resetInactivityLock()
+                } else {
+                    invalidateInactivityTimer()
+                }
+            }
+            .onAppear {
+                if !appSettings.isLockEnabled { onUnlock() }
+                resetInactivityLock()
+            }
             .onDisappear { invalidateInactivityTimer() }
     }
 

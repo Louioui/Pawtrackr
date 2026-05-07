@@ -272,7 +272,7 @@ struct AddPetSheet: View {
         newPet.photoData = avatarImageData
         newPet.owner = client
 
-        client.pets.append(newPet)
+        client.pets = (client.pets ?? []) + [newPet]
         modelContext.insert(newPet)
 
         do {
@@ -323,7 +323,7 @@ extension Binding {
 #Preview {
     // Lightweight preview with an in-memory model
     let schema = Schema([Client.self, Pet.self])
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
     if let container = try? ModelContainer(for: schema, configurations: config) {
         let c = Client(firstName: "Sarah", lastName: "Johnson", phone: "(555) 123-4567")
         container.mainContext.insert(c)

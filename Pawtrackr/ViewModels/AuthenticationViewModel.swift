@@ -13,10 +13,13 @@ final class AuthenticationViewModel: ObservableObject {
     @Published var currentUser: User?
     @Published var isAuthenticated = false
 
-    private let modelContext: ModelContext
+    /// Optional so the app can still launch the recovery UI when the data
+    /// store fails to open (e.g. schema mismatch in development). All methods
+    /// guard nil and become no-ops when the context is absent.
+    private let modelContext: ModelContext?
     private let localEmail = "local@pawtrackr.local"
 
-    init(modelContext: ModelContext) {
+    init(modelContext: ModelContext?) {
         self.modelContext = modelContext
     }
 
@@ -35,6 +38,7 @@ final class AuthenticationViewModel: ObservableObject {
     }
 
     func signIn(email: String) {
+        guard let modelContext else { return }
         let predicate = #Predicate<User> { $0.email == email }
         let descriptor = FetchDescriptor(predicate: predicate)
         if let user = (try? modelContext.fetch(descriptor))?.first {
@@ -61,6 +65,7 @@ final class AuthenticationViewModel: ObservableObject {
     // MARK: - Private Helpers
 
     private func signInLocalUser() {
+        guard let modelContext else { return }
         if let user = fetchLocalUser() {
             currentUser = user
             isAuthenticated = true
@@ -74,6 +79,7 @@ final class AuthenticationViewModel: ObservableObject {
     }
 
     private func fetchLocalUser() -> User? {
+        guard let modelContext else { return nil }
         let email = localEmail
         let descriptor = FetchDescriptor<User>(predicate: #Predicate { $0.email == email })
         return try? modelContext.fetch(descriptor).first

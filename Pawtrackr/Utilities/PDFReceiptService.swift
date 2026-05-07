@@ -59,7 +59,8 @@ final class PDFReceiptService {
         let config: BusinessConfig
         if let modelContext = visit.modelContext {
             let descriptor = FetchDescriptor<BusinessConfig>()
-            config = (try? modelContext.fetch(descriptor).first) ?? .default
+            let configs = (try? modelContext.fetch(descriptor)) ?? []
+            config = configs.first(where: \.isSetupComplete) ?? configs.first ?? .default
         } else {
             config = .default
         }
@@ -73,7 +74,7 @@ final class PDFReceiptService {
         let phone = visit.pet?.owner?.phone
         let phoneFormatted = phone.flatMap { PhoneUtils.display($0) ?? $0 }
 
-        let items = visit.items.map { item in
+        let items = (visit.items ?? []).map { item in
             ReceiptSnapshot.Item(name: item.name, priceString: item.lineTotal.moneyString)
         }
 

@@ -24,6 +24,8 @@ struct ClientsView: View {
     @State private var storedNotifications: [NotificationItem] = []
     @State private var clientToDelete: Client?
 
+    @FocusState private var isSearchFocused: Bool
+
     init() {
         _viewModel = State(initialValue: nil)
     }
@@ -47,7 +49,9 @@ struct ClientsView: View {
             .padding(.bottom, 80) // Padding to avoid the FAB
         }
         .searchable(text: searchTextBinding,
+                    isPresented: .init(get: { isSearchFocused }, set: { isSearchFocused = $0 }),
                     prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
+        .focused($isSearchFocused)
         .background(DS.ColorToken.background)
         .ignoresSafeArea(edges: .top)
         .alert(item: errorBinding) { error in
@@ -83,7 +87,11 @@ struct ClientsView: View {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
-            
+
+            ToolbarItem(placement: .primaryAction) {
+                CloudKitStatusView()
+            }
+
             ToolbarItem(placement: .navigation) {
                 Button {
                     showNotifications = true
@@ -91,6 +99,21 @@ struct ClientsView: View {
                     Image(systemName: "bell")
                 }
             }
+
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    isSearchFocused = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
+        }
+        .refreshable {
+            // Hop to MainActor to call the isolated VM, then run cloud sync
+            // concurrently with whatever local refresh the VM kicks off.
+            await MainActor.run { viewModel?.fetchClients() }
+            await CloudKitMonitor.shared.forceSync()
         }
         .navigationTitle("Clients")
         #if os(macOS)
@@ -105,18 +128,6 @@ struct ClientsView: View {
             }
         }
         #endif
-        .onReceive(NotificationCenter.default.publisher(for: .clientOpenRequested)) { notification in
-            guard let id = notification.requestedClientID else { return }
-            Task { @MainActor in
-                if openClientIfAvailable(id) {
-                    return
-                }
-
-                viewModel?.fetchClients()
-                try? await Task.sleep(for: .milliseconds(350))
-                _ = openClientIfAvailable(id)
-            }
-        }
         .sheet(isPresented: $showingNewClientSheet) {
         } content: {
             NewClientSheet(modelContext: modelContext)
@@ -136,22 +147,6 @@ struct ClientsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .visitDidComplete)) { note in
             storedNotifications.insert(NotificationItem(title: "Visit Completed", message: "A visit was checked out.", date: Date(), relatedID: note.visitID), at: 0)
         }
-    }
-
-    @MainActor
-    private func openClientIfAvailable(_ id: PersistentIdentifier) -> Bool {
-        guard let vm = viewModel else { return false }
-        let all = vm.inProgressClients + vm.otherClients
-        guard let client = all.first(where: { $0.persistentModelID == id }) else { return false }
-
-        withAnimation(Animations.gentleSpring) {
-            router.navigateToClient(client)
-        }
-        NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
-            ClientDidCreateKey.clientID.rawValue: id,
-            ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.navigated.rawValue
-        ])
-        return true
     }
 
     @ViewBuilder
@@ -180,7 +175,7 @@ struct ClientsView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private func clientList(for clients: [Client], enableInfiniteScroll: Bool = false) -> some View {
         LazyVStack(spacing: 10) {
@@ -226,7 +221,7 @@ struct ClientsView: View {
         }
         .padding(.horizontal)
     }
-    
+
     private func emptyState(_ viewModel: ClientsViewModel) -> some View {
         let isSearching = !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return ContentUnavailableView(
@@ -236,7 +231,7 @@ struct ClientsView: View {
         )
         .padding(40)
     }
-    
+
     private func sectionHeader(_ title: String, count: Int, topPadding: CGFloat = 0) -> some View {
         HStack {
             Text(title)
@@ -375,7 +370,7 @@ private struct QuickStatCard: View {
     let value: String
     let icon: String
     let color: Color
-    
+
     var body: some View {
         Card(elevation: .flat, showBorder: false) {
             VStack(alignment: .leading, spacing: 6) {

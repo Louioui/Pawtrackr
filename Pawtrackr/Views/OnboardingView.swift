@@ -11,6 +11,7 @@ import SwiftData
 struct OnboardingView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query private var configs: [BusinessConfig]
     
     @State private var name = ""
     @State private var email = ""
@@ -77,22 +78,23 @@ struct OnboardingView: View {
                     Button("Finish") {
                         saveAndFinish()
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
     }
     
     private func saveAndFinish() {
-        let config = BusinessConfig(
-            name: name,
-            email: email,
-            phone: phone,
-            address: address,
-            logoData: logoData
-        )
+        let config = configs.first ?? BusinessConfig()
+        config.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        config.email = email.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        config.phone = phone.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        config.address = address.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        config.logoData = logoData
         config.isSetupComplete = true
-        modelContext.insert(config)
+        if config.modelContext == nil {
+            modelContext.insert(config)
+        }
         try? modelContext.save()
         onComplete()
     }

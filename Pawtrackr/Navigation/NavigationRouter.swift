@@ -20,6 +20,16 @@ enum AppDestination: Hashable {
     case checkout(Pet)
 }
 
+enum PendingNavigationCommand {
+    enum Kind: String {
+        case client
+        case pet
+    }
+
+    static let kindKey = "pendingNavigationKind"
+    static let uuidKey = "pendingNavigationUUID"
+}
+
 // MARK: - NavigationRouter
 
 /// Observable router that manages navigation state across the app.
@@ -31,42 +41,85 @@ final class NavigationRouter {
     /// Navigation path for the Clients tab
     var clientsPath = NavigationPath()
 
+    /// Navigation path for the Dashboard tab
+    var dashboardPath = NavigationPath()
+
     /// Navigation path for the Insights tab (if needed)
     var insightsPath = NavigationPath()
 
     /// Navigation path for the Settings tab (if needed)
     var settingsPath = NavigationPath()
 
+    /// The surface currently hosting user-driven navigation.
+    var activeNavigationItem: NavigationItem = .dashboard
+
     // MARK: - Navigation Actions
 
     func navigateToClient(_ client: Client) {
-        clientsPath.append(AppDestination.clientDetail(client))
+        append(AppDestination.clientDetail(client))
     }
 
     func navigateToPet(_ pet: Pet) {
-        clientsPath.append(AppDestination.petDetail(pet))
+        append(AppDestination.petDetail(pet))
     }
 
     func navigateToVisit(_ visit: Visit) {
-        clientsPath.append(AppDestination.visitDetail(visit))
+        append(AppDestination.visitDetail(visit))
     }
 
     func navigateToPetHistory(_ pet: Pet) {
-        clientsPath.append(AppDestination.petHistory(pet))
+        append(AppDestination.petHistory(pet))
     }
 
     func navigateToCheckout(_ pet: Pet) {
-        clientsPath.append(AppDestination.checkout(pet))
+        append(AppDestination.checkout(pet))
     }
 
     func pop() {
-        if !clientsPath.isEmpty {
-            clientsPath.removeLast()
+        switch activeNavigationItem {
+        case .dashboard:
+            if !dashboardPath.isEmpty { dashboardPath.removeLast() }
+        case .clients:
+            if !clientsPath.isEmpty { clientsPath.removeLast() }
+        case .insights:
+            if !insightsPath.isEmpty { insightsPath.removeLast() }
+        case .settings:
+            if !settingsPath.isEmpty { settingsPath.removeLast() }
         }
     }
 
     func popToRoot() {
+        switch activeNavigationItem {
+        case .dashboard:
+            dashboardPath = NavigationPath()
+        case .clients:
+            clientsPath = NavigationPath()
+        case .insights:
+            insightsPath = NavigationPath()
+        case .settings:
+            settingsPath = NavigationPath()
+        }
+    }
+
+    func popDashboardToRoot() {
+        dashboardPath = NavigationPath()
+    }
+
+    func popClientsToRoot() {
         clientsPath = NavigationPath()
+    }
+
+    private func append(_ destination: AppDestination) {
+        switch activeNavigationItem {
+        case .dashboard:
+            dashboardPath.append(destination)
+        case .clients:
+            clientsPath.append(destination)
+        case .insights:
+            insightsPath.append(destination)
+        case .settings:
+            settingsPath.append(destination)
+        }
     }
 }
 

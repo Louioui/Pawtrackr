@@ -10,7 +10,7 @@ final class DashboardRepositoryTests: XCTestCase {
 
     override func setUpWithError() throws {
         let schema = Schema(PawtrackrSchema.models)
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, configurations: [config])
         context = container.mainContext
         repository = DashboardRepository(modelContainer: container)
@@ -24,7 +24,7 @@ final class DashboardRepositoryTests: XCTestCase {
         let pet = Pet(name: "Buddy", species: .dog)
         context.insert(pet)
         
-        let appt = Appointment(pet: pet, date: today.addingTimeInterval(3600))
+        let appt = Appointment(date: today.addingTimeInterval(3600), pet: pet, user: nil)
         context.insert(appt)
         
         let visit = Visit(pet: pet, startedAt: .now)
@@ -49,7 +49,7 @@ final class DashboardRepositoryTests: XCTestCase {
         // Last visit was 2 weeks ago
         let twoWeeksAgo = Calendar.current.date(byAdding: .day, value: -14, to: .now)!
         let visit = Visit(pet: pet, startedAt: twoWeeksAgo)
-        visit.endedAt = twoWeeksAgo.addingTimeInterval(3600)
+        visit.markCheckedOut(now: twoWeeksAgo.addingTimeInterval(3600))
         
         context.insert(pet)
         context.insert(visit)

@@ -77,14 +77,13 @@ final class ImageCache: @unchecked Sendable {
         // Use a quick hash composed of count + a few bytes from start/end + dimension.
         // Avoid (data as NSData).hash which is O(N) and causes main-thread freezes.
         let count = data.count
-        var quickHash = count
+        var quickHash = 5381
+        for byte in data.prefix(16) {
+            quickHash = (quickHash &* 33) &+ Int(byte)
+        }
         if count > 16 {
-            data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
-                if let base = ptr.baseAddress {
-                    let start = base.assumingMemoryBound(to: Int.self).pointee
-                    let end = base.advanced(by: count - 8).assumingMemoryBound(to: Int.self).pointee
-                    quickHash = quickHash ^ start ^ end
-                }
+            for byte in data.suffix(16) {
+                quickHash = (quickHash &* 33) &+ Int(byte)
             }
         }
         return "\(count)-\(quickHash)-\(Int(maxDimension.rounded()))"
@@ -173,14 +172,13 @@ final class ImageCache: @unchecked Sendable {
 
     private func cacheKey(for data: Data, maxDimension: CGFloat) -> String {
         let count = data.count
-        var quickHash = count
+        var quickHash = 5381
+        for byte in data.prefix(16) {
+            quickHash = (quickHash &* 33) &+ Int(byte)
+        }
         if count > 16 {
-            data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
-                if let base = ptr.baseAddress {
-                    let start = base.assumingMemoryBound(to: Int.self).pointee
-                    let end = base.advanced(by: count - 8).assumingMemoryBound(to: Int.self).pointee
-                    quickHash = quickHash ^ start ^ end
-                }
+            for byte in data.suffix(16) {
+                quickHash = (quickHash &* 33) &+ Int(byte)
             }
         }
         return "\(count)-\(quickHash)-\(Int(maxDimension.rounded()))"

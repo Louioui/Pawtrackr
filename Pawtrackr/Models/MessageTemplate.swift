@@ -10,9 +10,10 @@ import SwiftData
 
 @Model
 final class MessageTemplate {
-    var title: String
-    var content: String
-    var type: TemplateType
+    // Defaults for CloudKit compatibility.
+    var title: String = ""
+    var content: String = ""
+    var type: TemplateType = MessageTemplate.TemplateType.custom
     
     enum TemplateType: String, Codable, CaseIterable, Identifiable {
         case appointmentReminder = "Reminder"

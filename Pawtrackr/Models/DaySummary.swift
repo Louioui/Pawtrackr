@@ -11,9 +11,10 @@ import SwiftData
 @Model
 final class DaySummary {
     // Start-of-day (00:00) in the current calendar/timezone when computed
-    var day: Date
-    var revenue: Decimal
-    var visitCount: Int
+    // Defaults for CloudKit compatibility.
+    var day: Date = Date()
+    var revenue: Decimal = Decimal.zero
+    var visitCount: Int = 0
 
     init(day: Date, revenue: Decimal, visitCount: Int) {
         self.day = day

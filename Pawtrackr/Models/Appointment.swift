@@ -10,12 +10,15 @@ final class Appointment {
         case cancelled
     }
 
-    var uuid: UUID
-    var date: Date
-    var pet: Pet
+    // Defaults + optional pet for CloudKit compatibility.
+    // CloudKit requires every to-one relationship to be optional, so `pet`
+    // is now `Pet?`. Callers must use optional chaining (`appointment.pet?.name`).
+    var uuid: UUID = UUID()
+    var date: Date = Date()
+    var pet: Pet?
     var status: Status = Appointment.Status.scheduled
-    @Relationship(deleteRule: .nullify) var user: User?
-    @Relationship(deleteRule: .nullify) var visit: Visit?
+    var user: User?
+    var visit: Visit?
 
     init(date: Date, pet: Pet, user: User?, status: Status = .scheduled) {
         self.uuid = UUID()

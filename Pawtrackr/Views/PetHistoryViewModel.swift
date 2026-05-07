@@ -8,6 +8,18 @@ import Foundation
 import SwiftUI
 import SwiftData
 
+private final class NotificationObserverToken {
+    private let token: NSObjectProtocol
+
+    init(_ token: NSObjectProtocol) {
+        self.token = token
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(token)
+    }
+}
+
 @Observable
 @MainActor
 final class PetHistoryViewModel {
@@ -40,26 +52,20 @@ final class PetHistoryViewModel {
     var totalSpentString: String { totalSpent.moneyString }
     var averageDurationString: String { Formatters.durationString(from: Date(), to: Date().addingTimeInterval(averageDuration)) }
 
-    // nonisolated(unsafe) so deinit (which is nonisolated) can read and clear it.
-    nonisolated(unsafe) private var visitCompleteObserver: NSObjectProtocol?
+    private var visitCompleteObserver: NotificationObserverToken?
 
     // MARK: - Init
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
         self.modelContext = modelContext
-        visitCompleteObserver = NotificationCenter.default.addObserver(
+        let token = NotificationCenter.default.addObserver(
             forName: .visitDidComplete, object: nil, queue: .main
         ) { [weak self] _ in
             guard let self else { return }
             Task { await self.refresh() }
         }
+        visitCompleteObserver = NotificationObserverToken(token)
         Task { await refresh() }
-    }
-
-    deinit {
-        if let obs = visitCompleteObserver {
-            NotificationCenter.default.removeObserver(obs)
-        }
     }
 
     // MARK: - Public
@@ -73,7 +79,7 @@ final class PetHistoryViewModel {
         let header = ["Date", "Services", "Duration", "Amount"]
         let rows: [[String]] = filtered.map { v in
             let date = v.startedAt.formatted(date: .abbreviated, time: .omitted)
-            let services = v.items.map { $0.name }.joined(separator: ", ")
+            let services = (v.items ?? []).map { $0.name }.joined(separator: ", ")
             let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
             let amountValue = v.isCompleted ? v.total : v.servicesSubtotal
             let amount = String(format: "%.2f", (amountValue as NSDecimalNumber).doubleValue)
@@ -89,7 +95,7 @@ final class PetHistoryViewModel {
             let date = v.startedAt.formatted(date: .abbreviated, time: .shortened)
             let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
             let amount = (v.isCompleted ? v.total : v.servicesSubtotal).moneyString
-            let services = v.items.map { $0.name }.joined(separator: ", ")
+            let services = (v.items ?? []).map { $0.name }.joined(separator: ", ")
             out += "\n• \(date) — \(services) — \(duration) — \(amount)"
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -98,29 +104,42 @@ final class PetHistoryViewModel {
     // MARK: - Private
     private func fetchVisits() async {
         let (start, end) = dateBounds(for: scope)
-        let predicate = #Predicate<Visit> { v in
-            if let s = start {
-                if let e = end {
-                    return v.startedAt >= s && v.startedAt < e
-                } else {
-                    return v.startedAt >= s
-                }
-            } else {
-                if let e = end {
-                    return v.startedAt < e
-                } else {
-                    return true
-                }
+        let petUUID = pet.uuid
+        // Push as much filtering as possible into the predicate so SwiftData can use indexes.
+        // The macro only accepts a single boolean expression — we precompute the
+        // date pair into one branchless conditional. `v.payment != nil` (paid filter)
+        // is applied in-memory because SwiftData #Predicate can't reliably express
+        // optional to-one-relationship existence across versions.
+        let predicate: Predicate<Visit>
+        switch (start, end) {
+        case let (s?, e?):
+            predicate = #Predicate<Visit> { v in
+                v.endedAt != nil && v.pet?.uuid == petUUID && v.startedAt >= s && v.startedAt < e
+            }
+        case let (s?, nil):
+            predicate = #Predicate<Visit> { v in
+                v.endedAt != nil && v.pet?.uuid == petUUID && v.startedAt >= s
+            }
+        case let (nil, e?):
+            predicate = #Predicate<Visit> { v in
+                v.endedAt != nil && v.pet?.uuid == petUUID && v.startedAt < e
+            }
+        case (nil, nil):
+            predicate = #Predicate<Visit> { v in
+                v.endedAt != nil && v.pet?.uuid == petUUID
             }
         }
-        let descriptor = FetchDescriptor<Visit>(
+        var descriptor = FetchDescriptor<Visit>(
             predicate: predicate,
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
+        // Hard cap so a very chatty pet history can never freeze the screen.
+        descriptor.fetchLimit = 1000
+        // Prefetch items / payment so the in-memory paid-filter and KPI math
+        // don't fault relationships row-by-row.
+        descriptor.relationshipKeyPathsForPrefetching = [\Visit.items, \Visit.payment]
         do {
-            var fetched = try modelContext.fetch(descriptor)
-            let petID = pet.persistentModelID
-            fetched = fetched.filter { $0.pet?.persistentModelID == petID && $0.isCompleted && $0.isPaid }
+            let fetched = try modelContext.fetch(descriptor).filter { $0.payment != nil }
             visits = fetched
         } catch {
             visits = []
@@ -132,7 +151,7 @@ final class PetHistoryViewModel {
         guard !q.isEmpty else { filtered = visits; return }
         let lc = q.localizedLowercase
         filtered = visits.filter { v in
-            if v.items.contains(where: { $0.name.localizedCaseInsensitiveContains(lc) }) { return true }
+            if (v.items ?? []).contains(where: { $0.name.localizedCaseInsensitiveContains(lc) }) { return true }
             if let note = v.note, note.localizedCaseInsensitiveContains(lc) { return true }
             if let ref = v.payment?.externalReference, ref.localizedCaseInsensitiveContains(lc) { return true }
             return false

@@ -109,7 +109,7 @@ final class RecentHistoryViewModel {
                     petName: v.pet?.name ?? "Unknown",
                     ownerFirst: v.pet?.owner?.firstName ?? "",
                     ownerLast: v.pet?.owner?.lastName ?? "",
-                    itemNames: v.items.map { $0.name },
+                    itemNames: (v.items ?? []).map { $0.name },
                     total: (v.total as NSDecimalNumber).doubleValue
                 )
             }
@@ -150,7 +150,7 @@ final class RecentHistoryViewModel {
             let ended = v.endedAt.map { Formatters.iso8601.string(from: $0) } ?? ""
             let pet = (v.pet?.name ?? "Unknown").csvEscaped
             let owner = (v.pet?.owner?.fullName ?? "").csvEscaped
-            let serviceNames = v.items.map { $0.displayName.csvEscaped }
+            let serviceNames = (v.items ?? []).map { $0.displayName.csvEscaped }
             let services = "\"\(serviceNames.joined(separator: "; "))\""
             let amount = v.total.moneyString
             let payment = (v.payment?.method.displayName ?? "").csvEscaped

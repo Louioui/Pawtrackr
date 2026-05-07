@@ -21,10 +21,9 @@ struct VisitDetailView: View {
     @State private var showCheckout = false
     @State private var previewData: Data? = nil
     @State private var previewTitle: String = ""
-    
+
     var body: some View {
-        NavigationStack {
-            visitContent
+        visitContent
             .navigationTitle(NSLocalizedString("visit.title", comment: ""))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -35,7 +34,6 @@ struct VisitDetailView: View {
             .onAppear {
                 visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt)
             }
-        }
     }
 
     private var visitContent: some View {
@@ -229,7 +227,7 @@ struct VisitDetailView: View {
     @ViewBuilder
     private var servicesCard: some View {
         // Split into simpler subviews to aid type-checking
-        if visit.items.isEmpty { servicesEmptyCard } else { servicesContentCard }
+        if (visit.items ?? []).isEmpty { servicesEmptyCard } else { servicesContentCard }
     }
     
     private var servicesEmptyCard: some View {
@@ -280,7 +278,7 @@ struct VisitDetailView: View {
     }
     
     private var servicesChips: some View {
-        let items: [VisitItem] = Array(visit.items)
+        let items: [VisitItem] = Array(visit.items ?? [])
         return FlowLayout(spacing: 8, rowSpacing: 8) {
             ForEach(items, id: \.uuid) { (item: VisitItem) in
                 Chip(item.displayName, style: .tinted, size: .sm, tint: .blue)
@@ -291,7 +289,7 @@ struct VisitDetailView: View {
     }
     
     private var servicesPriceList: some View {
-        let items: [VisitItem] = Array(visit.items)
+        let items: [VisitItem] = Array(visit.items ?? [])
         return VStack(spacing: 8) {
             ForEach(items, id: \.uuid) { (item: VisitItem) in
                 HStack(alignment: .firstTextBaseline) {
@@ -466,7 +464,7 @@ struct VisitDetailView: View {
             let ended = visit.endedAt?.ISO8601Format() ?? ""
             let petName = visit.pet?.name ?? "Unknown"
             let ownerName = visit.pet?.owner.map { "\($0.firstName) \($0.lastName)" } ?? ""
-            let services = visit.items.map { $0.displayName }.joined(separator: "; ")
+            let services = (visit.items ?? []).map { $0.displayName }.joined(separator: "; ")
             let amount = visit.totalCurrencyString
             let payment = visit.payment?.method.displayName ?? ""
             let notes = (visit.note ?? "").replacingOccurrences(of: "\n", with: " ")

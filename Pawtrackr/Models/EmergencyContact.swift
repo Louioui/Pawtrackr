@@ -8,10 +8,11 @@ import SwiftData
 
 @Model
 final class EmergencyContact {
-    var uuid: UUID
-    var name: String
+    // Defaults for CloudKit compatibility.
+    var uuid: UUID = UUID()
+    var name: String = ""
     var relation: String?
-    var phone: String
+    var phone: String = ""
 
     // Inverse relationship to Client
     var owner: Client?
