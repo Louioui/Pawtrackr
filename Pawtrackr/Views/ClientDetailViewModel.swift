@@ -61,12 +61,18 @@ final class ClientDetailViewModel {
         let token = NotificationCenter.default.addObserver(
             forName: .visitDidComplete, object: nil, queue: .main
         ) { [weak self] notif in
-            guard let self else { return }
-            // Only refresh if the completed visit belongs to one of this client's pets.
-            // Fall back to refreshing if we can't tell, so we never show stale state.
-            if let visitClientID = notif.clientID, visitClientID != clientID { return }
-            self.refreshPets()
-            self.refreshRecentVisits()
+            // The block runs on the main queue, but it's a `(Notification) -> Void`
+            // closure that the compiler treats as nonisolated. Hop to MainActor
+            // explicitly so calling `refreshPets()` / `refreshRecentVisits()` is
+            // safe under Swift 6 strict-concurrency.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Only refresh if the completed visit belongs to one of this client's pets.
+                // Fall back to refreshing if we can't tell, so we never show stale state.
+                if let visitClientID = notif.clientID, visitClientID != clientID { return }
+                self.refreshPets()
+                self.refreshRecentVisits()
+            }
         }
         self.visitCompleteObserver = CDVMObserverToken(token)
         refreshRecentVisits()

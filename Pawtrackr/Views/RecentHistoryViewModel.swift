@@ -34,26 +34,31 @@ final class RecentHistoryViewModel {
     init(dataStore: DataStoreService, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.dataStore = dataStore
         self.eventBus = eventBus
-        // Reactively observe changes to Visit entities
-        self.observationTask = Task {
-            for await _ in dataStore.observeChanges(Visit.self) {
-                fetchVisits()
+        // [weak self] in both observation loops — without it, each for-await
+        // captures self strongly, and since neither stream terminates on its
+        // own, the VM would never deallocate when the view dismisses.
+        let changeStream = dataStore.observeChanges(Visit.self)
+        self.observationTask = Task { [weak self] in
+            for await _ in changeStream {
+                guard let self else { return }
+                self.fetchVisits()
             }
         }
-        self.eventTask = Task {
+        self.eventTask = Task { [weak self] in
             for await event in eventBus.stream {
+                guard let self else { return }
                 switch event {
                 case .checkoutCompleted(_), .refreshRequired:
-                    fetchVisits()
+                    self.fetchVisits()
                 default:
                     break
                 }
             }
         }
-        Task { fetchVisits() }
+        Task { [weak self] in self?.fetchVisits() }
     }
-
-    // Internal tasks auto-cancel when the view model is released.
+    // No explicit deinit — the [weak self] captures above let each loop exit
+    // naturally on the next yield when the VM deallocates.
     
     private func scheduleFetch() {
         searchTask?.cancel()

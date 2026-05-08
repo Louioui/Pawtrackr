@@ -1,6 +1,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 struct AppointmentsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -64,17 +65,36 @@ struct AppointmentsView: View {
     private func addAppointment(pet: Pet, date: Date) {
         let newAppointment = Appointment(date: date, pet: pet, user: authViewModel.currentUser)
         modelContext.insert(newAppointment)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            Logger.appointments.error("addAppointment save failed: \(String(describing: error))")
+        }
     }
 
     private func deleteAppointment(offsets: IndexSet) {
+        // Snapshot the targets BEFORE the animation. Deleting then iterating
+        // a live @Query result can cause "index out of range" if SwiftUI
+        // re-evaluates the @Query mid-deletion.
+        let targets = offsets.compactMap { offset -> Appointment? in
+            guard offset < appointments.count else { return nil }
+            return appointments[offset]
+        }
         withAnimation {
-            for index in offsets {
-                modelContext.delete(appointments[index])
+            for appointment in targets {
+                modelContext.delete(appointment)
             }
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                Logger.appointments.error("deleteAppointment save failed: \(String(describing: error))")
+            }
         }
     }
+}
+
+private extension Logger {
+    static let appointments = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Appointments")
 }
 
 struct AddAppointmentView: View {

@@ -82,8 +82,12 @@ final class DashboardViewModel {
         self.eventBus = eventBus
         self.repository = DashboardRepository(modelContainer: dataStore.container)
 
-        self.observationTask = Task {
+        // Use [weak self] so the for-await loop does not retain the VM.
+        // The eventBus stream never terminates on its own; the loop exits
+        // naturally when self deallocates and the next event arrives.
+        self.observationTask = Task { [weak self] in
             for await event in eventBus.stream {
+                guard let self else { return }
                 switch event {
                 case .checkoutCompleted(_), .refreshRequired:
                     await self.refresh()
@@ -93,7 +97,7 @@ final class DashboardViewModel {
             }
         }
 
-        Task { await refresh() }
+        Task { [weak self] in await self?.refresh() }
     }
 
     // MARK: - Public

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 struct OnboardingView: View {
     @Environment(\.modelContext) private var modelContext
@@ -95,9 +96,20 @@ struct OnboardingView: View {
         if config.modelContext == nil {
             modelContext.insert(config)
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            // Onboarding-failure visibility: log so we can see in Console if
+            // the user is stuck on this screen. The setup-complete flag is
+            // already set on the config object, so a rerun will reuse it.
+            Logger.onboarding.error("Onboarding save failed: \(String(describing: error))")
+        }
         onComplete()
     }
+}
+
+private extension Logger {
+    static let onboarding = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Onboarding")
 }
 
 #if canImport(UIKit)
