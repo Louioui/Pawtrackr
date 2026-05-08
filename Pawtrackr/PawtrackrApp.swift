@@ -28,6 +28,9 @@ struct PawtrackrApp: App {
 
     let container: ModelContainer?
     private var scheduledTasks: ScheduledTasks?
+    let dataStore: DataStoreService?
+    let router = AppRouter()
+    let eventBus = GlobalEventBus()
     @State private var appSettings = AppSettings()
     @StateObject private var authViewModel: AuthenticationViewModel
     // Using a class wrapper so subscriptions survive struct copies.
@@ -77,6 +80,11 @@ struct PawtrackrApp: App {
         self.container = initialContainer
         self.scheduledTasks = initialTasks
         self._authViewModel = StateObject(wrappedValue: initialAuthVM)
+        if let container = initialContainer {
+            self.dataStore = DataStoreService(container: container)
+        } else {
+            self.dataStore = nil
+        }
 
         // 3. Start side effects AFTER full initialization
         if let localContainer = initialContainer {
@@ -145,6 +153,9 @@ struct PawtrackrApp: App {
                 SettingsView()
                     .environmentObject(appSettings)
                     .environmentObject(authViewModel)
+                    .environment(dataStore)
+                    .environment(router)
+                    .environment(eventBus)
                     .modelContainer(container)
                     .frame(width: 450, height: 500)
             } else {
@@ -156,6 +167,7 @@ struct PawtrackrApp: App {
         MenuBarExtra("Pawtrackr", systemImage: "pawprint.fill") {
             if let container = container {
                 PawtrackrMenuBarExtra()
+                    .environment(dataStore)
                     .modelContainer(container)
             } else {
                 Text("Database unavailable")
@@ -171,8 +183,10 @@ struct PawtrackrApp: App {
             RootView()
                 .environmentObject(appSettings)
                 .environmentObject(authViewModel)
-                .modelContainer(container)
-                .onContinueUserActivity("com.pawtrackr.viewPet") { activity in
+                .environment(dataStore)
+                .environment(router)
+                .environment(eventBus)
+                .modelContainer(container)                .onContinueUserActivity("com.pawtrackr.viewPet") { activity in
                     handleViewPetActivity(activity)
                 }
                 .onContinueUserActivity("com.pawtrackr.viewClient") { activity in

@@ -75,9 +75,22 @@ final class DashboardViewModel {
     private let recentClientLimit = 5
     private let overduePetLimit  = 5
 
-    init(modelContext: ModelContext, repository: DashboardRepositoryProtocol? = nil) {
-        self.repository = repository ?? DashboardRepository(modelContainer: modelContext.container)
-        observeDashboardRefreshTriggers()
+    private var dataStore: DataStoreService
+    private var eventBus: GlobalEventBus
+    private var observationTask: Task<Void, Never>?
+
+    init(dataStore: DataStoreService, eventBus: GlobalEventBus) {
+        self.dataStore = dataStore
+        self.eventBus = eventBus
+        self.repository = DashboardRepository(modelContainer: dataStore.container)
+
+        self.observationTask = Task {
+            for await event in eventBus.stream {
+                if event == .checkoutCompleted { await self.refresh() }
+            }
+        }
+
+        Task { await refresh() }
     }
 
     // MARK: - Public
@@ -102,7 +115,7 @@ final class DashboardViewModel {
 
     func checkInFromAppointment(_ appointment: Appointment) async {
         do {
-            let visitRepo = VisitRepository(modelContainer: repository.modelContext.container)
+            let visitRepo = VisitRepository(modelContainer: repository.modelContext.container, eventBus: eventBus)
             _ = try await visitRepo.checkIn(from: appointment)
             await refresh()
         } catch {
@@ -114,8 +127,8 @@ final class DashboardViewModel {
         guard pet.activeVisit == nil else { return }
 
         do {
-            let visitRepo = VisitRepository(modelContainer: repository.modelContext.container)
-            _ = try await visitRepo.checkIn(pet: pet, date: .now)
+            let visitRepo = VisitRepository(modelContainer: repository.modelContext.container, eventBus: eventBus)
+            _ = try await visitRepo.checkIn(pet: pet, date: Date.now)
             await refresh()
         } catch {
             setDashboardError(error, source: #function)

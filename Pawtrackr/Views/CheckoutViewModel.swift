@@ -134,21 +134,25 @@ final class CheckoutViewModel {
     private(set) var selectedServicesSummary: String = "None"
     private(set) var finalTotalString: String = "$0.00"
 
+    private let eventBus: GlobalEventBus
+
     init(
         pet: Pet,
         visit: Visit?,
         draftStore: CheckoutDraftStore = .shared,
-        eventRecorder: CheckoutEventRecorder = .shared
+        eventRecorder: CheckoutEventRecorder = .shared,
+        eventBus: GlobalEventBus = GlobalEventBus()
     ) {
         self.pet = pet
         self.visit = visit ?? Visit(pet: pet)
         self.checkoutEndsAt = Date()
         self.draftStore = draftStore
         self.eventRecorder = eventRecorder
+        self.eventBus = eventBus
     }
 
     convenience init(pet: Pet) {
-        self.init(pet: pet, visit: nil)
+        self.init(pet: pet, visit: nil, eventBus: GlobalEventBus())
     }
 
     private static let serviceOrder: [String] = [
@@ -158,7 +162,7 @@ final class CheckoutViewModel {
     @MainActor
     func loadServices(modelContext: ModelContext) {
         Logger.checkout.info("CheckoutViewModel: Loading services")
-        self.visitRepository = VisitRepository(modelContainer: modelContext.container)
+        self.visitRepository = VisitRepository(modelContainer: modelContext.container, eventBus: eventBus)
         self.serviceRepository = ServiceRepository(modelContainer: modelContext.container)
         isLoadingServices = true
 
@@ -416,6 +420,7 @@ final class CheckoutViewModel {
             try? await draftStore.deleteDraft(for: visit.uuid)
             state = .confirmed
             isSaving = false
+            eventBus.publish(.checkoutCompleted)
 
             let userInfo: [String: Any] = [
                 VisitDidCompleteKey.endedAt.rawValue: endedAt

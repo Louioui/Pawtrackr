@@ -9,7 +9,7 @@ import SwiftData
 import CoreTransferable
 
 struct InsightsView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(DataStoreService.self) private var dataStore
     @State private var viewModel: InsightsViewModel?
     @State private var reportPDFData: Data?
     @State private var isPreparingReport = false
@@ -28,7 +28,7 @@ struct InsightsView: View {
         .navigationTitle("Insights")
         .task {
             guard viewModel == nil else { return }
-            let vm = InsightsViewModel(modelContext: modelContext)
+            let vm = InsightsViewModel(dataStore: dataStore)
             viewModel = vm
             await vm.refresh()
         }

@@ -42,8 +42,8 @@ struct CheckInPetIntent: AppIntent {
             return .result(value: "\(pet.name) is already checked in.")
         }
 
-        let repository = VisitRepository(modelContainer: container)
-        _ = try await repository.checkIn(pet: pet, date: .now)
+        let repository = VisitRepository(modelContainer: container, eventBus: GlobalEventBus())
+        _ = try await repository.checkIn(pet: pet, date: Date())
 
         return .result(value: "Checked in \(pet.name).")
     }

@@ -22,9 +22,11 @@ protocol VisitRepositoryProtocol: Sendable {
 @MainActor
 final class VisitRepository: VisitRepositoryProtocol {
     private let modelContext: ModelContext
+    private let eventBus: GlobalEventBus
     
-    init(modelContainer: ModelContainer) {
+    init(modelContainer: ModelContainer, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.modelContext = modelContainer.mainContext
+        self.eventBus = eventBus
     }
     
     func fetchVisits(predicate: Predicate<Visit>?, sortBy: [SortDescriptor<Visit>], limit: Int?) async throws -> [Visit] {
@@ -54,10 +56,8 @@ final class VisitRepository: VisitRepositoryProtocol {
             SummaryUpdater.rebuildDay(for: ended, in: modelContext)
         }
         
-        let userInfo: [String: Any] = [
-            VisitDidCompleteKey.endedAt.rawValue: ended ?? started
-        ]
-        NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: userInfo)
+        _ = ended ?? started
+        eventBus.publish(.checkoutCompleted)
     }
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
@@ -91,11 +91,8 @@ final class VisitRepository: VisitRepositoryProtocol {
         
         // Only post notification. PawtrackrApp's listener will handle 
         // the heavy summary rebuilding in a detached background task.
-        let userInfo: [String: Any] = [
-            VisitDidCompleteKey.endedAt.rawValue: now
-        ]
-        NotificationCenter.default.post(name: .visitDidComplete, object: visit, userInfo: userInfo)
-        Logger.visits.info("VisitRepository: Checkout complete, notification posted")
+        eventBus.publish(.checkoutCompleted)
+        Logger.visits.info("VisitRepository: Checkout complete, event published")
     }
 }
 

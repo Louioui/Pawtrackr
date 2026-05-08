@@ -10,6 +10,7 @@ import CoreTransferable
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(GlobalEventBus.self) private var eventBus
     @State private var viewModel: CheckoutViewModel
     @State private var receiptPDFData: Data?
     @State private var receiptFailed = false
@@ -29,7 +30,7 @@ struct CheckoutView: View {
     }
 
     init(pet: Pet, visit: Visit? = nil) {
-        _viewModel = State(initialValue: CheckoutViewModel(pet: pet, visit: visit))
+        _viewModel = State(initialValue: CheckoutViewModel(pet: pet, visit: visit, eventBus: GlobalEventBus()))
     }
 
     var body: some View {
@@ -72,6 +73,7 @@ struct CheckoutView: View {
             Alert(title: Text("Error"), message: Text(error.localizedDescription), dismissButton: .default(Text("OK")))
         }
         .onAppear {
+            viewModel = CheckoutViewModel(pet: viewModel.pet, visit: viewModel.visit, eventBus: eventBus)
             viewModel.loadServices(modelContext: modelContext)
             notesEditorText = viewModel.sessionNotes
             amountEditorText = viewModel.amountString

@@ -12,8 +12,10 @@ import Charts
 #endif
 
   struct DashboardView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(DataStoreService.self) private var dataStore
+    @Environment(GlobalEventBus.self) private var eventBus
     @Environment(NavigationRouter.self) private var router
+    @Environment(\.modelContext) private var modelContext
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
     @State private var showContent = false
@@ -23,6 +25,11 @@ import Charts
   var body: some View {
       dashboardContent
         .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
+        .task {
+            if vm == nil {
+                vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
+            }
+        }
         .sheet(isPresented: $showNewClient) {
           NewClientSheet(modelContext: modelContext)
         }
@@ -44,7 +51,7 @@ import Charts
       ProgressView()
         .task {
           // Assign immediately so @Observable tracking is live while refresh runs.
-          let model = DashboardViewModel(modelContext: modelContext)
+          let model = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
           vm = model
           await model.refresh()
         }

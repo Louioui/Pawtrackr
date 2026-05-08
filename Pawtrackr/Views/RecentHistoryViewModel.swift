@@ -25,32 +25,23 @@ final class RecentHistoryViewModel {
     private(set) var isLoading: Bool = false
     
     // MARK: - Private Properties
-    private var modelContext: ModelContext
-    private var searchTask: Task<Void, Never>? = nil
-    private var cancellables: Set<AnyCancellable> = []
-    private var workSeq: Int = 0 // guards async filtering application
+    private var dataStore: DataStoreService
+    private var searchTask: Task<Void, Never>?
+    private var workSeq: UInt64 = 0
+    private var observationTask: Task<Void, Never>?
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
-        // Auto-refresh when a checkout completes (Combine)
-        NotificationCenter.default.publisher(for: .visitDidComplete)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.fetchVisits() }
-            .store(in: &cancellables)
+    init(dataStore: DataStoreService) {
+        self.dataStore = dataStore
+        // Reactively observe changes to Visit entities
+        self.observationTask = Task {
+            for await _ in dataStore.observeChanges(Visit.self) {
+                fetchVisits()
+            }
+        }
         Task { fetchVisits() }
     }
 
-    // Combine cancellables auto-cancel on deinit.
-
-    /// Allows the view to provide a real ModelContext from the environment
-    /// after initializing with a temporary one. Triggers a refresh when changed.
-    func setModelContext(_ newContext: ModelContext) {
-        // Only swap if different to avoid redundant fetches
-        if newContext !== self.modelContext {
-            self.modelContext = newContext
-            fetchVisits()
-        }
-    }
+    // Internal tasks auto-cancel when the view model is released.
     
     private func scheduleFetch() {
         searchTask?.cancel()
@@ -69,76 +60,69 @@ final class RecentHistoryViewModel {
         let currentSeq = { workSeq &+= 1; return workSeq }()
 
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Compute date bounds for the selected scope and push them into the store predicate
         let cal = Calendar.current
         let now = Date()
         let (start, end): (Date?, Date?) = {
             switch scope {
-            case .all:
-                return (nil, nil)
+            case .all: return (nil, nil)
             case .today:
                 let s = cal.startOfDay(for: now)
                 guard let e = cal.date(byAdding: .day, value: 1, to: s) else { return (s, nil) }
                 return (s, e)
             case .thisWeek:
                 guard let s = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)),
-                      let e = cal.date(byAdding: .day, value: 7, to: s) else {
-                    return (nil, nil)
-                }
+                      let e = cal.date(byAdding: .day, value: 7, to: s) else { return (nil, nil) }
                 return (s, e)
             }
         }()
-        do {
-            let descriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { $0.endedAt != nil },
-                sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
-            )
-            let fetchedVisits = try modelContext.fetch(descriptor).filter { visit in
-                guard let endedAt = visit.endedAt else { return false }
-                if let s = start, endedAt < s { return false }
-                if let e = end, endedAt >= e { return false }
-                return true
-            }
 
-            // Snapshot minimal data for off-main filtering and summary
-            let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in
-                HistoryVisitSnap(
-                    id: v.uuid,
-                    startedAt: v.startedAt,
-                    endedAt: v.endedAt,
-                    petName: v.pet?.name ?? "Unknown",
-                    ownerFirst: v.pet?.owner?.firstName ?? "",
-                    ownerLast: v.pet?.owner?.lastName ?? "",
-                    itemNames: (v.items ?? []).map { $0.name },
-                    total: (v.total as NSDecimalNumber).doubleValue
-                )
-            }
+        Task {
+            do {
+                let fetchedVisits = try await dataStore.fetchAsync(
+                    #Predicate<Visit> { $0.endedAt != nil },
+                    sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+                ).filter { visit in
+                    guard let endedAt = visit.endedAt else { return false }
+                    if let s = start, endedAt < s { return false }
+                    if let e = end, endedAt >= e { return false }
+                    return true
+                }
 
-            Task.detached(priority: .utility) { [currentSeq] in
-                let result = RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
+                // ... keep the rest of the filtering logic ...
+                let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in
+                    HistoryVisitSnap(
+                        id: v.uuid,
+                        startedAt: v.startedAt,
+                        endedAt: v.endedAt,
+                        petName: v.pet?.name ?? "Unknown",
+                        ownerFirst: v.pet?.owner?.firstName ?? "",
+                        ownerLast: v.pet?.owner?.lastName ?? "",
+                        itemNames: (v.items ?? []).map { $0.name },
+                        total: (v.total as NSDecimalNumber).doubleValue
+                    )
+                }
+
+                Task.detached(priority: .utility) { [currentSeq] in
+                    let result = RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
+                    await MainActor.run {
+                        guard currentSeq == self.workSeq else { return }
+                        let filtered = fetchedVisits.filter { result.filteredIDs.contains($0.uuid) }
+                        let calendar = Calendar.current
+                        self.summaryVisitCount = filtered.count
+                        self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
+                        self.groupedVisits = Dictionary(grouping: filtered, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
+                        self.sortedDays = self.groupedVisits.keys.sorted(by: >)
+                        self.isLoading = false
+                    }
+                }
+            } catch {
                 await MainActor.run {
-                    guard currentSeq == self.workSeq else { return }
-
-                    // Apply filtered IDs to concrete visits
-                    let filtered = fetchedVisits.filter { result.filteredIDs.contains($0.uuid) }
-                    let calendar = Calendar.current
-                    self.summaryVisitCount = filtered.count
-                    self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
-                    self.groupedVisits = Dictionary(grouping: filtered, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
-                    self.sortedDays = self.groupedVisits.keys.sorted(by: >)
+                    print("Failed to fetch recent history: \(error)")
                     self.isLoading = false
-                    #if DEBUG
-                    let dt = Date().timeIntervalSince(t0)
-                    print("History filter+apply in \(String(format: "%.2f", dt))s for \(snaps.count) visits")
-                    #endif
                 }
             }
-        } catch {
-            print("Failed to fetch recent history: \(error)")
-            self.isLoading = false
         }
     }
-    
     func exportCSV() -> String {
         let allVisits = sortedDays.flatMap { groupedVisits[$0] ?? [] }
         var lines: [String] = []

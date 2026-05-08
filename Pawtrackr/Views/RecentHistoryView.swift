@@ -13,7 +13,7 @@ import UIKit
 #endif
 
 struct RecentHistoryView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(DataStoreService.self) private var dataStore
     @State private var viewModel: RecentHistoryViewModel?
     private var initialScope: RecentHistoryViewModel.Scope?
     private var initialQuery: String?
@@ -30,7 +30,7 @@ struct RecentHistoryView: View {
             .refreshable { viewModel?.fetchVisits() }
             .task {
                 if viewModel == nil {
-                    let vm = RecentHistoryViewModel(modelContext: modelContext)
+                    let vm = RecentHistoryViewModel(dataStore: dataStore)
                     if let s = initialScope { vm.scope = s }
                     if let q = initialQuery { vm.query = q }
                     viewModel = vm
@@ -62,8 +62,8 @@ struct RecentHistoryView: View {
     
     private func deleteVisit(_ visit: Visit) {
         do {
-            modelContext.delete(visit)
-            try modelContext.save()
+            dataStore.container.mainContext.delete(visit)
+            try dataStore.container.mainContext.save()
             HapticManager.notify(.success)
             viewModel?.fetchVisits()
         } catch {

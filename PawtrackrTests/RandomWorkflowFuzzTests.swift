@@ -6,18 +6,24 @@ import SwiftData
 final class RandomWorkflowFuzzTests: XCTestCase {
     private var container: ModelContainer!
     private var context: ModelContext!
+    private var dataStore: DataStoreService!
+    private var eventBus: GlobalEventBus!
 
     override func setUpWithError() throws {
         let schema = Schema(PawtrackrSchema.models)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, configurations: [config])
         context = container.mainContext
+        dataStore = DataStoreService(container: container)
+        eventBus = GlobalEventBus()
         Formatters.updateCurrencySymbol("$")
     }
 
     override func tearDownWithError() throws {
         container = nil
         context = nil
+        dataStore = nil
+        eventBus = nil
     }
 
     func testRandomizedClientPetVisitCheckoutDashboardWorkflow() async throws {
@@ -79,7 +85,7 @@ final class RandomWorkflowFuzzTests: XCTestCase {
         XCTAssertTrue(petMatches.contains { ($0.pets ?? []).contains { $0.name == firstCreated.pet } })
 
         let checkoutPets = Array(pets.prefix(8))
-        let visitRepository = VisitRepository(modelContainer: container)
+        let visitRepository = VisitRepository(modelContainer: container, eventBus: eventBus)
         let paymentMethods: [Payment.Method] = [.cash, .creditCard, .debitCard, .zelle, .other]
         var expectedRevenue = Decimal.zero
 
@@ -130,7 +136,7 @@ final class RandomWorkflowFuzzTests: XCTestCase {
         XCTAssertFalse(serviceDistribution.isEmpty)
         XCTAssertFalse(categoryDistribution.isEmpty)
 
-        let insights = InsightsViewModel(modelContext: context)
+        let insights = InsightsViewModel(dataStore: dataStore)
         await insights.refresh()
         XCTAssertEqual(insights.totalRevenue, expectedRevenue.roundedMoney())
         XCTAssertEqual(insights.totalVisitsInPeriod, checkoutPets.count)

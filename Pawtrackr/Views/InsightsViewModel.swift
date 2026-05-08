@@ -70,10 +70,10 @@ class InsightsViewModel {
     private(set) var isRefreshing  = false
     private(set) var hasLoadedOnce = false
 
-    private let modelContext: ModelContext
+    private let dataStore: DataStoreService
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+    init(dataStore: DataStoreService) {
+        self.dataStore = dataStore
     }
 
     // MARK: - Public
@@ -117,7 +117,7 @@ class InsightsViewModel {
         let descriptor = FetchDescriptor<Client>(
             predicate: #Predicate<Client> { $0.createdAt >= startOfMonth }
         )
-        let newClientsCount = (try? modelContext.fetchCount(descriptor)) ?? 0
+        let newClientsCount = (try? dataStore.container.mainContext.fetchCount(descriptor)) ?? 0
 
         return BusinessReportService.MonthlySummary(
             month: now,
@@ -132,39 +132,33 @@ class InsightsViewModel {
     // MARK: - Private fetches
 
     private func fetchRevenue() async {
-        let container  = modelContext.container
         let periodDays = revenuePeriodDays
         let cal        = Calendar.current
         let end        = cal.startOfDay(for: .now)
         guard let start = cal.date(byAdding: .day, value: -(periodDays - 1), to: end) else { return }
 
-        let result = await Task.detached(priority: .userInitiated) {
-            () -> (points: [(Date, Decimal)], totalVisits: Int) in
-            let bgContext = ModelContext(container)
-            let descriptor = FetchDescriptor<DaySummary>(
-                predicate: #Predicate<DaySummary> { summary in
-                    summary.day >= start && summary.day <= end
-                }
-            )
-            let summaries   = (try? bgContext.fetch(descriptor)) ?? []
-            let collapsed = SummaryUpdater.collapsedDayAggregates(from: summaries)
-            let points = collapsed.values
-                .map { ($0.day, $0.revenue) }
-                .sorted { $0.0 < $1.0 }
-            let totalVisits = collapsed.values.reduce(0) { $0 + $1.visitCount }
-            return (points: points, totalVisits: totalVisits)
-        }.value
+        let summaries = (try? await dataStore.fetchAsync(
+            #Predicate<DaySummary> { summary in
+                summary.day >= start && summary.day <= end
+            }
+        )) ?? []
 
-        revenueSeries       = result.points.map { RevenueData(date: $0.0, amount: $0.1) }
-        totalRevenue        = result.points.reduce(.zero) { $0 + $1.1 }
-        totalVisitsInPeriod = result.totalVisits
-        averageVisitValue   = result.totalVisits > 0
-            ? totalRevenue / Decimal(result.totalVisits)
+        let collapsed = SummaryUpdater.collapsedDayAggregates(from: summaries)
+        let points = collapsed.values
+            .map { ($0.day, $0.revenue) }
+            .sorted { $0.0 < $1.0 }
+        let totalVisits = collapsed.values.reduce(0) { $0 + $1.visitCount }
+
+        revenueSeries       = points.map { RevenueData(date: $0.0, amount: $0.1) }
+        totalRevenue        = points.reduce(.zero) { $0 + $1.1 }
+        totalVisitsInPeriod = totalVisits
+        averageVisitValue   = totalVisits > 0
+            ? totalRevenue / Decimal(totalVisits)
             : .zero
     }
 
     private func fetchDistributions() async {
-        let container = modelContext.container
+        let container = dataStore.container
         let cal   = Calendar.current
         let end   = cal.startOfDay(for: .now).addingTimeInterval(86400)
         let start = cal.date(byAdding: .day, value: -30, to: end) ?? end
@@ -236,7 +230,7 @@ class InsightsViewModel {
     }
 
     private func fetchTopClients() async {
-        let container = modelContext.container
+        let container = dataStore.container
 
         let rows = await Task.detached(priority: .userInitiated) { () -> [TopClientData] in
             let bgContext = ModelContext(container)
@@ -264,7 +258,7 @@ class InsightsViewModel {
     }
 
     private func fetchRetentionMetrics() async {
-        let container = modelContext.container
+        let container = dataStore.container
 
         let result = await Task.detached(priority: .userInitiated) {
             () -> (rate: Double, churn: Int, recurring: Int, oneTime: Int)? in
@@ -326,7 +320,7 @@ class InsightsViewModel {
                                         to: cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now)
         else { return }
 
-        let container = modelContext.container
+        let container = dataStore.container
         let rows = await Task.detached(priority: .userInitiated) { () -> [MonthlyGrowthData] in
             let bgContext = ModelContext(container)
             let descriptor = FetchDescriptor<DaySummary>(
