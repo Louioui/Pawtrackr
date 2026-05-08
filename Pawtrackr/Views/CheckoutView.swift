@@ -21,6 +21,7 @@ struct CheckoutView: View {
     @State private var notesSyncTask: Task<Void, Never>?
     @State private var amountSyncTask: Task<Void, Never>?
     @State private var referenceSyncTask: Task<Void, Never>?
+    @State private var didLoadViewModel = false
     @FocusState private var focusedField: FocusField?
 
     private enum FocusField: Hashable {
@@ -73,6 +74,8 @@ struct CheckoutView: View {
             Alert(title: Text("Error"), message: Text(error.localizedDescription), dismissButton: .default(Text("OK")))
         }
         .onAppear {
+            guard !didLoadViewModel else { return }
+            didLoadViewModel = true
             viewModel = CheckoutViewModel(pet: viewModel.pet, visit: viewModel.visit, eventBus: eventBus)
             viewModel.loadServices(modelContext: modelContext)
             notesEditorText = viewModel.sessionNotes

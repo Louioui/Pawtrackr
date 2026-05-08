@@ -7,7 +7,6 @@
 
 import SwiftUI
 import SwiftData
-import Combine
 
 @Observable
 @MainActor
@@ -26,16 +25,29 @@ final class RecentHistoryViewModel {
     
     // MARK: - Private Properties
     private var dataStore: DataStoreService
+    private let eventBus: GlobalEventBus
     private var searchTask: Task<Void, Never>?
     private var workSeq: UInt64 = 0
     private var observationTask: Task<Void, Never>?
+    private var eventTask: Task<Void, Never>?
 
-    init(dataStore: DataStoreService) {
+    init(dataStore: DataStoreService, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.dataStore = dataStore
+        self.eventBus = eventBus
         // Reactively observe changes to Visit entities
         self.observationTask = Task {
             for await _ in dataStore.observeChanges(Visit.self) {
                 fetchVisits()
+            }
+        }
+        self.eventTask = Task {
+            for await event in eventBus.stream {
+                switch event {
+                case .checkoutCompleted(_), .refreshRequired:
+                    fetchVisits()
+                default:
+                    break
+                }
             }
         }
         Task { fetchVisits() }
@@ -54,9 +66,6 @@ final class RecentHistoryViewModel {
     
     func fetchVisits() {
         self.isLoading = true
-        #if DEBUG
-        let t0 = Date()
-        #endif
         let currentSeq = { workSeq &+= 1; return workSeq }()
 
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -78,17 +87,7 @@ final class RecentHistoryViewModel {
 
         Task {
             do {
-                let fetchedVisits = try await dataStore.fetchAsync(
-                    #Predicate<Visit> { $0.endedAt != nil },
-                    sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
-                ).filter { visit in
-                    guard let endedAt = visit.endedAt else { return false }
-                    if let s = start, endedAt < s { return false }
-                    if let e = end, endedAt >= e { return false }
-                    return true
-                }
-
-                // ... keep the rest of the filtering logic ...
+                let fetchedVisits = try fetchCompletedVisits(start: start, end: end)
                 let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in
                     HistoryVisitSnap(
                         id: v.uuid,
@@ -102,26 +101,45 @@ final class RecentHistoryViewModel {
                     )
                 }
 
-                Task.detached(priority: .utility) { [currentSeq] in
-                    let result = RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
-                    await MainActor.run {
-                        guard currentSeq == self.workSeq else { return }
-                        let filtered = fetchedVisits.filter { result.filteredIDs.contains($0.uuid) }
-                        let calendar = Calendar.current
-                        self.summaryVisitCount = filtered.count
-                        self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
-                        self.groupedVisits = Dictionary(grouping: filtered, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
-                        self.sortedDays = self.groupedVisits.keys.sorted(by: >)
-                        self.isLoading = false
-                    }
-                }
+                let result = await Task.detached(priority: .utility) {
+                    RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
+                }.value
+
+                guard currentSeq == self.workSeq else { return }
+                let filtered = fetchedVisits.filter { result.filteredIDs.contains($0.uuid) }
+                let calendar = Calendar.current
+                self.summaryVisitCount = filtered.count
+                self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
+                self.groupedVisits = Dictionary(grouping: filtered, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
+                self.sortedDays = self.groupedVisits.keys.sorted(by: >)
+                self.isLoading = false
             } catch {
-                await MainActor.run {
-                    print("Failed to fetch recent history: \(error)")
-                    self.isLoading = false
-                }
+                print("Failed to fetch recent history: \(error)")
+                self.isLoading = false
             }
         }
+    }
+
+    private func fetchCompletedVisits(start: Date?, end: Date?) throws -> [Visit] {
+        let sort = [SortDescriptor(\Visit.endedAt, order: .reverse)]
+
+        if let start, let end {
+            return try dataStore.fetch(
+                #Predicate<Visit> { visit in
+                    if let endedAt = visit.endedAt {
+                        endedAt >= start && endedAt < end
+                    } else {
+                        false
+                    }
+                },
+                sortBy: sort
+            )
+        }
+
+        return try dataStore.fetch(
+            #Predicate<Visit> { $0.endedAt != nil },
+            sortBy: sort
+        )
     }
     func exportCSV() -> String {
         let allVisits = sortedDays.flatMap { groupedVisits[$0] ?? [] }

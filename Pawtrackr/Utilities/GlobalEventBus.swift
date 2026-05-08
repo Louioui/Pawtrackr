@@ -9,8 +9,16 @@ import Foundation
 import SwiftData
 import Combine
 
+struct CheckoutCompletionContext: Equatable {
+    let visitID: PersistentIdentifier
+    let petID: PersistentIdentifier?
+    let clientID: PersistentIdentifier?
+    let endedAt: Date
+    let total: Decimal
+}
+
 enum AppEvent: Equatable {
-    case checkoutCompleted
+    case checkoutCompleted(CheckoutCompletionContext)
     case dataStoreReset
     case refreshRequired
     case clientCreated(clientID: PersistentIdentifier)
@@ -22,11 +30,12 @@ enum AppEvent: Equatable {
     
     static func == (lhs: AppEvent, rhs: AppEvent) -> Bool {
         switch (lhs, rhs) {
-        case (.checkoutCompleted, .checkoutCompleted),
-             (.dataStoreReset, .dataStoreReset),
+        case (.dataStoreReset, .dataStoreReset),
              (.refreshRequired, .refreshRequired),
              (.showNewClientSheet, .showNewClientSheet):
             return true
+        case (.checkoutCompleted(let lhs), .checkoutCompleted(let rhs)):
+            return lhs == rhs
         case (.clientCreated(let id1), .clientCreated(let id2)),
              (.navigateToPet(let id1), .navigateToPet(let id2)),
              (.navigateToClient(let id1), .navigateToClient(let id2)),

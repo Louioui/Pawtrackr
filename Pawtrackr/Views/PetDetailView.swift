@@ -55,9 +55,9 @@ final class PetDetailViewModel {
         return VisitTimer.format(seconds: avg)
     }
     
-    init(pet: Pet, modelContext: ModelContext) {
+    init(pet: Pet, modelContext: ModelContext, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.pet = pet
-        self.visitRepository = VisitRepository(modelContainer: modelContext.container)
+        self.visitRepository = VisitRepository(modelContainer: modelContext.container, eventBus: eventBus)
         
         Task { [weak self] in
             let notifications = NotificationCenter.default.notifications(named: .visitDidComplete).map { _ in () }
@@ -122,6 +122,7 @@ final class PetDetailViewModel {
 struct PetDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(GlobalEventBus.self) private var eventBus
     @State private var viewModel: PetDetailViewModel?
     @State private var confirmCheckIn: Bool = false
     private let initialPet: Pet
@@ -186,7 +187,7 @@ struct PetDetailView: View {
                 }
             } else {
                 ProgressView()
-                    .task { viewModel = PetDetailViewModel(pet: initialPet, modelContext: modelContext) }
+                    .task { viewModel = PetDetailViewModel(pet: initialPet, modelContext: modelContext, eventBus: eventBus) }
             }
         }
     }

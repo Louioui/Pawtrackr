@@ -10,6 +10,7 @@ import CoreTransferable
 
 struct InsightsView: View {
     @Environment(DataStoreService.self) private var dataStore
+    @Environment(GlobalEventBus.self) private var eventBus
     @State private var viewModel: InsightsViewModel?
     @State private var reportPDFData: Data?
     @State private var isPreparingReport = false
@@ -28,7 +29,7 @@ struct InsightsView: View {
         .navigationTitle("Insights")
         .task {
             guard viewModel == nil else { return }
-            let vm = InsightsViewModel(dataStore: dataStore)
+            let vm = InsightsViewModel(dataStore: dataStore, eventBus: eventBus)
             viewModel = vm
             await vm.refresh()
         }

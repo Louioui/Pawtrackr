@@ -14,6 +14,7 @@ import UIKit
 
 struct RecentHistoryView: View {
     @Environment(DataStoreService.self) private var dataStore
+    @Environment(GlobalEventBus.self) private var eventBus
     @State private var viewModel: RecentHistoryViewModel?
     private var initialScope: RecentHistoryViewModel.Scope?
     private var initialQuery: String?
@@ -30,7 +31,7 @@ struct RecentHistoryView: View {
             .refreshable { viewModel?.fetchVisits() }
             .task {
                 if viewModel == nil {
-                    let vm = RecentHistoryViewModel(dataStore: dataStore)
+                    let vm = RecentHistoryViewModel(dataStore: dataStore, eventBus: eventBus)
                     if let s = initialScope { vm.scope = s }
                     if let q = initialQuery { vm.query = q }
                     viewModel = vm

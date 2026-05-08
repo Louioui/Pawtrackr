@@ -220,6 +220,12 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.externalReference, "")
     }
 
+    func testDefaultPaymentMethod_IsCashForFastCheckout() {
+        let vm = makeVM()
+        XCTAssertEqual(vm.selectedPaymentMethod, .cash)
+        XCTAssertFalse(vm.requiresExternalReference)
+    }
+
     func testChoosePayment_KeepsReferenceForCard() {
         let vm = makeVM()
         vm.setExternalReference("4242")
@@ -294,9 +300,48 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.visit.payment?.method, .cash)
     }
 
+    func testProcessPayment_ManualOverrideReconcilesLineItemsAndSummaryRevenue() async throws {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        vm.toggleService(haircut)
+        vm.setAmountDirectly("100.00")
+        try vm.advance()
+        try vm.advance()
+        vm.choosePayment(.cash)
+        try vm.advance()
+
+        await vm.processPayment()
+
+        XCTAssertEqual(vm.state, .confirmed)
+        XCTAssertEqual(vm.visit.total, Decimal(100.00))
+        XCTAssertEqual(vm.visit.payment?.amount, Decimal(100.00))
+        XCTAssertEqual((vm.visit.items ?? []).reduce(Decimal.zero) { $0 + $1.lineTotal }, Decimal(100.00))
+
+        let day = Calendar.current.startOfDay(for: vm.visit.endedAt ?? Date())
+        let summaries = try context.fetch(FetchDescriptor<DaySummary>(
+            predicate: #Predicate<DaySummary> { $0.day == day }
+        ))
+        XCTAssertEqual(SummaryUpdater.collapsedDayAggregates(from: summaries)[day]?.revenue, Decimal(100.00))
+    }
+
+    func testProcessPayment_RequiresReviewStep() async {
+        let vm = makeVM()
+        vm.toggleService(bath)
+
+        await vm.processPayment()
+
+        XCTAssertNotNil(vm.appError)
+        XCTAssertNotEqual(vm.state, .confirmed)
+        XCTAssertNil(vm.visit.endedAt)
+    }
+
     func testProcessPayment_DoesNotRunWhenAlreadySaving() async {
         let vm = makeVM()
         vm.toggleService(bath)
+        try? vm.advance()
+        try? vm.advance()
+        vm.choosePayment(.cash)
+        try? vm.advance()
         // Manually set isSaving to simulate a double-tap
         // processPayment guards on isSaving so the second call should be a no-op.
         // We can't set isSaving directly (private(set)) so instead we verify the guard

@@ -14,6 +14,7 @@ import OSLog
 struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(GlobalEventBus.self) private var eventBus
 
     // Lazy-initialized ViewModel to avoid context crashes
     @State private var viewModel: ClientDetailViewModel? = nil
@@ -99,7 +100,7 @@ struct ClientDetailView: View {
         .onAppear {
             if viewModel == nil {
                 let ctx = client.modelContext ?? modelContext
-                viewModel = ClientDetailViewModel(client: client, modelContext: ctx)
+                viewModel = ClientDetailViewModel(client: client, modelContext: ctx, eventBus: eventBus)
                 viewModel?.refreshRecentVisits()
             }
         }

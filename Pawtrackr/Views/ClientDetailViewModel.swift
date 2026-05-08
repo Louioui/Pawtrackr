@@ -39,10 +39,15 @@ final class ClientDetailViewModel {
     private var lastTotalForClient: Int = 0
     private var fetchTask: Task<Void, Never>?
 
-    init(client: Client, modelContext: ModelContext, initialLimit: Int = 50) {
+    init(
+        client: Client,
+        modelContext: ModelContext,
+        initialLimit: Int = 50,
+        eventBus: GlobalEventBus = GlobalEventBus()
+    ) {
         self.client        = client
         self.modelContext  = modelContext
-        self.visitRepository = VisitRepository(modelContainer: modelContext.container)
+        self.visitRepository = VisitRepository(modelContainer: modelContext.container, eventBus: eventBus)
         self.pets          = client.pets ?? []
         self.currentLimit  = max(initialLimit, pageSize)
         refreshRecentVisits()

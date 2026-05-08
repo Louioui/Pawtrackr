@@ -56,14 +56,14 @@ final class VisitRepository: VisitRepositoryProtocol {
             SummaryUpdater.rebuildDay(for: ended, in: modelContext)
         }
         
-        _ = ended ?? started
-        eventBus.publish(.checkoutCompleted)
+        eventBus.publish(.refreshRequired)
     }
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
         let visit = Visit(pet: pet, startedAt: date)
         modelContext.insert(visit)
         try modelContext.save()
+        eventBus.publish(.refreshRequired)
         return visit
     }
 
@@ -79,6 +79,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         appointment.visit = visit
         modelContext.insert(visit)
         try modelContext.save()
+        eventBus.publish(.refreshRequired)
         return visit
     }
     
@@ -88,10 +89,28 @@ final class VisitRepository: VisitRepositoryProtocol {
         
         // Save the visit and its payment
         try modelContext.save()
-        
-        // Only post notification. PawtrackrApp's listener will handle 
-        // the heavy summary rebuilding in a detached background task.
-        eventBus.publish(.checkoutCompleted)
+
+        SummaryUpdater.rebuildDay(for: now, in: modelContext)
+        let completion = CheckoutCompletionContext(
+            visitID: visit.persistentModelID,
+            petID: visit.pet?.persistentModelID,
+            clientID: visit.pet?.owner?.persistentModelID,
+            endedAt: now,
+            total: visit.total
+        )
+        eventBus.publish(.checkoutCompleted(completion))
+        var userInfo: [String: Any] = [
+            VisitDidCompleteKey.visitID.rawValue: completion.visitID,
+            VisitDidCompleteKey.endedAt.rawValue: completion.endedAt,
+            VisitDidCompleteKey.total.rawValue: completion.total
+        ]
+        if let petID = completion.petID {
+            userInfo[VisitDidCompleteKey.petID.rawValue] = petID
+        }
+        if let clientID = completion.clientID {
+            userInfo[VisitDidCompleteKey.clientID.rawValue] = clientID
+        }
+        NotificationCenter.default.post(name: .visitDidComplete, object: visit, userInfo: userInfo)
         Logger.visits.info("VisitRepository: Checkout complete, event published")
     }
 }

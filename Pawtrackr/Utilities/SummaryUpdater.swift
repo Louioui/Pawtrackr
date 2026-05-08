@@ -10,7 +10,7 @@ import SwiftData
 import OSLog
 
 enum SummaryUpdater {
-    struct DayAggregate: Equatable {
+    struct DayAggregate: Equatable, Sendable {
         let day: Date
         let revenue: Decimal
         let visitCount: Int

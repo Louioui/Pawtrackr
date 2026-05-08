@@ -62,7 +62,7 @@ final class CheckoutViewModel {
     var sessionNotes: String = ""
     var amountString: String = ""
     var selectedServiceIDs: Set<PersistentIdentifier> = [] { didSet { scheduleDraftSave(reason: "services_changed") } }
-    var selectedPaymentMethod: Payment.Method = .creditCard { didSet { scheduleDraftSave(reason: "payment_method_changed") } }
+    var selectedPaymentMethod: Payment.Method = .cash { didSet { scheduleDraftSave(reason: "payment_method_changed") } }
     var beforePhotoData: Data? { didSet { scheduleDraftSave(reason: "before_photo_changed") } }
     var afterPhotoData: Data? { didSet { scheduleDraftSave(reason: "after_photo_changed") } }
     var externalReference: String = ""
@@ -82,6 +82,12 @@ final class CheckoutViewModel {
     private var autosaveTask: Task<Void, Never>?
     private var suppressDraftAutosave = false
     private var lastSavedDraftFingerprint: String?
+
+    private struct PersistedCheckout {
+        let endedAt: Date
+        let completion: CheckoutCompletionContext
+        let container: ModelContainer
+    }
 
     // MARK: Computed State
     var requiresExternalReference: Bool {
@@ -382,7 +388,11 @@ final class CheckoutViewModel {
 
     @MainActor
     func processPayment() async {
-        guard !isSaving else { return }
+        guard !isSaving, state != .confirmed else { return }
+        guard currentStep == .review else {
+            self.appError = .validation(.custom(message: "Review checkout before confirming payment."))
+            return
+        }
 
         do {
             try validate(step: .review)
@@ -412,19 +422,28 @@ final class CheckoutViewModel {
         }.value
 
         do {
-            let endedAt = try persistCheckout(
+            let persisted = try persistCheckout(
                 processedBefore: pBefore, processedBeforeThumb: pBeforeThumb,
                 processedAfter: pAfter, processedAfterThumb: pAfterThumb
             )
+            await rebuildCheckoutSummaries(for: persisted.endedAt, container: persisted.container)
             autosaveTask?.cancel()
             try? await draftStore.deleteDraft(for: visit.uuid)
             state = .confirmed
             isSaving = false
-            eventBus.publish(.checkoutCompleted)
+            eventBus.publish(.checkoutCompleted(persisted.completion))
 
-            let userInfo: [String: Any] = [
-                VisitDidCompleteKey.endedAt.rawValue: endedAt
+            var userInfo: [String: Any] = [
+                VisitDidCompleteKey.visitID.rawValue: persisted.completion.visitID,
+                VisitDidCompleteKey.endedAt.rawValue: persisted.endedAt,
+                VisitDidCompleteKey.total.rawValue: persisted.completion.total
             ]
+            if let petID = persisted.completion.petID {
+                userInfo[VisitDidCompleteKey.petID.rawValue] = petID
+            }
+            if let clientID = persisted.completion.clientID {
+                userInfo[VisitDidCompleteKey.clientID.rawValue] = clientID
+            }
             NotificationCenter.default.post(name: .visitDidComplete, object: visit, userInfo: userInfo)
             Logger.checkout.info("CheckoutViewModel: Checkout saved successfully")
             trace("checkout_saved")
@@ -451,7 +470,7 @@ final class CheckoutViewModel {
         processedBeforeThumb: Data?,
         processedAfter: Data?,
         processedAfterThumb: Data?
-    ) throws -> Date {
+    ) throws -> PersistedCheckout {
         guard let context = visit.modelContext ?? pet.modelContext else {
             throw AppError.database("Internal error: Data store unavailable.")
         }
@@ -467,6 +486,7 @@ final class CheckoutViewModel {
         let endedAt = visit.endedAt ?? checkoutEndsAt ?? Date()
 
         syncVisitItems(in: context)
+        reconcileLineItemPrices(to: total)
 
         visit.note = notes
         visit.behaviorTags = sortedTags
@@ -494,7 +514,14 @@ final class CheckoutViewModel {
 
         visit.markCheckedOut(total: total, now: endedAt)
         try context.save()
-        return endedAt
+        let completion = CheckoutCompletionContext(
+            visitID: visit.persistentModelID,
+            petID: pet.persistentModelID,
+            clientID: pet.owner?.persistentModelID,
+            endedAt: endedAt,
+            total: total
+        )
+        return PersistedCheckout(endedAt: endedAt, completion: completion, container: context.container)
     }
 
     private func syncVisitItems(in context: ModelContext) {
@@ -514,14 +541,47 @@ final class CheckoutViewModel {
 
         for service in allServices + addOnServices where selectedIDs.contains(service.persistentModelID) {
             if existingItemsByServiceID[service.persistentModelID] == nil {
-                visit.addItem(
-                    title: service.name,
-                    unitPrice: service.effectiveBasePrice,
-                    quantity: 1,
-                    service: service
-                )
+                let item = VisitItem.from(service: service, visit: visit)
+                context.insert(item)
+                var currentItems = visit.items ?? []
+                currentItems.append(item)
+                visit.items = currentItems
             }
         }
+    }
+
+    private func reconcileLineItemPrices(to finalTotal: Decimal) {
+        let items = visit.items ?? []
+        guard !items.isEmpty else { return }
+
+        let subtotal = items.reduce(Decimal.zero) { $0 + $1.lineTotal }
+        let normalizedTotal = finalTotal.roundedMoney()
+        guard subtotal != normalizedTotal else { return }
+
+        var allocated = Decimal.zero
+        for (index, item) in items.enumerated() {
+            let lineTotal: Decimal
+            if index == items.count - 1 {
+                lineTotal = (normalizedTotal - allocated).roundedMoney()
+            } else if subtotal > .zero {
+                lineTotal = ((item.lineTotal / subtotal) * normalizedTotal).roundedMoney()
+                allocated += lineTotal
+            } else {
+                lineTotal = (normalizedTotal / Decimal(items.count)).roundedMoney()
+                allocated += lineTotal
+            }
+
+            let quantity = Decimal(max(1, item.quantity))
+            item.setUnitPrice((lineTotal / quantity).roundedMoney())
+        }
+        visit.recalcTotal()
+    }
+
+    private func rebuildCheckoutSummaries(for endedAt: Date, container: ModelContainer) async {
+        await Task.detached(priority: .utility) {
+            let context = ModelContext(container)
+            SummaryUpdater.rebuildDay(for: endedAt, in: context)
+        }.value
     }
 
     private func validate(step: CheckoutFlowStep) throws {

@@ -9,18 +9,12 @@
 import SwiftUI
 import SwiftData
 import OSLog
-import Combine
 import CoreSpotlight
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
 import AppKit
 #endif
-
-// Holds Combine subscriptions that must outlive the App struct's value copies.
-private final class AppCancellables {
-    var bag: Set<AnyCancellable> = []
-}
 
 @main
 struct PawtrackrApp: App {
@@ -33,8 +27,6 @@ struct PawtrackrApp: App {
     let eventBus = GlobalEventBus()
     @State private var appSettings = AppSettings()
     @StateObject private var authViewModel: AuthenticationViewModel
-    // Using a class wrapper so subscriptions survive struct copies.
-    private let cancellables = AppCancellables()
 
     // Platform AppDelegate for silent CloudKit pushes.
     #if canImport(UIKit) && !targetEnvironment(macCatalyst)
@@ -119,19 +111,6 @@ struct PawtrackrApp: App {
                 SummaryUpdater.rebuildAllSummaries(in: ctx)
             }
 
-            NotificationCenter.default.publisher(for: .visitDidComplete)
-                .receive(on: RunLoop.main)
-                .sink { notification in
-                    guard let date = notification.endedAtDate else { return }
-                    let targetDate = date
-
-                    // Detach and use a background context for heavy work
-                    Task.detached(priority: .utility) {
-                        let backgroundContext = ModelContext(localContainer)
-                        SummaryUpdater.rebuildDay(for: targetDate, in: backgroundContext)
-                    }
-                }
-                .store(in: &cancellables.bag)
         }
     }
 
@@ -186,7 +165,8 @@ struct PawtrackrApp: App {
                 .environment(dataStore)
                 .environment(router)
                 .environment(eventBus)
-                .modelContainer(container)                .onContinueUserActivity("com.pawtrackr.viewPet") { activity in
+                .modelContainer(container)
+                .onContinueUserActivity("com.pawtrackr.viewPet") { activity in
                     handleViewPetActivity(activity)
                 }
                 .onContinueUserActivity("com.pawtrackr.viewClient") { activity in

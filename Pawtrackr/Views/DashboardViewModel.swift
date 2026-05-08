@@ -5,7 +5,6 @@
 
 import Foundation
 import SwiftData
-import Combine
 import OSLog
 
 private let dashboardLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Dashboard")
@@ -69,7 +68,6 @@ final class DashboardViewModel {
     // MARK: - Private
     private var isRefreshing = false
     private let repository: DashboardRepositoryProtocol
-    private var cancellables: Set<AnyCancellable> = []
     private let revenueWindowDays = 7
     private let galleryWindowDays = 14
     private let recentClientLimit = 5
@@ -86,7 +84,12 @@ final class DashboardViewModel {
 
         self.observationTask = Task {
             for await event in eventBus.stream {
-                if event == .checkoutCompleted { await self.refresh() }
+                switch event {
+                case .checkoutCompleted(_), .refreshRequired:
+                    await self.refresh()
+                default:
+                    break
+                }
             }
         }
 
@@ -152,24 +155,6 @@ final class DashboardViewModel {
         } catch {
             setDashboardError(error, source: #function)
             overduePets = []
-        }
-    }
-
-    private func observeDashboardRefreshTriggers() {
-        NotificationCenter.default.publisher(for: .visitDidComplete)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.scheduleRefresh() }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: ModelContext.didSave)
-            .debounce(for: .milliseconds(750), scheduler: RunLoop.main)
-            .sink { [weak self] _ in self?.scheduleRefresh() }
-            .store(in: &cancellables)
-    }
-
-    private func scheduleRefresh() {
-        Task { @MainActor [weak self] in
-            await self?.refresh()
         }
     }
 

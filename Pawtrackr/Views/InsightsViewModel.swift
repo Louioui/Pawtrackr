@@ -71,9 +71,22 @@ class InsightsViewModel {
     private(set) var hasLoadedOnce = false
 
     private let dataStore: DataStoreService
+    private let eventBus: GlobalEventBus
+    private var observationTask: Task<Void, Never>?
 
-    init(dataStore: DataStoreService) {
+    init(dataStore: DataStoreService, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.dataStore = dataStore
+        self.eventBus = eventBus
+        self.observationTask = Task {
+            for await event in eventBus.stream {
+                switch event {
+                case .checkoutCompleted(_), .refreshRequired:
+                    await self.refresh()
+                default:
+                    break
+                }
+            }
+        }
     }
 
     // MARK: - Public
@@ -137,20 +150,22 @@ class InsightsViewModel {
         let end        = cal.startOfDay(for: .now)
         guard let start = cal.date(byAdding: .day, value: -(periodDays - 1), to: end) else { return }
 
-        let summaries = (try? await dataStore.fetchAsync(
-            #Predicate<DaySummary> { summary in
-                summary.day >= start && summary.day <= end
-            }
-        )) ?? []
+        let container = dataStore.container
+        let aggregates = await Task.detached(priority: .userInitiated) { () -> [SummaryUpdater.DayAggregate] in
+            let bgContext = ModelContext(container)
+            let descriptor = FetchDescriptor<DaySummary>(
+                predicate: #Predicate<DaySummary> { summary in
+                    summary.day >= start && summary.day <= end
+                }
+            )
+            let summaries = (try? bgContext.fetch(descriptor)) ?? []
+            return SummaryUpdater.collapsedDayAggregates(from: summaries).values.sorted { $0.day < $1.day }
+        }.value
 
-        let collapsed = SummaryUpdater.collapsedDayAggregates(from: summaries)
-        let points = collapsed.values
-            .map { ($0.day, $0.revenue) }
-            .sorted { $0.0 < $1.0 }
-        let totalVisits = collapsed.values.reduce(0) { $0 + $1.visitCount }
+        let totalVisits = aggregates.reduce(0) { $0 + $1.visitCount }
 
-        revenueSeries       = points.map { RevenueData(date: $0.0, amount: $0.1) }
-        totalRevenue        = points.reduce(.zero) { $0 + $1.1 }
+        revenueSeries       = aggregates.map { RevenueData(date: $0.day, amount: $0.revenue) }
+        totalRevenue        = aggregates.reduce(.zero) { $0 + $1.revenue }
         totalVisitsInPeriod = totalVisits
         averageVisitValue   = totalVisits > 0
             ? totalRevenue / Decimal(totalVisits)
