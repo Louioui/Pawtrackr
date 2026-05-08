@@ -9,7 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject private var appSettings: AppSettings
+    @Environment(AppSettings.self) private var appSettings
     @State private var showChangePIN = false
     @State private var pinChangeError: String? = nil
     @State private var showError = false
@@ -74,7 +74,9 @@ struct SettingsView: View {
     }
 
     private var settingsContent: some View {
-        Form {
+        @Bindable var appSettings = appSettings
+
+        return Form {
             Section(header: Text("Business Profile")) {
                 TextField("Business Name", text: $appSettings.businessName)
                 TextField("Currency Symbol", text: $appSettings.currencySymbol)
@@ -164,7 +166,7 @@ struct SettingsView: View {
 #endif
         .sheet(isPresented: $showChangePIN) {
             ChangePINSheet(isPresented: $showChangePIN, errorMessage: $pinChangeError)
-                .environmentObject(appSettings)
+                .environment(appSettings)
         }
         .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
             Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
@@ -263,7 +265,7 @@ struct SettingsView: View {
 
 // MARK: - Change PIN Sheet
 private struct ChangePINSheet: View {
-    @EnvironmentObject private var appSettings: AppSettings
+    @Environment(AppSettings.self) private var appSettings
     @Binding var isPresented: Bool
     @Binding var errorMessage: String?
 

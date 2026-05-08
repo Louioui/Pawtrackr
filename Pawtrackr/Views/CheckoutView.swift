@@ -152,12 +152,7 @@ struct CheckoutView: View {
     // MARK: - Steps
 
     private var stepTransition: AnyTransition {
-        let insertEdge: Edge = isGoingBack ? .leading : .trailing
-        let removeEdge: Edge = isGoingBack ? .trailing : .leading
-        return .asymmetric(
-            insertion: .move(edge: insertEdge),
-            removal: .move(edge: removeEdge).combined(with: .opacity)
-        )
+        .opacity
     }
 
     @ViewBuilder
@@ -274,6 +269,7 @@ struct CheckoutView: View {
                                 .scrollContentBackground(.hidden)
                                 #endif
                                 .focused($focusedField, equals: .sessionNotes)
+                                .accessibilityIdentifier("checkout.notesEditor")
                                 .frame(minHeight: 120)
                                 .padding(8)
                                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.05)))
@@ -339,6 +335,7 @@ struct CheckoutView: View {
                             .keyboardType(.decimalPad)
                             #endif
                             .focused($focusedField, equals: .amount)
+                            .accessibilityIdentifier("checkout.amountField")
                             .font(Font.system(size: 40, weight: .bold, design: .rounded))
                             .multilineTextAlignment(TextAlignment.center)
                             .foregroundStyle(Color.blue)
@@ -490,12 +487,13 @@ struct CheckoutView: View {
                         isGoingBack = true
                         viewModel.goBack()
                     } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.headline)
-                            .frame(width: primaryButtonHeight, height: primaryButtonHeight)
-                            .background(Circle().fill(Color.gray.opacity(0.1)))
+                            Image(systemName: "chevron.left")
+                                .font(.headline)
+                                .frame(width: primaryButtonHeight, height: primaryButtonHeight)
+                                .background(Circle().fill(Color.gray.opacity(0.1)))
+                        }
+                        .accessibilityIdentifier("checkout.backButton")
                     }
-                }
                 
                 Button {
                     advance()
@@ -509,6 +507,7 @@ struct CheckoutView: View {
                         .scaleEffect(viewModel.isAdvanceEnabled ? 1.0 : 0.97)
                 }
                 .disabled(!viewModel.isAdvanceEnabled)
+                .accessibilityIdentifier("checkout.primaryButton")
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isAdvanceEnabled)
                 #if os(macOS)
                 .keyboardShortcut(.return)
@@ -560,9 +559,17 @@ struct CheckoutView: View {
         notesSyncTask?.cancel()
         amountSyncTask?.cancel()
         referenceSyncTask?.cancel()
-        viewModel.setSessionNotes(notesEditorText)
-        viewModel.setAmountDirectly(amountEditorText)
-        viewModel.setExternalReference(referenceEditorText)
+
+        switch viewModel.currentStep {
+        case .details:
+            viewModel.setSessionNotes(notesEditorText)
+        case .payment, .review:
+            viewModel.setSessionNotes(notesEditorText)
+            viewModel.setAmountDirectly(amountEditorText)
+            viewModel.setExternalReference(referenceEditorText)
+        case .services:
+            break
+        }
     }
 
     private func commitAmountInput() {
@@ -683,6 +690,7 @@ struct CheckoutView: View {
             dismiss()
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("checkout.doneButton")
         .font(.headline)
         .foregroundStyle(.secondary)
         .padding(.top, 10)
@@ -721,6 +729,7 @@ struct CheckoutView: View {
             .scaleEffect(isSelected ? 1.04 : 1.0)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("checkout.service.\(service.name)")
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
     }
 
@@ -746,6 +755,7 @@ struct CheckoutView: View {
             .overlay(RoundedRectangle(cornerRadius: 15).stroke(isSelected ? Color.green.opacity(0.5) : Color.clear, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("checkout.addOn.\(service.name)")
         .animation(.spring(response: 0.3, dampingFraction: 0.65), value: isSelected)
     }
 
@@ -789,6 +799,7 @@ struct CheckoutView: View {
             .scaleEffect(isSelected ? 1.03 : 1.0)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("checkout.payment.\(option.method.rawValue)")
         .animation(.spring(response: 0.3, dampingFraction: 0.65), value: isSelected)
     }
 

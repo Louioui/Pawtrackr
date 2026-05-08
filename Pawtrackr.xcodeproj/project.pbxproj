@@ -14,11 +14,19 @@
 			remoteGlobalIDString = 04B7B9122E4F07A900823E8F;
 			remoteInfo = Pawtrackr;
 		};
+		B2C3D4E52E70000100000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04B7B90B2E4F07A900823E8F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 04B7B9122E4F07A900823E8F;
+			remoteInfo = Pawtrackr;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		04B7B9132E4F07A900823E8F /* Pawtrackr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pawtrackr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D42E60000100000001 /* PawtrackrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PawtrackrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B2C3D4E52E70000100000001 /* PawtrackrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PawtrackrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -30,6 +38,11 @@
 		A1B2C3D42E60000100000002 /* PawtrackrTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = PawtrackrTests;
+			sourceTree = "<group>";
+		};
+		B2C3D4E52E70000100000002 /* PawtrackrUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PawtrackrUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +62,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B2C3D4E52E70000100000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -57,6 +77,7 @@
 			children = (
 				04B7B9152E4F07A900823E8F /* Pawtrackr */,
 				A1B2C3D42E60000100000002 /* PawtrackrTests */,
+				B2C3D4E52E70000100000002 /* PawtrackrUITests */,
 				04B7B9142E4F07A900823E8F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -66,6 +87,7 @@
 			children = (
 				04B7B9132E4F07A900823E8F /* Pawtrackr.app */,
 				A1B2C3D42E60000100000001 /* PawtrackrTests.xctest */,
+				B2C3D4E52E70000100000001 /* PawtrackrUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -118,6 +140,29 @@
 			productReference = A1B2C3D42E60000100000001 /* PawtrackrTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B2C3D4E52E70000100000005 /* PawtrackrUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2C3D4E52E70000100000006 /* Build configuration list for PBXNativeTarget "PawtrackrUITests" */;
+			buildPhases = (
+				B2C3D4E52E70000100000007 /* Sources */,
+				B2C3D4E52E70000100000004 /* Frameworks */,
+				B2C3D4E52E70000100000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B2C3D4E52E70000100000009 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B2C3D4E52E70000100000002 /* PawtrackrUITests */,
+			);
+			name = PawtrackrUITests;
+			packageProductDependencies = (
+			);
+			productName = PawtrackrUITests;
+			productReference = B2C3D4E52E70000100000001 /* PawtrackrUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -132,6 +177,10 @@
 						CreatedOnToolsVersion = 16.4;
 					};
 					A1B2C3D42E60000100000005 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 04B7B9122E4F07A900823E8F;
+					};
+					B2C3D4E52E70000100000005 = {
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = 04B7B9122E4F07A900823E8F;
 					};
@@ -155,6 +204,7 @@
 			targets = (
 				04B7B9122E4F07A900823E8F /* Pawtrackr */,
 				A1B2C3D42E60000100000005 /* PawtrackrTests */,
+				B2C3D4E52E70000100000005 /* PawtrackrUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -168,6 +218,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1B2C3D42E60000100000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2C3D4E52E70000100000008 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -191,6 +248,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B2C3D4E52E70000100000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -198,6 +262,11 @@
 			isa = PBXTargetDependency;
 			target = 04B7B9122E4F07A900823E8F /* Pawtrackr */;
 			targetProxy = A1B2C3D42E60000100000003 /* PBXContainerItemProxy */;
+		};
+		B2C3D4E52E70000100000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 04B7B9122E4F07A900823E8F /* Pawtrackr */;
+			targetProxy = B2C3D4E52E70000100000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -467,6 +536,56 @@
 			};
 			name = Release;
 		};
+		B2C3D4E52E7000010000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6ALS97634D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = PartnerShipWithMedia.PawtrackrUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Pawtrackr;
+			};
+			name = Debug;
+		};
+		B2C3D4E52E7000010000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6ALS97634D;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = PartnerShipWithMedia.PawtrackrUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Pawtrackr;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -493,6 +612,15 @@
 			buildConfigurations = (
 				A1B2C3D42E6000010000000A /* Debug */,
 				A1B2C3D42E6000010000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B2C3D4E52E70000100000006 /* Build configuration list for PBXNativeTarget "PawtrackrUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B2C3D4E52E7000010000000A /* Debug */,
+				B2C3D4E52E7000010000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

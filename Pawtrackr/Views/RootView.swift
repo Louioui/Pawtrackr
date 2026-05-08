@@ -11,7 +11,7 @@ import SwiftData
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @EnvironmentObject private var authViewModel: AuthenticationViewModel
+    @Environment(AuthenticationViewModel.self) private var authViewModel
     @Query private var businessConfigs: [BusinessConfig]
     @State private var cloudKitMonitor = CloudKitMonitor.shared
     @State private var showOnboarding = false
@@ -53,6 +53,7 @@ struct RootView: View {
 
             guard !didRunStartupMaintenance else { return }
             didRunStartupMaintenance = true
+            guard !AppRuntime.isUITesting else { return }
 
             let container = modelContext.container
             Task.detached(priority: .utility) {

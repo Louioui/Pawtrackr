@@ -9,6 +9,7 @@
 import Foundation
 import SwiftData
 import Observation
+import OSLog
 
 @Observable
 @MainActor
@@ -53,6 +54,13 @@ class InsightsViewModel {
         let value: Double
     }
 
+    private struct ClientInsightsResult: Sendable {
+        let topClients: [TopClientData]
+        let retentionRate: Double
+        let churnRiskCount: Int
+        let retentionSeries: [RetentionData]
+    }
+
     // MARK: - State
     var revenueSeries:          [RevenueData]       = []
     var serviceDistribution:    [DistributionData]  = []
@@ -73,12 +81,19 @@ class InsightsViewModel {
     private let dataStore: DataStoreService
     private let eventBus: GlobalEventBus
     private var observationTask: Task<Void, Never>?
+    /// In-flight revenue fetch. Cancelled and replaced when the user changes the
+    /// period picker so rapid 7→30→90 taps don't race and leave stale data on screen.
+    private var revenueFetchTask: Task<Void, Never>?
 
     init(dataStore: DataStoreService, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.dataStore = dataStore
         self.eventBus = eventBus
-        self.observationTask = Task {
+        // Use weak self so the observation task does not retain the VM. When the
+        // view dismisses and the VM is deallocated, the next yielded event finds
+        // self == nil and breaks the loop, ending the task naturally.
+        self.observationTask = Task { [weak self] in
             for await event in eventBus.stream {
+                guard let self else { return }
                 switch event {
                 case .checkoutCompleted(_), .refreshRequired:
                     await self.refresh()
@@ -94,22 +109,24 @@ class InsightsViewModel {
     func refresh() async {
         guard !isRefreshing else { return }
         isRefreshing = true
-        defer {
-            isRefreshing = false
-            hasLoadedOnce = true
-        }
+        defer { isRefreshing = false }
 
-        async let rev:       () = fetchRevenue()
-        async let dist:      () = fetchDistributions()
-        async let top:       () = fetchTopClients()
-        async let growth:    () = fetchMonthlyGrowth()
-        async let retention: () = fetchRetentionMetrics()
-
-        _ = await [rev, dist, top, growth, retention]
+        // Load the metrics needed to render the screen first. The client-wide
+        // metrics can touch far more rows, so they run after the first paint.
+        await fetchRevenue()
+        await fetchMonthlyGrowth()
+        await fetchDistributions()
+        hasLoadedOnce = true
+        await fetchClientInsights()
     }
 
     func refreshRevenue() async {
-        await fetchRevenue()
+        // Cancel any in-flight fetch from a prior period change so we don't write
+        // stale results into revenueSeries after the user has moved on.
+        revenueFetchTask?.cancel()
+        let task = Task { await fetchRevenue() }
+        revenueFetchTask = task
+        await task.value
     }
 
     func generateReportSummary() async -> BusinessReportService.MonthlySummary {
@@ -130,7 +147,13 @@ class InsightsViewModel {
         let descriptor = FetchDescriptor<Client>(
             predicate: #Predicate<Client> { $0.createdAt >= startOfMonth }
         )
-        let newClientsCount = (try? dataStore.container.mainContext.fetchCount(descriptor)) ?? 0
+        let newClientsCount: Int
+        do {
+            newClientsCount = try dataStore.container.mainContext.fetchCount(descriptor)
+        } catch {
+            Logger.insights.error("New clients count fetch failed: \(String(describing: error))")
+            newClientsCount = 0
+        }
 
         return BusinessReportService.MonthlySummary(
             month: now,
@@ -151,16 +174,29 @@ class InsightsViewModel {
         guard let start = cal.date(byAdding: .day, value: -(periodDays - 1), to: end) else { return }
 
         let container = dataStore.container
-        let aggregates = await Task.detached(priority: .userInitiated) { () -> [SummaryUpdater.DayAggregate] in
+        let aggregates = await Task.detached(priority: .utility) { () -> [SummaryUpdater.DayAggregate] in
             let bgContext = ModelContext(container)
-            let descriptor = FetchDescriptor<DaySummary>(
+            var descriptor = FetchDescriptor<DaySummary>(
                 predicate: #Predicate<DaySummary> { summary in
                     summary.day >= start && summary.day <= end
                 }
             )
-            let summaries = (try? bgContext.fetch(descriptor)) ?? []
+            // Predicate already constrains to <= 90 days; this fetchLimit is a safety
+            // valve in case the summary table has duplicates from a legacy migration.
+            descriptor.fetchLimit = 500
+            let summaries: [DaySummary]
+            do {
+                summaries = try bgContext.fetch(descriptor)
+            } catch {
+                Logger.insights.error("Revenue DaySummary fetch failed: \(String(describing: error))")
+                summaries = []
+            }
             return SummaryUpdater.collapsedDayAggregates(from: summaries).values.sorted { $0.day < $1.day }
         }.value
+
+        // If a newer period change cancelled this task while the background fetch
+        // was running, abandon the result so we don't flicker stale data on screen.
+        if Task.isCancelled { return }
 
         let totalVisits = aggregates.reduce(0) { $0 + $1.visitCount }
 
@@ -178,36 +214,56 @@ class InsightsViewModel {
         let end   = cal.startOfDay(for: .now).addingTimeInterval(86400)
         let start = cal.date(byAdding: .day, value: -30, to: end) ?? end
 
-        let result = await Task.detached(priority: .userInitiated) {
+        let result = await Task.detached(priority: .utility) {
             () -> (services: [DistributionData], categories: [DistributionData], payments: [PaymentMethodData]) in
 
             let bgContext = ModelContext(container)
 
             var visitsDescriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { $0.endedAt != nil },
+                predicate: #Predicate<Visit> { visit in
+                    if let endedAt = visit.endedAt {
+                        endedAt >= start && endedAt < end
+                    } else {
+                        false
+                    }
+                },
                 sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
             )
             visitsDescriptor.fetchLimit = 2000
             visitsDescriptor.relationshipKeyPathsForPrefetching = [\.items]
 
-            let categoryDescriptor = FetchDescriptor<CategoryDaySummary>(
+            var categoryDescriptor = FetchDescriptor<CategoryDaySummary>(
                 predicate: #Predicate<CategoryDaySummary> { summary in
                     summary.day >= start && summary.day < end
                 }
             )
+            categoryDescriptor.fetchLimit = 1000
 
-            let paymentDescriptor = FetchDescriptor<Payment>(
+            var paymentDescriptor = FetchDescriptor<Payment>(
                 predicate: #Predicate<Payment> { payment in
                     payment.paidAt >= start && payment.paidAt < end
                 }
             )
+            paymentDescriptor.fetchLimit = 5000
 
-            let visits = ((try? bgContext.fetch(visitsDescriptor)) ?? []).filter { visit in
-                guard let endedAt = visit.endedAt else { return false }
-                return endedAt >= start && endedAt < end
+            let visits: [Visit]
+            do { visits = try bgContext.fetch(visitsDescriptor) }
+            catch {
+                Logger.insights.error("Distributions visits fetch failed: \(String(describing: error))")
+                visits = []
             }
-            let categories = (try? bgContext.fetch(categoryDescriptor)) ?? []
-            let payments = (try? bgContext.fetch(paymentDescriptor)) ?? []
+            let categories: [CategoryDaySummary]
+            do { categories = try bgContext.fetch(categoryDescriptor) }
+            catch {
+                Logger.insights.error("Distributions category fetch failed: \(String(describing: error))")
+                categories = []
+            }
+            let payments: [Payment]
+            do { payments = try bgContext.fetch(paymentDescriptor) }
+            catch {
+                Logger.insights.error("Distributions payment fetch failed: \(String(describing: error))")
+                payments = []
+            }
 
             var serviceStats: [String: (count: Int, revenue: Decimal)] = [:]
             for visit in visits {
@@ -244,83 +300,80 @@ class InsightsViewModel {
         paymentMethodDistribution = result.payments
     }
 
-    private func fetchTopClients() async {
+    private func fetchClientInsights() async {
         let container = dataStore.container
 
-        let rows = await Task.detached(priority: .userInitiated) { () -> [TopClientData] in
+        let result = await Task.detached(priority: .utility) { () -> ClientInsightsResult in
             let bgContext = ModelContext(container)
 
             var clientDesc = FetchDescriptor<Client>()
             clientDesc.relationshipKeyPathsForPrefetching = [\.pets]
-            let clients = (try? bgContext.fetch(clientDesc)) ?? []
-
-            var petDesc = FetchDescriptor<Pet>()
-            petDesc.relationshipKeyPathsForPrefetching = [\.visits]
-            _ = try? bgContext.fetch(petDesc)
-
-            return clients.map { client in
-                let visits = (client.pets ?? []).flatMap { $0.visits ?? [] }.filter { $0.isCompleted }
-                let spent  = visits.reduce(Decimal.zero) { $0 + $1.total }
-                return TopClientData(name: client.fullName, totalSpent: spent, visitCount: visits.count)
+            clientDesc.fetchLimit = 5000
+            let clients: [Client]
+            do { clients = try bgContext.fetch(clientDesc) }
+            catch {
+                Logger.insights.error("Client insights fetch failed: \(String(describing: error))")
+                clients = []
             }
-            .filter  { $0.totalSpent > 0 }
-            .sorted  { $0.totalSpent > $1.totalSpent }
-            .prefix(10)
-            .map     { $0 }
-        }.value
-
-        topClients = rows
-    }
-
-    private func fetchRetentionMetrics() async {
-        let container = dataStore.container
-
-        let result = await Task.detached(priority: .userInitiated) {
-            () -> (rate: Double, churn: Int, recurring: Int, oneTime: Int)? in
-
-            let bgCtx = ModelContext(container)
-
-            var clientDesc = FetchDescriptor<Client>()
-            clientDesc.relationshipKeyPathsForPrefetching = [\.pets]
-            guard let allClients = try? bgCtx.fetch(clientDesc),
-                  !allClients.isEmpty else { return nil }
 
             var petDesc = FetchDescriptor<Pet>()
             petDesc.relationshipKeyPathsForPrefetching = [\.visits]
-            _ = try? bgCtx.fetch(petDesc)
+            petDesc.fetchLimit = 10000
+            do {
+                _ = try bgContext.fetch(petDesc)
+            } catch {
+                Logger.insights.error("Pet prefetch failed: \(String(describing: error))")
+            }
 
             var recurring = 0
-            var churn     = 0
-            for client in allClients {
-                var completedCount = 0
-                outer: for pet in client.pets ?? [] {
-                    for visit in pet.visits ?? [] where visit.isCompleted {
-                        completedCount += 1
-                        if completedCount > 1 { break outer }
-                    }
+            var churn = 0
+            var clientRows: [TopClientData] = []
+
+            for client in clients {
+                let visits = (client.pets ?? []).flatMap { $0.visits ?? [] }.filter { $0.isCompleted }
+                let spent  = visits.reduce(Decimal.zero) { $0 + $1.total }
+
+                if visits.count > 1 {
+                    recurring += 1
                 }
-                if completedCount > 1 { recurring += 1 }
-                if (client.pets ?? []).contains(where: { $0.isOverdue }) { churn += 1 }
+                if (client.pets ?? []).contains(where: { $0.isOverdue }) {
+                    churn += 1
+                }
+
+                if spent > .zero {
+                    clientRows.append(TopClientData(name: client.fullName, totalSpent: spent, visitCount: visits.count))
+                }
             }
 
-            let rate = Double(recurring) / Double(allClients.count)
-            return (rate: rate, churn: churn,
-                    recurring: recurring, oneTime: allClients.count - recurring)
+            let rows = Array(clientRows.sorted { $0.totalSpent > $1.totalSpent }.prefix(10))
+
+            guard !clients.isEmpty else {
+                return ClientInsightsResult(topClients: rows, retentionRate: 0, churnRiskCount: 0, retentionSeries: [])
+            }
+
+            let oneTime = clients.count - recurring
+            let series: [RetentionData]
+            if recurring > 0 || oneTime > 0 {
+                series = [
+                    RetentionData(label: "Recurring", value: Double(recurring)),
+                    RetentionData(label: "One-time",  value: Double(oneTime))
+                ]
+            } else {
+                series = []
+            }
+
+            return ClientInsightsResult(
+                topClients: rows,
+                retentionRate: Double(recurring) / Double(clients.count),
+                churnRiskCount: churn,
+                retentionSeries: series
+            )
         }.value
 
-        guard let result else { return }
-        retentionRate  = result.rate
-        churnRiskCount = result.churn
-
-        // Guard against both-zero state which produces an invisible chart
-        guard result.recurring > 0 || result.oneTime > 0 else {
-            retentionSeries = []
-            return
-        }
-        retentionSeries = [
-            RetentionData(label: "Recurring", value: Double(result.recurring)),
-            RetentionData(label: "One-time",  value: Double(result.oneTime))
-        ]
+        topClients = result.topClients
+        retentionRate = result.retentionRate
+        churnRiskCount = result.churnRiskCount
+        retentionSeries = result.retentionSeries
     }
 
     private func fetchMonthlyGrowth() async {
@@ -336,14 +389,21 @@ class InsightsViewModel {
         else { return }
 
         let container = dataStore.container
-        let rows = await Task.detached(priority: .userInitiated) { () -> [MonthlyGrowthData] in
+        let rows = await Task.detached(priority: .utility) { () -> [MonthlyGrowthData] in
             let bgContext = ModelContext(container)
-            let descriptor = FetchDescriptor<DaySummary>(
+            var descriptor = FetchDescriptor<DaySummary>(
                 predicate: #Predicate<DaySummary> { summary in
                     summary.day >= rangeStart && summary.day < rangeEnd
                 }
             )
-            let summaries = (try? bgContext.fetch(descriptor)) ?? []
+            // 6 months × ~31 days = ~186 rows max. Cap defensively.
+            descriptor.fetchLimit = 1000
+            let summaries: [DaySummary]
+            do { summaries = try bgContext.fetch(descriptor) }
+            catch {
+                Logger.insights.error("Monthly growth fetch failed: \(String(describing: error))")
+                summaries = []
+            }
             let collapsed = SummaryUpdater.collapsedDayAggregates(from: summaries)
 
             var buckets: [(start: Date, label: String, revenue: Decimal, count: Int)] = []
@@ -370,4 +430,8 @@ class InsightsViewModel {
 
         monthlyGrowth = rows
     }
+}
+
+private extension Logger {
+    static let insights = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Insights")
 }

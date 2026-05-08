@@ -13,6 +13,12 @@ import SwiftData
 import Observation
 import OSLog
 
+private final class CDVMObserverToken {
+    private let token: NSObjectProtocol
+    init(_ token: NSObjectProtocol) { self.token = token }
+    deinit { NotificationCenter.default.removeObserver(token) }
+}
+
 @Observable
 @MainActor
 final class ClientDetailViewModel {
@@ -38,6 +44,7 @@ final class ClientDetailViewModel {
     private var currentLimit: Int
     private var lastTotalForClient: Int = 0
     private var fetchTask: Task<Void, Never>?
+    private var visitCompleteObserver: CDVMObserverToken?
 
     init(
         client: Client,
@@ -50,6 +57,18 @@ final class ClientDetailViewModel {
         self.visitRepository = VisitRepository(modelContainer: modelContext.container, eventBus: eventBus)
         self.pets          = client.pets ?? []
         self.currentLimit  = max(initialLimit, pageSize)
+        let clientID = client.persistentModelID
+        let token = NotificationCenter.default.addObserver(
+            forName: .visitDidComplete, object: nil, queue: .main
+        ) { [weak self] notif in
+            guard let self else { return }
+            // Only refresh if the completed visit belongs to one of this client's pets.
+            // Fall back to refreshing if we can't tell, so we never show stale state.
+            if let visitClientID = notif.clientID, visitClientID != clientID { return }
+            self.refreshPets()
+            self.refreshRecentVisits()
+        }
+        self.visitCompleteObserver = CDVMObserverToken(token)
         refreshRecentVisits()
     }
 

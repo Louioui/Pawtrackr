@@ -61,7 +61,13 @@ struct InsightsView: View {
                 topClientsCard(vm)
             }
             .padding(DS.Spacing.lg)
+            // Mirror the identifier on the inner content as well so XCUI can
+            // locate the scrollable region whether it surfaces as a ScrollView
+            // or an `otherElements` container.
+            .accessibilityIdentifier("insights.mainScroll.content")
         }
+        .accessibilityIdentifier("insights.mainScroll")
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - KPI summary strip

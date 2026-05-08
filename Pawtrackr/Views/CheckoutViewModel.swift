@@ -431,6 +431,12 @@ final class CheckoutViewModel {
             try? await draftStore.deleteDraft(for: visit.uuid)
             state = .confirmed
             isSaving = false
+            // Release multi-MB photo Data now that it's persisted to the Visit model
+            // (and to disk via @Attribute(.externalStorage)). The didSet hook on these
+            // properties tries to schedule a draft save, but scheduleDraftSave bails
+            // when state == .confirmed, so this is safe.
+            self.beforePhotoData = nil
+            self.afterPhotoData = nil
             eventBus.publish(.checkoutCompleted(persisted.completion))
 
             var userInfo: [String: Any] = [

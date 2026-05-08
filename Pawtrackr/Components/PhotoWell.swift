@@ -18,15 +18,30 @@ struct PhotoWell: View {
     @Binding var imageData: Data?
     let title: String
     let allowsEditing: Bool
+    let maxDimension: CGFloat
+    let jpegQuality: CGFloat
 
-    init(imageData: Binding<Data?>, title: String, allowsEditing: Bool = true) {
+    init(
+        imageData: Binding<Data?>,
+        title: String,
+        allowsEditing: Bool = true,
+        maxDimension: CGFloat = 1024,
+        jpegQuality: CGFloat = 0.70
+    ) {
         self._imageData = imageData
         self.title = title
         self.allowsEditing = allowsEditing
+        self.maxDimension = maxDimension
+        self.jpegQuality = jpegQuality
     }
 
     var body: some View {
-        ImagePicker(imageData: $imageData, allowsEditing: allowsEditing) {
+        ImagePicker(
+            imageData: $imageData,
+            allowsEditing: allowsEditing,
+            maxDimension: maxDimension,
+            jpegQuality: jpegQuality
+        ) {
             ZStack {
                 if let data = imageData {
                     LazyImageDataImage(data: data, maxDimension: 512)
@@ -60,6 +75,11 @@ struct LazyImageDataImage: View {
     let maxDimension: CGFloat
     
     @State private var image: Image? = nil
+    @State private var loadedIdentity: ImageDataIdentity?
+
+    private var identity: ImageDataIdentity {
+        ImageDataIdentity(data: data, maxDimension: maxDimension)
+    }
     
     var body: some View {
         ZStack {
@@ -72,13 +92,20 @@ struct LazyImageDataImage: View {
                     .scaleEffect(0.8)
             }
         }
-        .task(id: data) {
+        .task(id: identity) {
             // Decode off the main thread
-            await loadImage()
+            await loadImage(for: identity)
         }
     }
     
-    private func loadImage() async {
+    private func loadImage(for identity: ImageDataIdentity) async {
+        await MainActor.run {
+            if loadedIdentity != identity {
+                image = nil
+                loadedIdentity = identity
+            }
+        }
+
         let decoded = await Task.detached(priority: .userInitiated) { () -> Image? in
             #if canImport(UIKit)
             if let ui = ImageCache.shared.image(data: data, maxDimension: maxDimension) {
@@ -93,8 +120,31 @@ struct LazyImageDataImage: View {
         }.value
         
         await MainActor.run {
+            guard loadedIdentity == identity else { return }
             self.image = decoded
         }
+    }
+}
+
+private struct ImageDataIdentity: Hashable {
+    let count: Int
+    let sampleHash: Int
+    let maxDimension: Int
+
+    init(data: Data, maxDimension: CGFloat) {
+        self.count = data.count
+        self.maxDimension = Int(maxDimension.rounded())
+
+        var hash = 5381
+        for byte in data.prefix(16) {
+            hash = (hash &* 33) &+ Int(byte)
+        }
+        if data.count > 16 {
+            for byte in data.suffix(16) {
+                hash = (hash &* 33) &+ Int(byte)
+            }
+        }
+        self.sampleHash = hash
     }
 }
 

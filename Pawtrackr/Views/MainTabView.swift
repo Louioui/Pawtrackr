@@ -3,8 +3,8 @@ import SwiftUI
 /// Legacy MainTabView - now deprecated in favor of ContentView.
 /// Kept for backward compatibility with any remaining references.
 struct MainTabView: View {
-    @EnvironmentObject var appSettings: AppSettings
-    @EnvironmentObject var authViewModel: AuthenticationViewModel
+    @Environment(AppSettings.self) private var appSettings
+    @Environment(AuthenticationViewModel.self) private var authViewModel
 
     var body: some View {
         TabView {

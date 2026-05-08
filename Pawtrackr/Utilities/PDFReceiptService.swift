@@ -11,6 +11,7 @@ import Foundation
 import SwiftUI
 import PDFKit
 import SwiftData
+import OSLog
 
 #if canImport(UIKit)
 import UIKit
@@ -59,7 +60,13 @@ final class PDFReceiptService {
         let config: BusinessConfig
         if let modelContext = visit.modelContext {
             let descriptor = FetchDescriptor<BusinessConfig>()
-            let configs = (try? modelContext.fetch(descriptor)) ?? []
+            let configs: [BusinessConfig]
+            do {
+                configs = try modelContext.fetch(descriptor)
+            } catch {
+                Logger.pdfReceipt.error("BusinessConfig fetch failed: \(String(describing: error))")
+                configs = []
+            }
             config = configs.first(where: \.isSetupComplete) ?? configs.first ?? .default
         } else {
             config = .default
@@ -296,4 +303,8 @@ final class PDFReceiptService {
         let footerSize = footer.size(withAttributes: footerAttributes)
         footer.draw(at: CGPoint(x: (612 - footerSize.width) / 2, y: 740), withAttributes: footerAttributes)
     }
+}
+
+private extension Logger {
+    static let pdfReceipt = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "PDFReceipt")
 }

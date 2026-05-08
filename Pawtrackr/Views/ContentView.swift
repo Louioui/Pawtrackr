@@ -8,16 +8,22 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject var appSettings: AppSettings
-    @EnvironmentObject var authViewModel: AuthenticationViewModel
+    @Environment(AppSettings.self) private var appSettings
+    @Environment(AuthenticationViewModel.self) private var authViewModel
 
     @State private var router = NavigationRouter()
     @State private var sidebarSelection: NavigationItem? = .dashboard
     @State private var tabSelection: NavigationItem = .dashboard
     @State private var showingNewClientSheet = false
+    /// Last-handled (kind, uuid, timestamp) used to dedupe near-simultaneous
+    /// navigation requests coming from both `.onReceive` and `consumePendingNavigation`
+    /// at app launch / cold-start time.
+    @State private var lastNavigationDedupeKey: String?
+    @State private var lastNavigationDedupeAt: Date = .distantPast
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Namespace private var sharedNamespace
 
@@ -75,24 +81,47 @@ struct ContentView: View {
     private func handleNavigation(_ notification: Notification, type: NavigationType) {
         guard let uuid = notification.userInfo?["uuid"] as? UUID else { return }
 
+        // Dedupe near-simultaneous fires (e.g. `.onReceive` + `consumePendingNavigation`
+        // on cold launch). 1.5s window is generous; legitimate re-navigation by user
+        // tap will exceed this trivially.
+        let dedupeKey = "\(type)-\(uuid)"
+        let now = Date()
+        if dedupeKey == lastNavigationDedupeKey, now.timeIntervalSince(lastNavigationDedupeAt) < 1.5 {
+            return
+        }
+
         switch type {
         case .client:
-            let descriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.uuid == uuid })
-            if let client = try? modelContext.fetch(descriptor).first {
-                selectClientsSurface()
-                router.popClientsToRoot()
-                router.navigateToClient(client)
-                clearPendingNavigation(kind: .client, uuid: uuid)
+            var descriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.uuid == uuid })
+            descriptor.fetchLimit = 1
+            do {
+                if let client = try modelContext.fetch(descriptor).first {
+                    selectClientsSurface()
+                    router.popClientsToRoot()
+                    router.navigateToClient(client)
+                    lastNavigationDedupeKey = dedupeKey
+                    lastNavigationDedupeAt = now
+                    clearPendingNavigation(kind: .client, uuid: uuid)
+                }
+            } catch {
+                Logger.contentNav.error("Client navigation fetch failed: \(String(describing: error))")
             }
 
         case .pet:
-            let petDescriptor = FetchDescriptor<Pet>(predicate: #Predicate { $0.uuid == uuid })
-            if let pet = try? modelContext.fetch(petDescriptor).first, let owner = pet.owner {
-                selectClientsSurface()
-                router.popClientsToRoot()
-                router.navigateToClient(owner)
-                router.navigateToPet(pet)
-                clearPendingNavigation(kind: .pet, uuid: uuid)
+            var petDescriptor = FetchDescriptor<Pet>(predicate: #Predicate { $0.uuid == uuid })
+            petDescriptor.fetchLimit = 1
+            do {
+                if let pet = try modelContext.fetch(petDescriptor).first, let owner = pet.owner {
+                    selectClientsSurface()
+                    router.popClientsToRoot()
+                    router.navigateToClient(owner)
+                    router.navigateToPet(pet)
+                    lastNavigationDedupeKey = dedupeKey
+                    lastNavigationDedupeAt = now
+                    clearPendingNavigation(kind: .pet, uuid: uuid)
+                }
+            } catch {
+                Logger.contentNav.error("Pet navigation fetch failed: \(String(describing: error))")
             }
         }
     }
@@ -256,4 +285,8 @@ struct ContentView: View {
             CheckoutView(pet: pet, visit: pet.activeVisit)
         }
     }
+}
+
+private extension Logger {
+    static let contentNav = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ContentNavigation")
 }

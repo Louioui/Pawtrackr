@@ -562,7 +562,7 @@ struct ClientDetailView: View {
                 let orderedDays = grouped.keys.sorted(by: >)
                 VStack(spacing: 14) {
                     ForEach(orderedDays, id: \.self) { day in
-                        let visits = grouped[day]!.sorted(by: { $0.sortKeyDate > $1.sortKeyDate })
+                        let visits = (grouped[day] ?? []).sorted(by: { $0.sortKeyDate > $1.sortKeyDate })
                         HStack(spacing: 6) {
                             Text(Formatters.dateOnly.string(from: day)).font(.subheadline.weight(.semibold))
                             Text(String(format: NSLocalizedString("client_detail.visits_count_fmt", comment: ""), visits.count))

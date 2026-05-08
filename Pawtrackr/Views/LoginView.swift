@@ -2,8 +2,8 @@
 import SwiftUI
 
 struct LoginView: View {
-    @EnvironmentObject var authViewModel: AuthenticationViewModel
-    @EnvironmentObject var appSettings: AppSettings
+    @Environment(AuthenticationViewModel.self) private var authViewModel
+    @Environment(AppSettings.self) private var appSettings
     @State private var unlocked = false
 
     var body: some View {

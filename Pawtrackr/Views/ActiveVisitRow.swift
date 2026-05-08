@@ -28,6 +28,7 @@ struct ActiveVisitRow: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Session options")
+                    .accessibilityIdentifier("dashboard.activeSession.checkoutButton")
                 }
             }
         }

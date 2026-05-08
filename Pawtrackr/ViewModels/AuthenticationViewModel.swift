@@ -7,11 +7,14 @@
 
 import Foundation
 import SwiftData
+import Observation
+import OSLog
 
 @MainActor
-final class AuthenticationViewModel: ObservableObject {
-    @Published var currentUser: User?
-    @Published var isAuthenticated = false
+@Observable
+final class AuthenticationViewModel {
+    var currentUser: User?
+    var isAuthenticated = false
 
     /// Optional so the app can still launch the recovery UI when the data
     /// store fails to open (e.g. schema mismatch in development). All methods
@@ -39,18 +42,16 @@ final class AuthenticationViewModel: ObservableObject {
 
     func signIn(email: String) {
         guard let modelContext else { return }
-        let predicate = #Predicate<User> { $0.email == email }
-        let descriptor = FetchDescriptor(predicate: predicate)
-        if let user = (try? modelContext.fetch(descriptor))?.first {
+        if let user = fetchUser(byEmail: email) {
             currentUser = user
             isAuthenticated = true
-        } else {
-            let newUser = User(name: "New User", email: email)
-            modelContext.insert(newUser)
-            try? modelContext.save()
-            currentUser = newUser
-            isAuthenticated = true
+            return
         }
+        let newUser = User(name: "New User", email: email)
+        modelContext.insert(newUser)
+        persist(modelContext, label: "signIn(email:)")
+        currentUser = newUser
+        isAuthenticated = true
     }
 
     func signOut() {
@@ -66,22 +67,42 @@ final class AuthenticationViewModel: ObservableObject {
 
     private func signInLocalUser() {
         guard let modelContext else { return }
-        if let user = fetchLocalUser() {
+        if let user = fetchUser(byEmail: localEmail) {
             currentUser = user
             isAuthenticated = true
             return
         }
         let newUser = User(name: "Local User", email: localEmail)
         modelContext.insert(newUser)
-        try? modelContext.save()
+        persist(modelContext, label: "signInLocalUser")
         currentUser = newUser
         isAuthenticated = true
     }
 
-    private func fetchLocalUser() -> User? {
+    /// Fetches at most one user matching the given email. The User table is single-row
+    /// in practice, so the explicit fetchLimit is defense-in-depth + a hint to SwiftData's
+    /// query planner. Errors are logged rather than silently swallowed.
+    private func fetchUser(byEmail email: String) -> User? {
         guard let modelContext else { return nil }
-        let email = localEmail
-        let descriptor = FetchDescriptor<User>(predicate: #Predicate { $0.email == email })
-        return try? modelContext.fetch(descriptor).first
+        var descriptor = FetchDescriptor<User>(predicate: #Predicate<User> { $0.email == email })
+        descriptor.fetchLimit = 1
+        do {
+            return try modelContext.fetch(descriptor).first
+        } catch {
+            Logger.auth.error("User fetch failed for email lookup: \(String(describing: error))")
+            return nil
+        }
     }
+
+    private func persist(_ context: ModelContext, label: String) {
+        do {
+            try context.save()
+        } catch {
+            Logger.auth.error("\(label) save failed: \(String(describing: error))")
+        }
+    }
+}
+
+private extension Logger {
+    static let auth = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Auth")
 }

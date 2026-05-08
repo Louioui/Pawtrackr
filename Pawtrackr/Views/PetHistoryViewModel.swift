@@ -82,7 +82,9 @@ final class PetHistoryViewModel {
             let services = (v.items ?? []).map { $0.name }.joined(separator: ", ")
             let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
             let amountValue = v.isCompleted ? v.total : v.servicesSubtotal
-            let amount = String(format: "%.2f", (amountValue as NSDecimalNumber).doubleValue)
+            // Stay in Decimal — Double conversion can introduce precision drift
+            // (e.g. $19.99 → 19.989999…) which surfaces in customer CSVs.
+            let amount = NSDecimalNumber(decimal: amountValue.roundedMoney()).stringValue
             return [date, services, duration, amount]
         }
         let lines = ([header] + rows).map { $0.map { $0.csvEscaped }.joined(separator: ",") }.joined(separator: "\n")

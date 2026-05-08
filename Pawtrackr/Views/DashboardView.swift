@@ -142,6 +142,7 @@ import Charts
       .padding(.horizontal, 16)
       .padding(.vertical, 24)
     }
+    .accessibilityIdentifier("dashboard.scroll")
     .onAppear {
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
             showContent = true
@@ -297,7 +298,7 @@ import Charts
 	            selectSurface(.clients, resetPath: true)
 	          }
 	          NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
-	          actionCard(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "doc.chart") {
+	          actionCard(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "chart.bar.fill") {
 	            selectSurface(.insights, resetPath: true)
 	          }
 	        }

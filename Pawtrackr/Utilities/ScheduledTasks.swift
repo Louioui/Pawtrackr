@@ -11,6 +11,9 @@ class ScheduledTasks {
     }
 
     func start() {
+        // Invalidate any pre-existing timer to avoid orphaning it if start() is
+        // called more than once for the same instance.
+        timer?.invalidate()
         // Run maintenance daily.
         timer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
             self?.runMaintenance()

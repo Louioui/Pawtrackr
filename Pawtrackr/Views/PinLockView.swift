@@ -15,7 +15,7 @@ import SwiftUI
 public struct PinLockGate<Content: View>: View {
     @State private var isUnlocked = false
     @Environment(\.scenePhase) private var scenePhase
-    @EnvironmentObject private var appSettings: AppSettings
+    @Environment(AppSettings.self) private var appSettings
     @State private var inactivityTimer: Timer? = nil
     private let onUnlock: () -> Void
     private let content: Content
@@ -89,7 +89,7 @@ public struct PinLockGate<Content: View>: View {
 
 // MARK: - Lock Screen (4 digits; default PIN 1994)
 public struct PinLockView: View {
-    @EnvironmentObject private var appSettings: AppSettings
+    @Environment(AppSettings.self) private var appSettings
     @State private var authenticator = BiometricAuthenticator()
     @Binding var isUnlocked: Bool
     @State private var digits: [Int] = []

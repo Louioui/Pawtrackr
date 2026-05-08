@@ -42,8 +42,15 @@ struct PetCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active && isActive {
-                visitTimer.sceneBecameActive()
+            switch newPhase {
+            case .active:
+                if isActive { visitTimer.sceneBecameActive() }
+            case .inactive, .background:
+                // Pause the tick subscription so we don't accumulate elapsed
+                // time or burn battery while the app is not foregrounded.
+                visitTimer.sceneWillResignActive()
+            @unknown default:
+                break
             }
         }
         .onAppear { syncTimer() }

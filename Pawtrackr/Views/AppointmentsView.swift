@@ -4,7 +4,7 @@ import SwiftData
 
 struct AppointmentsView: View {
     @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject private var authViewModel: AuthenticationViewModel
+    @Environment(AuthenticationViewModel.self) private var authViewModel
     @Query(sort: \Appointment.date) private var appointments: [Appointment]
     @State private var showingAddSheet = false
     @State private var selectedDate = Date()

@@ -81,6 +81,10 @@ final class CloudKitMonitor {
     private let container: CKContainer
     private var observers: [NSObjectProtocol] = []
     private var hasStarted = false
+    /// The currently-running forceSync watchdog. Replaced (and cancelled) on each
+    /// new forceSync call so rapid pull-to-refresh doesn't stack watchdogs that
+    /// later all race to flip syncState back to .idle.
+    private var forceSyncWatchdog: Task<Void, Never>?
 
     private enum DefaultsKey {
         static let lastSyncDate = "cloudkit.lastSyncDate"
@@ -210,35 +214,37 @@ final class CloudKitMonitor {
         log.error("CloudKit event error: \(error.localizedDescription, privacy: .public) (\(nsError.code))")
 
         if let ckError = error as? CKError {
-            switch ckError.code {
-            case .quotaExceeded:
+            if isQuotaExceeded(ckError) {
                 quotaExceeded = true
                 lastErrorMessage = NSLocalizedString(
                     "cloudkit.error.quota",
                     value: "Your iCloud storage is full. Free up space or upgrade.",
                     comment: ""
                 )
-            case .networkUnavailable, .networkFailure:
-                lastErrorMessage = NSLocalizedString(
-                    "cloudkit.error.network",
-                    value: "Can't reach iCloud — check your connection.",
-                    comment: ""
-                )
-            case .notAuthenticated:
-                lastErrorMessage = NSLocalizedString(
-                    "cloudkit.error.signed_out",
-                    value: "Sign in to iCloud in Settings to sync your data.",
-                    comment: ""
-                )
-                accountState = .noAccount
-            case .partialFailure:
-                lastErrorMessage = NSLocalizedString(
-                    "cloudkit.error.partial",
-                    value: "Some changes didn't sync. They'll retry shortly.",
-                    comment: ""
-                )
-            default:
-                lastErrorMessage = ckError.localizedDescription
+            } else {
+                switch ckError.code {
+                case .networkUnavailable, .networkFailure:
+                    lastErrorMessage = NSLocalizedString(
+                        "cloudkit.error.network",
+                        value: "Can't reach iCloud — check your connection.",
+                        comment: ""
+                    )
+                case .notAuthenticated:
+                    lastErrorMessage = NSLocalizedString(
+                        "cloudkit.error.signed_out",
+                        value: "Sign in to iCloud in Settings to sync your data.",
+                        comment: ""
+                    )
+                    accountState = .noAccount
+                case .partialFailure:
+                    lastErrorMessage = NSLocalizedString(
+                        "cloudkit.error.partial",
+                        value: "Some changes didn't sync. They'll retry shortly.",
+                        comment: ""
+                    )
+                default:
+                    lastErrorMessage = ckError.localizedDescription
+                }
             }
         } else {
             lastErrorMessage = error.localizedDescription
@@ -261,9 +267,12 @@ final class CloudKitMonitor {
         syncState = .syncing
         postChange()
         // Watchdog: if no event arrives within 10s, drop back to idle so the
-        // spinner doesn't get stuck.
-        Task { [weak self] in
+        // spinner doesn't get stuck. Cancel any in-flight watchdog first so
+        // rapid forceSync() calls don't stack.
+        forceSyncWatchdog?.cancel()
+        forceSyncWatchdog = Task { [weak self] in
             try? await Task.sleep(for: .seconds(10))
+            if Task.isCancelled { return }
             await MainActor.run {
                 guard let self else { return }
                 if self.syncState == .syncing {
@@ -324,5 +333,14 @@ final class CloudKitMonitor {
 
     private func postChange() {
         NotificationCenter.default.post(name: .cloudKitStateDidChange, object: self)
+    }
+
+    private func isQuotaExceeded(_ error: CKError) -> Bool {
+        if error.code == .quotaExceeded {
+            return true
+        }
+        return error.partialErrorsByItemID?.values.contains { partialError in
+            (partialError as? CKError)?.code == .quotaExceeded
+        } ?? false
     }
 }

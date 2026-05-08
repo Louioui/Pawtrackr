@@ -6,9 +6,10 @@
 //
 
 import SwiftUI
-import Combine
+import Observation
 
-final class AppSettings: ObservableObject {
+@Observable
+final class AppSettings {
     // MARK: - Keys
 
     private enum Keys {
@@ -35,40 +36,40 @@ final class AppSettings: ObservableObject {
         static let currencySymbol = "$"
     }
 
-    // MARK: - Published Properties
+    // MARK: - Properties
 
-    @Published var businessName: String {
+    var businessName: String {
         didSet {
             UserDefaults.standard.set(businessName, forKey: Keys.businessName)
         }
     }
 
-    @Published var currencySymbol: String {
+    var currencySymbol: String {
         didSet {
             UserDefaults.standard.set(currencySymbol, forKey: Keys.currencySymbol)
         }
     }
 
-    @Published var isLockEnabled: Bool {
+    var isLockEnabled: Bool {
         didSet {
             UserDefaults.standard.set(isLockEnabled, forKey: Keys.isLockEnabled)
         }
     }
 
-    @Published var isBiometricLockEnabled: Bool {
+    var isBiometricLockEnabled: Bool {
         didSet {
             UserDefaults.standard.set(isBiometricLockEnabled, forKey: Keys.biometricLockEnabled)
         }
     }
 
     /// 4-digit App PIN. Validated to ensure it's exactly 4 digits.
-    @Published private(set) var appPIN: String {
+    private(set) var appPIN: String {
         didSet {
             UserDefaults.standard.set(appPIN, forKey: Keys.appPIN)
         }
     }
 
-    @Published var lastPINChangeDate: Date? {
+    var lastPINChangeDate: Date? {
         didSet {
             if let d = lastPINChangeDate {
                 UserDefaults.standard.set(d, forKey: Keys.lastPINChangeDate)
@@ -78,13 +79,13 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    @Published var autoLockOnBackground: Bool {
+    var autoLockOnBackground: Bool {
         didSet {
             UserDefaults.standard.set(autoLockOnBackground, forKey: Keys.autoLockOnBackground)
         }
     }
 
-    @Published var autoLockAfterInactivity: Bool {
+    var autoLockAfterInactivity: Bool {
         didSet {
             UserDefaults.standard.set(autoLockAfterInactivity, forKey: Keys.autoLockAfterInactivity)
         }
@@ -96,13 +97,21 @@ final class AppSettings: ObservableObject {
     // MARK: - Init
 
     init() {
+        if AppRuntime.isUITesting {
+            UserDefaults.standard.set(false, forKey: Keys.isLockEnabled)
+            UserDefaults.standard.set(false, forKey: Keys.biometricLockEnabled)
+            UserDefaults.standard.set(false, forKey: Keys.autoLockOnBackground)
+            UserDefaults.standard.set(false, forKey: Keys.autoLockAfterInactivity)
+            UserDefaults.standard.set(Defaults.currencySymbol, forKey: Keys.currencySymbol)
+        }
+
         // Register defaults first
         UserDefaults.standard.register(defaults: [
-            Keys.isLockEnabled: Defaults.isLockEnabled,
-            Keys.biometricLockEnabled: Defaults.biometricEnabled,
+            Keys.isLockEnabled: AppRuntime.isUITesting ? false : Defaults.isLockEnabled,
+            Keys.biometricLockEnabled: AppRuntime.isUITesting ? false : Defaults.biometricEnabled,
             Keys.appPIN: Defaults.pin,
-            Keys.autoLockOnBackground: Defaults.autoLockBackground,
-            Keys.autoLockAfterInactivity: Defaults.autoLockInactivity
+            Keys.autoLockOnBackground: AppRuntime.isUITesting ? false : Defaults.autoLockBackground,
+            Keys.autoLockAfterInactivity: AppRuntime.isUITesting ? false : Defaults.autoLockInactivity
         ])
 
         // Read values

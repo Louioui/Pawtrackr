@@ -26,7 +26,7 @@ struct PawtrackrApp: App {
     let router = AppRouter()
     let eventBus = GlobalEventBus()
     @State private var appSettings = AppSettings()
-    @StateObject private var authViewModel: AuthenticationViewModel
+    @State private var authViewModel: AuthenticationViewModel
 
     // Platform AppDelegate for silent CloudKit pushes.
     #if canImport(UIKit) && !targetEnvironment(macCatalyst)
@@ -41,19 +41,43 @@ struct PawtrackrApp: App {
         let initialTasks: ScheduledTasks?
         let initialAuthVM: AuthenticationViewModel
 
+        let isUITesting = AppRuntime.isUITesting
+        let isRunningUnitTests = AppRuntime.isRunningTests && !isUITesting
+        // Unit tests use the Pawtrackr app as their host. If the host opens its
+        // own ModelContainer alongside the test's container, the two SwiftData
+        // stores coexist in the process and the runtime can invalidate model
+        // instances mid-test. Skip container creation entirely for unit tests
+        // so the test owns the only container in the process.
+        let inMemory = AppRuntime.prefersInMemoryStore
         let logger = Logger(subsystem: "com.pawtrackr", category: "PawtrackrApp")
+
+        if isRunningUnitTests {
+            initialContainer = nil
+            initialTasks = nil
+            initialAuthVM = AuthenticationViewModel(modelContext: nil)
+            self.container = nil
+            self.scheduledTasks = nil
+            self._authViewModel = State(initialValue: initialAuthVM)
+            self.dataStore = nil
+            return
+        }
+
         do {
             let schema = Schema(PawtrackrSchema.models)
             let config = ModelConfiguration(
-                "Pawtrackr",
+                inMemory ? "PawtrackrTests" : "Pawtrackr",
                 schema: schema,
-                isStoredInMemoryOnly: false,
-                cloudKitDatabase: .automatic
+                isStoredInMemoryOnly: inMemory,
+                cloudKitDatabase: inMemory ? .none : .automatic
             )
             let localContainer = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self, configurations: [config])
 
+            if isUITesting {
+                try UITestDataSeeder.seedIfNeeded(in: localContainer.mainContext)
+            }
+
             initialContainer = localContainer
-            initialTasks = ScheduledTasks(modelContainer: localContainer)
+            initialTasks = inMemory ? nil : ScheduledTasks(modelContainer: localContainer)
             initialAuthVM = AuthenticationViewModel(modelContext: localContainer.mainContext)
         } catch {
             // Most common cause: schema changed since the last run and the
@@ -71,7 +95,7 @@ struct PawtrackrApp: App {
         // 2. Assign all properties
         self.container = initialContainer
         self.scheduledTasks = initialTasks
-        self._authViewModel = StateObject(wrappedValue: initialAuthVM)
+        self._authViewModel = State(initialValue: initialAuthVM)
         if let container = initialContainer {
             self.dataStore = DataStoreService(container: container)
         } else {
@@ -80,37 +104,48 @@ struct PawtrackrApp: App {
 
         // 3. Start side effects AFTER full initialization
         if let localContainer = initialContainer {
-            initialTasks?.start()
+            if inMemory {
+                Task { @MainActor in
+                    CloudKitMonitor.shared.markFirstSyncCompleted()
+                }
+            } else {
+                initialTasks?.start()
 
-            // Start the CloudKit monitor on launch so the UI gets the
-            // earliest possible signal about account/sync state.
-            Task { @MainActor in
-                CloudKitMonitor.shared.start()
-            }
+                // Start the CloudKit monitor on launch so the UI gets the
+                // earliest possible signal about account/sync state.
+                Task { @MainActor in
+                    CloudKitMonitor.shared.start()
+                }
 
-            // Register for silent CloudKit pushes (used by NSPersistentCloudKitContainer
-            // to trigger background fetches when records change on other devices).
-            #if canImport(UIKit) && !targetEnvironment(macCatalyst)
-            DispatchQueue.main.async {
-                UIApplication.shared.registerForRemoteNotifications()
+                // Register for silent CloudKit pushes (used by NSPersistentCloudKitContainer
+                // to trigger background fetches when records change on other devices).
+                #if canImport(UIKit) && !targetEnvironment(macCatalyst)
+                DispatchQueue.main.async {
+                    UIApplication.shared.registerForRemoteNotifications()
+                }
+                #elseif canImport(AppKit)
+                DispatchQueue.main.async {
+                    NSApplication.shared.registerForRemoteNotifications()
+                }
+                #endif
             }
-            #elseif canImport(AppKit)
-            DispatchQueue.main.async {
-                NSApplication.shared.registerForRemoteNotifications()
-            }
-            #endif
 
             // Access UserDefaults directly to avoid using StateObject before it is installed on a view
             let symbol = UserDefaults.standard.string(forKey: "currencySymbol") ?? "$"
 
-            Task.detached(priority: .userInitiated) {
-                let ctx = ModelContext(localContainer)
-                await MainActor.run {
+            if inMemory {
+                Task { @MainActor in
                     Formatters.updateCurrencySymbol(symbol)
                 }
-                SummaryUpdater.rebuildAllSummaries(in: ctx)
+            } else {
+                Task.detached(priority: .userInitiated) {
+                    let ctx = ModelContext(localContainer)
+                    await MainActor.run {
+                        Formatters.updateCurrencySymbol(symbol)
+                    }
+                    SummaryUpdater.rebuildAllSummaries(in: ctx)
+                }
             }
-
         }
     }
 
@@ -130,8 +165,8 @@ struct PawtrackrApp: App {
         Settings {
             if let container = container {
                 SettingsView()
-                    .environmentObject(appSettings)
-                    .environmentObject(authViewModel)
+                    .environment(appSettings)
+                    .environment(authViewModel)
                     .environment(dataStore)
                     .environment(router)
                     .environment(eventBus)
@@ -160,8 +195,8 @@ struct PawtrackrApp: App {
     private var mainWindowContent: some View {
         if let container = container {
             RootView()
-                .environmentObject(appSettings)
-                .environmentObject(authViewModel)
+                .environment(appSettings)
+                .environment(authViewModel)
                 .environment(dataStore)
                 .environment(router)
                 .environment(eventBus)

@@ -18,6 +18,13 @@
         "identifier" : "A1B2C3D42E60000100000005",
         "name" : "PawtrackrTests"
       }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Pawtrackr.xcodeproj",
+        "identifier" : "B2C3D4E52E70000100000005",
+        "name" : "PawtrackrUITests"
+      }
     }
   ],
   "version" : 1
