@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var cloudKitMonitor = CloudKitMonitor.shared
     @State private var versionTapCount = 0
     @State private var showDiagnostics = false
+    @State private var clientsDoc: ExportDocument? = nil
+    @State private var visitsDoc: ExportDocument? = nil
     private let wrapsInNavigationStack: Bool
 
     init(wrapsInNavigationStack: Bool = true) {
@@ -99,16 +101,16 @@ struct SettingsView: View {
             }
 
             Section(header: Text("Data Export")) {
-                if let clientsExport = try? ExportService.shared.exportClientsToCSV(modelContext: modelContext) {
-                    ShareLink(item: clientsExport, preview: SharePreview("Clients Export", image: Image(systemName: "person.3.fill"))) {
-                        Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
-                    }
+                Button {
+                    clientsDoc = try? ExportService.shared.exportClientsToCSV(modelContext: modelContext)
+                } label: {
+                    Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
                 }
 
-                if let visitsExport = try? ExportService.shared.exportVisitsToCSV(modelContext: modelContext) {
-                    ShareLink(item: visitsExport, preview: SharePreview("Visits Export", image: Image(systemName: "calendar"))) {
-                        Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
-                    }
+                Button {
+                    visitsDoc = try? ExportService.shared.exportVisitsToCSV(modelContext: modelContext)
+                } label: {
+                    Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
                 }
             }
 
@@ -167,6 +169,22 @@ struct SettingsView: View {
         .sheet(isPresented: $showChangePIN) {
             ChangePINSheet(isPresented: $showChangePIN, errorMessage: $pinChangeError)
                 .environment(appSettings)
+        }
+        .sheet(item: $clientsDoc) { doc in
+            exportShareSheet(
+                doc: doc,
+                title: NSLocalizedString("settings.export.clients_ready", value: "Clients Export Ready", comment: ""),
+                icon: "person.3.fill",
+                previewTitle: NSLocalizedString("settings.export.clients_title", value: "Clients Export", comment: "")
+            )
+        }
+        .sheet(item: $visitsDoc) { doc in
+            exportShareSheet(
+                doc: doc,
+                title: NSLocalizedString("settings.export.visits_ready", value: "Visits Export Ready", comment: ""),
+                icon: "calendar",
+                previewTitle: NSLocalizedString("settings.export.visits_title", value: "Visits Export", comment: "")
+            )
         }
         .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
             Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
@@ -246,6 +264,35 @@ struct SettingsView: View {
             }
         }
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func exportShareSheet(doc: ExportDocument, title: String, icon: String, previewTitle: String) -> some View {
+        VStack(spacing: 20) {
+            Spacer()
+            Image(systemName: icon)
+                .font(.largeTitle)
+                .foregroundStyle(DS.ColorToken.primary)
+            Text(title).font(.headline)
+            ShareLink(
+                item: doc,
+                preview: SharePreview(previewTitle, image: Image(systemName: icon))
+            ) {
+                Label(NSLocalizedString("settings.export.share_action", value: "Share via…", comment: ""),
+                      systemImage: "square.and.arrow.up")
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(DS.ColorToken.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .foregroundStyle(.white)
+                    .font(.headline)
+            }
+            Spacer()
+        }
+        .padding()
+#if os(iOS)
+        .presentationDetents([.height(240)])
+        .presentationDragIndicator(.visible)
+#endif
     }
 
     private var pinStatusSubtitle: String {

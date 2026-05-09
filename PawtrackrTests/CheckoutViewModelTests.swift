@@ -195,8 +195,9 @@ final class CheckoutViewModelTests: XCTestCase {
         try vm.advance()
         try vm.advance()
         vm.choosePayment(.creditCard)
-        // requiresExternalReference is true; reference empty → disabled
         vm.setExternalReference("")
+        XCTAssertFalse(vm.isAdvanceEnabled)
+        vm.setExternalReference("42")
         XCTAssertFalse(vm.isAdvanceEnabled)
         vm.setExternalReference("4242")
         XCTAssertTrue(vm.isAdvanceEnabled)
@@ -226,11 +227,27 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertFalse(vm.requiresExternalReference)
     }
 
-    func testChoosePayment_KeepsReferenceForCard() {
+    func testChoosePayment_KeepsReferenceAcrossCardMethods() {
         let vm = makeVM()
-        vm.setExternalReference("4242")
         vm.choosePayment(.creditCard)
+        vm.setExternalReference("4242")
+        vm.choosePayment(.debitCard)
         XCTAssertEqual(vm.externalReference, "4242")
+    }
+
+    func testChoosePayment_ClearsReferenceWhenReferenceTypeChanges() {
+        let vm = makeVM()
+        vm.choosePayment(.zelle)
+        vm.setExternalReference("zelle-123")
+        vm.choosePayment(.creditCard)
+        XCTAssertEqual(vm.externalReference, "")
+    }
+
+    func testSetExternalReference_NormalizesCardInputToLastFourDigits() {
+        let vm = makeVM()
+        vm.choosePayment(.creditCard)
+        vm.setExternalReference("card ending 991234")
+        XCTAssertEqual(vm.externalReference, "1234")
     }
 
     // MARK: - Draft

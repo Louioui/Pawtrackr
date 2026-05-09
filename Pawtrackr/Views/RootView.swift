@@ -18,27 +18,25 @@ struct RootView: View {
     @State private var didEvaluateOnboarding = false
     @State private var didRunStartupMaintenance = false
     @State private var showFirstSyncGate = false
+    @State private var bypassLockForCurrentSession = false
 
     var body: some View {
-        PinLockGate(onUnlock: {
-            authViewModel.signInAfterUnlock()
-        }) {
-            ZStack(alignment: .top) {
-                VStack(spacing: 0) {
-                    CloudKitAccountBanner()
-                        .animation(.easeInOut(duration: 0.25), value: cloudKitMonitor.accountState)
-                    ContentView()
-                }
-                if showFirstSyncGate {
-                    FirstSyncGateView(isPresented: $showFirstSyncGate)
-                        .transition(.opacity)
+        Group {
+            if shouldBypassLockGate {
+                mainShell
+            } else {
+                PinLockGate(onUnlock: {
+                    authViewModel.signInAfterUnlock()
+                }) {
+                    mainShell
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: showFirstSyncGate)
         }
         .adaptiveCover(isPresented: $showOnboarding) {
             OnboardingView {
                 showOnboarding = false
+                bypassLockForCurrentSession = true
+                authViewModel.signInAfterUnlock()
             }
             .interactiveDismissDisabled(true)
         }
@@ -56,6 +54,7 @@ struct RootView: View {
                 TimeHub.shared.resume()
             case .inactive, .background:
                 TimeHub.shared.pause()
+                bypassLockForCurrentSession = false
             @unknown default:
                 break
             }
@@ -72,6 +71,21 @@ struct RootView: View {
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
+    }
+
+    private var mainShell: some View {
+        ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                CloudKitAccountBanner()
+                    .animation(.easeInOut(duration: 0.25), value: cloudKitMonitor.accountState)
+                ContentView()
+            }
+            if showFirstSyncGate {
+                FirstSyncGateView(isPresented: $showFirstSyncGate)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: showFirstSyncGate)
     }
 
     private func updateFirstSyncGate(for accountState: CloudKitMonitor.AccountState) {
@@ -112,5 +126,13 @@ struct RootView: View {
             DataMigrations.ensureMessageTemplates(in: backgroundContext)
             SummaryUpdater.rebuildAllSummaries(in: backgroundContext)
         }
+    }
+
+    private var onboardingIncomplete: Bool {
+        !businessConfigs.contains(where: \.isSetupComplete)
+    }
+
+    private var shouldBypassLockGate: Bool {
+        onboardingIncomplete || showOnboarding || bypassLockForCurrentSession
     }
 }

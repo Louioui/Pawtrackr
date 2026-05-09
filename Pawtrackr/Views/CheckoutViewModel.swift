@@ -94,19 +94,26 @@ final class CheckoutViewModel {
         selectedPaymentMethod.requiresExternalReference
     }
 
+    var referenceFieldTitle: String {
+        selectedPaymentMethod.referenceFieldTitle
+    }
+
     var referencePlaceholder: String {
-        switch selectedPaymentMethod {
-        case .cash: return "Optional note"
-        case .debitCard, .creditCard: return "Last 4 Digits"
-        case .zelle: return "Transaction ID"
-        case .other: return "Reference"
-        }
+        selectedPaymentMethod.referencePlaceholder
+    }
+
+    var referenceHelperText: String {
+        selectedPaymentMethod.referenceHelperText
+    }
+
+    var referenceValidationMessage: String? {
+        selectedPaymentMethod.validationMessage(for: externalReference)
     }
 
     var isConfirmEnabled: Bool {
-        let ref = externalReference.trimmed
         let hasValidAmount = servicesTotalDecimal > 0
-        return hasValidAmount && !isSaving && (!requiresExternalReference || !ref.isEmpty)
+        let hasValidReference = selectedPaymentMethod.isValidReference(externalReference)
+        return hasValidAmount && !isSaving && (!requiresExternalReference || hasValidReference)
     }
 
     static let tagOptions: [String] = Pet.BehaviorTag.allCases.map { $0.displayName }
@@ -247,7 +254,7 @@ final class CheckoutViewModel {
     }
 
     func setExternalReference(_ text: String) {
-        externalReference = text
+        externalReference = selectedPaymentMethod.normalizeReference(text)
         scheduleDraftSave(reason: "reference_changed")
     }
 
@@ -329,8 +336,18 @@ final class CheckoutViewModel {
     }
 
     func choosePayment(_ method: Payment.Method) {
+        let previousMethod = selectedPaymentMethod
+        let existingReference = externalReference
         selectedPaymentMethod = method
-        if !method.requiresExternalReference { externalReference = "" }
+
+        if !method.requiresExternalReference {
+            externalReference = ""
+        } else if method.preservesReference(whenSwitchingFrom: previousMethod) {
+            externalReference = method.normalizeReference(existingReference)
+        } else {
+            externalReference = ""
+        }
+
         trace("payment_method_selected_\(method.rawValue)")
     }
 
@@ -656,8 +673,8 @@ final class CheckoutViewModel {
             guard total > 0 else {
                 throw ValidationError.custom(message: "Cannot check out with a total amount of zero.")
             }
-            if requiresExternalReference && externalReference.trimmed.isEmpty {
-                throw ValidationError.custom(message: "A reference is required for this payment method.")
+            if let message = selectedPaymentMethod.validationMessage(for: externalReference) {
+                throw ValidationError.custom(message: message)
             }
         }
     }

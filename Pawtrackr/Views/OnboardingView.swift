@@ -75,7 +75,7 @@ struct OnboardingView: View {
             }
         }
         .task {
-            viewModel = OnboardingViewModel(modelContext: modelContext, appSettings: appSettings)
+            viewModel.bindIfNeeded(modelContext: modelContext, appSettings: appSettings)
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.85), value: viewModel.currentStep)
         .alert("Setup Error", isPresented: Binding(
@@ -121,11 +121,19 @@ struct OnboardingView: View {
 
     private var onboardingHeader: some View {
         VStack(spacing: DS.Spacing.md) {
-            Text(viewModel.currentStep.title)
-                .font(DS.TypeScale.title)
-                .foregroundStyle(.primary)
-                .id(viewModel.currentStep)
-                .transition(.push(from: .top))
+            VStack(spacing: DS.Spacing.xs) {
+                Text(viewModel.currentStep.title)
+                    .font(DS.TypeScale.title)
+                    .foregroundStyle(.primary)
+                    .id(viewModel.currentStep)
+                    .transition(.push(from: .top))
+
+                Text(viewModel.currentStep.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, DS.Spacing.xxl)
+            }
             
             HStack(spacing: 8) {
                 ForEach(OnboardingViewModel.Step.allCases, id: \.self) { step in
@@ -161,15 +169,15 @@ struct OnboardingView: View {
     private var permissionsStep: some View {
         VStack(spacing: DS.Spacing.xxl) {
             VStack(spacing: DS.Spacing.md) {
-                Image(systemName: "bell.badge.fill")
+                Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 60))
                     .foregroundStyle(DS.ColorToken.primary)
                     .symbolEffect(.bounce, value: viewModel.currentStep)
                 
-                Text("Stay Informed")
+                Text("Choose Your Defaults")
                     .font(.title2.bold())
                 
-                Text("Customize notifications and security to fit your workflow.")
+                Text("These preferences can be changed later in Settings, but getting them right now makes the first session smoother.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, DS.Spacing.xl)
@@ -177,17 +185,25 @@ struct OnboardingView: View {
             
             VStack(spacing: DS.Spacing.lg) {
                 permissionToggle(
-                    title: "Notifications",
-                    subtitle: "Reminders for appointments and schedule changes.",
-                    icon: "bell.fill",
-                    isOn: $viewModel.notificationsEnabled
+                    title: "Lock When App Closes",
+                    subtitle: "Require your PIN again whenever Pawtrackr leaves the foreground.",
+                    icon: "lock.fill",
+                    isOn: $viewModel.lockOnBackgroundEnabled
+                )
+
+                permissionToggle(
+                    title: "Lock After Inactivity",
+                    subtitle: "Automatically relock the app after a few idle minutes.",
+                    icon: "timer",
+                    isOn: $viewModel.autoLockAfterInactivityEnabled
                 )
                 
                 permissionToggle(
-                    title: "Biometric Lock",
-                    subtitle: "Unlock Pawtrackr quickly with FaceID or TouchID.",
-                    icon: "faceid",
-                    isOn: $viewModel.biometricsEnabled
+                    title: viewModel.biometricTitle,
+                    subtitle: viewModel.biometricSubtitle,
+                    icon: viewModel.isBiometricsAvailable ? "faceid" : "touchid",
+                    isOn: $viewModel.biometricsEnabled,
+                    isDisabled: !viewModel.isBiometricsAvailable
                 )
             }
             .padding(.horizontal, DS.Spacing.xxl)
@@ -195,7 +211,13 @@ struct OnboardingView: View {
         .padding(.top, DS.Spacing.xl)
     }
 
-    private func permissionToggle(title: String, subtitle: String, icon: String, isOn: Binding<Bool>) -> some View {
+    private func permissionToggle(
+        title: String,
+        subtitle: String,
+        icon: String,
+        isOn: Binding<Bool>,
+        isDisabled: Bool = false
+    ) -> some View {
         Toggle(isOn: isOn) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
@@ -213,6 +235,8 @@ struct OnboardingView: View {
         .background(DS.ColorToken.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .hairlineBorder(DS.ColorToken.border, cornerRadius: 12)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.6 : 1)
     }
 
     private var businessCardPreview: some View {
@@ -327,6 +351,7 @@ struct OnboardingView: View {
                     TextField("e.g. Bark & Bathe Grooming", text: $viewModel.name)
                         .textFieldStyle(.roundedBorder)
                         .font(.title3)
+                        .accessibilityIdentifier("onboarding.businessName")
                         #if os(iOS)
                         .textInputAutocapitalization(.words)
                         #endif
@@ -362,6 +387,12 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, DS.Spacing.xxl)
                 
+                Text("Contact details are optional. Add them now if you want them on receipts and exports.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, DS.Spacing.xxl)
+                
                 VStack(spacing: DS.Spacing.lg) {
                     onboardingTextField(title: "Contact Email", text: $viewModel.email, icon: "envelope", contentType: .emailAddress)
                     onboardingTextField(title: "Phone Number", text: $viewModel.phone, icon: "phone", contentType: .telephoneNumber)
@@ -380,12 +411,12 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
             
             if axis == .vertical {
-                TextField("", text: text, axis: .vertical)
+                TextField(title, text: text, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(3...5)
                     .textContentType(contentType)
             } else {
-                TextField("", text: text)
+                TextField(title, text: text)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(contentType)
                     #if os(iOS)
@@ -407,36 +438,46 @@ struct OnboardingView: View {
 
     
     private var onboardingFooter: some View {
-        HStack {
-            if viewModel.currentStep != .welcome {
-                Button("Back") {
-                    viewModel.previousStep()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+        VStack(spacing: DS.Spacing.sm) {
+            if let validationMessage = viewModel.currentValidationMessage {
+                Text(validationMessage)
+                    .font(.caption)
+                    .foregroundStyle(DS.ColorToken.danger)
             }
-            
-            Spacer()
-            
-            if viewModel.currentStep != .warmStart {
-                Button {
-                    viewModel.nextStep()
-                } label: {
-                    HStack {
-                        Text("Continue")
-                        Image(systemName: "arrow.right")
+
+            HStack {
+                if viewModel.currentStep != .welcome {
+                    Button("Back") {
+                        viewModel.previousStep()
                     }
-                    .padding(.horizontal, DS.Spacing.lg)
-                    .padding(.vertical, DS.Spacing.md)
-                    .background(viewModel.canGoNext ? DS.ColorToken.primary : DS.ColorToken.primary.opacity(0.5))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
-                    .shadow(color: viewModel.canGoNext ? DS.ColorToken.primary.opacity(0.3) : .clear, radius: 8, x: 0, y: 4)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .disabled(viewModel.isSaving)
                 }
-                .disabled(!viewModel.canGoNext)
-                .buttonStyle(.plain)
-                .scaleEffect(viewModel.canGoNext ? 1.0 : 0.98)
-                .animation(.spring(), value: viewModel.canGoNext)
+                
+                Spacer()
+                
+                if viewModel.currentStep != .warmStart {
+                    Button {
+                        viewModel.nextStep()
+                    } label: {
+                        HStack {
+                            Text(viewModel.primaryActionTitle)
+                            Image(systemName: "arrow.right")
+                        }
+                        .padding(.horizontal, DS.Spacing.lg)
+                        .padding(.vertical, DS.Spacing.md)
+                        .background(viewModel.canGoNext ? DS.ColorToken.primary : DS.ColorToken.primary.opacity(0.5))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+                        .shadow(color: viewModel.canGoNext ? DS.ColorToken.primary.opacity(0.3) : .clear, radius: 8, x: 0, y: 4)
+                    }
+                    .disabled(!viewModel.canGoNext || viewModel.isSaving)
+                    .buttonStyle(.plain)
+                    .scaleEffect(viewModel.canGoNext ? 1.0 : 0.98)
+                    .animation(.spring(), value: viewModel.canGoNext)
+                    .accessibilityIdentifier("onboarding.continue")
+                }
             }
         }
         .padding(DS.Spacing.xxl)
@@ -463,12 +504,8 @@ struct OnboardingView: View {
                 pinEntryView(title: "Enter PIN", text: $viewModel.pin, field: .pin)
                 pinEntryView(title: "Confirm PIN", text: $viewModel.confirmPin, field: .confirmPin)
                 
-                if !viewModel.pin.isEmpty && viewModel.pin.count != 4 {
-                    Text("PIN must be 4 digits")
-                        .font(.caption)
-                        .foregroundStyle(DS.ColorToken.danger)
-                } else if !viewModel.confirmPin.isEmpty && viewModel.pin != viewModel.confirmPin {
-                    Text("PINs do not match")
+                if let validationMessage = viewModel.securityValidationMessage {
+                    Text(validationMessage)
                         .font(.caption)
                         .foregroundStyle(DS.ColorToken.danger)
                 }
@@ -497,8 +534,10 @@ struct OnboardingView: View {
                     .focused($focusedField, equals: field)
                     .opacity(0.01)
                     .onChange(of: text.wrappedValue) { _, newValue in
-                        if newValue.count > 4 {
-                            text.wrappedValue = String(newValue.prefix(4))
+                        let filtered = String(newValue.filter(\.isNumber).prefix(4))
+                        if filtered != newValue {
+                            text.wrappedValue = filtered
+                            return
                         }
                         // Auto-advance focus if filling first PIN
                         if field == .pin && text.wrappedValue.count == 4 {
@@ -546,18 +585,33 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, DS.Spacing.xl)
             }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Workspace Summary")
+                    .font(.headline)
+                Label(viewModel.name.trimmed.isEmpty ? "Business name will be added in setup" : viewModel.name.trimmed, systemImage: "building.2")
+                Label("Currency: \(viewModel.currencySymbol)", systemImage: "dollarsign.circle")
+                Label("PIN protection enabled", systemImage: "lock.shield")
+            }
+            .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(DS.ColorToken.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .hairlineBorder(DS.ColorToken.border, cornerRadius: 14)
+            .padding(.horizontal, DS.Spacing.xxl)
             
             VStack(spacing: DS.Spacing.md) {
                 selectionCard(
                     title: "Start Fresh",
-                    subtitle: "Empty database, ready for your first client.",
+                    subtitle: "Start with your own services, clients, and first visit workflow.",
                     icon: "plus.circle.fill",
                     action: { completeWithCelebration(seed: false) }
                 )
                 
                 selectionCard(
                     title: "See Demo Data",
-                    subtitle: "Seeds example pets and visits to explore features.",
+                    subtitle: "Load polished sample clients, pets, visits, and pricing so you can explore every major screen.",
                     icon: "wand.and.stars",
                     isPromoted: true,
                     action: { completeWithCelebration(seed: true) }
@@ -594,6 +648,8 @@ struct OnboardingView: View {
             .shadow(color: isPromoted ? DS.ColorToken.primary.opacity(0.1) : .clear, radius: 10, x: 0, y: 4)
         }
         .buttonStyle(.plain)
+        .disabled(viewModel.isSaving)
+        .accessibilityIdentifier(title == "Start Fresh" ? "onboarding.startFresh" : "onboarding.demoData")
     }
 
     
@@ -602,12 +658,16 @@ struct OnboardingView: View {
             withAnimation(.spring()) {
                 showConfetti = true
             }
-            HapticManager.notify(.success)
             
             // Give a moment for the confetti to pop before dismissing
             try? await Task.sleep(for: .seconds(1.5))
             
             await viewModel.finish(seedSampleData: seed, onComplete: onComplete)
+            if viewModel.saveError != nil {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showConfetti = false
+                }
+            }
         }
     }
 }

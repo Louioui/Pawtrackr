@@ -20,7 +20,6 @@ struct CheckoutView: View {
     @State private var referenceEditorText: String = ""
     @State private var notesSyncTask: Task<Void, Never>?
     @State private var amountSyncTask: Task<Void, Never>?
-    @State private var referenceSyncTask: Task<Void, Never>?
     @State private var didLoadViewModel = false
     @FocusState private var focusedField: FocusField?
 
@@ -29,6 +28,8 @@ struct CheckoutView: View {
         case amount
         case externalReference
     }
+
+    private let paymentReferenceScrollTarget = "checkout.referenceField.anchor"
 
     init(pet: Pet, visit: Visit? = nil) {
         _viewModel = State(initialValue: CheckoutViewModel(pet: pet, visit: visit, eventBus: GlobalEventBus()))
@@ -85,7 +86,6 @@ struct CheckoutView: View {
         .onDisappear {
             notesSyncTask?.cancel()
             amountSyncTask?.cancel()
-            referenceSyncTask?.cancel()
             viewModel.flushDraft()
         }
         .onChange(of: viewModel.sessionNotes) { _, newValue in
@@ -319,93 +319,116 @@ struct CheckoutView: View {
     }
 
     private var paymentStep: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                stepHero(
-                    eyebrow: "Step 3",
-                    title: "Confirm payment",
-                    message: "Set the total and payment method before the final review."
-                )
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 24) {
+                    stepHero(
+                        eyebrow: "Step 3",
+                        title: "Confirm payment",
+                        message: "Set the total and payment method before the final review."
+                    )
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Final Amount").font(.headline).padding(.horizontal)
-                    Card {
-                        TextField("$0.00", text: amountBinding)
-                            #if os(iOS)
-                            .keyboardType(.decimalPad)
-                            #endif
-                            .focused($focusedField, equals: .amount)
-                            .accessibilityIdentifier("checkout.amountField")
-                            .font(Font.system(size: 40, weight: .bold, design: .rounded))
-                            .multilineTextAlignment(TextAlignment.center)
-                            .foregroundStyle(Color.blue)
-                            .onSubmit {
-                                commitAmountInput()
-                                #if os(macOS)
-                                focusedField = nil
-                                if viewModel.isAdvanceEnabled { advance() }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Final Amount").font(.headline).padding(.horizontal)
+                        Card {
+                            TextField("$0.00", text: amountBinding)
+                                #if os(iOS)
+                                .keyboardType(.decimalPad)
                                 #endif
-                            }
-
-                        Text("Auto-filled from selected services. You can adjust the total before charging the client.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Payment Method").font(.headline).padding(.horizontal)
-                    LazyVGrid(columns: paymentGridColumns, spacing: 12) {
-                        ForEach(Self.paymentOptions) { option in
-                            paymentCard(for: option)
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-
-                if viewModel.requiresExternalReference {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Reference Info").font(Font.subheadline.weight(.medium)).padding(.horizontal)
-                        TextField(viewModel.referencePlaceholder, text: $referenceEditorText)
-                            .focused($focusedField, equals: .externalReference)
-                            .textFieldStyle(.roundedBorder)
-                            .padding(.horizontal)
-                            .onChange(of: referenceEditorText) { _, newValue in
-                                referenceSyncTask?.cancel()
-                                referenceSyncTask = Task { @MainActor in
-                                    do {
-                                        try await Task.sleep(for: .milliseconds(250))
-                                    } catch {
-                                        return
-                                    }
-                                    viewModel.setExternalReference(newValue)
+                                .focused($focusedField, equals: .amount)
+                                .accessibilityIdentifier("checkout.amountField")
+                                .font(Font.system(size: 40, weight: .bold, design: .rounded))
+                                .multilineTextAlignment(TextAlignment.center)
+                                .foregroundStyle(Color.blue)
+                                .onSubmit {
+                                    commitAmountInput()
+                                    #if os(macOS)
+                                    focusedField = nil
+                                    if viewModel.isAdvanceEnabled { advance() }
+                                    #endif
                                 }
-                            }
-                            #if os(macOS)
-                            .onSubmit {
-                                referenceSyncTask?.cancel()
-                                viewModel.setExternalReference(referenceEditorText)
-                                if viewModel.isAdvanceEnabled { advance() }
-                            }
-                            #endif
-                    }
-                }
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Summary").font(.headline).padding(.horizontal)
-                    Card {
-                        VStack(spacing: 10) {
-                            summaryRow(title: "Pet", value: viewModel.pet.name)
-                            summaryRow(title: "Duration", value: viewModel.sessionDurationString)
-                            summaryRow(title: "Services", value: selectedServicesSummary)
-                            Divider()
-                            summaryRow(title: "Total", value: viewModel.finalTotalString, isTotal: true)
+
+                            Text("Auto-filled from selected services. You can adjust the total before charging the client.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
                         }
                     }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Payment Method").font(.headline).padding(.horizontal)
+                        LazyVGrid(columns: paymentGridColumns, spacing: 12) {
+                            ForEach(Self.paymentOptions) { option in
+                                paymentCard(for: option)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    if viewModel.requiresExternalReference {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(viewModel.referenceFieldTitle).font(Font.subheadline.weight(.medium)).padding(.horizontal)
+                            TextField(viewModel.referencePlaceholder, text: referenceBinding)
+                                .focused($focusedField, equals: .externalReference)
+                                .textFieldStyle(.roundedBorder)
+                                .padding(.horizontal)
+                                .accessibilityIdentifier("checkout.referenceField")
+                                .autocorrectionDisabled()
+                                #if os(iOS)
+                                .keyboardType(viewModel.selectedPaymentMethod.referenceFormat == .cardLast4 ? .numberPad : .asciiCapable)
+                                #endif
+                                #if os(macOS)
+                                .onSubmit {
+                                    viewModel.setExternalReference(referenceEditorText)
+                                    if viewModel.isAdvanceEnabled { advance() }
+                                }
+                                #endif
+
+                            Text(viewModel.referenceHelperText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal)
+
+                            if let message = viewModel.referenceValidationMessage {
+                                Text(message)
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.red)
+                                    .padding(.horizontal)
+                                    .accessibilityIdentifier("checkout.referenceValidation")
+                            }
+                        }
+                        .id(paymentReferenceScrollTarget)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Summary").font(.headline).padding(.horizontal)
+                        Card {
+                            VStack(spacing: 10) {
+                                summaryRow(title: "Pet", value: viewModel.pet.name)
+                                summaryRow(title: "Duration", value: viewModel.sessionDurationString)
+                                summaryRow(title: "Services", value: selectedServicesSummary)
+                                Divider()
+                                summaryRow(title: "Total", value: viewModel.finalTotalString, isTotal: true)
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical)
+            }
+            .onChange(of: viewModel.selectedPaymentMethod) { _, method in
+                guard method.requiresExternalReference else { return }
+
+                withAnimation(.easeInOut(duration: 0.24)) {
+                    proxy.scrollTo(paymentReferenceScrollTarget, anchor: .center)
+                }
+
+                Task { @MainActor in
+                    #if os(iOS)
+                    try? await Task.sleep(for: .milliseconds(180))
+                    #endif
+                    focusedField = .externalReference
                 }
             }
-            .padding(.vertical)
         }
         #if os(iOS)
         .scrollDismissesKeyboard(.interactively)
@@ -558,7 +581,6 @@ struct CheckoutView: View {
     private func flushPendingEditors() {
         notesSyncTask?.cancel()
         amountSyncTask?.cancel()
-        referenceSyncTask?.cancel()
 
         switch viewModel.currentStep {
         case .details:
@@ -827,6 +849,17 @@ struct CheckoutView: View {
                     }
                     viewModel.setAmountDirectly(filtered)
                 }
+            }
+        )
+    }
+
+    var referenceBinding: Binding<String> {
+        Binding(
+            get: { referenceEditorText },
+            set: { newValue in
+                let normalized = viewModel.selectedPaymentMethod.normalizeReference(newValue)
+                referenceEditorText = normalized
+                viewModel.setExternalReference(normalized)
             }
         )
     }

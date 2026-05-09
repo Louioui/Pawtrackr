@@ -61,6 +61,13 @@ extension Payment {
     enum Method: String, Codable, CaseIterable, Identifiable {
         case cash, debitCard, creditCard, zelle, other
 
+        enum ReferenceFormat: Equatable {
+            case none
+            case cardLast4
+            case transactionID
+            case freeform
+        }
+
         var id: String { rawValue }
         var displayName: String {
             switch self {
@@ -86,6 +93,93 @@ extension Payment {
             case .debitCard, .creditCard, .zelle: return true
             case .cash, .other: return false
             }
+        }
+
+        var referenceFormat: ReferenceFormat {
+            switch self {
+            case .cash: return .none
+            case .debitCard, .creditCard: return .cardLast4
+            case .zelle: return .transactionID
+            case .other: return .freeform
+            }
+        }
+
+        var referenceFieldTitle: String {
+            switch self {
+            case .cash: return "Reference"
+            case .debitCard, .creditCard: return "Last 4 Digits"
+            case .zelle: return "Transaction ID"
+            case .other: return "Reference"
+            }
+        }
+
+        var referencePlaceholder: String {
+            switch self {
+            case .cash: return "Optional note"
+            case .debitCard, .creditCard: return "1234"
+            case .zelle: return "ZELLE-48291"
+            case .other: return "Reference"
+            }
+        }
+
+        var referenceHelperText: String {
+            switch self {
+            case .cash:
+                return "You can leave this blank for cash payments."
+            case .debitCard, .creditCard:
+                return "Use the last 4 digits from the card or terminal slip."
+            case .zelle:
+                return "Use the confirmation or transfer ID from the payment."
+            case .other:
+                return "Add any note that will help you reconcile the payment later."
+            }
+        }
+
+        func normalizeReference(_ value: String) -> String {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            switch referenceFormat {
+            case .none, .freeform:
+                return trimmed
+            case .cardLast4:
+                let digits = trimmed.filter(\.isNumber)
+                return String(digits.suffix(4))
+            case .transactionID:
+                return trimmed.uppercased()
+            }
+        }
+
+        func isValidReference(_ value: String) -> Bool {
+            let normalized = normalizeReference(value)
+
+            switch referenceFormat {
+            case .none, .freeform:
+                return true
+            case .cardLast4:
+                return normalized.count == 4
+            case .transactionID:
+                return !normalized.isEmpty
+            }
+        }
+
+        func validationMessage(for value: String) -> String? {
+            guard requiresExternalReference else { return nil }
+
+            let normalized = normalizeReference(value)
+            guard !normalized.isEmpty else {
+                return "Enter \(referenceFieldTitle.lowercased()) to continue."
+            }
+
+            switch referenceFormat {
+            case .cardLast4 where normalized.count < 4:
+                return "Enter all 4 digits before continuing."
+            default:
+                return nil
+            }
+        }
+
+        func preservesReference(whenSwitchingFrom previousMethod: Method) -> Bool {
+            referenceFormat == previousMethod.referenceFormat && referenceFormat != .none
         }
     } 
 }

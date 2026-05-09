@@ -10,10 +10,6 @@ import Observation
 import SwiftData
 import OSLog
 
-#if canImport(UserNotifications)
-import UserNotifications
-#endif
-
 @Observable
 final class OnboardingViewModel {
     enum Step: Int, CaseIterable {
@@ -32,6 +28,23 @@ final class OnboardingViewModel {
             case .security: return "Security"
             case .permissions: return "Preferences"
             case .warmStart: return "Ready to Start"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .welcome:
+                return "Set up your workspace, security, and starter data in a few steps."
+            case .businessProfile:
+                return "Add the business details that appear across receipts, exports, and client-facing surfaces."
+            case .regional:
+                return "Choose how prices display and add contact details you want on file."
+            case .security:
+                return "Create the PIN that protects your data on this device."
+            case .permissions:
+                return "Pick the lock behavior that matches how you work day to day."
+            case .warmStart:
+                return "Start with a clean workspace or explore the app with polished demo records."
             }
         }
     }
@@ -53,8 +66,9 @@ final class OnboardingViewModel {
     var pin: String = ""
     var confirmPin: String = ""
     
-    // Permissions
-    var notificationsEnabled = false
+    // Preferences
+    var lockOnBackgroundEnabled = true
+    var autoLockAfterInactivityEnabled = false
     var biometricsEnabled = false
     
     // Metadata
@@ -64,12 +78,46 @@ final class OnboardingViewModel {
     private var modelContext: ModelContext?
     private var appSettings: AppSettings?
     private let logger = Logger(subsystem: "com.pawtrackr", category: "Onboarding")
+    private let biometrics = BiometricAuthenticator()
+    private var hasLoadedInitialState = false
     
     // MARK: - Init
     init(modelContext: ModelContext?, appSettings: AppSettings?) {
         self.modelContext = modelContext
         self.appSettings = appSettings
         self.currencySymbol = appSettings?.currencySymbol ?? "$"
+        self.lockOnBackgroundEnabled = appSettings?.autoLockOnBackground ?? true
+        self.autoLockAfterInactivityEnabled = appSettings?.autoLockAfterInactivity ?? false
+        self.biometricsEnabled = (appSettings?.isBiometricLockEnabled ?? false) && isBiometricsAvailable
+    }
+
+    func bindIfNeeded(modelContext: ModelContext, appSettings: AppSettings) {
+        self.modelContext = modelContext
+        self.appSettings = appSettings
+
+        guard !hasLoadedInitialState else { return }
+        hasLoadedInitialState = true
+
+        currencySymbol = appSettings.currencySymbol
+        lockOnBackgroundEnabled = appSettings.autoLockOnBackground
+        autoLockAfterInactivityEnabled = appSettings.autoLockAfterInactivity
+        biometricsEnabled = appSettings.isBiometricLockEnabled && isBiometricsAvailable
+
+        do {
+            var descriptor = FetchDescriptor<BusinessConfig>()
+            descriptor.fetchLimit = 1
+            if let config = try modelContext.fetch(descriptor).first {
+                if !config.name.trimmed.isEmpty {
+                    name = config.name
+                }
+                email = config.email ?? ""
+                phone = config.phone ?? ""
+                address = config.address ?? ""
+                logoData = config.logoData
+            }
+        } catch {
+            logger.error("Failed to hydrate onboarding state: \(error.localizedDescription, privacy: .public)")
+        }
     }
     
     // MARK: - Navigation
@@ -107,41 +155,106 @@ final class OnboardingViewModel {
         case .welcome:
             return true
         case .businessProfile:
-            return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return businessNameValidationMessage == nil
         case .regional:
-            return !email.isEmpty && email.contains("@")
+            return regionalValidationMessage == nil
         case .security:
-            return pin.count == 4 && pin == confirmPin
+            let normalizedPIN = pin.filter(\.isNumber)
+            let normalizedConfirm = confirmPin.filter(\.isNumber)
+            return AppSettings.isValidPIN(normalizedPIN) && normalizedPIN == normalizedConfirm
         case .permissions:
             return true
         case .warmStart:
             return true
         }
     }
+
+    var primaryActionTitle: String {
+        switch currentStep {
+        case .welcome:
+            return "Get Started"
+        case .permissions:
+            return "Review Setup"
+        default:
+            return "Continue"
+        }
+    }
+
+    var currentValidationMessage: String? {
+        switch currentStep {
+        case .businessProfile:
+            return businessNameValidationMessage
+        case .regional:
+            return regionalValidationMessage
+        case .security:
+            return securityValidationMessage
+        default:
+            return nil
+        }
+    }
+
+    var businessNameValidationMessage: String? {
+        name.trimmed.isEmpty ? "Add your business name to continue." : nil
+    }
+
+    var regionalValidationMessage: String? {
+        let trimmedEmail = email.trimmed
+        guard !trimmedEmail.isEmpty else { return nil }
+        return Self.isValidEmail(trimmedEmail) ? nil : "Enter a valid email address or leave it blank for now."
+    }
+
+    var securityValidationMessage: String? {
+        let normalizedPIN = pin.filter(\.isNumber)
+        let normalizedConfirm = confirmPin.filter(\.isNumber)
+
+        if (!pin.isEmpty && normalizedPIN != pin) || (!confirmPin.isEmpty && normalizedConfirm != confirmPin) {
+            return "PIN must use numbers only."
+        }
+        if !pin.isEmpty && normalizedPIN.count < 4 {
+            return "PIN must be 4 digits."
+        }
+        if !confirmPin.isEmpty && normalizedConfirm.count < 4 {
+            return "Confirm your 4-digit PIN."
+        }
+        if normalizedPIN.count == 4 && normalizedConfirm.count == 4 && normalizedPIN != normalizedConfirm {
+            return "PINs do not match."
+        }
+        if normalizedPIN.count == 4 && normalizedConfirm.count == 4 &&
+            AppSettings.isValidPIN(normalizedPIN) && normalizedPIN == normalizedConfirm {
+            return nil
+        }
+        return nil
+    }
+
+    var isBiometricsAvailable: Bool {
+        biometrics.biometricType() != .none
+    }
+
+    var biometricTitle: String {
+        switch biometrics.biometricType() {
+        case .faceID:
+            return "Face ID Unlock"
+        case .touchID:
+            return "Touch ID Unlock"
+        case .none:
+            return "Biometric Unlock"
+        }
+    }
+
+    var biometricSubtitle: String {
+        isBiometricsAvailable
+            ? "Use biometrics alongside your PIN for faster unlock."
+            : "This device does not have biometric unlock available right now."
+    }
     
     // MARK: - Actions
-    
-    func requestNotifications() {
-        #if canImport(UserNotifications)
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { success, _ in
-            Task { @MainActor in
-                self.notificationsEnabled = success
-            }
-        }
-        #else
-        self.notificationsEnabled = true
-        #endif
-    }
-    
-    func requestBiometrics() {
-        biometricsEnabled = true
-    }
-    
+
     @MainActor
     func finish(seedSampleData: Bool, onComplete: @escaping () -> Void) async {
         guard !isSaving else { return }
         isSaving = true
         saveError = nil
+        await Task.yield()
         
         logger.info("Starting onboarding finish (seed: \(seedSampleData))")
         
@@ -159,72 +272,83 @@ final class OnboardingViewModel {
             return
         }
         
-        // Move heavy operations to a background task to prevent UI freezing
-        let businessName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let businessEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let businessPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        let businessAddress = address.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let businessName = name.trimmed
+        let businessEmail = email.trimmed.nilIfEmpty
+        let businessPhone = phone.trimmed.nilIfEmpty
+        let businessAddress = address.trimmed.nilIfEmpty
         let currentCurrency = currencySymbol
-        let currentPin = pin
-        let useBiometrics = biometricsEnabled
-        let logo = logoData
-        
-        Task.detached(priority: .userInitiated) {
-            do {
-                // 1. Update App Settings
-                await MainActor.run {
-                    _ = settings.changePIN(to: currentPin)
-                    settings.currencySymbol = currentCurrency
-                    settings.businessName = businessName
-                    settings.isBiometricLockEnabled = useBiometrics
-                }
-                
-                // 2. Save Business Config
-                let backgroundContext = ModelContext(context.container)
-                let configs = try backgroundContext.fetch(FetchDescriptor<BusinessConfig>())
-                let config = configs.first ?? BusinessConfig()
-                
-                config.name = businessName
-                config.email = businessEmail
-                config.phone = businessPhone
-                config.address = businessAddress
-                config.logoData = logo
-                config.isSetupComplete = true
-                
-                if config.modelContext == nil {
-                    backgroundContext.insert(config)
-                }
-                
-                // 3. Seed Sample Data if requested
-                if seedSampleData {
-                    try UITestDataSeeder.seedIfNeeded(in: backgroundContext)
-                    await MainActor.run {
-                        settings.hasConfiguredPrices = true
-                        settings.hasAddedFirstClient = true
-                        settings.hasCompletedFirstVisit = true
-                    }
-                } else {
-                    DataMigrations.ensureServiceCatalog(in: backgroundContext)
-                    DataMigrations.ensureMessageTemplates(in: backgroundContext)
-                }
-                
-                try backgroundContext.save()
-                
-                // 4. Finalize on Main Actor
-                await MainActor.run {
-                    Formatters.updateCurrencySymbol(currentCurrency)
-                    HapticManager.notify(.success)
-                    self.isSaving = false
-                    onComplete()
-                }
-            } catch {
-                let errorMsg = error.localizedDescription
-                await MainActor.run {
-                    self.logger.error("Failed to complete onboarding: \(errorMsg)")
-                    self.saveError = "Setup could not be saved. Please try again."
-                    self.isSaving = false
-                }
-            }
+        let currentPIN = pin.filter(\.isNumber)
+        let useBiometrics = biometricsEnabled && isBiometricsAvailable
+
+        guard businessNameValidationMessage == nil else {
+            saveError = businessNameValidationMessage
+            isSaving = false
+            return
         }
+        guard regionalValidationMessage == nil else {
+            saveError = regionalValidationMessage
+            isSaving = false
+            return
+        }
+        guard AppSettings.isValidPIN(currentPIN), currentPIN == confirmPin.filter(\.isNumber) else {
+            saveError = "Your PIN is incomplete. Enter the same 4 digits in both fields."
+            isSaving = false
+            return
+        }
+
+        do {
+            var descriptor = FetchDescriptor<BusinessConfig>()
+            descriptor.fetchLimit = 1
+            let config = try context.fetch(descriptor).first ?? BusinessConfig()
+
+            config.name = businessName
+            config.email = businessEmail
+            config.phone = businessPhone
+            config.address = businessAddress
+            config.logoData = logoData
+            config.isSetupComplete = true
+
+            if config.modelContext == nil {
+                context.insert(config)
+            }
+
+            DataMigrations.ensureServiceCatalog(in: context)
+            DataMigrations.ensureMessageTemplates(in: context)
+
+            if seedSampleData {
+                try DemoDataSeeder.seedIfNeeded(in: context)
+            }
+
+            try context.save()
+
+            settings.isLockEnabled = true
+            settings.isBiometricLockEnabled = useBiometrics
+            settings.autoLockOnBackground = lockOnBackgroundEnabled
+            settings.autoLockAfterInactivity = autoLockAfterInactivityEnabled
+            settings.currencySymbol = currentCurrency
+            settings.businessName = businessName
+            settings.isChecklistDismissed = false
+            settings.hasConfiguredPrices = seedSampleData
+            settings.hasAddedFirstClient = seedSampleData
+            settings.hasCompletedFirstVisit = seedSampleData
+
+            guard settings.changePIN(to: currentPIN) else {
+                throw ValidationError.custom(message: "The selected PIN could not be saved.")
+            }
+
+            Formatters.updateCurrencySymbol(currentCurrency)
+            HapticManager.notify(.success)
+            isSaving = false
+            onComplete()
+        } catch {
+            logger.error("Failed to complete onboarding: \(error.localizedDescription, privacy: .public)")
+            saveError = "Setup could not be saved. Please try again."
+            isSaving = false
+        }
+    }
+
+    private static func isValidEmail(_ value: String) -> Bool {
+        let pattern = #"^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$"#
+        return value.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 }

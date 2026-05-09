@@ -383,8 +383,8 @@ struct PetDetailView: View {
                                 VisitTimelineRow(visit: visit)
                             }
                             .buttonStyle(.plain)
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     }
                 }
             }
@@ -488,19 +488,24 @@ struct PetDetailView: View {
             }
         }
 
+    private static let relativeDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        f.doesRelativeDateFormatting = true
+        return f
+    }()
+
+    private static let timeOnlyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
+
     private func startedString(_ date: Date) -> String {
-            // Localized relative day (Today/Yesterday) + time for current locale
-            let dateOnly = DateFormatter()
-            dateOnly.locale = .current
-            dateOnly.dateStyle = .medium
-            dateOnly.timeStyle = .none
-            dateOnly.doesRelativeDateFormatting = true
-            let timeOnly = DateFormatter()
-            timeOnly.locale = .current
-            timeOnly.dateStyle = .none
-            timeOnly.timeStyle = .short
-            return "\(dateOnly.string(from: date)), \(timeOnly.string(from: date))"
-        }
+        "\(Self.relativeDayFormatter.string(from: date)), \(Self.timeOnlyFormatter.string(from: date))"
+    }
 
     private func vmElapsedLabel() -> String {
         viewModel?.visitTimer.formattedElapsed ?? ""
