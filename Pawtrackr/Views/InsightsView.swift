@@ -481,6 +481,7 @@ struct InsightsView: View {
                 ) {
                     Label("Export Report", systemImage: "doc.badge.arrow.up")
                 }
+                .accessibilityIdentifier("insights.shareReport")
             } else {
                 Button {
                     guard !isPreparingReport else { return }
@@ -499,6 +500,7 @@ struct InsightsView: View {
                     }
                 }
                 .disabled(isPreparingReport)
+                .accessibilityIdentifier("insights.exportReport")
             }
         }
     }

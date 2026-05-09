@@ -344,13 +344,17 @@ struct DashboardView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     actionCard(title: NSLocalizedString("dashboard.new_client", comment: ""), symbol: "person.crop.circle.badge.plus") { showNewClient = true }
+                        .accessibilityIdentifier("dashboard.quickAction.newClient")
                     actionCard(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") {
                         selectSurface(.clients, resetPath: true)
                     }
+                    .accessibilityIdentifier("dashboard.quickAction.checkIn")
                     NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
+                        .accessibilityIdentifier("dashboard.quickAction.checkOut")
                     actionCard(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "chart.bar.fill") {
                         selectSurface(.insights, resetPath: true)
                     }
+                    .accessibilityIdentifier("dashboard.quickAction.reports")
                 }
             }
         }

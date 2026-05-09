@@ -78,6 +78,7 @@ struct AddPetSheet: View {
 
                             // Pet name
                             petInputField(NSLocalizedString("add_pet.name", comment: ""), text: $petName)
+                                .accessibilityIdentifier("addPet.name")
                                 #if os(iOS)
                                 .textInputAutocapitalization(.words)
                                 #endif
@@ -214,11 +215,13 @@ struct AddPetSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("common.cancel", comment: "")) { dismiss() }
+                        .accessibilityIdentifier("addPet.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(NSLocalizedString("common.save", comment: "")) { savePet() }
                         .disabled(petName.trimmed.isEmpty || selectedSpecies == nil)
                         .accessibilityHint(petName.trimmed.isEmpty ? "Enter a pet name to enable save" : "Saves this pet to the client")
+                        .accessibilityIdentifier("addPet.save")
                 }
             }
             .alert(item: $appError) { error in

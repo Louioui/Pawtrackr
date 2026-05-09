@@ -35,16 +35,19 @@ struct EditClientSheet: View {
             Form {
                 Section("Owner Information") {
                     TextField("First Name", text: $firstName)
+                        .accessibilityIdentifier("editClient.firstName")
                     #if os(iOS)
                     .textContentType(.givenName)
                     .textInputAutocapitalization(.words)
                     #endif
                     TextField("Last Name", text: $lastName)
+                        .accessibilityIdentifier("editClient.lastName")
                     #if os(iOS)
                     .textContentType(.familyName)
                     .textInputAutocapitalization(.words)
                     #endif
                     TextField("Phone", text: $phone)
+                        .accessibilityIdentifier("editClient.phone")
                         .autocorrectionDisabled()
                         .onChange(of: phone) { _, newValue in
                             if let pretty = PhoneUtils.display(newValue) { phone = pretty }
@@ -54,6 +57,7 @@ struct EditClientSheet: View {
                     .textContentType(.telephoneNumber)
                     #endif
                     TextField("Email", text: $email)
+                        .accessibilityIdentifier("editClient.email")
                     #if os(iOS)
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)
@@ -61,6 +65,7 @@ struct EditClientSheet: View {
                     .autocorrectionDisabled(true)
                     #endif
                     TextField("Address", text: $address)
+                        .accessibilityIdentifier("editClient.address")
                     #if os(iOS)
                     .textContentType(.fullStreetAddress)
                     #endif
@@ -72,6 +77,7 @@ struct EditClientSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", role: .cancel) { dismiss() }
+                        .accessibilityIdentifier("editClient.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -79,6 +85,7 @@ struct EditClientSheet: View {
                         save()
                     }
                     .disabled(!isValid)
+                    .accessibilityIdentifier("editClient.save")
                 }
             }
             .alert(item: $appError) { error in

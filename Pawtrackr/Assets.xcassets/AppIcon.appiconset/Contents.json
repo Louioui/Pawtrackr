@@ -1,18 +1,6 @@
 {
   "images" : [
     {
-      "filename" : "iphone120.png",
-      "idiom" : "iphone",
-      "scale" : "2x",
-      "size" : "60x60"
-    },
-    {
-      "filename" : "iphone180.png",
-      "idiom" : "iphone",
-      "scale" : "3x",
-      "size" : "60x60"
-    },
-    {
       "filename" : "notification40.png",
       "idiom" : "iphone",
       "scale" : "2x",
@@ -47,6 +35,18 @@
       "idiom" : "iphone",
       "scale" : "3x",
       "size" : "40x40"
+    },
+    {
+      "filename" : "iphone120.png",
+      "idiom" : "iphone",
+      "scale" : "2x",
+      "size" : "60x60"
+    },
+    {
+      "filename" : "iphone180.png",
+      "idiom" : "iphone",
+      "scale" : "3x",
+      "size" : "60x60"
     },
     {
       "filename" : "ipadNotification20.png",
@@ -101,6 +101,12 @@
       "idiom" : "ipad",
       "scale" : "2x",
       "size" : "83.5x83.5"
+    },
+    {
+      "filename" : "appstore1024.png",
+      "idiom" : "ios-marketing",
+      "scale" : "1x",
+      "size" : "1024x1024"
     },
     {
       "filename" : "mac16.png",
@@ -161,12 +167,6 @@
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"
-    },
-    {
-      "filename" : "appstore1024.png",
-      "idiom" : "ios-marketing",
-      "scale" : "1x",
-      "size" : "1024x1024"
     }
   ],
   "info" : {

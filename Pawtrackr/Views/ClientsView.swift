@@ -76,6 +76,7 @@ struct ClientsView: View {
             FAB(systemImage: "person.fill.badge.plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
                 showingNewClientSheet = true
             }
+            .accessibilityIdentifier("clients.fab.addClient")
             #endif
         }
         .toolbar {
@@ -86,6 +87,7 @@ struct ClientsView: View {
                     Label(NSLocalizedString("clients.add_client", comment: ""), systemImage: "person.fill.badge.plus")
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                .accessibilityIdentifier("clients.toolbar.addClient")
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -98,6 +100,7 @@ struct ClientsView: View {
                 } label: {
                     Image(systemName: "bell")
                 }
+                .accessibilityIdentifier("clients.toolbar.notifications")
             }
 
             ToolbarItem(placement: .navigation) {
@@ -107,6 +110,7 @@ struct ClientsView: View {
                     Image(systemName: "magnifyingglass")
                 }
                 .keyboardShortcut("f", modifiers: .command)
+                .accessibilityIdentifier("clients.toolbar.search")
             }
         }
         .refreshable {
@@ -185,6 +189,7 @@ struct ClientsView: View {
                         .matchedGeometryEffect(id: client.id, in: namespace)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")
                 .contextMenu {
                     Button(role: .destructive) {
                         clientToDelete = client

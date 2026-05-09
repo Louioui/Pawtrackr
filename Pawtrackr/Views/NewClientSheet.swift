@@ -62,14 +62,17 @@ struct NewClientSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(NSLocalizedString("new_client.owner", comment: "")).font(.subheadline.weight(.semibold))
                         inputField(NSLocalizedString("new_client.first_name", comment: ""), text: $viewModel.first)
+                            .accessibilityIdentifier("newClient.firstName")
                             #if os(iOS)
                             .textInputAutocapitalization(.words)
                             #endif
                         inputField(NSLocalizedString("new_client.last_name", comment: ""), text: $viewModel.last)
+                            .accessibilityIdentifier("newClient.lastName")
                             #if os(iOS)
                             .textInputAutocapitalization(.words)
                             #endif
                         inputField(NSLocalizedString("new_client.phone", comment: ""), text: $viewModel.phone)
+                            .accessibilityIdentifier("newClient.phone")
                             #if os(iOS)
                             .keyboardType(.phonePad)
                             #endif
@@ -82,6 +85,7 @@ struct NewClientSheet: View {
                                 }
                             }
                         inputField(NSLocalizedString("new_client.email", comment: ""), text: $viewModel.email)
+                            .accessibilityIdentifier("newClient.email")
                             #if os(iOS)
                             .keyboardType(.emailAddress)
                             #endif
@@ -89,6 +93,7 @@ struct NewClientSheet: View {
                             .textInputAutocapitalization(.never)
                             #endif
                         inputField(NSLocalizedString("new_client.address", comment: ""), text: $viewModel.address)
+                            .accessibilityIdentifier("newClient.address")
                             #if os(iOS)
                             .textInputAutocapitalization(.words)
                             #endif
@@ -323,6 +328,7 @@ struct NewClientSheet: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { dismiss() }
+                    .accessibilityIdentifier("newClient.cancel")
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
@@ -337,6 +343,7 @@ struct NewClientSheet: View {
                         .labelStyle(.titleAndIcon)
                 }
                 .disabled(viewModel.isSaving)
+                .accessibilityIdentifier("newClient.create")
             }
         }
         .alert(item: $viewModel.appError) { error in

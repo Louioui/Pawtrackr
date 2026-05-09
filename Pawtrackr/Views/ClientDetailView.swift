@@ -291,12 +291,14 @@ struct ClientDetailView: View {
                     if isEditingClientInline {
                         HStack(spacing: 8) {
                             Button { cancelInlineEdit(client) } label: { Image(systemName: "xmark.circle.fill") }
+                                .accessibilityIdentifier("clientDetail.inlineEdit.cancel")
                             Button { saveInlineEdit(client) } label: { Image(systemName: "checkmark.circle.fill") }
                                 .disabled(
                                     editFirst.trimmed.isEmpty ||
                                     editLast.trimmed.isEmpty ||
                                     (!editPhone.trimmed.isEmpty && PhoneUtils.toE164(editPhone) == nil)
                                 )
+                                .accessibilityIdentifier("clientDetail.inlineEdit.save")
                         }
                         .font(.title3)
                     } else {
@@ -304,9 +306,11 @@ struct ClientDetailView: View {
                             Button { showCommunication = true } label: { Image(systemName: "message.circle.fill") }
                                 .font(.title3)
                                 .foregroundStyle(.blue)
+                                .accessibilityIdentifier("clientDetail.message")
                             Button { beginInlineEdit(client) } label: { Image(systemName: "ellipsis.circle") }
                                 .font(.title3)
                                 .accessibilityLabel(NSLocalizedString("a11y.more_actions", comment: ""))
+                                .accessibilityIdentifier("clientDetail.editInline")
                         }
                     }
                 }
@@ -517,16 +521,19 @@ struct ClientDetailView: View {
                                         }
                                     }
                                     .disabled(pet.activeVisit != nil)
+                                    .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
 
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "creditcard.fill", tint: .green) {
                                         // Open checkout; pass active visit so it finalizes the ongoing session
                                         checkoutPet = pet
                                     }
                                     .disabled(pet.activeVisit == nil)
+                                    .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
 
                                     actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {
                                         sheetDestination = .history(pet)
                                     }
+                                    .accessibilityIdentifier("clientDetail.pet.\(pet.name).history")
                                 }
                             }
                         }
@@ -645,6 +652,7 @@ struct ClientDetailView: View {
             }
             .disabled(isDeleting)
             .accessibilityLabel(NSLocalizedString("client_details.delete", comment: ""))
+            .accessibilityIdentifier("clientDetail.toolbar.delete")
             .tint(.red)
         }
     }
