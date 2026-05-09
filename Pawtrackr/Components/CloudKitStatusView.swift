@@ -104,7 +104,7 @@ private struct CloudKitStatusPopover: View {
             Button {
                 Task { await monitor.forceSync() }
             } label: {
-                Label(NSLocalizedString("cloudkit.action.sync_now", value: "Sync Now", comment: ""),
+                Label(NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: ""),
                       systemImage: "arrow.clockwise.icloud")
                     .frame(maxWidth: .infinity)
             }

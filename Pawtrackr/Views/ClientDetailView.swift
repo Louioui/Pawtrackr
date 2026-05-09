@@ -441,6 +441,7 @@ struct ClientDetailView: View {
             try modelContext.save()
         } catch {
             Logger.clientDetailView.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting emergency contact")
         }
         viewModel?.refreshRecentVisits()
     }
@@ -477,6 +478,7 @@ struct ClientDetailView: View {
             newContactName = ""; newContactRelation = ""; newContactPhone = ""
         } catch {
             Logger.clientDetailView.error("Failed to save contact: \(error.localizedDescription, privacy: .public)")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving emergency contact")
             validationError = "Failed to save to database."
         }
     }
@@ -686,6 +688,7 @@ struct ClientDetailView: View {
             isDeleting = false
             let message = String(describing: error)
             Logger.clientDetailView.error("Failed to delete client: \(message, privacy: .public)")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting client")
             alertDestination = .deleteError(message)
         }
     }
@@ -717,6 +720,8 @@ struct ClientDetailView: View {
             try modelContext.save()
         } catch {
             Logger.clientDetailView.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving client changes")
+            return
         }
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }
         // Optional: show a small saved toast for inline edits

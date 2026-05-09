@@ -66,12 +66,25 @@ struct PetHistoryView: View {
             VStack(spacing: 16) {
                 headerCard(vm)
                     .padding(.horizontal)
+                controls(vm)
+                    .padding(.horizontal)
 
-                if vm.visits.isEmpty {
+                if vm.isLoading && vm.filtered.isEmpty {
+                    ProgressView("Loading history…")
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 40)
+                } else if vm.visits.isEmpty {
                     ContentUnavailableView(
                         NSLocalizedString("pet_history.empty_title", comment: ""),
                         systemImage: "clock.arrow.circlepath",
                         description: Text(String(format: NSLocalizedString("pet_history.empty_desc_fmt", comment: ""), vm.pet.name))
+                    )
+                    .padding(.top, 40)
+                } else if vm.filtered.isEmpty {
+                    ContentUnavailableView(
+                        "No Matching Visits",
+                        systemImage: "magnifyingglass",
+                        description: Text("Try a different service, note, or reference.")
                     )
                     .padding(.top, 40)
                 } else {
@@ -85,11 +98,21 @@ struct PetHistoryView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar { toolbarContent(vm) }
+        .alert(item: Binding(
+            get: { vm.appError },
+            set: { vm.appError = $0 }
+        )) { error in
+            Alert(
+                title: Text("History Error"),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text("OK"))
+            )
+        }
         .task { await vm.refresh() }
     }
 
     private func visitList(_ vm: PetHistoryViewModel) -> some View {
-        let groups = Dictionary(grouping: vm.visits, by: { Calendar.current.startOfDay(for: $0.sortKeyDate) })
+        let groups = Dictionary(grouping: vm.filtered, by: { Calendar.current.startOfDay(for: $0.sortKeyDate) })
         let sortedDays = groups.keys.sorted(by: >)
 
         return LazyVStack(spacing: 16, pinnedViews: .sectionHeaders) {
@@ -101,7 +124,6 @@ struct PetHistoryView: View {
                             VisitTimelineRow(visit: visit)
                         }
                         .buttonStyle(.plain)
-                        // Infinite scroll removed (no pagination in current view model)
                     }
                 } header: {
                     HStack {
@@ -115,9 +137,38 @@ struct PetHistoryView: View {
                 }
             }
 
-            // Loading indicator removed (view model doesn't expose isLoading)
+            if vm.canLoadMore {
+                Button {
+                    vm.loadMore()
+                } label: {
+                    HStack(spacing: 8) {
+                        if vm.isLoading {
+                            ProgressView().controlSize(.small)
+                        }
+                        Text(NSLocalizedString("common.load_more", comment: "Load More"))
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                    .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal)
+    }
+
+    private func controls(_ vm: PetHistoryViewModel) -> some View {
+        @Bindable var vm = vm
+        return VStack(spacing: 10) {
+            SearchField(text: $vm.searchText)
+            Picker("History Range", selection: $vm.scope) {
+                ForEach(PetHistoryViewModel.Scope.allCases) { scope in
+                    Text(scope.rawValue).tag(scope)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
     }
 
     private func headerCard(_ vm: PetHistoryViewModel) -> some View {

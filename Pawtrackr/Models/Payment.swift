@@ -21,6 +21,8 @@ final class Payment {
     var paidAt: Date = Date()
     var note: String?
     var externalReference: String?
+    var lastModifiedBy: UUID = DeviceIdentity.currentID
+    var lastModifiedAt: Date = Date()
 
     // MARK: - Relationships
     var visit: Visit?
@@ -37,11 +39,19 @@ final class Payment {
         self.paidAt = paidAt
         self.note = note
         self.externalReference = externalReference
+        self.lastModifiedBy = DeviceIdentity.currentID
+        self.lastModifiedAt = .now
     }
 
     // MARK: - Mutating API
     func setAmount(_ newAmount: Decimal) {
         amount = max(0, newAmount).roundedMoney()
+        markModified()
+    }
+
+    func markModified() {
+        lastModifiedBy = DeviceIdentity.currentID
+        lastModifiedAt = .now
     }
 }
 

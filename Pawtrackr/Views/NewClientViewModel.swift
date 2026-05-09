@@ -107,6 +107,7 @@ final class NewClientViewModel {
             self.appError = .validation(error)
             return .failed
         } catch {
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "creating client")
             self.appError = .database(error.localizedDescription)
             return .failed
         }

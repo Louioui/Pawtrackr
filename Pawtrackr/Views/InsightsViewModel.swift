@@ -306,6 +306,53 @@ class InsightsViewModel {
         let result = await Task.detached(priority: .utility) { () -> ClientInsightsResult in
             let bgContext = ModelContext(container)
 
+            var summaryDesc = FetchDescriptor<ClientInsightSummary>(
+                sortBy: [SortDescriptor(\.totalSpent, order: .reverse)]
+            )
+            summaryDesc.fetchLimit = 5000
+            let summaries: [ClientInsightSummary]
+            do {
+                summaries = try bgContext.fetch(summaryDesc)
+            } catch {
+                Logger.insights.error("Client insight summary fetch failed: \(String(describing: error))")
+                summaries = []
+            }
+
+            if !summaries.isEmpty {
+                let collapsed = Array(SummaryUpdater.collapsedClientInsightSummaries(from: summaries).values)
+                let recurring = collapsed.filter(\.isRecurring).count
+                let churn = collapsed.filter(\.isChurnRisk).count
+                let oneTime = max(0, collapsed.count - recurring)
+                let topRows = collapsed
+                    .filter { $0.totalSpent > .zero }
+                    .sorted { $0.totalSpent > $1.totalSpent }
+                    .prefix(10)
+                    .map {
+                        TopClientData(
+                            name: $0.clientName,
+                            totalSpent: $0.totalSpent,
+                            visitCount: $0.visitCount
+                        )
+                    }
+
+                let series: [RetentionData]
+                if recurring > 0 || oneTime > 0 {
+                    series = [
+                        RetentionData(label: "Recurring", value: Double(recurring)),
+                        RetentionData(label: "One-time", value: Double(oneTime))
+                    ]
+                } else {
+                    series = []
+                }
+
+                return ClientInsightsResult(
+                    topClients: Array(topRows),
+                    retentionRate: collapsed.isEmpty ? 0 : Double(recurring) / Double(collapsed.count),
+                    churnRiskCount: churn,
+                    retentionSeries: series
+                )
+            }
+
             var clientDesc = FetchDescriptor<Client>()
             clientDesc.relationshipKeyPathsForPrefetching = [\.pets]
             clientDesc.fetchLimit = 5000

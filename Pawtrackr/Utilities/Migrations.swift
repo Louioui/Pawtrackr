@@ -33,7 +33,7 @@ import OSLog
 // remain in the chain so their store can climb forward to the latest.
 
 enum PawtrackrSchemaV1: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 0, 0)
+    static var versionIdentifier: Schema.Version = .init(1, 0, 1)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -51,8 +51,10 @@ enum PawtrackrSchemaV1: VersionedSchema {
             DaySummary.self,
             ServiceDaySummary.self,
             CategoryDaySummary.self,
+            ClientInsightSummary.self,
 
             // Aux tables
+            CheckoutTransaction.self,
             EmergencyContact.self,
             BusinessConfig.self,
             MessageTemplate.self

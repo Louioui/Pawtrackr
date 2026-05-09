@@ -1,4 +1,3 @@
-
 //
 //  PetHistoryViewModel.swift
 //  Pawtrackr
@@ -37,12 +36,20 @@ final class PetHistoryViewModel {
     var pet: Pet
 
     // MARK: - Filtering
-    var scope: Scope = .thisMonth { didSet { Task { await refresh() } } }
-    var searchText: String = "" { didSet { applyFilters() } }
+    var scope: Scope = .thisMonth {
+        didSet {
+            currentLimit = pageSize
+            Task { await refresh() }
+        }
+    }
+    var searchText: String = "" { didSet { applyFiltersAndKPIs() } }
 
     // MARK: - Output
     private(set) var visits: [Visit] = []
     private(set) var filtered: [Visit] = []
+    private(set) var isLoading = false
+    private(set) var canLoadMore = false
+    var appError: AppError? = nil
 
     // MARK: - KPIs
     private(set) var totalVisits: Int = 0
@@ -50,41 +57,72 @@ final class PetHistoryViewModel {
     private(set) var averageDuration: TimeInterval = 0
 
     var totalSpentString: String { totalSpent.moneyString }
-    var averageDurationString: String { Formatters.durationString(from: Date(), to: Date().addingTimeInterval(averageDuration)) }
+    var averageDurationString: String {
+        Formatters.durationString(from: Date(), to: Date().addingTimeInterval(averageDuration))
+    }
 
+    private let pageSize = 100
+    private var currentLimit = 100
+    private var refreshGeneration: UInt64 = 0
+    private var snapshots: [PetHistoryVisitSnapshot] = []
+    private var filteredSnapshots: [PetHistoryVisitSnapshot] = []
     private var visitCompleteObserver: NotificationObserverToken?
 
     // MARK: - Init
     init(pet: Pet, modelContext: ModelContext) {
         self.pet = pet
         self.modelContext = modelContext
+        let petID = pet.persistentModelID
         let token = NotificationCenter.default.addObserver(
             forName: .visitDidComplete, object: nil, queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
             guard let self else { return }
+            if let completedPetID = notification.petID, completedPetID != petID { return }
             Task { await self.refresh() }
         }
         visitCompleteObserver = NotificationObserverToken(token)
-        Task { await refresh() }
     }
 
     // MARK: - Public
     func refresh() async {
-        await fetchVisits()
-        applyFilters()
-        computeKPIs()
+        let generation = nextRefreshGeneration()
+        isLoading = true
+        appError = nil
+
+        do {
+            let fetched = try await fetchVisitSnapshots()
+            guard generation == refreshGeneration else { return }
+            snapshots = fetched.rows
+            canLoadMore = fetched.hasMore
+            visits = snapshots.compactMap { modelContext.model(for: $0.modelID) as? Visit }
+            applyFiltersAndKPIs()
+        } catch {
+            guard generation == refreshGeneration else { return }
+            snapshots = []
+            filteredSnapshots = []
+            visits = []
+            filtered = []
+            canLoadMore = false
+            appError = .database(error.localizedDescription)
+            computeKPIs()
+        }
+
+        isLoading = false
+    }
+
+    func loadMore() {
+        guard canLoadMore, !isLoading else { return }
+        currentLimit += pageSize
+        Task { await refresh() }
     }
 
     func exportCSV() -> Data {
         let header = ["Date", "Services", "Duration", "Amount"]
-        let rows: [[String]] = filtered.map { v in
-            let date = v.startedAt.formatted(date: .abbreviated, time: .omitted)
-            let services = (v.items ?? []).map { $0.name }.joined(separator: ", ")
-            let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
-            let amountValue = v.isCompleted ? v.total : v.servicesSubtotal
-            // Stay in Decimal — Double conversion can introduce precision drift
-            // (e.g. $19.99 → 19.989999…) which surfaces in customer CSVs.
-            let amount = NSDecimalNumber(decimal: amountValue.roundedMoney()).stringValue
+        let rows: [[String]] = filteredSnapshots.map { visit in
+            let date = visit.startedAt.formatted(date: .abbreviated, time: .omitted)
+            let services = visit.itemNames.joined(separator: ", ")
+            let duration = Formatters.durationString(from: visit.startedAt, to: visit.endedAt)
+            let amount = NSDecimalNumber(decimal: visit.total.roundedMoney()).stringValue
             return [date, services, duration, amount]
         }
         let lines = ([header] + rows).map { $0.map { $0.csvEscaped }.joined(separator: ",") }.joined(separator: "\n")
@@ -93,83 +131,102 @@ final class PetHistoryViewModel {
 
     func exportPlainText() -> String {
         var out = ""
-        for v in filtered {
-            let date = v.startedAt.formatted(date: .abbreviated, time: .shortened)
-            let duration = Formatters.durationString(from: v.startedAt, to: v.endedAt ?? .now)
-            let amount = (v.isCompleted ? v.total : v.servicesSubtotal).moneyString
-            let services = (v.items ?? []).map { $0.name }.joined(separator: ", ")
+        for visit in filteredSnapshots {
+            let date = visit.startedAt.formatted(date: .abbreviated, time: .shortened)
+            let duration = Formatters.durationString(from: visit.startedAt, to: visit.endedAt)
+            let amount = visit.total.moneyString
+            let services = visit.itemNames.joined(separator: ", ")
             out += "\n• \(date) — \(services) — \(duration) — \(amount)"
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Private
-    private func fetchVisits() async {
-        let (start, end) = dateBounds(for: scope)
-        let petUUID = pet.uuid
-        // Push as much filtering as possible into the predicate so SwiftData can use indexes.
-        // The macro only accepts a single boolean expression — we precompute the
-        // date pair into one branchless conditional. `v.payment != nil` (paid filter)
-        // is applied in-memory because SwiftData #Predicate can't reliably express
-        // optional to-one-relationship existence across versions.
-        let predicate: Predicate<Visit>
-        switch (start, end) {
-        case let (s?, e?):
-            predicate = #Predicate<Visit> { v in
-                v.endedAt != nil && v.pet?.uuid == petUUID && v.startedAt >= s && v.startedAt < e
-            }
-        case let (s?, nil):
-            predicate = #Predicate<Visit> { v in
-                v.endedAt != nil && v.pet?.uuid == petUUID && v.startedAt >= s
-            }
-        case let (nil, e?):
-            predicate = #Predicate<Visit> { v in
-                v.endedAt != nil && v.pet?.uuid == petUUID && v.startedAt < e
-            }
-        case (nil, nil):
-            predicate = #Predicate<Visit> { v in
-                v.endedAt != nil && v.pet?.uuid == petUUID
-            }
-        }
-        var descriptor = FetchDescriptor<Visit>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        // Hard cap so a very chatty pet history can never freeze the screen.
-        descriptor.fetchLimit = 1000
-        // Prefetch items / payment so the in-memory paid-filter and KPI math
-        // don't fault relationships row-by-row.
-        descriptor.relationshipKeyPathsForPrefetching = [\Visit.items, \Visit.payment]
-        do {
-            let fetched = try modelContext.fetch(descriptor).filter { $0.payment != nil }
-            visits = fetched
-        } catch {
-            visits = []
-        }
+    private func nextRefreshGeneration() -> UInt64 {
+        refreshGeneration &+= 1
+        return refreshGeneration
     }
 
-    private func applyFilters() {
+    private func fetchVisitSnapshots() async throws -> (rows: [PetHistoryVisitSnapshot], hasMore: Bool) {
+        let (start, end) = dateBounds(for: scope)
+        let petUUID = pet.uuid
+        let container = modelContext.container
+        let fetchLimit = currentLimit + 1
+
+        return try await Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            let predicate: Predicate<Visit>
+            switch (start, end) {
+            case let (s?, e?):
+                predicate = #Predicate<Visit> { visit in
+                    if let endedAt = visit.endedAt {
+                        endedAt >= s && endedAt < e && visit.pet?.uuid == petUUID
+                    } else {
+                        false
+                    }
+                }
+            case let (s?, nil):
+                predicate = #Predicate<Visit> { visit in
+                    if let endedAt = visit.endedAt {
+                        endedAt >= s && visit.pet?.uuid == petUUID
+                    } else {
+                        false
+                    }
+                }
+            case let (nil, e?):
+                predicate = #Predicate<Visit> { visit in
+                    if let endedAt = visit.endedAt {
+                        endedAt < e && visit.pet?.uuid == petUUID
+                    } else {
+                        false
+                    }
+                }
+            case (nil, nil):
+                predicate = #Predicate<Visit> { visit in
+                    visit.endedAt != nil && visit.pet?.uuid == petUUID
+                }
+            }
+
+            var descriptor = FetchDescriptor<Visit>(
+                predicate: predicate,
+                sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+            )
+            descriptor.fetchLimit = fetchLimit
+            descriptor.relationshipKeyPathsForPrefetching = [\Visit.items, \Visit.payment]
+
+            let fetched = try context.fetch(descriptor).filter { $0.payment != nil }
+            let rows = fetched.map { visit in
+                PetHistoryVisitSnapshot(
+                    modelID: visit.persistentModelID,
+                    startedAt: visit.startedAt,
+                    endedAt: visit.endedAt ?? visit.startedAt,
+                    itemNames: (visit.items ?? []).map(\.name),
+                    note: visit.note,
+                    externalReference: visit.payment?.externalReference,
+                    total: visit.total
+                )
+            }
+            return (Array(rows.prefix(fetchLimit - 1)), fetched.count >= fetchLimit)
+        }.value
+    }
+
+    private func applyFiltersAndKPIs() {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { filtered = visits; return }
-        let lc = q.localizedLowercase
-        filtered = visits.filter { v in
-            if (v.items ?? []).contains(where: { $0.name.localizedCaseInsensitiveContains(lc) }) { return true }
-            if let note = v.note, note.localizedCaseInsensitiveContains(lc) { return true }
-            if let ref = v.payment?.externalReference, ref.localizedCaseInsensitiveContains(lc) { return true }
-            return false
+        if q.isEmpty {
+            filteredSnapshots = snapshots
+            filtered = visits
+        } else {
+            filteredSnapshots = snapshots.filter { $0.matches(query: q) }
+            let filteredIDs = Set(filteredSnapshots.map(\.modelID))
+            filtered = visits.filter { filteredIDs.contains($0.persistentModelID) }
         }
+        computeKPIs()
     }
 
     private func computeKPIs() {
-        totalVisits = filtered.count
-        let ended = filtered.compactMap { v -> (TimeInterval, Decimal)? in
-            guard let end = v.endedAt else { return nil }
-            let dur = max(0, end.timeIntervalSince(v.startedAt))
-            let amt: Decimal = v.isCompleted ? v.total : v.servicesSubtotal
-            return (dur, amt)
-        }
-        totalSpent = ended.reduce(.zero) { $0 + $1.1 }
-        let totalDur = ended.reduce(0) { $0 + $1.0 }
+        totalVisits = filteredSnapshots.count
+        totalSpent = filteredSnapshots.reduce(.zero) { $0 + $1.total }
+        let totalDur = filteredSnapshots.reduce(0) { $0 + $1.duration }
         averageDuration = totalVisits > 0 ? totalDur / Double(max(1, totalVisits)) : 0
     }
 
@@ -197,6 +254,25 @@ final class PetHistoryViewModel {
             }
             return (start, end)
         }
+    }
+}
+
+private struct PetHistoryVisitSnapshot: Sendable {
+    let modelID: PersistentIdentifier
+    let startedAt: Date
+    let endedAt: Date
+    let itemNames: [String]
+    let note: String?
+    let externalReference: String?
+    let total: Decimal
+
+    var duration: TimeInterval {
+        max(0, endedAt.timeIntervalSince(startedAt))
+    }
+
+    func matches(query: String) -> Bool {
+        let fields = itemNames + [note, externalReference].compactMap { $0 }
+        return SearchEngine.matches(query, in: fields)
     }
 }
 

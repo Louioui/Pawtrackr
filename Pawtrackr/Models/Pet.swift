@@ -36,7 +36,12 @@ final class Pet {
     // MARK: - Notes & Behavior
     var notes: String?
     var health: String?
-    var behaviorTags: [String] = []
+    var behaviorTagsRaw: String = ""
+    @Transient
+    var behaviorTags: [String] {
+        get { Self.decodeBehaviorTags(from: behaviorTagsRaw) }
+        set { behaviorTagsRaw = Self.encodeBehaviorTags(newValue) }
+    }
     var specialInstructions: String?
 
     // MARK: - Grooming & Vet Info
@@ -283,16 +288,20 @@ final class Pet {
     func addBehaviorTag(_ tag: String) {
         let t = tag.trimmed
         guard !t.isEmpty else { return }
-        if !behaviorTags.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) {
-            behaviorTags.append(t)
+        var tags = behaviorTags
+        if !tags.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) {
+            tags.append(t)
+            behaviorTags = tags
             didUpdate()
         }
     }
 
     func removeBehaviorTag(_ tag: String) {
         let t = tag.trimmed
-        if let idx = behaviorTags.firstIndex(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) {
-            behaviorTags.remove(at: idx)
+        var tags = behaviorTags
+        if let idx = tags.firstIndex(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) {
+            tags.remove(at: idx)
+            behaviorTags = tags
             didUpdate()
         }
     }
@@ -349,6 +358,20 @@ final class Pet {
         #if canImport(UIKit) || canImport(AppKit)
         thumbnailData = ImageCache.shared.downsampleToData(data: data, maxDimension: 200)
         #endif
+    }
+
+    private static func decodeBehaviorTags(from raw: String) -> [String] {
+        guard !raw.isEmpty, let data = raw.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    private static func encodeBehaviorTags(_ tags: [String]) -> String {
+        let cleaned = tags.map { $0.trimmed }.filter { !$0.isEmpty }
+        guard let data = try? JSONEncoder().encode(cleaned),
+              let raw = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return raw
     }
 }
 

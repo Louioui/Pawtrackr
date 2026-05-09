@@ -114,7 +114,7 @@ struct PawtrackrApp: App {
                 // Start the CloudKit monitor on launch so the UI gets the
                 // earliest possible signal about account/sync state.
                 Task { @MainActor in
-                    CloudKitMonitor.shared.start()
+                    CloudKitMonitor.shared.start(modelContainer: localContainer)
                 }
 
                 // Register for silent CloudKit pushes (used by NSPersistentCloudKitContainer

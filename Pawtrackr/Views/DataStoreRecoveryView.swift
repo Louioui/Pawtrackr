@@ -126,6 +126,7 @@ struct DataStoreRecoveryView: View {
                 ? NSLocalizedString("recovery.no_files_found", value: "No store files were present.", comment: "")
                 : String(format: NSLocalizedString("recovery.archived_n", value: "Archived %d file(s)", comment: ""), movedFiles.count)
             UserDefaults.standard.removeObject(forKey: PawtrackrApp.lastInitErrorKey)
+            CloudKitMonitor.resetPersistedSyncStateForLocalStoreReset()
             log.info("Store reset complete; archived \(movedFiles.count) files.")
         } catch {
             resetError = String(format: NSLocalizedString("recovery.reset_failed", value: "Couldn't reset: %@", comment: ""), error.localizedDescription)

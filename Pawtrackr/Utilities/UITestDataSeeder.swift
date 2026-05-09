@@ -91,8 +91,11 @@ enum UITestDataSeeder {
     private static func seedBusinessConfig(in context: ModelContext) throws {
         let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
         if let config = configs.first {
-            config.name = "Pawtrackr UI Test Grooming"
-            config.isSetupComplete = true
+            // Only update if setup is NOT complete (legacy or empty state)
+            if !config.isSetupComplete {
+                config.name = "Pawtrackr UI Test Grooming"
+                config.isSetupComplete = true
+            }
         } else {
             let config = BusinessConfig(
                 name: "Pawtrackr UI Test Grooming",

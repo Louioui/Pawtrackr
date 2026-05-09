@@ -104,6 +104,11 @@ import Charts
         if showContent {
             smartSummary(vm)
                 .transition(.move(edge: .top).combined(with: .opacity))
+            
+            if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
+                checklistSection(vm)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
 
             #if os(macOS)
             HStack(alignment: .top, spacing: 20) {
@@ -236,6 +241,56 @@ import Charts
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.bottom, 8)
+  }
+
+  private func checklistSection(_ vm: DashboardViewModel) -> some View {
+      Card(elevation: .low) {
+          VStack(alignment: .leading, spacing: 16) {
+              HStack {
+                  VStack(alignment: .leading, spacing: 4) {
+                      Text("Getting Started")
+                          .font(.headline)
+                      Text("\(vm.checklist.filter({ $0.isCompleted }).count) of \(vm.checklist.count) steps completed")
+                          .font(.caption)
+                          .foregroundStyle(.secondary)
+                  }
+                  Spacer()
+                  Button {
+                      withAnimation {
+                          appSettings.isChecklistDismissed = true
+                      }
+                  } label: {
+                      Image(systemName: "xmark")
+                          .font(.caption.bold())
+                          .padding(8)
+                          .background(Color.secondary.opacity(0.1))
+                          .clipShape(Circle())
+                  }
+                  .buttonStyle(.plain)
+              }
+              
+              ProgressView(value: Double(vm.checklist.filter({ $0.isCompleted }).count), total: Double(vm.checklist.count))
+                  .tint(DS.ColorToken.success)
+              
+              VStack(spacing: 12) {
+                  ForEach(vm.checklist) { item in
+                      HStack(spacing: 12) {
+                          Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                              .foregroundStyle(item.isCompleted ? DS.ColorToken.success : DS.ColorToken.border)
+                              .font(.title3)
+                          
+                          Text(item.title)
+                              .font(.subheadline)
+                              .foregroundStyle(item.isCompleted ? .secondary : .primary)
+                              .strikethrough(item.isCompleted)
+                          
+                          Spacer()
+                      }
+                  }
+              }
+          }
+          .padding(DS.Spacing.md)
+      }
   }
 
   private func generateSummaryText(_ vm: DashboardViewModel) -> String {

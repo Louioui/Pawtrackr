@@ -127,6 +127,9 @@ final class CheckoutViewModel {
         let reference = externalReference.trimmed
         return reference.isEmpty ? "None" : reference
     }
+    private var checkoutIdempotencyKey: String {
+        "checkout:\(visit.uuid.uuidString)"
+    }
     var notesPreview: String {
         let trimmed = sessionNotes.trimmed
         return trimmed.isEmpty ? "No notes added" : trimmed
@@ -455,6 +458,7 @@ final class CheckoutViewModel {
             trace("checkout_saved")
         } catch {
             Logger.checkout.error("CheckoutViewModel: Persistence failed - \(error.localizedDescription)")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving checkout")
             let appErr = AppError.database("Persistence failed: \(error.localizedDescription)")
             state = .failed(appErr)
             appError = appErr
@@ -490,6 +494,27 @@ final class CheckoutViewModel {
         let total = servicesTotalDecimal
         let ref = externalReference.trimmed
         let endedAt = visit.endedAt ?? checkoutEndsAt ?? Date()
+        let transaction = try checkoutTransaction(in: context)
+
+        if transaction.status == .succeeded,
+           visit.payment != nil,
+           let completedAt = visit.endedAt {
+            let completion = CheckoutCompletionContext(
+                visitID: visit.persistentModelID,
+                petID: pet.persistentModelID,
+                clientID: pet.owner?.persistentModelID,
+                endedAt: completedAt,
+                total: visit.total
+            )
+            return PersistedCheckout(endedAt: completedAt, completion: completion, container: context.container)
+        }
+
+        transaction.markProcessing(
+            amount: total,
+            method: selectedPaymentMethod,
+            externalReference: ref.isEmpty ? nil : ref,
+            clientUUID: pet.owner?.uuid
+        )
 
         syncVisitItems(in: context)
         reconcileLineItemPrices(to: total)
@@ -505,13 +530,14 @@ final class CheckoutViewModel {
         if let payment = visit.payment {
             payment.setAmount(total)
             payment.method = selectedPaymentMethod
-            payment.paidAt = Date()
+            payment.paidAt = endedAt
             payment.externalReference = ref.isEmpty ? nil : ref
+            payment.markModified()
         } else {
             let payment = Payment(
                 amount: total,
                 method: selectedPaymentMethod,
-                paidAt: Date(),
+                paidAt: endedAt,
                 externalReference: ref.isEmpty ? nil : ref
             )
             context.insert(payment)
@@ -519,6 +545,7 @@ final class CheckoutViewModel {
         }
 
         visit.markCheckedOut(total: total, now: endedAt)
+        transaction.markSucceeded(completedAt: endedAt)
         try context.save()
         let completion = CheckoutCompletionContext(
             visitID: visit.persistentModelID,
@@ -528,6 +555,32 @@ final class CheckoutViewModel {
             total: total
         )
         return PersistedCheckout(endedAt: endedAt, completion: completion, container: context.container)
+    }
+
+    private func checkoutTransaction(in context: ModelContext) throws -> CheckoutTransaction {
+        let key = checkoutIdempotencyKey
+        var descriptor = FetchDescriptor<CheckoutTransaction>(
+            predicate: #Predicate<CheckoutTransaction> { $0.idempotencyKey == key },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+
+        if let existing = try context.fetch(descriptor).first {
+            return existing
+        }
+
+        let ref = externalReference.trimmed
+        let transaction = CheckoutTransaction(
+            idempotencyKey: key,
+            visitUUID: visit.uuid,
+            petUUID: pet.uuid,
+            clientUUID: pet.owner?.uuid,
+            amount: servicesTotalDecimal,
+            method: selectedPaymentMethod,
+            externalReference: ref.isEmpty ? nil : ref
+        )
+        context.insert(transaction)
+        return transaction
     }
 
     private func syncVisitItems(in context: ModelContext) {

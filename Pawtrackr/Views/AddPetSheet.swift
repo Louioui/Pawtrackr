@@ -280,6 +280,7 @@ struct AddPetSheet: View {
             HapticManager.notify(.success)
             dismiss()
         } catch {
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "adding pet")
             appError = .database(NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)")
         }
     }

@@ -22,6 +22,7 @@ final class RecentHistoryViewModel {
     private(set) var summaryVisitCount: Int = 0
     private(set) var summaryRevenueString: String = "$0.00"
     private(set) var isLoading: Bool = false
+    var appError: AppError? = nil
     
     // MARK: - Private Properties
     private var dataStore: DataStoreService
@@ -92,26 +93,17 @@ final class RecentHistoryViewModel {
 
         Task {
             do {
-                let fetchedVisits = try fetchCompletedVisits(start: start, end: end)
-                let snaps: [HistoryVisitSnap] = fetchedVisits.map { v in
-                    HistoryVisitSnap(
-                        id: v.uuid,
-                        startedAt: v.startedAt,
-                        endedAt: v.endedAt,
-                        petName: v.pet?.name ?? "Unknown",
-                        ownerFirst: v.pet?.owner?.firstName ?? "",
-                        ownerLast: v.pet?.owner?.lastName ?? "",
-                        itemNames: (v.items ?? []).map { $0.name },
-                        total: (v.total as NSDecimalNumber).doubleValue
-                    )
-                }
-
+                let snaps = try await fetchCompletedVisitSnapshots(start: start, end: end)
                 let result = await Task.detached(priority: .utility) {
                     RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
                 }.value
 
                 guard currentSeq == self.workSeq else { return }
-                let filtered = fetchedVisits.filter { result.filteredIDs.contains($0.uuid) }
+                let filteredModelIDs = snaps
+                    .filter { result.filteredIDs.contains($0.id) }
+                    .map(\.modelID)
+                let mainContext = dataStore.container.mainContext
+                let filtered = filteredModelIDs.compactMap { mainContext.model(for: $0) as? Visit }
                 let calendar = Calendar.current
                 self.summaryVisitCount = filtered.count
                 self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
@@ -119,32 +111,57 @@ final class RecentHistoryViewModel {
                 self.sortedDays = self.groupedVisits.keys.sorted(by: >)
                 self.isLoading = false
             } catch {
-                print("Failed to fetch recent history: \(error)")
+                self.appError = .database(error.localizedDescription)
+                self.groupedVisits = [:]
+                self.sortedDays = []
+                self.summaryVisitCount = 0
+                self.summaryRevenueString = "$0.00"
                 self.isLoading = false
             }
         }
     }
 
-    private func fetchCompletedVisits(start: Date?, end: Date?) throws -> [Visit] {
-        let sort = [SortDescriptor(\Visit.endedAt, order: .reverse)]
+    private func fetchCompletedVisitSnapshots(start: Date?, end: Date?) async throws -> [HistoryVisitSnap] {
+        let container = dataStore.container
 
-        if let start, let end {
-            return try dataStore.fetch(
-                #Predicate<Visit> { visit in
-                    if let endedAt = visit.endedAt {
-                        endedAt >= start && endedAt < end
-                    } else {
-                        false
-                    }
-                },
-                sortBy: sort
-            )
-        }
+        return try await Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            let sort = [SortDescriptor(\Visit.endedAt, order: .reverse)]
+            let visits: [Visit]
+            if let start, let end {
+                let descriptor = FetchDescriptor<Visit>(
+                    predicate: #Predicate<Visit> { visit in
+                        if let endedAt = visit.endedAt {
+                            endedAt >= start && endedAt < end
+                        } else {
+                            false
+                        }
+                    },
+                    sortBy: sort
+                )
+                visits = try context.fetch(descriptor)
+            } else {
+                let descriptor = FetchDescriptor<Visit>(
+                    predicate: #Predicate<Visit> { $0.endedAt != nil },
+                    sortBy: sort
+                )
+                visits = try context.fetch(descriptor)
+            }
 
-        return try dataStore.fetch(
-            #Predicate<Visit> { $0.endedAt != nil },
-            sortBy: sort
-        )
+            return visits.map { v in
+                HistoryVisitSnap(
+                    modelID: v.persistentModelID,
+                    id: v.uuid,
+                    startedAt: v.startedAt,
+                    endedAt: v.endedAt,
+                    petName: v.pet?.name ?? "Unknown",
+                    ownerFirst: v.pet?.owner?.firstName ?? "",
+                    ownerLast: v.pet?.owner?.lastName ?? "",
+                    itemNames: (v.items ?? []).map { $0.name },
+                    total: (v.total as NSDecimalNumber).doubleValue
+                )
+            }
+        }.value
     }
     func exportCSV() -> String {
         let allVisits = sortedDays.flatMap { groupedVisits[$0] ?? [] }
@@ -180,6 +197,7 @@ extension RecentHistoryViewModel {
 
 // MARK: - Background Compute Helpers
 fileprivate struct HistoryVisitSnap: Sendable {
+    let modelID: PersistentIdentifier
     let id: UUID
     let startedAt: Date
     let endedAt: Date?

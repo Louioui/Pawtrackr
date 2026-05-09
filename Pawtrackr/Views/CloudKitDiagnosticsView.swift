@@ -11,10 +11,15 @@
 
 import SwiftUI
 import CloudKit
+import SwiftData
 
 struct CloudKitDiagnosticsView: View {
+    @Environment(DataStoreService.self) private var dataStore
     @State private var monitor = CloudKitMonitor.shared
     @State private var copySuccessTimestamp: Date?
+    @State private var isRebuildingInsights = false
+    @State private var rebuildMessage: String?
+    @State private var lastSummaryRebuildDate = UserDefaults.standard.object(forKey: "lastSummaryRebuildDate") as? Date
 
     var body: some View {
         Form {
@@ -29,10 +34,20 @@ struct CloudKitDiagnosticsView: View {
                 row(NSLocalizedString("cloudkit.diagnostics.state", value: "Current State", comment: ""), syncStateText)
                 row(NSLocalizedString("cloudkit.diagnostics.last_sync", value: "Last Sync", comment: ""),
                     monitor.lastSyncDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "—")
+                row(NSLocalizedString("cloudkit.diagnostics.last_attempt", value: "Last Check", comment: ""),
+                    monitor.lastAttemptDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "—")
+                row(NSLocalizedString("cloudkit.diagnostics.last_import", value: "Last Import", comment: ""),
+                    monitor.lastImportDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "—")
+                row(NSLocalizedString("cloudkit.diagnostics.last_export", value: "Last Export", comment: ""),
+                    monitor.lastExportDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "—")
                 row(NSLocalizedString("cloudkit.diagnostics.first_sync", value: "First Sync Done", comment: ""),
                     monitor.firstSyncCompleted ? "Yes" : "No")
                 row(NSLocalizedString("cloudkit.diagnostics.quota_exceeded", value: "Quota Exceeded", comment: ""),
                     monitor.quotaExceeded ? "Yes" : "No")
+                row(NSLocalizedString("cloudkit.diagnostics.app_access", value: "App Access Warning", comment: ""),
+                    monitor.iCloudAppAccessMayBeDisabled ? "Yes" : "No")
+                row("Last Insights Rebuild",
+                    lastSummaryRebuildDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "—")
                 if let err = monitor.lastErrorMessage {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(NSLocalizedString("cloudkit.diagnostics.last_error", value: "Last Error", comment: ""))
@@ -48,7 +63,7 @@ struct CloudKitDiagnosticsView: View {
                 Button {
                     Task { await monitor.forceSync() }
                 } label: {
-                    Label(NSLocalizedString("cloudkit.action.sync_now", value: "Sync Now", comment: ""),
+                    Label(NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: ""),
                           systemImage: "arrow.clockwise.icloud")
                 }
 
@@ -57,6 +72,23 @@ struct CloudKitDiagnosticsView: View {
                 } label: {
                     Label(NSLocalizedString("cloudkit.diagnostics.recheck_account", value: "Re-check Account", comment: ""),
                           systemImage: "person.crop.circle.badge.questionmark")
+                }
+
+                Button {
+                    Task { await rebuildInsightsCache() }
+                } label: {
+                    Label("Rebuild Insights Cache", systemImage: "chart.bar.doc.horizontal")
+                }
+                .disabled(isRebuildingInsights)
+
+                if isRebuildingInsights {
+                    ProgressView("Rebuilding insights…")
+                }
+
+                if let rebuildMessage {
+                    Text(rebuildMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Button {
@@ -109,8 +141,13 @@ struct CloudKitDiagnosticsView: View {
             "Account: \(monitor.accountState.displayLabel)",
             "State: \(syncStateText)",
             "Last sync: \(monitor.lastSyncDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "never")",
+            "Last check: \(monitor.lastAttemptDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "never")",
+            "Last import: \(monitor.lastImportDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "never")",
+            "Last export: \(monitor.lastExportDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "never")",
+            "Last insights rebuild: \(lastSummaryRebuildDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "never")",
             "First sync done: \(monitor.firstSyncCompleted)",
             "Quota exceeded: \(monitor.quotaExceeded)",
+            "App access warning: \(monitor.iCloudAppAccessMayBeDisabled)",
             "Last error: \(monitor.lastErrorMessage ?? "none")"
         ]
         let text = lines.joined(separator: "\n")
@@ -121,6 +158,24 @@ struct CloudKitDiagnosticsView: View {
         NSPasteboard.general.setString(text, forType: .string)
         #endif
         copySuccessTimestamp = Date()
+    }
+
+    private func rebuildInsightsCache() async {
+        guard !isRebuildingInsights else { return }
+        isRebuildingInsights = true
+        rebuildMessage = nil
+
+        let container = dataStore.container
+        await Task.detached(priority: .userInitiated) {
+            let context = ModelContext(container)
+            SummaryUpdater.rebuildAllSummaries(in: context)
+        }.value
+
+        lastSummaryRebuildDate = UserDefaults.standard.object(forKey: "lastSummaryRebuildDate") as? Date
+        rebuildMessage = lastSummaryRebuildDate.map {
+            "Insights cache rebuilt at \($0.formatted(date: .omitted, time: .standard))."
+        } ?? "Insights cache rebuild finished."
+        isRebuildingInsights = false
     }
 }
 

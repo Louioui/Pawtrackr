@@ -55,6 +55,12 @@ final class DashboardViewModel {
         #endif
     }
 
+    struct ChecklistItem: Identifiable {
+        let id = UUID()
+        let title: String
+        let isCompleted: Bool
+    }
+
     // MARK: - Observable state
     var kpi = KPI()
     var activeVisits: [Visit] = []
@@ -63,6 +69,7 @@ final class DashboardViewModel {
     var overduePets: [Pet] = []
     var revenueSeries: [RevenuePoint] = []
     var gallery: [GalleryItem] = []
+    var checklist: [ChecklistItem] = []
     var appError: AppError? = nil
 
     // MARK: - Private
@@ -86,15 +93,35 @@ final class DashboardViewModel {
         // The eventBus stream never terminates on its own; the loop exits
         // naturally when self deallocates and the next event arrives.
         self.observationTask = Task { [weak self] in
-            for await event in eventBus.stream {
-                guard let self else { return }
-                switch event {
-                case .checkoutCompleted(_), .refreshRequired:
-                    await self.refresh()
-                default:
-                    break
+            // Listen to EventBus for checkout and explicit refreshes
+            let streamTask = Task { [weak self] in
+                for await event in eventBus.stream {
+                    guard let self else { return }
+                    switch event {
+                    case .checkoutCompleted(_), .refreshRequired:
+                        await self.refresh()
+                    default:
+                        break
+                    }
                 }
             }
+
+            // Listen to NotificationCenter for legacy/repository-direct events
+            let center = NotificationCenter.default
+            let notifications = [
+                Notification.Name.clientDidCreate,
+                Notification.Name.visitDidStart,
+                Notification.Name.visitDidComplete,
+                Notification.Name.serviceDidUpdate
+            ]
+
+            for name in notifications {
+                center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                    Task { [weak self] in await self?.refresh() }
+                }
+            }
+            
+            await streamTask.value
         }
 
         Task { [weak self] in await self?.refresh() }
@@ -116,8 +143,40 @@ final class DashboardViewModel {
         async let overdue: () = fetchOverduePets()
         async let revenue: () = buildRevenueSeries(days: revenueWindowDays)
         async let gallery: () = buildGallery(days: galleryWindowDays)
+        async let checklist: () = fetchChecklistStatus()
 
-        _ = await [kpis, active, upcoming, clients, overdue, revenue, gallery]
+        _ = await [kpis, active, upcoming, clients, overdue, revenue, gallery, checklist]
+    }
+
+    private func fetchChecklistStatus() async {
+        let context = repository.modelContext
+        
+        do {
+            // 1. Branding: Covered by BusinessConfig
+            let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
+            let isBrandingComplete = configs.first?.isSetupComplete ?? false
+            
+            // 2. Catalog: Any service with price > 0
+            let services = try context.fetch(FetchDescriptor<Service>())
+            let isCatalogConfigured = services.contains { $0.basePrice > 0 }
+            
+            // 3. First Client
+            let clientCount = try context.fetchCount(FetchDescriptor<Client>())
+            let hasClient = clientCount > 0
+            
+            // 4. First Visit
+            let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
+            let hasVisit = visitCount > 0
+            
+            checklist = [
+                ChecklistItem(title: NSLocalizedString("checklist.branding", value: "Add Business Branding", comment: ""), isCompleted: isBrandingComplete),
+                ChecklistItem(title: NSLocalizedString("checklist.catalog", value: "Configure Service Prices", comment: ""), isCompleted: isCatalogConfigured),
+                ChecklistItem(title: NSLocalizedString("checklist.client", value: "Add Your First Client", comment: ""), isCompleted: hasClient),
+                ChecklistItem(title: NSLocalizedString("checklist.visit", value: "Start Your First Visit", comment: ""), isCompleted: hasVisit)
+            ]
+        } catch {
+            dashboardLog.error("Checklist fetch failed: \(error)")
+        }
     }
 
     func checkInFromAppointment(_ appointment: Appointment) async {

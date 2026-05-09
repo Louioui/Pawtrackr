@@ -15,7 +15,17 @@ enum DataPruner {
     ///   - days: Age in days beyond which photos should be pruned.
     ///   - downsampleOnly: If true, high-res photos are downsampled to thumbnails instead of being deleted.
     ///   - context: The ModelContext to use for operations.
-    static func pruneOldPhotos(olderThan days: Int, downsampleOnly: Bool = true, in context: ModelContext) {
+    static func pruneOldPhotos(
+        olderThan days: Int,
+        downsampleOnly: Bool = true,
+        pruneSyncedAssets: Bool = false,
+        in context: ModelContext
+    ) {
+        guard pruneSyncedAssets else {
+            Logger.maintenance.info("Skipping photo pruning: visit photos are CloudKit-synced user data, not a local cache.")
+            return
+        }
+
         let cal = Calendar.current
         guard let cutoffDate = cal.date(byAdding: .day, value: -days, to: .now) else { return }
         

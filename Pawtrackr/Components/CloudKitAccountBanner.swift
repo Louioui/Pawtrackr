@@ -31,11 +31,11 @@ struct CloudKitAccountBanner: View {
                     Text(info.message).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                if info.actionTitle != nil {
+                if let actionTitle = info.actionTitle {
                     Button {
-                        openSystemSettings()
+                        open(info.action)
                     } label: {
-                        Text(info.actionTitle ?? "")
+                        Text(actionTitle)
                             .font(.caption.weight(.semibold))
                     }
                     .buttonStyle(.bordered)
@@ -71,7 +71,8 @@ struct CloudKitAccountBanner: View {
                 tint: .orange,
                 title: NSLocalizedString("cloudkit.banner.signed_out.title", value: "Signed out of iCloud", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.signed_out.message", value: "Your data is only on this device. Sign in to back it up and sync.", comment: ""),
-                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: "")
+                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
+                action: .settings
             )
         case .restricted:
             return BannerInfo(
@@ -80,7 +81,8 @@ struct CloudKitAccountBanner: View {
                 tint: .orange,
                 title: NSLocalizedString("cloudkit.banner.restricted.title", value: "iCloud is restricted", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.restricted.message", value: "Restrictions or parental controls are blocking iCloud sync.", comment: ""),
-                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: "")
+                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
+                action: .settings
             )
         case .temporarilyUnavailable:
             return BannerInfo(
@@ -89,7 +91,8 @@ struct CloudKitAccountBanner: View {
                 tint: .orange,
                 title: NSLocalizedString("cloudkit.banner.temp_unavailable.title", value: "iCloud unavailable", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.temp_unavailable.message", value: "Sign in again or wait — iCloud is temporarily unavailable.", comment: ""),
-                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: "")
+                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
+                action: .settings
             )
         case .available where monitor.quotaExceeded:
             return BannerInfo(
@@ -98,17 +101,52 @@ struct CloudKitAccountBanner: View {
                 tint: .red,
                 title: NSLocalizedString("cloudkit.banner.quota.title", value: "iCloud storage is full", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.quota.message", value: "Free up space or upgrade so new visits and photos can sync.", comment: ""),
-                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: "")
+                actionTitle: NSLocalizedString("cloudkit.banner.quota.action", value: "Manage Storage", comment: ""),
+                action: .iCloudStorage
             )
+        case .available where monitor.iCloudAppAccessMayBeDisabled:
+            return BannerInfo(
+                fingerprint: "appAccessDisabled",
+                icon: "exclamationmark.icloud.fill",
+                tint: .orange,
+                title: NSLocalizedString("cloudkit.banner.app_access.title", value: "Check iCloud access", comment: ""),
+                message: NSLocalizedString("cloudkit.banner.app_access.message", value: "iCloud is signed in, but app access may be disabled in Settings.", comment: ""),
+                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
+                action: .settings
+            )
+        case .available:
+            if let message = monitor.lastErrorMessage, case .error = monitor.syncState {
+                return BannerInfo(
+                    fingerprint: "syncError-\(message)",
+                    icon: "xmark.icloud.fill",
+                    tint: .red,
+                    title: NSLocalizedString("cloudkit.banner.sync_error.title", value: "iCloud sync needs attention", comment: ""),
+                    message: message,
+                    actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
+                    action: .settings
+                )
+            }
+            return nil
         default:
             return nil
         }
     }
 
-    private func openSystemSettings() {
+    private func open(_ action: BannerAction) {
         #if canImport(UIKit) && !targetEnvironment(macCatalyst)
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
+        let urlString: String
+        switch action {
+        case .settings:
+            urlString = UIApplication.openSettingsURLString
+        case .iCloudStorage:
+            urlString = "App-prefs:CASTLE&path=STORAGE_MANAGEMENT"
+        }
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url) { success in
+                if !success, action != .settings, let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsURL)
+                }
+            }
         }
         #elseif canImport(AppKit)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane") {
@@ -124,5 +162,11 @@ struct CloudKitAccountBanner: View {
         let title: String
         let message: String
         let actionTitle: String?
+        let action: BannerAction
+    }
+
+    private enum BannerAction: Equatable {
+        case settings
+        case iCloudStorage
     }
 }

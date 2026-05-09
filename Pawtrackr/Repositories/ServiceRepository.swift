@@ -42,10 +42,12 @@ final class ServiceRepository: ServiceRepositoryProtocol {
             modelContext.insert(service)
         }
         try modelContext.save()
+        NotificationCenter.default.post(name: .serviceDidUpdate, object: service)
     }
     
     func deleteService(_ service: Service) async throws {
         modelContext.delete(service)
         try modelContext.save()
+        NotificationCenter.default.post(name: .serviceDidUpdate, object: nil)
     }
 }

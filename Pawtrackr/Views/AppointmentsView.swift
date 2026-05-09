@@ -69,6 +69,7 @@ struct AppointmentsView: View {
             try modelContext.save()
         } catch {
             Logger.appointments.error("addAppointment save failed: \(String(describing: error))")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving appointment")
         }
     }
 
@@ -88,6 +89,7 @@ struct AppointmentsView: View {
                 try modelContext.save()
             } catch {
                 Logger.appointments.error("deleteAppointment save failed: \(String(describing: error))")
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting appointment")
             }
         }
     }

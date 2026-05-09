@@ -16,6 +16,17 @@ enum SummaryUpdater {
         let visitCount: Int
     }
 
+    struct ClientInsightAggregate: Equatable, Sendable {
+        let clientUUID: UUID
+        let clientName: String
+        let totalSpent: Decimal
+        let visitCount: Int
+        let isRecurring: Bool
+        let isChurnRisk: Bool
+        let lastVisitAt: Date?
+        let updatedAt: Date
+    }
+
     static func collapsedDayAggregates(from summaries: [DaySummary]) -> [Date: DayAggregate] {
         summaries.reduce(into: [Date: DayAggregate]()) { result, summary in
             let candidate = DayAggregate(day: summary.day, revenue: summary.revenue, visitCount: summary.visitCount)
@@ -46,6 +57,28 @@ enum SummaryUpdater {
         }
         return perDayAndCategory.reduce(into: [String: Int]()) { result, entry in
             result[entry.key.name, default: 0] += entry.value
+        }
+    }
+
+    static func collapsedClientInsightSummaries(from summaries: [ClientInsightSummary]) -> [UUID: ClientInsightAggregate] {
+        summaries.reduce(into: [UUID: ClientInsightAggregate]()) { result, summary in
+            let candidate = ClientInsightAggregate(
+                clientUUID: summary.clientUUID,
+                clientName: summary.clientName,
+                totalSpent: summary.totalSpent,
+                visitCount: summary.visitCount,
+                isRecurring: summary.isRecurring,
+                isChurnRisk: summary.isChurnRisk,
+                lastVisitAt: summary.lastVisitAt,
+                updatedAt: summary.updatedAt
+            )
+            guard let existing = result[summary.clientUUID] else {
+                result[summary.clientUUID] = candidate
+                return
+            }
+            if isPreferred(candidate, over: existing) {
+                result[summary.clientUUID] = candidate
+            }
         }
     }
 
@@ -127,6 +160,13 @@ enum SummaryUpdater {
                 context.delete(summary)
             }
 
+            var updatedClientUUIDs = Set<UUID>()
+            for visit in visits {
+                guard let client = visit.pet?.owner, !updatedClientUUIDs.contains(client.uuid) else { continue }
+                try upsertClientInsightSummary(for: client, in: context)
+                updatedClientUUIDs.insert(client.uuid)
+            }
+
             if context.hasChanges {
                 try context.save()
             }
@@ -150,6 +190,9 @@ enum SummaryUpdater {
             let categoryRows = try context.fetch(FetchDescriptor<CategoryDaySummary>())
             _ = canonicalCategorySummariesByDayAndName(from: categoryRows, in: context)
 
+            let clientRows = try context.fetch(FetchDescriptor<ClientInsightSummary>())
+            _ = canonicalClientInsightSummaries(from: clientRows, in: context)
+
             if context.hasChanges {
                 try context.save()
             }
@@ -163,7 +206,7 @@ enum SummaryUpdater {
     private static func fetchVisitsEndedInRange(start: Date, end: Date, in context: ModelContext) throws -> [Visit] {
         // SwiftData #Predicate supports date comparisons. Using a precise predicate 
         // ensures the database (SQLite) does the heavy lifting, not the main CPU.
-        let descriptor = FetchDescriptor<Visit>(
+        var descriptor = FetchDescriptor<Visit>(
             predicate: #Predicate<Visit> { v in
                 if let ended = v.endedAt {
                     return ended >= start && ended < end
@@ -172,6 +215,7 @@ enum SummaryUpdater {
                 }
             }
         )
+        descriptor.relationshipKeyPathsForPrefetching = [\Visit.items, \Visit.pet]
         return try context.fetch(descriptor)
     }
 
@@ -205,48 +249,217 @@ enum SummaryUpdater {
         return try context.fetch(descriptor)
     }
 
-    /// Rebuild summaries only for days that have changed since the last sync.
-    /// Call this once on app launch.
+    /// Rebuild all derived summary rows from canonical Visit data.
+    ///
+    /// These rows are cache data. In a CloudKit-backed store they can arrive out of
+    /// order, duplicate across devices, or be absent on a fresh restore while visits
+    /// are still importing. A full deterministic rebuild avoids the silent failure
+    /// mode where an early "no changes" watermark makes restored visits invisible in
+    /// Dashboard/Insights.
     static func rebuildAllSummaries(in context: ModelContext) {
-        let lastSync = UserDefaults.standard.object(forKey: "lastSummarySyncDate") as? Date ?? .distantPast
         let now = Date()
-        
+
         do {
-            // Fetch visits updated since last sync
             let descriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { $0.updatedAt > lastSync }
+                predicate: #Predicate<Visit> { $0.endedAt != nil },
+                sortBy: [SortDescriptor(\.endedAt, order: .forward)]
             )
-            let changedVisits = try context.fetch(descriptor)
-            
-            if changedVisits.isEmpty {
-                Logger.summaries.info("No visits changed since \(lastSync), skipping full rebuild")
-                UserDefaults.standard.set(now, forKey: "lastSummarySyncDate")
-                return
-            }
-
-            // Get unique days from changed visits
+            let completedVisits = try context.fetch(descriptor)
             let cal = Calendar.current
-            var uniqueDays = Set<Date>()
-            for visit in changedVisits {
-                if let endedAt = visit.endedAt {
-                    uniqueDays.insert(cal.startOfDay(for: endedAt))
+            logRecentRemoteModifications(in: completedVisits, now: now)
+
+            var dayStats: [Date: (revenue: Decimal, count: Int)] = [:]
+            var serviceStats: [SummaryNameKey: Int] = [:]
+            var categoryStats: [SummaryNameKey: Int] = [:]
+
+            for visit in completedVisits {
+                guard let endedAt = visit.endedAt else { continue }
+                let day = cal.startOfDay(for: endedAt)
+                var dayAggregate = dayStats[day] ?? (.zero, 0)
+                dayAggregate.revenue += visit.total
+                dayAggregate.count += 1
+                dayStats[day] = dayAggregate
+
+                for item in visit.items ?? [] {
+                    serviceStats[SummaryNameKey(day: day, name: item.displayName), default: 0] += 1
+                    if let raw = item.serviceCategoryRaw ?? item.service?.category?.rawValue {
+                        categoryStats[SummaryNameKey(day: day, name: raw), default: 0] += 1
+                    }
                 }
-                // Also rebuild the day it started if it was recently updated (e.g. checked in)
-                uniqueDays.insert(cal.startOfDay(for: visit.startedAt))
             }
 
-            Logger.summaries.info("Rebuilding summaries for \(uniqueDays.count) changed days")
+            var clientDesc = FetchDescriptor<Client>()
+            clientDesc.relationshipKeyPathsForPrefetching = [\Client.pets]
+            let clients = try context.fetch(clientDesc)
 
-            // Rebuild each changed day
-            for day in uniqueDays {
-                rebuildDay(for: day, in: context)
+            var petDesc = FetchDescriptor<Pet>()
+            petDesc.relationshipKeyPathsForPrefetching = [\Pet.visits, \Pet.appointments]
+            _ = try? context.fetch(petDesc)
+
+            let clientStats = clients.reduce(into: [UUID: ClientInsightAggregate]()) { result, client in
+                result[client.uuid] = clientInsightAggregate(for: client)
             }
 
-            UserDefaults.standard.set(now, forKey: "lastSummarySyncDate")
-            Logger.summaries.info("Incremental summary rebuild successful")
+            try replaceDaySummaries(with: dayStats, in: context)
+            try replaceServiceSummaries(with: serviceStats, in: context)
+            try replaceCategorySummaries(with: categoryStats, in: context)
+            try replaceClientInsightSummaries(with: clientStats, in: context)
+
+            if context.hasChanges {
+                try context.save()
+            }
+            UserDefaults.standard.set(now, forKey: "lastSummaryRebuildDate")
+            Logger.summaries.info("Full summary rebuild successful: \(completedVisits.count) visits, \(dayStats.count) day rows")
         } catch {
-            Logger.summaries.error("Incremental summary rebuild failed: \(String(describing: error))")
+            Logger.summaries.error("Full summary rebuild failed: \(String(describing: error))")
         }
+    }
+
+    static func upsertClientInsightSummary(for client: Client, in context: ModelContext) throws {
+        let aggregate = clientInsightAggregate(for: client)
+        let clientUUID = client.uuid
+        let descriptor = FetchDescriptor<ClientInsightSummary>(
+            predicate: #Predicate<ClientInsightSummary> { $0.clientUUID == clientUUID }
+        )
+        let existingRows = try context.fetch(descriptor)
+        let canonical = canonicalClientInsightSummary(from: existingRows, in: context)
+
+        if let row = canonical {
+            row.update(
+                clientName: aggregate.clientName,
+                totalSpent: aggregate.totalSpent,
+                visitCount: aggregate.visitCount,
+                isChurnRisk: aggregate.isChurnRisk,
+                lastVisitAt: aggregate.lastVisitAt
+            )
+        } else {
+            context.insert(ClientInsightSummary(
+                clientUUID: aggregate.clientUUID,
+                clientName: aggregate.clientName,
+                totalSpent: aggregate.totalSpent,
+                visitCount: aggregate.visitCount,
+                isChurnRisk: aggregate.isChurnRisk,
+                lastVisitAt: aggregate.lastVisitAt
+            ))
+        }
+    }
+
+    private static func logRecentRemoteModifications(in visits: [Visit], now: Date) {
+        let localDeviceID = DeviceIdentity.currentID
+        let syncWindow: TimeInterval = 10 * 60
+        for visit in visits where visit.lastModifiedBy != localDeviceID && now.timeIntervalSince(visit.lastModifiedAt) <= syncWindow {
+            Logger.summaries.warning("Recent remote visit modification detected during summary rebuild. visit=\(visit.uuid.uuidString, privacy: .public) writer=\(visit.lastModifiedBy.uuidString, privacy: .public) at=\(visit.lastModifiedAt, privacy: .public)")
+        }
+    }
+
+    static func resetSummaryRebuildState() {
+        UserDefaults.standard.removeObject(forKey: "lastSummarySyncDate")
+        UserDefaults.standard.removeObject(forKey: "lastSummaryRebuildDate")
+    }
+
+    private static func replaceDaySummaries(with stats: [Date: (revenue: Decimal, count: Int)], in context: ModelContext) throws {
+        let rows = try context.fetch(FetchDescriptor<DaySummary>())
+        var seen = Set<Date>()
+        for row in rows {
+            guard let aggregate = stats[row.day], !seen.contains(row.day) else {
+                context.delete(row)
+                continue
+            }
+            seen.insert(row.day)
+            row.revenue = aggregate.revenue
+            row.visitCount = aggregate.count
+        }
+
+        for (day, aggregate) in stats where !seen.contains(day) {
+            context.insert(DaySummary(day: day, revenue: aggregate.revenue, visitCount: aggregate.count))
+        }
+    }
+
+    private static func replaceServiceSummaries(with stats: [SummaryNameKey: Int], in context: ModelContext) throws {
+        let rows = try context.fetch(FetchDescriptor<ServiceDaySummary>())
+        var seen = Set<SummaryNameKey>()
+        for row in rows {
+            let key = SummaryNameKey(day: row.day, name: row.serviceName)
+            guard let count = stats[key], !seen.contains(key) else {
+                context.delete(row)
+                continue
+            }
+            seen.insert(key)
+            row.count = count
+        }
+
+        for (key, count) in stats where !seen.contains(key) {
+            context.insert(ServiceDaySummary(day: key.day, serviceName: key.name, count: count))
+        }
+    }
+
+    private static func replaceCategorySummaries(with stats: [SummaryNameKey: Int], in context: ModelContext) throws {
+        let rows = try context.fetch(FetchDescriptor<CategoryDaySummary>())
+        var seen = Set<SummaryNameKey>()
+        for row in rows {
+            let key = SummaryNameKey(day: row.day, name: row.categoryRaw)
+            guard let count = stats[key], !seen.contains(key) else {
+                context.delete(row)
+                continue
+            }
+            seen.insert(key)
+            row.count = count
+        }
+
+        for (key, count) in stats where !seen.contains(key) {
+            context.insert(CategoryDaySummary(day: key.day, categoryRaw: key.name, count: count))
+        }
+    }
+
+    private static func replaceClientInsightSummaries(
+        with stats: [UUID: ClientInsightAggregate],
+        in context: ModelContext
+    ) throws {
+        let rows = try context.fetch(FetchDescriptor<ClientInsightSummary>())
+        var seen = Set<UUID>()
+        for row in rows {
+            guard let aggregate = stats[row.clientUUID], !seen.contains(row.clientUUID) else {
+                context.delete(row)
+                continue
+            }
+            seen.insert(row.clientUUID)
+            row.update(
+                clientName: aggregate.clientName,
+                totalSpent: aggregate.totalSpent,
+                visitCount: aggregate.visitCount,
+                isChurnRisk: aggregate.isChurnRisk,
+                lastVisitAt: aggregate.lastVisitAt
+            )
+        }
+
+        for aggregate in stats.values where !seen.contains(aggregate.clientUUID) {
+            context.insert(ClientInsightSummary(
+                clientUUID: aggregate.clientUUID,
+                clientName: aggregate.clientName,
+                totalSpent: aggregate.totalSpent,
+                visitCount: aggregate.visitCount,
+                isChurnRisk: aggregate.isChurnRisk,
+                lastVisitAt: aggregate.lastVisitAt
+            ))
+        }
+    }
+
+    private static func clientInsightAggregate(for client: Client) -> ClientInsightAggregate {
+        let pets = client.pets ?? []
+        let visits = pets.flatMap { $0.visits ?? [] }.filter { $0.isCompleted }
+        let spent = visits.reduce(Decimal.zero) { $0 +~ $1.total }
+        let lastVisitAt = visits.compactMap(\.endedAt).max()
+
+        return ClientInsightAggregate(
+            clientUUID: client.uuid,
+            clientName: client.fullName,
+            totalSpent: spent.roundedMoney(),
+            visitCount: visits.count,
+            isRecurring: visits.count > 1,
+            isChurnRisk: pets.contains { $0.isOverdue },
+            lastVisitAt: lastVisitAt,
+            updatedAt: .now
+        )
     }
 
     /// Synchronous version that reuses already-fetched visits for efficiency
@@ -316,6 +529,26 @@ enum SummaryUpdater {
             return candidate.visitCount > existing.visitCount
         }
         return candidate.revenue > existing.revenue
+    }
+
+    private static func isPreferred(_ candidate: ClientInsightAggregate, over existing: ClientInsightAggregate) -> Bool {
+        if candidate.visitCount != existing.visitCount {
+            return candidate.visitCount > existing.visitCount
+        }
+        if candidate.totalSpent != existing.totalSpent {
+            return candidate.totalSpent > existing.totalSpent
+        }
+        return candidate.updatedAt > existing.updatedAt
+    }
+
+    private static func isPreferred(_ candidate: ClientInsightSummary, over existing: ClientInsightSummary) -> Bool {
+        if candidate.visitCount != existing.visitCount {
+            return candidate.visitCount > existing.visitCount
+        }
+        if candidate.totalSpent != existing.totalSpent {
+            return candidate.totalSpent > existing.totalSpent
+        }
+        return candidate.updatedAt > existing.updatedAt
     }
 
     private static func canonicalDaySummary(from summaries: [DaySummary], in context: ModelContext) -> DaySummary? {
@@ -404,6 +637,27 @@ enum SummaryUpdater {
                 }
             } else {
                 result[key] = summary
+            }
+        }
+        return result
+    }
+
+    private static func canonicalClientInsightSummary(from summaries: [ClientInsightSummary], in context: ModelContext) -> ClientInsightSummary? {
+        canonicalClientInsightSummaries(from: summaries, in: context).values.first
+    }
+
+    private static func canonicalClientInsightSummaries(from summaries: [ClientInsightSummary], in context: ModelContext) -> [UUID: ClientInsightSummary] {
+        var result: [UUID: ClientInsightSummary] = [:]
+        for summary in summaries {
+            if let existing = result[summary.clientUUID] {
+                if isPreferred(summary, over: existing) {
+                    context.delete(existing)
+                    result[summary.clientUUID] = summary
+                } else {
+                    context.delete(summary)
+                }
+            } else {
+                result[summary.clientUUID] = summary
             }
         }
         return result

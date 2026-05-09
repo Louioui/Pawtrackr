@@ -17,10 +17,17 @@ final class Visit {
     var updatedAt: Date = Date()
     var startedAt: Date = Date()
     var endedAt: Date?
+    var lastModifiedBy: UUID = DeviceIdentity.currentID
+    var lastModifiedAt: Date = Date()
 
     // MARK: - Notes & Media
     var note: String?
-    var behaviorTags: [String] = []
+    var behaviorTagsRaw: String = ""
+    @Transient
+    var behaviorTags: [String] {
+        get { Self.decodeBehaviorTags(from: behaviorTagsRaw) }
+        set { behaviorTagsRaw = Self.encodeBehaviorTags(newValue) }
+    }
     @Attribute(.externalStorage) var beforePhotoData: Data?
     @Attribute(.externalStorage) var afterPhotoData: Data?
     @Attribute(.externalStorage) var beforeThumbnailData: Data?
@@ -53,6 +60,8 @@ final class Visit {
         self.updatedAt = .now
         self.startedAt = startedAt
         self.endedAt = nil
+        self.lastModifiedBy = DeviceIdentity.currentID
+        self.lastModifiedAt = .now
         self.note = nil
         self.beforePhotoData = nil
         self.afterPhotoData = nil
@@ -67,6 +76,8 @@ final class Visit {
         self.updatedAt = .now
         self.startedAt = startedAt
         self.endedAt = nil
+        self.lastModifiedBy = DeviceIdentity.currentID
+        self.lastModifiedAt = .now
         self.note = nil
         self.beforePhotoData = nil
         self.afterPhotoData = nil
@@ -170,10 +181,26 @@ final class Visit {
 
     private func didUpdate() {
         updatedAt = .now
+        lastModifiedBy = DeviceIdentity.currentID
+        lastModifiedAt = updatedAt
         // Only attempt to update the client's last visit date if we can safely reach it.
         // In background contexts, we avoid forcing a load of the entire owner hierarchy.
         if let owner = pet?.owner {
             owner.lastVisitDate = sortKeyDate
         }
+    }
+
+    private static func decodeBehaviorTags(from raw: String) -> [String] {
+        guard !raw.isEmpty, let data = raw.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    private static func encodeBehaviorTags(_ tags: [String]) -> String {
+        let cleaned = tags.map { $0.trimmed }.filter { !$0.isEmpty }
+        guard let data = try? JSONEncoder().encode(cleaned),
+              let raw = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return raw
     }
 }

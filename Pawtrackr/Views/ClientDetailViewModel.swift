@@ -182,6 +182,7 @@ final class ClientDetailViewModel {
                 self.pets = client.pets ?? []
             } catch {
                 appError = .database(error.localizedDescription)
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "checking in pet")
                 Logger.clientDetail.error("Failed to check in: \(String(describing: error))")
             }
             refreshRecentVisits()
@@ -195,6 +196,7 @@ final class ClientDetailViewModel {
                 try await visitRepository.saveVisit(visit)
             } catch {
                 appError = .database(error.localizedDescription)
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving visit service")
                 Logger.clientDetail.error("Failed to add service: \(String(describing: error))")
             }
             refreshRecentVisits()
@@ -209,6 +211,7 @@ final class ClientDetailViewModel {
                 self.pets = client.pets ?? []
             } catch {
                 appError = .database(error.localizedDescription)
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "checking out pet")
                 Logger.clientDetail.error("Failed to check out: \(String(describing: error))")
             }
             refreshRecentVisits()

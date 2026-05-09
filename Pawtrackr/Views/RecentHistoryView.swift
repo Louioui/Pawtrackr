@@ -59,6 +59,16 @@ struct RecentHistoryView: View {
             .padding(.top, 8)
             .animated(Animations.fastEaseOut, value: viewModel.scope)
         }
+        .alert(item: Binding(
+            get: { viewModel.appError },
+            set: { viewModel.appError = $0 }
+        )) { error in
+            Alert(
+                title: Text("History Error"),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
     
     private func deleteVisit(_ visit: Visit) {
@@ -69,6 +79,8 @@ struct RecentHistoryView: View {
             viewModel?.fetchVisits()
         } catch {
             HapticManager.notify(.error)
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting visit history")
+            viewModel?.appError = .database(error.localizedDescription)
         }
     }
 

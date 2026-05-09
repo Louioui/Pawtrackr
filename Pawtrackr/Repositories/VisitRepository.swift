@@ -64,6 +64,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         modelContext.insert(visit)
         try modelContext.save()
         eventBus.publish(.refreshRequired)
+        NotificationCenter.default.post(name: .visitDidStart, object: visit)
         return visit
     }
 
@@ -80,6 +81,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         modelContext.insert(visit)
         try modelContext.save()
         eventBus.publish(.refreshRequired)
+        NotificationCenter.default.post(name: .visitDidStart, object: visit)
         return visit
     }
     

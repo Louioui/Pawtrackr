@@ -11,6 +11,12 @@ import SwiftData
 extension Notification.Name {
     /// Posted after a successful checkout so views (Clients, Pet Detail, Recent History, Insights) can refresh.
     static let visitDidComplete = Notification.Name("visitDidComplete")
+    /// Posted when a new visit is started (Check-in).
+    static let visitDidStart = Notification.Name("visitDidStart")
+    /// Posted when a visit ends (Check-out).
+    static let visitDidEnd = Notification.Name("visitDidEnd")
+    /// Posted when a service is saved or updated.
+    static let serviceDidUpdate = Notification.Name("serviceDidUpdate")
     /// Posted after a new client is created, for auto-navigation.
     static let clientDidCreate = Notification.Name("clientDidCreate")
     /// Request to open an existing client by ID (e.g., duplicate detected)

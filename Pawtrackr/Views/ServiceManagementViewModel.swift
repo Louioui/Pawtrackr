@@ -38,6 +38,7 @@ class ServiceManagementViewModel {
                 fetchServices()
             } catch {
                 appError = .database(error.localizedDescription)
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting service")
             }
         }
     }

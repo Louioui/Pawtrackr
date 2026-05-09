@@ -118,7 +118,7 @@ struct SettingsView: View {
                     Button {
                         Task { await cloudKitMonitor.forceSync() }
                     } label: {
-                        Label(NSLocalizedString("cloudkit.action.sync_now", value: "Sync Now", comment: ""),
+                        Label(NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: ""),
                               systemImage: "arrow.clockwise.icloud")
                     }
                     .disabled({

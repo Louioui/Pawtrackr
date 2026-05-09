@@ -43,12 +43,10 @@ final class PawtrackrAppDelegate: NSObject, UIApplicationDelegate {
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         pushLog.info("Received remote notification (likely silent CloudKit push).")
-        // Let CloudKitMonitor flip to .syncing — the actual fetch is handled by
-        // NSPersistentCloudKitContainer's own subscription handler.
         Task { @MainActor in
-            await CloudKitMonitor.shared.forceSync()
+            let completed = await CloudKitMonitor.shared.waitForRemoteNotificationSync()
+            completionHandler(completed ? .newData : .noData)
         }
-        completionHandler(.newData)
     }
 }
 
@@ -69,7 +67,7 @@ final class PawtrackrAppDelegate: NSObject, NSApplicationDelegate {
                      didReceiveRemoteNotification userInfo: [String: Any]) {
         pushLog.info("Received remote notification (likely silent CloudKit push).")
         Task { @MainActor in
-            await CloudKitMonitor.shared.forceSync()
+            _ = await CloudKitMonitor.shared.waitForRemoteNotificationSync()
         }
     }
 }

@@ -298,6 +298,19 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.visit.total, Decimal(30.00))
         XCTAssertNotNil(vm.visit.payment)
         XCTAssertEqual(vm.visit.payment?.method, .cash)
+        XCTAssertEqual(vm.visit.payment?.paidAt, vm.visit.endedAt)
+
+        let transactions = try context.fetch(FetchDescriptor<CheckoutTransaction>())
+        let transaction = try XCTUnwrap(transactions.first)
+        XCTAssertEqual(transactions.count, 1)
+        XCTAssertEqual(transaction.idempotencyKey, "checkout:\(vm.visit.uuid.uuidString)")
+        XCTAssertEqual(transaction.status, .succeeded)
+        XCTAssertEqual(transaction.amount, Decimal(30.00))
+        XCTAssertEqual(transaction.attemptCount, 1)
+
+        await vm.processPayment()
+        let transactionsAfterRetry = try context.fetch(FetchDescriptor<CheckoutTransaction>())
+        XCTAssertEqual(transactionsAfterRetry.count, 1)
     }
 
     func testProcessPayment_ManualOverrideReconcilesLineItemsAndSummaryRevenue() async throws {
@@ -353,6 +366,8 @@ final class CheckoutViewModelTests: XCTestCase {
         // If both ran, state would still be .confirmed. If guard fired on second, same result.
         // Key check: no crash and state is resolved.
         XCTAssertFalse(vm.isSaving)
+        let transactions = try? context.fetch(FetchDescriptor<CheckoutTransaction>())
+        XCTAssertEqual(transactions?.count, 1)
     }
 
     func testProcessPayment_FailsValidationWithZeroAmount() async {
