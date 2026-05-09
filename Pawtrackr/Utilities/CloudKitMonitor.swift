@@ -238,6 +238,13 @@ final class CloudKitMonitor {
 
     private func handleError(_ error: Error) {
         let nsError = error as NSError
+        
+        // Suppress expected "no account" error from CloudKit mirroring setup
+        if nsError.domain == NSCocoaErrorDomain && nsError.code == 134400 {
+            log.info("CloudKit integration setup skipped: No iCloud account configured (expected).")
+            return
+        }
+
         log.error("CloudKit event error: \(error.localizedDescription, privacy: .public) (\(nsError.code))")
 
         if let ckError = ckError(from: error) {

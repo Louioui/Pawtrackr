@@ -113,11 +113,11 @@ class InsightsViewModel {
 
         // Load the metrics needed to render the screen first. The client-wide
         // metrics can touch far more rows, so they run after the first paint.
-        await fetchRevenue()
-        await fetchMonthlyGrowth()
-        await fetchDistributions()
+        try? await PerformanceMonitor.measureAsync(label: "Insights: fetchRevenue") { await fetchRevenue() }
+        try? await PerformanceMonitor.measureAsync(label: "Insights: fetchMonthlyGrowth") { await fetchMonthlyGrowth() }
+        try? await PerformanceMonitor.measureAsync(label: "Insights: fetchDistributions") { await fetchDistributions() }
         hasLoadedOnce = true
-        await fetchClientInsights()
+        try? await PerformanceMonitor.measureAsync(label: "Insights: fetchClientInsights") { await fetchClientInsights() }
     }
 
     func refreshRevenue() async {
@@ -144,16 +144,21 @@ class InsightsViewModel {
         let currentMonthLabel = fmt.string(from: now)
         let monthlyVisits = monthlyGrowth.first(where: { $0.month == currentMonthLabel })?.visitCount ?? 0
 
-        let descriptor = FetchDescriptor<Client>(
-            predicate: #Predicate<Client> { $0.createdAt >= startOfMonth }
-        )
-        let newClientsCount: Int
-        do {
-            newClientsCount = try dataStore.container.mainContext.fetchCount(descriptor)
-        } catch {
-            Logger.insights.error("New clients count fetch failed: \(String(describing: error))")
-            newClientsCount = 0
-        }
+        // Run the fetchCount on a background context so a large Client table does
+        // not freeze the main thread when the user taps "Export Report".
+        let container = dataStore.container
+        let newClientsCount: Int = await Task.detached(priority: .utility) { () -> Int in
+            let bg = ModelContext(container)
+            let descriptor = FetchDescriptor<Client>(
+                predicate: #Predicate<Client> { $0.createdAt >= startOfMonth }
+            )
+            do {
+                return try bg.fetchCount(descriptor)
+            } catch {
+                Logger.insights.error("New clients count fetch failed: \(String(describing: error))")
+                return 0
+            }
+        }.value
 
         return BusinessReportService.MonthlySummary(
             month: now,

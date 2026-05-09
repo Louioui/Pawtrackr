@@ -21,6 +21,13 @@ struct OnboardingView: View {
     @State private var viewModel: OnboardingViewModel
     @State private var showConfetti = false
     
+    // Explicitly define PlatformImage based on platform to ensure availability
+    #if canImport(UIKit)
+    private typealias PlatformImage = UIImage
+    #elseif canImport(AppKit)
+    private typealias PlatformImage = NSImage
+    #endif
+    
     private enum FocusField {
         case pin, confirmPin
     }
@@ -50,18 +57,12 @@ struct OnboardingView: View {
                 // Content
                 ZStack {
                     switch viewModel.currentStep {
-                    case .welcome:
-                        welcomeStep
-                    case .businessProfile:
-                        businessProfileStep
-                    case .regional:
-                        regionalStep
-                    case .security:
-                        securityStep
-                    case .permissions:
-                        permissionsStep
-                    case .warmStart:
-                        warmStartStep
+                    case .welcome: welcomeStep
+                    case .businessProfile: businessProfileStep
+                    case .regional: regionalStep
+                    case .security: securityStep
+                    case .permissions: permissionsStep
+                    case .warmStart: warmStartStep
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -90,7 +91,18 @@ struct OnboardingView: View {
         }
     }
     
-    // MARK: - Subviews
+    @ViewBuilder
+    private func logoImageView(image: PlatformImage) -> some View {
+        #if os(iOS)
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+        #elseif os(macOS)
+        Image(nsImage: image)
+            .resizable()
+            .scaledToFill()
+        #endif
+    }
 
     private var confettiView: some View {
         GeometryReader { proxy in
@@ -128,7 +140,7 @@ struct OnboardingView: View {
                     .id(viewModel.currentStep)
                     .transition(.push(from: .top))
 
-                Text(viewModel.currentStep.subtitle)
+                Text(subtitle(for: viewModel.currentStep))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -164,6 +176,17 @@ struct OnboardingView: View {
         }
         .padding(.vertical, DS.Spacing.xl)
         .background(DS.ColorToken.background)
+    }
+
+    private func subtitle(for step: OnboardingViewModel.Step) -> String {
+        switch step {
+        case .welcome: return "Let's configure your workspace."
+        case .businessProfile: return "Tell us about your grooming business."
+        case .regional: return "Set your local currency and contact details."
+        case .security: return "Secure your business data with a PIN."
+        case .permissions: return "Set your app preferences and unlock method."
+        case .warmStart: return "You are all set to start grooming!"
+        }
     }
 
     private var permissionsStep: some View {
@@ -243,9 +266,7 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 16) {
                 if let logoData = viewModel.logoData, let uiImage = PlatformImage(data: logoData) {
-                    Image(platformImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
+                    logoImageView(image: uiImage)
                         .frame(width: 60, height: 60)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .matchedGeometryEffect(id: "businessLogo", in: animation)
@@ -261,7 +282,7 @@ struct OnboardingView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(viewModel.name.isEmpty ? "Your Business Name" : viewModel.name)
+                    Text(viewModel.name.trimmed.isEmpty ? "Your Business Name" : viewModel.name)
                         .font(.headline)
                         .foregroundStyle(viewModel.name.isEmpty ? .secondary : .primary)
                     
@@ -484,8 +505,6 @@ struct OnboardingView: View {
         .background(DS.ColorToken.background)
     }
     
-    // MARK: - Steps
-    
     private var securityStep: some View {
         VStack(spacing: DS.Spacing.xxl) {
             VStack(spacing: DS.Spacing.md) {
@@ -503,17 +522,18 @@ struct OnboardingView: View {
             VStack(spacing: DS.Spacing.xl) {
                 pinEntryView(title: "Enter PIN", text: $viewModel.pin, field: .pin)
                 pinEntryView(title: "Confirm PIN", text: $viewModel.confirmPin, field: .confirmPin)
-                
-                if let validationMessage = viewModel.securityValidationMessage {
-                    Text(validationMessage)
-                        .font(.caption)
-                        .foregroundStyle(DS.ColorToken.danger)
-                }
+                // Validation messages render in the shared footer to avoid duplicates.
             }
         }
         .padding(.top, DS.Spacing.xl)
         .onAppear {
-            focusedField = .pin
+            // Focus the first empty PIN field on entry — but if the user is coming
+            // back from a later step with both PINs already filled, leave focus alone.
+            if viewModel.pin.filter(\.isNumber).count < 4 {
+                focusedField = .pin
+            } else if viewModel.confirmPin.filter(\.isNumber).count < 4 {
+                focusedField = .confirmPin
+            }
         }
     }
 
@@ -530,9 +550,10 @@ struct OnboardingView: View {
                     #if os(iOS)
                     .keyboardType(.numberPad)
                     #endif
-                    .textContentType(field == .pin ? .oneTimeCode : .oneTimeCode) // using .oneTimeCode as generic placeholder where safe
+                    .textContentType(.oneTimeCode)
                     .focused($focusedField, equals: field)
                     .opacity(0.01)
+                    .accessibilityIdentifier(field == .pin ? "onboarding.pinField" : "onboarding.confirmPinField")
                     .onChange(of: text.wrappedValue) { _, newValue in
                         let filtered = String(newValue.filter(\.isNumber).prefix(4))
                         if filtered != newValue {
@@ -658,15 +679,17 @@ struct OnboardingView: View {
             withAnimation(.spring()) {
                 showConfetti = true
             }
-            
-            // Give a moment for the confetti to pop before dismissing
-            try? await Task.sleep(for: .seconds(1.5))
-            
+
+            // Run the confetti pop and the persistence work concurrently so demo
+            // seeding can begin immediately rather than waiting 1.5s of dead time.
+            async let pop: Void = Task.sleep(for: .seconds(1.5))
             await viewModel.finish(seedSampleData: seed, onComplete: onComplete)
-            if viewModel.saveError != nil {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    showConfetti = false
-                }
+            try? await pop
+
+            // Tear the confetti down whether we succeeded or failed so it does not
+            // hang in the view tree while the alert / parent re-renders.
+            withAnimation(.easeOut(duration: 0.2)) {
+                showConfetti = false
             }
         }
     }
@@ -699,20 +722,3 @@ private struct ConfettiPiece: View {
             }
     }
 }
-
-
-#if canImport(UIKit)
-typealias PlatformImage = UIImage
-extension Image {
-    init(platformImage: UIImage) {
-        self.init(uiImage: platformImage)
-    }
-}
-#elseif canImport(AppKit)
-typealias PlatformImage = NSImage
-extension Image {
-    init(platformImage: NSImage) {
-        self.init(nsImage: platformImage)
-    }
-}
-#endif

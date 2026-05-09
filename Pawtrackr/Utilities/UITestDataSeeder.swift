@@ -10,6 +10,11 @@ import SwiftData
 
 enum UITestDataSeeder {
     static func seedIfNeeded(in context: ModelContext) throws {
+        // Onboarding test mode: skip seeding ANY data so the onboarding flow
+        // takes over on launch. The XCUI test then drives every step.
+        if AppRuntime.isOnboardingTestMode {
+            return
+        }
         try seedBusinessConfig(in: context)
         DataMigrations.ensureServiceCatalog(in: context)
 

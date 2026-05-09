@@ -10,36 +10,33 @@ class ScheduledTasks {
         self.modelContainer = modelContainer
     }
 
+    private let defaults = UserDefaults.standard
+    private let lastRunKey = "com.pawtrackr.lastMaintenanceDate"
+
     func start() {
-        // Invalidate any pre-existing timer to avoid orphaning it if start() is
-        // called more than once for the same instance.
         timer?.invalidate()
-        // Run maintenance daily.
-        timer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
-            self?.runMaintenance()
+        // Check every hour to see if a new day has passed since the last run.
+        timer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in
+            self?.checkAndRunMaintenance()
         }
-        // Also kick once shortly after launch
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            self?.runMaintenance()
-        }
+        // Run immediately after launch if due.
+        checkAndRunMaintenance()
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    deinit {
-        stop()
+    private func checkAndRunMaintenance() {
+        let lastRun = defaults.object(forKey: lastRunKey) as? Date
+        if let lastRun, Calendar.current.isDateInToday(lastRun) {
+            return
+        }
+        runMaintenance()
     }
 
     private func runMaintenance() {
+        defaults.set(Date(), forKey: lastRunKey)
         let container = modelContainer
         Task.detached(priority: .background) {
             let context = ModelContext(container)
-            // 1. Incremental summary rebuild for changed days.
             SummaryUpdater.rebuildAllSummaries(in: context)
-            // 2. Prune/downsample old photos (older than 6 months).
             DataPruner.pruneOldPhotos(olderThan: 180, downsampleOnly: true, in: context)
         }
     }

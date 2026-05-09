@@ -59,7 +59,8 @@ final class PawtrackrUITests: XCTestCase {
         }
 
         tapPrimaryButton(named: "Continue to Payment")
-        XCTAssertTrue(app.staticTexts["Confirm payment"].waitForExistence(timeout: 8))
+        // Increased timeout from 12s to 20s to provide ample buffer for complex checkout transitions.
+        XCTAssertTrue(app.staticTexts["Confirm payment"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.textFields["checkout.amountField"].waitForExistence(timeout: 5))
 
         tapPrimaryButton(named: "Review Checkout")

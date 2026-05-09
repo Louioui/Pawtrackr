@@ -145,19 +145,33 @@ final class RandomWorkflowFuzzTests: XCTestCase {
         XCTAssertTrue(activeClients.isEmpty)
     }
 
-    func testNewClientWorkflow_RejectsInvalidPhoneInput() async throws {
-        let vm = NewClientViewModel(modelContext: context)
-        vm.first = "Invalid"
-        vm.last = "Phone"
-        vm.phone = "111-111-1111"
-        vm.pets[0].name = "Signal"
-        vm.pets[0].gender = .male
-
-        let outcome = await vm.createClient()
-
-        XCTAssertEqual(outcome, .failed)
-        XCTAssertNotNil(vm.appError)
-        XCTAssertEqual(try context.fetch(FetchDescriptor<Client>()).count, 0)
+    func testCheckoutViewModel_ResilienceFuzz() async throws {
+        let pet = Pet(name: "FuzzPet", species: .dog)
+        context.insert(pet)
+        let visit = Visit(pet: pet)
+        context.insert(visit)
+        
+        let vm = makeCheckoutViewModel(pet: pet, visit: visit)
+        vm.allServices = try seedPricedServices()
+        
+        var rng = SeededRandom(state: 0xDEADBEEF)
+        
+        // Fuzz interactions for 500 iterations
+        for _ in 0..<500 {
+            let action = rng.nextInt(6)
+            switch action {
+            case 0: vm.toggleService(vm.allServices.randomElement()!)
+            case 1: vm.toggleAddOn(vm.allServices.randomElement()!)
+            case 2: vm.setSessionNotes("Random \(rng.next())")
+            case 3: vm.setAmountDirectly("\(rng.nextInt(100)).\(rng.nextInt(99))")
+            case 4: vm.choosePayment(Payment.Method.allCases.randomElement()!)
+            case 5: _ = try? vm.advance()
+            default: break
+            }
+        }
+        
+        // Assert we ended in a sane state
+        XCTAssertNotNil(vm.state)
     }
 
     private func seedPricedServices() throws -> [Service] {

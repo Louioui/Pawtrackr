@@ -41,19 +41,63 @@ struct ReportDocument: Transferable {
     }
 }
 
-@MainActor
-class ExportService {
+final class ExportService: @unchecked Sendable {
     static let shared = ExportService()
-    
+
+    @MainActor
     func exportClientsToCSV(modelContext: ModelContext) throws -> ExportDocument {
         let descriptor = FetchDescriptor<Client>(sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)])
         let clients = try modelContext.fetch(descriptor)
-        
+        return Self.makeClientsCSV(from: clients, dateString: Self.currentDateString())
+    }
+
+    @MainActor
+    func exportVisitsToCSV(modelContext: ModelContext) throws -> ExportDocument {
+        let descriptor = FetchDescriptor<Visit>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
+        let visits = try modelContext.fetch(descriptor)
+        return Self.makeVisitsCSV(from: visits, dateString: Self.currentDateString())
+    }
+
+    /// Async export that runs the SwiftData fetch + CSV string-building on a
+    /// background context so a large catalog does not freeze the Settings UI.
+    func exportClientsToCSVAsync(container: ModelContainer) async throws -> ExportDocument {
+        let dateString = Self.currentDateString()
+        return try await Task.detached(priority: .userInitiated) {
+            let bg = ModelContext(container)
+            let descriptor = FetchDescriptor<Client>(sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)])
+            let clients = try bg.fetch(descriptor)
+            return Self.makeClientsCSV(from: clients, dateString: dateString)
+        }.value
+    }
+
+    func exportVisitsToCSVAsync(container: ModelContainer) async throws -> ExportDocument {
+        let dateString = Self.currentDateString()
+        return try await Task.detached(priority: .userInitiated) {
+            let bg = ModelContext(container)
+            let descriptor = FetchDescriptor<Visit>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
+            let visits = try bg.fetch(descriptor)
+            return Self.makeVisitsCSV(from: visits, dateString: dateString)
+        }.value
+    }
+
+    // MARK: - Pure builders (no DB access — safe to call from any actor)
+
+    /// Date formatter built fresh per export so we don't reach into the MainActor-
+    /// isolated `Formatters.dateOnly` from a background context (Swift 6 issue).
+    private static func makeRowDateFormatter() -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = .current
+        f.doesRelativeDateFormatting = false
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }
+
+    private static func makeClientsCSV(from clients: [Client], dateString: String) -> ExportDocument {
+        let rowFormatter = makeRowDateFormatter()
         var csv = "First Name,Last Name,Phone,Email,Address,Notes,Last Visit\n"
-        
         for client in clients {
-            let lastVisit = client.lastVisitDate != nil ? Formatters.dateOnly.string(from: client.lastVisitDate!) : ""
-            
+            let lastVisit = client.lastVisitDate != nil ? rowFormatter.string(from: client.lastVisitDate!) : ""
             let columns: [String] = [
                 client.firstName,
                 client.lastName,
@@ -63,48 +107,29 @@ class ExportService {
                 client.notes ?? "",
                 lastVisit
             ]
-            
-            let row = columns.map { $0.csvEscaped }.joined(separator: ",")
-            csv += row + "\n"
+            csv += columns.map { $0.csvEscaped }.joined(separator: ",") + "\n"
         }
-        
-        return ExportDocument(csvData: csv, filename: "Pawtrackr_Clients_\(currentDateString()).csv")
+        return ExportDocument(csvData: csv, filename: "Pawtrackr_Clients_\(dateString).csv")
     }
-    
-    func exportVisitsToCSV(modelContext: ModelContext) throws -> ExportDocument {
-        let descriptor = FetchDescriptor<Visit>(sortBy: [SortDescriptor(\.startedAt, order: .reverse)])
-        let visits = try modelContext.fetch(descriptor)
-        
+
+    private static func makeVisitsCSV(from visits: [Visit], dateString: String) -> ExportDocument {
+        let rowFormatter = makeRowDateFormatter()
         var csv = "Date,Pet,Client,Total,Payment Method,Status,Notes\n"
-        
         for visit in visits {
-            let date = Formatters.dateOnly.string(from: visit.startedAt)
+            let date = rowFormatter.string(from: visit.startedAt)
             let petName = visit.pet?.name ?? "Unknown"
             let clientName = visit.pet?.owner?.fullName ?? "Unknown"
-            // Use a fixed format for numbers in CSV to avoid locale issues (commas as decimal separators)
             let total = String(format: "%.2f", (visit.total as NSDecimalNumber).doubleValue)
             let payment = visit.payment?.method.displayName ?? "Pending"
             let status = visit.isCompleted ? "Completed" : "Active"
             let notes = visit.note ?? ""
-            
-            let columns: [String] = [
-                date,
-                petName,
-                clientName,
-                total,
-                payment,
-                status,
-                notes
-            ]
-            
-            let row = columns.map { $0.csvEscaped }.joined(separator: ",")
-            csv += row + "\n"
+            let columns: [String] = [date, petName, clientName, total, payment, status, notes]
+            csv += columns.map { $0.csvEscaped }.joined(separator: ",") + "\n"
         }
-        
-        return ExportDocument(csvData: csv, filename: "Pawtrackr_Visits_\(currentDateString()).csv")
+        return ExportDocument(csvData: csv, filename: "Pawtrackr_Visits_\(dateString).csv")
     }
-    
-    private func currentDateString() -> String {
+
+    private static func currentDateString() -> String {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
         return fmt.string(from: Date())

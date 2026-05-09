@@ -1,82 +1,49 @@
-//
-//  OnboardingViewModel.swift
-//  Pawtrackr
-//
-//  Manages the state and logic for the multi-step onboarding journey.
-//
-
-import SwiftUI
+import Foundation
 import Observation
 import SwiftData
 import OSLog
+import SwiftUI
 
 @Observable
 final class OnboardingViewModel {
+    private var modelContext: ModelContext?
+    private var appSettings: AppSettings?
+
     enum Step: Int, CaseIterable {
-        case welcome
-        case businessProfile
-        case regional
-        case security
-        case permissions
-        case warmStart
+        case welcome, businessProfile, regional, security, permissions, warmStart
         
         var title: String {
             switch self {
             case .welcome: return "Welcome"
-            case .businessProfile: return "Your Business"
-            case .regional: return "Regional Settings"
+            case .businessProfile: return "Business Profile"
+            case .regional: return "Regional Info"
             case .security: return "Security"
-            case .permissions: return "Preferences"
-            case .warmStart: return "Ready to Start"
-            }
-        }
-
-        var subtitle: String {
-            switch self {
-            case .welcome:
-                return "Set up your workspace, security, and starter data in a few steps."
-            case .businessProfile:
-                return "Add the business details that appear across receipts, exports, and client-facing surfaces."
-            case .regional:
-                return "Choose how prices display and add contact details you want on file."
-            case .security:
-                return "Create the PIN that protects your data on this device."
-            case .permissions:
-                return "Pick the lock behavior that matches how you work day to day."
-            case .warmStart:
-                return "Start with a clean workspace or explore the app with polished demo records."
+            case .permissions: return "Permissions"
+            case .warmStart: return "Finish"
             }
         }
     }
-    
-    // MARK: - State
+
     var currentStep: Step = .welcome
-    
-    // Business Profile
     var name: String = ""
-    var logoData: Data?
-    
-    // Regional/Contact
     var email: String = ""
     var phone: String = ""
     var address: String = ""
-    var currencySymbol: String = "$"
-    
-    // Security
+    var logoData: Data? = nil
     var pin: String = ""
     var confirmPin: String = ""
+    var biometricsEnabled: Bool = false
+    var lockOnBackgroundEnabled: Bool = true
+    var autoLockAfterInactivityEnabled: Bool = false
+    var currentCurrency: String = "$"
+    var isSaving: Bool = false
+    var saveError: String? = nil
     
-    // Preferences
-    var lockOnBackgroundEnabled = true
-    var autoLockAfterInactivityEnabled = false
-    var biometricsEnabled = false
-    
-    // Metadata
-    var isSaving = false
-    var saveError: String?
-    
-    private var modelContext: ModelContext?
-    private var appSettings: AppSettings?
+    var currencySymbol: String {
+        get { currentCurrency }
+        set { currentCurrency = newValue }
+    }
+
     private let logger = Logger(subsystem: "com.pawtrackr", category: "Onboarding")
     private let biometrics = BiometricAuthenticator()
     private var hasLoadedInitialState = false
@@ -85,7 +52,7 @@ final class OnboardingViewModel {
     init(modelContext: ModelContext?, appSettings: AppSettings?) {
         self.modelContext = modelContext
         self.appSettings = appSettings
-        self.currencySymbol = appSettings?.currencySymbol ?? "$"
+        self.currentCurrency = appSettings?.currencySymbol ?? "$"
         self.lockOnBackgroundEnabled = appSettings?.autoLockOnBackground ?? true
         self.autoLockAfterInactivityEnabled = appSettings?.autoLockAfterInactivity ?? false
         self.biometricsEnabled = (appSettings?.isBiometricLockEnabled ?? false) && isBiometricsAvailable
@@ -98,7 +65,7 @@ final class OnboardingViewModel {
         guard !hasLoadedInitialState else { return }
         hasLoadedInitialState = true
 
-        currencySymbol = appSettings.currencySymbol
+        currentCurrency = appSettings.currencySymbol
         lockOnBackgroundEnabled = appSettings.autoLockOnBackground
         autoLockAfterInactivityEnabled = appSettings.autoLockAfterInactivity
         biometricsEnabled = appSettings.isBiometricLockEnabled && isBiometricsAvailable
@@ -126,6 +93,8 @@ final class OnboardingViewModel {
             HapticManager.notify(.error)
             return
         }
+        
+        TelemetryService.shared.track(event: "onboarding_step_completed", parameters: ["step": currentStep.title])
         
         guard let next = Step(rawValue: currentStep.rawValue + 1) else { return }
         HapticManager.impact(.medium)
@@ -200,7 +169,10 @@ final class OnboardingViewModel {
     var regionalValidationMessage: String? {
         let trimmedEmail = email.trimmed
         guard !trimmedEmail.isEmpty else { return nil }
-        return Self.isValidEmail(trimmedEmail) ? nil : "Enter a valid email address or leave it blank for now."
+        // Use a more inclusive but standard regex
+        let emailRegEx = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        let emailPred = NSPredicate(format:"SELF MATCHES %@", emailRegEx)
+        return emailPred.evaluate(with: trimmedEmail) ? nil : "Enter a valid email address (e.g., hello@business.com)."
     }
 
     var securityValidationMessage: String? {
@@ -218,10 +190,6 @@ final class OnboardingViewModel {
         }
         if normalizedPIN.count == 4 && normalizedConfirm.count == 4 && normalizedPIN != normalizedConfirm {
             return "PINs do not match."
-        }
-        if normalizedPIN.count == 4 && normalizedConfirm.count == 4 &&
-            AppSettings.isValidPIN(normalizedPIN) && normalizedPIN == normalizedConfirm {
-            return nil
         }
         return nil
     }
@@ -276,7 +244,7 @@ final class OnboardingViewModel {
         let businessEmail = email.trimmed.nilIfEmpty
         let businessPhone = phone.trimmed.nilIfEmpty
         let businessAddress = address.trimmed.nilIfEmpty
-        let currentCurrency = currencySymbol
+        let currentCurrency = currentCurrency
         let currentPIN = pin.filter(\.isNumber)
         let useBiometrics = biometricsEnabled && isBiometricsAvailable
 
@@ -312,14 +280,23 @@ final class OnboardingViewModel {
                 context.insert(config)
             }
 
-            DataMigrations.ensureServiceCatalog(in: context)
-            DataMigrations.ensureMessageTemplates(in: context)
-
-            if seedSampleData {
-                try DemoDataSeeder.seedIfNeeded(in: context)
-            }
-
+            // Persist BusinessConfig immediately on main so the @Query in RootView
+            // re-evaluates and can dismiss onboarding. Heavier work (catalog seed,
+            // demo data, summary rebuilds) runs off-main to avoid stalling the UI.
             try context.save()
+
+            let container = context.container
+            await Task.detached(priority: .userInitiated) {
+                let bg = ModelContext(container)
+                DataMigrations.ensureServiceCatalog(in: bg)
+                DataMigrations.ensureMessageTemplates(in: bg)
+                if seedSampleData {
+                    try? DemoDataSeeder.seedIfNeeded(in: bg)
+                }
+                if bg.hasChanges {
+                    try? bg.save()
+                }
+            }.value
 
             settings.isLockEnabled = true
             settings.isBiometricLockEnabled = useBiometrics
@@ -336,6 +313,8 @@ final class OnboardingViewModel {
                 throw ValidationError.custom(message: "The selected PIN could not be saved.")
             }
 
+            TelemetryService.shared.track(event: "onboarding_finished", parameters: ["seedSampleData": String(seedSampleData)])
+
             Formatters.updateCurrencySymbol(currentCurrency)
             HapticManager.notify(.success)
             isSaving = false
@@ -345,10 +324,5 @@ final class OnboardingViewModel {
             saveError = "Setup could not be saved. Please try again."
             isSaving = false
         }
-    }
-
-    private static func isValidEmail(_ value: String) -> Bool {
-        let pattern = #"^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$"#
-        return value.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 }

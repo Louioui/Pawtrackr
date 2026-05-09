@@ -88,6 +88,16 @@ struct DataStoreRecoveryView: View {
                 } else {
                     VStack(spacing: 12) {
                         Button {
+                            repairStore()
+                        } label: {
+                            Label(NSLocalizedString("recovery.repair_button", value: "Repair Storage (Safe)", comment: ""),
+                                  systemImage: "wrench.adjustable")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
                             resetStore()
                         } label: {
                             Label(NSLocalizedString("recovery.reset_button", value: "Reset Local Data", comment: ""),
@@ -115,6 +125,12 @@ struct DataStoreRecoveryView: View {
 
     private var lastErrorDetail: String? {
         UserDefaults.standard.string(forKey: PawtrackrApp.lastInitErrorKey)
+    }
+
+    private func repairStore() {
+        StoreHealthCheck.repairStore()
+        resetDetail = NSLocalizedString("recovery.repair_done", value: "Repair complete. Please try relaunching the app.", comment: "")
+        hasReset = true
     }
 
     private func resetStore() {

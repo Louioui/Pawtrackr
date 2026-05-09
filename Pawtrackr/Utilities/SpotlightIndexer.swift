@@ -74,4 +74,11 @@ final class SpotlightIndexer: @unchecked Sendable {
             CSSearchableIndex.default().deleteSearchableItems(withIdentifiers: [id], completionHandler: nil)
         }
     }
+    
+    nonisolated func reindexAll() {
+        queue.async {
+            CSSearchableIndex.default().deleteAllSearchableItems(completionHandler: nil)
+            // Re-indexing logic would ideally trigger here or be managed by a sync service.
+        }
+    }
 }

@@ -26,11 +26,6 @@ struct DashboardView: View {
     var body: some View {
         dashboardContent
             .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
-            .task {
-                if vm == nil {
-                    vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
-                }
-            }
             .sheet(isPresented: $showNewClient) {
                 NewClientSheet(modelContext: modelContext)
             }
@@ -46,11 +41,15 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var dashboardContent: some View {
+        // Single owner of VM creation — previously two `.task` modifiers raced and
+        // could spawn two VMs (each with its own observer task and notification
+        // observers, leaking until process exit).
         if let vm {
             content(vm)
         } else {
             ProgressView()
                 .task {
+                    guard self.vm == nil else { return }
                     let model = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
                     vm = model
                     await model.refresh()

@@ -37,7 +37,7 @@ struct PawtrackrApp: App {
 
     init() {
         // 1. Initial local variables for all properties
-        let initialContainer: ModelContainer?
+        var initialContainer: ModelContainer?
         let initialTasks: ScheduledTasks?
         let initialAuthVM: AuthenticationViewModel
 
@@ -79,6 +79,13 @@ struct PawtrackrApp: App {
             initialContainer = localContainer
             initialTasks = inMemory ? nil : ScheduledTasks(modelContainer: localContainer)
             initialAuthVM = AuthenticationViewModel(modelContext: localContainer.mainContext)
+            
+            // Validate store health
+            if !StoreHealthCheck.isStoreHealthy(container: localContainer) {
+                logger.critical("ModelContainer health check failed.")
+                UserDefaults.standard.set("Database integrity check failed.", forKey: PawtrackrApp.lastInitErrorKey)
+                initialContainer = nil
+            }
         } catch {
             // Most common cause: schema changed since the last run and the
             // existing on-disk store doesn't match. We expose this state to

@@ -66,9 +66,12 @@ final class ClientRepository: ClientRepositoryProtocol {
             predicate: #Predicate { $0.endedAt == nil }
         )
         activeVisitDesc.fetchLimit = 500
-        // Prefetch the relationship chain in one round-trip so we don't fault
-        // pet/owner per row in a tight loop.
-        activeVisitDesc.relationshipKeyPathsForPrefetching = [\Visit.pet, \Visit.pet?.owner]
+        // Prefetch the pet relationship so we don't fault it per row. SwiftData's
+        // prefetch graph can't traverse optional-chained key paths like
+        // `\Visit.pet?.owner` — it crashes with _assertionFailure deep in the
+        // framework — so we only prefetch the first hop and accept the per-row
+        // owner fault. Bounded to 500 rows above, so the worst case is small.
+        activeVisitDesc.relationshipKeyPathsForPrefetching = [\Visit.pet]
         let activeVisits = try modelContext.fetch(activeVisitDesc)
         return Set(activeVisits.compactMap { $0.pet?.owner?.persistentModelID })
     }

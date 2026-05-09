@@ -33,7 +33,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
         viewModel.email = "invalid-email"
         XCTAssertFalse(viewModel.canGoNext)
-        XCTAssertEqual(viewModel.regionalValidationMessage, "Enter a valid email address or leave it blank for now.")
+        XCTAssertEqual(viewModel.regionalValidationMessage, "Enter a valid email address (e.g., hello@business.com).")
 
         viewModel.email = "owner@example.com"
         XCTAssertTrue(viewModel.canGoNext)
@@ -114,9 +114,142 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(settings.hasConfiguredPrices)
         XCTAssertTrue(settings.hasAddedFirstClient)
         XCTAssertTrue(settings.hasCompletedFirstVisit)
-        XCTAssertGreaterThan(try context.fetchCount(FetchDescriptor<Client>()), 0)
-        XCTAssertGreaterThan(try context.fetchCount(FetchDescriptor<Visit>()), 0)
-        XCTAssertGreaterThan(try context.fetchCount(FetchDescriptor<Service>()), 0)
+
+        // After fix #2 the demo seeder runs on a background context, so the
+        // newly inserted records live on the shared store but may not be in the
+        // main context's row cache yet — re-fetch with a fresh background context
+        // to verify they actually persisted.
+        let bgContext = ModelContext(container)
+        XCTAssertGreaterThan(try bgContext.fetchCount(FetchDescriptor<Client>()), 0)
+        XCTAssertGreaterThan(try bgContext.fetchCount(FetchDescriptor<Visit>()), 0)
+        XCTAssertGreaterThan(try bgContext.fetchCount(FetchDescriptor<Service>()), 0)
+    }
+
+    // MARK: - Navigation
+
+    func testNextStep_ProgressesThroughAllStepsWhenValid() {
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
+        XCTAssertEqual(viewModel.currentStep, .welcome)
+
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .businessProfile)
+
+        // Business profile blocks until name is set.
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .businessProfile, "Should stay on businessProfile when name is empty.")
+
+        viewModel.name = "Test Grooming"
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .regional)
+
+        // Regional accepts blank email.
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .security)
+
+        // Security blocks until PINs are valid and matching.
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .security)
+
+        viewModel.pin = "1234"
+        viewModel.confirmPin = "1234"
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .permissions)
+
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .warmStart)
+
+        // Warm start is the last step — nextStep beyond it should be a no-op.
+        viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .warmStart)
+    }
+
+    func testPreviousStep_GoesBackButStopsAtWelcome() {
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
+        viewModel.currentStep = .regional
+
+        viewModel.previousStep()
+        XCTAssertEqual(viewModel.currentStep, .businessProfile)
+
+        viewModel.previousStep()
+        XCTAssertEqual(viewModel.currentStep, .welcome)
+
+        viewModel.previousStep()
+        XCTAssertEqual(viewModel.currentStep, .welcome, "previousStep at welcome should be a no-op.")
+    }
+
+    func testGoToStep_OnlyPermitsBackwardsNavigation() {
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
+        viewModel.currentStep = .security
+
+        viewModel.goToStep(.businessProfile)
+        XCTAssertEqual(viewModel.currentStep, .businessProfile, "Backwards jump should succeed.")
+
+        viewModel.goToStep(.permissions)
+        XCTAssertEqual(viewModel.currentStep, .businessProfile, "Forward jump should be ignored.")
+
+        viewModel.goToStep(.businessProfile)
+        XCTAssertEqual(viewModel.currentStep, .businessProfile, "Same-step jump should be a no-op.")
+    }
+
+    func testPrimaryActionTitle_VariesByStep() {
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
+
+        viewModel.currentStep = .welcome
+        XCTAssertEqual(viewModel.primaryActionTitle, "Get Started")
+
+        viewModel.currentStep = .businessProfile
+        XCTAssertEqual(viewModel.primaryActionTitle, "Continue")
+
+        viewModel.currentStep = .permissions
+        XCTAssertEqual(viewModel.primaryActionTitle, "Review Setup")
+
+        viewModel.currentStep = .warmStart
+        XCTAssertEqual(viewModel.primaryActionTitle, "Continue")
+    }
+
+    func testFinish_RejectsBlankBusinessName() async {
+        let settings = AppSettings()
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)
+        viewModel.name = "   "
+        viewModel.pin = "1234"
+        viewModel.confirmPin = "1234"
+
+        var completionFired = false
+        await viewModel.finish(seedSampleData: false) { completionFired = true }
+
+        XCTAssertFalse(completionFired)
+        XCTAssertNotNil(viewModel.saveError)
+    }
+
+    func testFinish_RejectsMismatchedPINs() async {
+        let settings = AppSettings()
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)
+        viewModel.name = "Test"
+        viewModel.pin = "1111"
+        viewModel.confirmPin = "2222"
+
+        var completionFired = false
+        await viewModel.finish(seedSampleData: false) { completionFired = true }
+
+        XCTAssertFalse(completionFired)
+        XCTAssertNotNil(viewModel.saveError)
+    }
+
+    func testFinish_GuardsAgainstDoubleInvocation() async {
+        let settings = AppSettings()
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)
+        viewModel.name = "Test"
+        viewModel.pin = "1234"
+        viewModel.confirmPin = "1234"
+
+        // Two concurrent finishes — the second should be a no-op while the first
+        // is still in flight.
+        async let first: Void = viewModel.finish(seedSampleData: false) { }
+        async let second: Void = viewModel.finish(seedSampleData: false) { }
+        _ = await (first, second)
+
+        let configs = try? context.fetch(FetchDescriptor<BusinessConfig>())
+        XCTAssertEqual(configs?.count, 1, "Should never create more than one BusinessConfig.")
     }
 
     private func resetAppSettingsDefaults() {

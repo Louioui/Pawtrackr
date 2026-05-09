@@ -41,10 +41,10 @@ struct CheckoutView: View {
 
             stepContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .animation(.easeInOut(duration: 0.22), value: viewModel.currentStep)
 
             bottomBar
         }
+        .safeAreaPadding(.bottom)
         .background(DS.ColorToken.background.ignoresSafeArea())
         #if os(macOS)
         .frame(minWidth: 480, minHeight: 560)
@@ -157,12 +157,13 @@ struct CheckoutView: View {
 
     @ViewBuilder
     private var stepContent: some View {
-        switch viewModel.currentStep {
-        case .services:  servicesStep.transition(stepTransition)
-        case .details:   detailsStep.transition(stepTransition)
-        case .payment:   paymentStep.transition(stepTransition)
-        case .review:    reviewStep.transition(stepTransition)
+        ZStack {
+            if viewModel.currentStep == .services { servicesStep }
+            if viewModel.currentStep == .details { detailsStep }
+            if viewModel.currentStep == .payment { paymentStep }
+            if viewModel.currentStep == .review { reviewStep }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var stepIndicator: some View {
@@ -734,6 +735,7 @@ struct CheckoutView: View {
     func serviceTag(for service: Service) -> some View {
         let isSelected = viewModel.isServiceSelected(service)
         return Button {
+            HapticManager.impact(.light)
             withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                 viewModel.toggleService(service)
             }
@@ -758,6 +760,7 @@ struct CheckoutView: View {
     func addOnRow(_ service: Service) -> some View {
         let isSelected = viewModel.isAddOnSelected(service)
         return Button {
+            HapticManager.impact(.light)
             withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
                 viewModel.toggleAddOn(service)
             }
@@ -785,6 +788,7 @@ struct CheckoutView: View {
         let isSelected = viewModel.tags.contains(raw)
         let display = BehaviorTagIcons.display(for: raw)
         return Button {
+            HapticManager.impact(.light)
             viewModel.toggleTag(raw)
         } label: {
             HStack(spacing: 4) {
@@ -804,6 +808,7 @@ struct CheckoutView: View {
     func paymentCard(for option: PaymentOption) -> some View {
         let isSelected = viewModel.selectedPaymentMethod == option.method
         return Button {
+            HapticManager.impact(.medium)
             withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
                 viewModel.choosePayment(option.method)
             }

@@ -53,6 +53,7 @@ final class Payment {
         lastModifiedBy = DeviceIdentity.currentID
         lastModifiedAt = .now
     }
+    
 }
 
 // MARK: - Payment Method Enum

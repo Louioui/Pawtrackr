@@ -19,6 +19,10 @@ struct SettingsView: View {
     @State private var showDiagnostics = false
     @State private var clientsDoc: ExportDocument? = nil
     @State private var visitsDoc: ExportDocument? = nil
+    @State private var isExportingClients = false
+    @State private var isExportingVisits = false
+    @State private var exportError: String? = nil
+    @State private var showDisableLockConfirm = false
     private let wrapsInNavigationStack: Bool
 
     init(wrapsInNavigationStack: Bool = true) {
@@ -89,29 +93,55 @@ struct SettingsView: View {
                 securityStatusCard
                     .listRowInsets(EdgeInsets())
 
-                Toggle("Enable App Lock", isOn: $appSettings.isLockEnabled)
+                Toggle("Enable App Lock", isOn: Binding(
+                    get: { appSettings.isLockEnabled },
+                    set: { newValue in
+                        if !newValue && appSettings.isLockEnabled {
+                            // Confirm before disabling — wallet/business app, the lock is
+                            // a major safety boundary that shouldn't be removed by a stray tap.
+                            showDisableLockConfirm = true
+                        } else {
+                            appSettings.isLockEnabled = newValue
+                        }
+                    }
+                ))
+                .accessibilityIdentifier("settings.appLockToggle")
 
                 if appSettings.isLockEnabled {
                     Toggle("Biometric Unlock", isOn: $appSettings.isBiometricLockEnabled)
+                        .accessibilityIdentifier("settings.biometricToggle")
 
                     Button("Change PIN") {
                         showChangePIN = true
                     }
+                    .accessibilityIdentifier("settings.changePIN")
                 }
             }
 
             Section(header: Text("Data Export")) {
                 Button {
-                    clientsDoc = try? ExportService.shared.exportClientsToCSV(modelContext: modelContext)
+                    runExport(kind: .clients)
                 } label: {
-                    Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
+                    HStack {
+                        Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
+                        Spacer()
+                        if isExportingClients { ProgressView() }
+                    }
                 }
+                .accessibilityIdentifier("settings.exportClients")
+                .disabled(isExportingClients)
 
                 Button {
-                    visitsDoc = try? ExportService.shared.exportVisitsToCSV(modelContext: modelContext)
+                    runExport(kind: .visits)
                 } label: {
-                    Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
+                    HStack {
+                        Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
+                        Spacer()
+                        if isExportingVisits { ProgressView() }
+                    }
                 }
+                .accessibilityIdentifier("settings.exportVisits")
+                .disabled(isExportingVisits)
             }
 
             Section {
@@ -189,6 +219,47 @@ struct SettingsView: View {
         .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
             Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
         } message: { Text(pinChangeError ?? "") }
+        .alert("Export Failed", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("OK", role: .cancel) { }
+        } message: { Text(exportError ?? "") }
+        .alert("Disable App Lock?", isPresented: $showDisableLockConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Disable", role: .destructive) {
+                appSettings.isLockEnabled = false
+            }
+        } message: {
+            Text("Anyone with access to this device will be able to view client data. You can re-enable the lock at any time.")
+        }
+    }
+
+    private enum ExportKind { case clients, visits }
+
+    private func runExport(kind: ExportKind) {
+        let container = modelContext.container
+        switch kind {
+        case .clients:
+            guard !isExportingClients else { return }
+            isExportingClients = true
+            Task {
+                defer { isExportingClients = false }
+                do {
+                    clientsDoc = try await ExportService.shared.exportClientsToCSVAsync(container: container)
+                } catch {
+                    exportError = error.localizedDescription
+                }
+            }
+        case .visits:
+            guard !isExportingVisits else { return }
+            isExportingVisits = true
+            Task {
+                defer { isExportingVisits = false }
+                do {
+                    visitsDoc = try await ExportService.shared.exportVisitsToCSVAsync(container: container)
+                } catch {
+                    exportError = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: - UI Sections

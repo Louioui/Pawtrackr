@@ -10,11 +10,19 @@ import Foundation
 enum AppRuntime {
     static let uiTestingArgument = "-pawtrackr-ui-testing"
     static let uiTestingEnvironmentKey = "PAWTRACKR_UI_TESTING"
+    /// When set, the UI test seeder will skip inserting a BusinessConfig so the
+    /// onboarding flow shows on launch — used to drive onboarding XCUI tests.
+    static let onboardingTestArgument = "-pawtrackr-ui-onboarding"
 
     static var isUITesting: Bool {
         let processInfo = ProcessInfo.processInfo
         return processInfo.arguments.contains(uiTestingArgument)
             || processInfo.environment[uiTestingEnvironmentKey] == "1"
+    }
+
+    /// True when the UI tester wants the onboarding flow to be shown on launch.
+    static var isOnboardingTestMode: Bool {
+        ProcessInfo.processInfo.arguments.contains(onboardingTestArgument)
     }
 
     /// True when the process was launched by XCTest (unit or UI test). Used by
