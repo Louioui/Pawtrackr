@@ -8,21 +8,25 @@
 import SwiftUI
 import Observation
 
+/// Keys used for UserDefaults persistence.
+/// Internal visibility ensures accessibility for Observation macro expansion across platforms.
+enum AppSettingsKeys {
+    static let isLockEnabled = "isLockEnabled"
+    static let isBiometricLockEnabled = "isBiometricLockEnabled"
+    static let appPIN = "appPIN"
+    static let lastPINChangeDate = "lastPINChangeDate"
+    static let autoLockOnBackground = "autoLockOnBackground"
+    static let autoLockAfterInactivity = "autoLockAfterInactivity"
+    static let businessName = "businessName"
+    static let currencySymbol = "currencySymbol"
+    static let hasConfiguredPrices = "hasConfiguredPrices"
+    static let hasAddedFirstClient = "hasAddedFirstClient"
+    static let hasCompletedFirstVisit = "hasCompletedFirstVisit"
+    static let isChecklistDismissed = "isChecklistDismissed"
+}
+
 @Observable
 final class AppSettings {
-    // MARK: - Keys
-
-    private enum Keys {
-        static let isLockEnabled = "isLockEnabled"
-        static let biometricLockEnabled = "isBiometricLockEnabled"
-        static let appPIN = "appPIN"
-        static let lastPINChangeDate = "lastPINChangeDate"
-        static let autoLockOnBackground = "autoLockOnBackground"
-        static let autoLockAfterInactivity = "autoLockAfterInactivity"
-        static let businessName = "businessName"
-        static let currencySymbol = "currencySymbol"
-    }
-
     // MARK: - Defaults
 
     private enum Defaults {
@@ -34,80 +38,80 @@ final class AppSettings {
         static let idleLockMinutes = 5
         static let businessName = "My Pet Grooming"
         static let currencySymbol = "$"
-        static let hasConfiguredPrices = "hasConfiguredPrices"
-        static let hasAddedFirstClient = "hasAddedFirstClient"
-        static let hasCompletedFirstVisit = "hasCompletedFirstVisit"
-        static let isChecklistDismissed = "isChecklistDismissed"
+        static let hasConfiguredPrices = false
+        static let hasAddedFirstClient = false
+        static let hasCompletedFirstVisit = false
+        static let isChecklistDismissed = false
     }
 
     // MARK: - Properties
 
     var hasConfiguredPrices: Bool {
-        didSet { UserDefaults.standard.set(hasConfiguredPrices, forKey: Keys.hasConfiguredPrices) }
+        didSet { UserDefaults.standard.set(hasConfiguredPrices, forKey: AppSettingsKeys.hasConfiguredPrices) }
     }
     
     var hasAddedFirstClient: Bool {
-        didSet { UserDefaults.standard.set(hasAddedFirstClient, forKey: Keys.hasAddedFirstClient) }
+        didSet { UserDefaults.standard.set(hasAddedFirstClient, forKey: AppSettingsKeys.hasAddedFirstClient) }
     }
     
     var hasCompletedFirstVisit: Bool {
-        didSet { UserDefaults.standard.set(hasCompletedFirstVisit, forKey: Keys.hasCompletedFirstVisit) }
+        didSet { UserDefaults.standard.set(hasCompletedFirstVisit, forKey: AppSettingsKeys.hasCompletedFirstVisit) }
     }
     
     var isChecklistDismissed: Bool {
-        didSet { UserDefaults.standard.set(isChecklistDismissed, forKey: Keys.isChecklistDismissed) }
+        didSet { UserDefaults.standard.set(isChecklistDismissed, forKey: AppSettingsKeys.isChecklistDismissed) }
     }
 
     var businessName: String {
         didSet {
-            UserDefaults.standard.set(businessName, forKey: Keys.businessName)
+            UserDefaults.standard.set(businessName, forKey: AppSettingsKeys.businessName)
         }
     }
 
     var currencySymbol: String {
         didSet {
-            UserDefaults.standard.set(currencySymbol, forKey: Keys.currencySymbol)
+            UserDefaults.standard.set(currencySymbol, forKey: AppSettingsKeys.currencySymbol)
         }
     }
 
     var isLockEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(isLockEnabled, forKey: Keys.isLockEnabled)
+            UserDefaults.standard.set(isLockEnabled, forKey: AppSettingsKeys.isLockEnabled)
         }
     }
 
     var isBiometricLockEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(isBiometricLockEnabled, forKey: Keys.biometricLockEnabled)
+            UserDefaults.standard.set(isBiometricLockEnabled, forKey: AppSettingsKeys.isBiometricLockEnabled)
         }
     }
 
     /// 4-digit App PIN. Validated to ensure it's exactly 4 digits.
     private(set) var appPIN: String {
         didSet {
-            UserDefaults.standard.set(appPIN, forKey: Keys.appPIN)
+            UserDefaults.standard.set(appPIN, forKey: AppSettingsKeys.appPIN)
         }
     }
 
     var lastPINChangeDate: Date? {
         didSet {
             if let d = lastPINChangeDate {
-                UserDefaults.standard.set(d, forKey: Keys.lastPINChangeDate)
+                UserDefaults.standard.set(d, forKey: AppSettingsKeys.lastPINChangeDate)
             } else {
-                UserDefaults.standard.removeObject(forKey: Keys.lastPINChangeDate)
+                UserDefaults.standard.removeObject(forKey: AppSettingsKeys.lastPINChangeDate)
             }
         }
     }
 
     var autoLockOnBackground: Bool {
         didSet {
-            UserDefaults.standard.set(autoLockOnBackground, forKey: Keys.autoLockOnBackground)
+            UserDefaults.standard.set(autoLockOnBackground, forKey: AppSettingsKeys.autoLockOnBackground)
         }
     }
 
     var autoLockAfterInactivity: Bool {
         didSet {
-            UserDefaults.standard.set(autoLockAfterInactivity, forKey: Keys.autoLockAfterInactivity)
+            UserDefaults.standard.set(autoLockAfterInactivity, forKey: AppSettingsKeys.autoLockAfterInactivity)
         }
     }
 
@@ -118,38 +122,42 @@ final class AppSettings {
 
     init() {
         if AppRuntime.isUITesting {
-            UserDefaults.standard.set(false, forKey: Keys.isLockEnabled)
-            UserDefaults.standard.set(false, forKey: Keys.biometricLockEnabled)
-            UserDefaults.standard.set(false, forKey: Keys.autoLockOnBackground)
-            UserDefaults.standard.set(false, forKey: Keys.autoLockAfterInactivity)
-            UserDefaults.standard.set(Defaults.currencySymbol, forKey: Keys.currencySymbol)
+            UserDefaults.standard.set(false, forKey: AppSettingsKeys.isLockEnabled)
+            UserDefaults.standard.set(false, forKey: AppSettingsKeys.isBiometricLockEnabled)
+            UserDefaults.standard.set(false, forKey: AppSettingsKeys.autoLockOnBackground)
+            UserDefaults.standard.set(false, forKey: AppSettingsKeys.autoLockAfterInactivity)
+            UserDefaults.standard.set(Defaults.currencySymbol, forKey: AppSettingsKeys.currencySymbol)
         }
 
         // Register defaults first
         UserDefaults.standard.register(defaults: [
-            Keys.isLockEnabled: AppRuntime.isUITesting ? false : Defaults.isLockEnabled,
-            Keys.biometricLockEnabled: AppRuntime.isUITesting ? false : Defaults.biometricEnabled,
-            Keys.appPIN: Defaults.pin,
-            Keys.autoLockOnBackground: AppRuntime.isUITesting ? false : Defaults.autoLockBackground,
-            Keys.autoLockAfterInactivity: AppRuntime.isUITesting ? false : Defaults.autoLockInactivity
+            AppSettingsKeys.isLockEnabled: AppRuntime.isUITesting ? false : Defaults.isLockEnabled,
+            AppSettingsKeys.isBiometricLockEnabled: AppRuntime.isUITesting ? false : Defaults.biometricEnabled,
+            AppSettingsKeys.appPIN: Defaults.pin,
+            AppSettingsKeys.autoLockOnBackground: AppRuntime.isUITesting ? false : Defaults.autoLockBackground,
+            AppSettingsKeys.autoLockAfterInactivity: AppRuntime.isUITesting ? false : Defaults.autoLockInactivity,
+            AppSettingsKeys.hasConfiguredPrices: Defaults.hasConfiguredPrices,
+            AppSettingsKeys.hasAddedFirstClient: Defaults.hasAddedFirstClient,
+            AppSettingsKeys.hasCompletedFirstVisit: Defaults.hasCompletedFirstVisit,
+            AppSettingsKeys.isChecklistDismissed: Defaults.isChecklistDismissed
         ])
 
         // Read values
-        self.businessName = UserDefaults.standard.string(forKey: Keys.businessName) ?? Defaults.businessName
-        self.currencySymbol = UserDefaults.standard.string(forKey: Keys.currencySymbol) ?? Defaults.currencySymbol
-        self.isLockEnabled = UserDefaults.standard.bool(forKey: Keys.isLockEnabled)
-        self.isBiometricLockEnabled = UserDefaults.standard.bool(forKey: Keys.isBiometricLockEnabled)
-        self.autoLockOnBackground = UserDefaults.standard.bool(forKey: Keys.autoLockOnBackground)
-        self.autoLockAfterInactivity = UserDefaults.standard.bool(forKey: Keys.autoLockAfterInactivity)
-        self.lastPINChangeDate = UserDefaults.standard.object(forKey: Keys.lastPINChangeDate) as? Date
+        self.businessName = UserDefaults.standard.string(forKey: AppSettingsKeys.businessName) ?? Defaults.businessName
+        self.currencySymbol = UserDefaults.standard.string(forKey: AppSettingsKeys.currencySymbol) ?? Defaults.currencySymbol
+        self.isLockEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.isLockEnabled)
+        self.isBiometricLockEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.isBiometricLockEnabled)
+        self.autoLockOnBackground = UserDefaults.standard.bool(forKey: AppSettingsKeys.autoLockOnBackground)
+        self.autoLockAfterInactivity = UserDefaults.standard.bool(forKey: AppSettingsKeys.autoLockAfterInactivity)
+        self.lastPINChangeDate = UserDefaults.standard.object(forKey: AppSettingsKeys.lastPINChangeDate) as? Date
 
-        self.hasConfiguredPrices = UserDefaults.standard.bool(forKey: Keys.hasConfiguredPrices)
-        self.hasAddedFirstClient = UserDefaults.standard.bool(forKey: Keys.hasAddedFirstClient)
-        self.hasCompletedFirstVisit = UserDefaults.standard.bool(forKey: Keys.hasCompletedFirstVisit)
-        self.isChecklistDismissed = UserDefaults.standard.bool(forKey: Keys.isChecklistDismissed)
+        self.hasConfiguredPrices = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasConfiguredPrices)
+        self.hasAddedFirstClient = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasAddedFirstClient)
+        self.hasCompletedFirstVisit = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasCompletedFirstVisit)
+        self.isChecklistDismissed = UserDefaults.standard.bool(forKey: AppSettingsKeys.isChecklistDismissed)
 
         // Validate stored PIN
-        let storedPIN = UserDefaults.standard.string(forKey: Keys.appPIN) ?? Defaults.pin
+        let storedPIN = UserDefaults.standard.string(forKey: AppSettingsKeys.appPIN) ?? Defaults.pin
         self.appPIN = Self.isValidPIN(storedPIN) ? storedPIN : Defaults.pin
     }
 

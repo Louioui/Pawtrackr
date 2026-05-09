@@ -158,7 +158,7 @@ final class DashboardViewModel {
             
             // 2. Catalog: Any service with price > 0
             let services = try context.fetch(FetchDescriptor<Service>())
-            let isCatalogConfigured = services.contains { $0.basePrice > 0 }
+            let isCatalogConfigured = services.contains { ($0.basePrice ?? 0) > 0 }
             
             // 3. First Client
             let clientCount = try context.fetchCount(FetchDescriptor<Client>())
