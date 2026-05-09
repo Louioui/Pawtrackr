@@ -18,7 +18,7 @@ enum DataPruner {
     static func pruneOldPhotos(
         olderThan days: Int,
         downsampleOnly: Bool = true,
-        pruneSyncedAssets: Bool = true,
+        pruneSyncedAssets: Bool = false,
         in context: ModelContext
     ) {
         guard pruneSyncedAssets else {
