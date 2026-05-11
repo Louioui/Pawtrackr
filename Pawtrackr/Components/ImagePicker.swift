@@ -13,10 +13,13 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import ImageIO
+import OSLog
 
 #if canImport(UIKit)
 import PhotosUI
 #endif
+
+private let imagePickerLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ImagePicker")
 
 // MARK: - Public Types (Cross-Platform)
 public enum ImagePickerSource: Equatable {
@@ -186,7 +189,7 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
                 do {
                     return try await loadUIImage(from: provider)
                 } catch {
-                    print("Failed to load UIImage from provider: \(error.localizedDescription)")
+                    imagePickerLog.error("Failed to load UIImage from provider: \(error.localizedDescription, privacy: .public)")
                 }
             }
 
@@ -195,7 +198,7 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
                     let data = try await loadData(from: provider, typeIdentifier: UTType.image.identifier)
                     return UIImage(data: data)
                 } catch {
-                    print("Failed to load image Data from provider: \(error.localizedDescription)")
+                    imagePickerLog.error("Failed to load image Data from provider: \(error.localizedDescription, privacy: .public)")
                 }
             }
 

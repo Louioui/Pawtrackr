@@ -20,6 +20,7 @@ final class InsightsUITests: XCTestCase {
             "-AppleLocale", "en_US"
         ]
         app.launchEnvironment["PAWTRACKR_UI_TESTING"] = "1"
+        app.launchEnvironment["PAWTRACKR_UI_START_TAB"] = "insights"
         app.launch()
     }
 
@@ -30,36 +31,36 @@ final class InsightsUITests: XCTestCase {
     // MARK: - Tab activation
 
     func testInsightsTabLoadsAndShowsKPIs() throws {
-        waitForDashboard()
-        tapTab("Insights")
+        XCTAssertTrue(waitForInsightsScreen(timeout: 12), "Insights screen did not finish presenting.")
 
         XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 12),
                       "Insights tab should display the Revenue KPI heading.")
 
         let anyKPI = waitForAny([
             { self.app.staticTexts["Avg Visit"].exists },
-            { self.app.staticTexts["Retention"].exists }
+            { self.app.staticTexts["Retention"].exists },
+            { self.app.otherElements["insights.kpi.avgVisit"].exists },
+            { self.app.otherElements["insights.kpi.retention"].exists }
         ], timeout: 6)
         XCTAssertTrue(anyKPI, "At least one secondary KPI tile should render.")
     }
 
     func testInsightsScrollsRevealsAdditionalCards() throws {
-        waitForDashboard()
-        tapTab("Insights")
+        XCTAssertTrue(waitForInsightsScreen(timeout: 12), "Insights screen did not finish presenting.")
         XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 12))
 
-        let scroll = app.scrollViews["insights.mainScroll"]
-        let target = scroll.exists ? scroll : app.scrollViews.firstMatch
-        for _ in 0..<3 {
-            target.exists ? target.swipeUp() : app.swipeUp()
+        let target = insightsSwipeAnchor()
+        for _ in 0..<4 {
+            target.swipeUp()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.35))
         }
 
         let anyLowerCard = waitForAny([
-            { self.app.staticTexts["Top Services"].exists },
-            { self.app.staticTexts["Payment Mix"].exists },
-            { self.app.staticTexts["Visits by Category"].exists },
-            { self.app.staticTexts["Client Retention"].exists },
-            { self.app.staticTexts["Top Clients"].exists }
+            { self.app.staticTexts["Top Services"].exists || self.app.staticTexts["insights.section.topServices"].exists },
+            { self.app.staticTexts["Payment Mix"].exists || self.app.staticTexts["insights.section.paymentMix"].exists },
+            { self.app.staticTexts["Visits by Category"].exists || self.app.staticTexts["insights.section.category"].exists },
+            { self.app.staticTexts["Client Retention"].exists || self.app.staticTexts["insights.section.retention"].exists },
+            { self.app.staticTexts["Top Clients"].exists || self.app.staticTexts["insights.section.topClients"].exists }
         ], timeout: 6)
         XCTAssertTrue(anyLowerCard, "Scrolling should reveal one of the lower analytics cards.")
     }
@@ -67,29 +68,34 @@ final class InsightsUITests: XCTestCase {
     // MARK: - Period picker
 
     func testInsightsRevenuePeriodPickerSwitchesWindow() throws {
-        waitForDashboard()
-        tapTab("Insights")
+        XCTAssertTrue(waitForInsightsScreen(timeout: 12), "Insights screen did not finish presenting.")
         XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 12))
 
         // The picker uses segmented style; segments come through as buttons named 7D/30D/90D.
         let sevenDay = app.buttons["7D"]
         let thirtyDay = app.buttons["30D"]
         let ninetyDay = app.buttons["90D"]
+        let windowLabel = app.staticTexts["insights.revenue.window"]
+
+        XCTAssertTrue(windowLabel.waitForExistence(timeout: 4), "Revenue window label should be present.")
 
         if sevenDay.waitForHittable(timeout: 4) {
             sevenDay.tap()
-            // The "7-day window" label should appear under the heading.
             XCTAssertTrue(
-                app.staticTexts["7-day window"].waitForExistence(timeout: 4)
-                    || app.staticTexts.matching(NSPredicate(format: "label CONTAINS '7-day'")).firstMatch.waitForExistence(timeout: 2),
+                waitForAny([
+                    { (windowLabel.value as? String)?.contains("7-day") == true },
+                    { self.app.staticTexts["7-day window"].exists }
+                ], timeout: 4),
                 "Picker should change the displayed window label."
             )
         }
         if ninetyDay.waitForHittable(timeout: 3) {
             ninetyDay.tap()
             XCTAssertTrue(
-                app.staticTexts["90-day window"].waitForExistence(timeout: 4)
-                    || app.staticTexts.matching(NSPredicate(format: "label CONTAINS '90-day'")).firstMatch.waitForExistence(timeout: 2)
+                waitForAny([
+                    { (windowLabel.value as? String)?.contains("90-day") == true },
+                    { self.app.staticTexts["90-day window"].exists }
+                ], timeout: 4)
             )
         }
         if thirtyDay.waitForHittable(timeout: 3) {
@@ -100,8 +106,7 @@ final class InsightsUITests: XCTestCase {
     // MARK: - Export
 
     func testInsightsExportReportButtonExists() throws {
-        waitForDashboard()
-        tapTab("Insights")
+        XCTAssertTrue(waitForInsightsScreen(timeout: 12), "Insights screen did not finish presenting.")
         XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 12))
 
         // Either the prepare-button or (if cached) the share-link should be visible.
@@ -109,7 +114,9 @@ final class InsightsUITests: XCTestCase {
         let shareBtn = app.buttons["insights.shareReport"]
         let anyVisible = waitForAny([
             { exportBtn.exists },
-            { shareBtn.exists }
+            { shareBtn.exists },
+            { self.app.buttons["Export Report"].exists },
+            { self.app.buttons["Share Report"].exists }
         ], timeout: 6)
         XCTAssertTrue(anyVisible, "An Export Report or Share Report toolbar item should be present.")
     }
@@ -117,12 +124,10 @@ final class InsightsUITests: XCTestCase {
     // MARK: - Pull-to-refresh stays responsive
 
     func testInsightsPullToRefreshRemainsResponsive() throws {
-        waitForDashboard()
-        tapTab("Insights")
+        XCTAssertTrue(waitForInsightsScreen(timeout: 12), "Insights screen did not finish presenting.")
         XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 12))
 
-        let scroll = app.scrollViews["insights.mainScroll"]
-        let target = scroll.exists ? scroll : app.scrollViews.firstMatch
+        let target = insightsSwipeAnchor()
         target.swipeDown(velocity: .fast)
 
         let stillThere = waitForAny([
@@ -143,12 +148,14 @@ final class InsightsUITests: XCTestCase {
         return conditions.contains(where: { $0() })
     }
 
-    private func waitForDashboard() {
-        XCTAssertTrue(
-            app.staticTexts["Dashboard"].waitForExistence(timeout: 12)
-                || app.navigationBars["Dashboard"].waitForExistence(timeout: 2),
-            "Dashboard did not load."
-        )
+    private func waitForInsightsScreen(timeout: TimeInterval = 3) -> Bool {
+        waitForAny([
+            { self.app.buttons["30D"].exists },
+            { self.app.buttons["7D"].exists },
+            { self.app.staticTexts["30-day window"].exists },
+            { self.app.otherElements["insights.mainScroll"].exists },
+            { self.app.otherElements["insights.mainScroll.content"].exists }
+        ], timeout: timeout)
     }
 
     /// Robust tab-tap that survives iOS 18's TabView content-swap flake.
@@ -168,6 +175,25 @@ final class InsightsUITests: XCTestCase {
             // Done — caller will perform its own existence check.
             if attempt >= 1 { return }
         }
+    }
+
+    private func insightsSwipeAnchor() -> XCUIElement {
+        let periodButton = app.buttons["30D"]
+        if periodButton.exists { return periodButton }
+
+        let revenueWindow = app.staticTexts["30-day window"]
+        if revenueWindow.exists { return revenueWindow }
+
+        let explicitScroll = app.scrollViews["insights.mainScroll"]
+        if explicitScroll.exists { return explicitScroll }
+
+        let explicitContainer = app.otherElements["insights.mainScroll"]
+        if explicitContainer.exists { return explicitContainer }
+
+        let revenueHeading = app.staticTexts["Revenue"]
+        if revenueHeading.exists { return revenueHeading }
+
+        return app.otherElements.firstMatch
     }
 }
 

@@ -14,25 +14,32 @@ struct InsightsView: View {
     @State private var viewModel: InsightsViewModel?
     @State private var reportPDFData: Data?
     @State private var isPreparingReport = false
-    @State private var revenuePeriod: Int = 30
 
     var body: some View {
         Group {
-            if let vm = viewModel, vm.hasLoadedOnce {
-                mainContent(vm)
+            if let vm = viewModel {
+                switch vm.state {
+                case .loading:
+                    loadingContent
+                        .transition(.opacity)
+                case .loaded:
+                    mainContent(vm)
+                        .transition(.opacity)
+                case .error(let message):
+                    ContentUnavailableView("Error", systemImage: "exclamationmark.triangle", description: Text(message))
+                }
             } else {
-                ProgressView("Loading Insights…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Color.clear
+                    .task {
+                        guard viewModel == nil else { return }
+                        let vm = InsightsViewModel(dataStore: dataStore, eventBus: eventBus)
+                        viewModel = vm
+                        await vm.refresh()
+                    }
             }
         }
         .background(DS.ColorToken.background)
         .navigationTitle("Insights")
-        .task {
-            guard viewModel == nil else { return }
-            let vm = InsightsViewModel(dataStore: dataStore, eventBus: eventBus)
-            viewModel = vm
-            await vm.refresh()
-        }
         .refreshable {
             await viewModel?.refresh()
         }
@@ -40,9 +47,6 @@ struct InsightsView: View {
             ToolbarItem(placement: .primaryAction) {
                 reportButton
             }
-        }
-        .onChange(of: viewModel?.totalRevenue) { _, _ in
-            reportPDFData = nil
         }
     }
 
@@ -61,13 +65,9 @@ struct InsightsView: View {
                 topClientsCard(vm)
             }
             .padding(DS.Spacing.lg)
-            // Mirror the identifier on the inner content as well so XCUI can
-            // locate the scrollable region whether it surfaces as a ScrollView
-            // or an `otherElements` container.
             .accessibilityIdentifier("insights.mainScroll.content")
         }
         .accessibilityIdentifier("insights.mainScroll")
-        .accessibilityElement(children: .contain)
     }
 
     // MARK: - KPI summary strip
@@ -78,24 +78,33 @@ struct InsightsView: View {
                 title: "Revenue",
                 value: vm.totalRevenue.moneyString,
                 icon: "dollarsign.circle.fill",
-                color: DS.ColorToken.primary
+                color: DS.ColorToken.primary,
+                accessibilityIdentifier: "insights.kpi.revenue"
             )
             kpiTile(
                 title: "Avg Visit",
                 value: vm.averageVisitValue > 0 ? vm.averageVisitValue.moneyString : "—",
                 icon: "chart.line.uptrend.xyaxis",
-                color: DS.ColorToken.success
+                color: DS.ColorToken.success,
+                accessibilityIdentifier: "insights.kpi.avgVisit"
             )
             kpiTile(
                 title: "Retention",
                 value: "\(Int(vm.retentionRate * 100))%",
                 icon: "person.2.fill",
-                color: DS.ColorToken.warning
+                color: DS.ColorToken.warning,
+                accessibilityIdentifier: "insights.kpi.retention"
             )
         }
     }
 
-    private func kpiTile(title: String, value: String, icon: String, color: Color) -> some View {
+    private func kpiTile(
+        title: String,
+        value: String,
+        icon: String,
+        color: Color,
+        accessibilityIdentifier: String
+    ) -> some View {
         Card(padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)) {
             VStack(alignment: .leading, spacing: 5) {
                 Image(systemName: icon)
@@ -105,6 +114,7 @@ struct InsightsView: View {
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
+                    .contentTransition(.numericText())
                 Text(title)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -120,29 +130,20 @@ struct InsightsView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Revenue").font(.headline)
-                        Text("\(revenuePeriod)-day window")
+                        Text("Revenue")
+                            .font(.headline)
+                        Text("\(vm.revenuePeriodDays)-day window")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Picker("Period", selection: $revenuePeriod) {
-                        Text("7D").tag(7)
-                        Text("30D").tag(30)
-                        Text("90D").tag(90)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 126)
-                    .onChange(of: revenuePeriod) { _, days in
-                        guard let vm = viewModel else { return }
-                        vm.revenuePeriodDays = days
-                        Task { await vm.refreshRevenue() }
-                    }
+                    revenuePeriodSelector(vm)
                 }
 
                 Text(vm.totalRevenue.moneyString)
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(DS.ColorToken.primary)
+                    .contentTransition(.numericText())
 
                 if vm.revenueSeries.isEmpty || vm.totalRevenue == .zero {
                     emptyState(icon: "chart.bar.xaxis", message: "No revenue recorded in this period")
@@ -156,36 +157,54 @@ struct InsightsView: View {
                         .cornerRadius(3)
                     }
                     .chartXAxis {
-                        AxisMarks(values: .stride(by: .day,
-                                                  count: revenuePeriod <= 7 ? 1 : revenuePeriod <= 30 ? 5 : 15)) { _ in
+                        AxisMarks(values: .stride(by: .day, count: vm.revenuePeriodDays <= 7 ? 1 : vm.revenuePeriodDays <= 30 ? 5 : 15)) { _ in
                             AxisValueLabel(format: .dateTime.month(.abbreviated).day())
                                 .font(.system(size: 9))
                             AxisGridLine()
                         }
                     }
-                    .chartYAxis {
-                        AxisMarks(position: .leading) { _ in
-                            AxisGridLine()
-                        }
-                    }
                     .frame(height: 155)
+                    .animation(.spring(), value: vm.revenueSeries.count)
 
                     HStack {
-                        Label("\(vm.totalVisitsInPeriod) visit\(vm.totalVisitsInPeriod == 1 ? "" : "s")",
-                              systemImage: "scissors")
+                        Label("\(vm.totalVisitsInPeriod) visits", systemImage: "scissors")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        if vm.averageVisitValue > 0 {
-                            Label("Avg \(vm.averageVisitValue.moneyString)",
-                                  systemImage: "chart.line.uptrend.xyaxis")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Label("Avg \(vm.averageVisitValue.moneyString)", systemImage: "chart.line.uptrend.xyaxis")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
         }
+    }
+
+    private func revenuePeriodSelector(_ vm: InsightsViewModel) -> some View {
+        let periods: [Int] = [7, 30, 90]
+        return HStack(spacing: 4) {
+            ForEach(periods, id: \.self) { period in
+                let isSelected = vm.revenuePeriodDays == period
+                Button {
+                    guard vm.revenuePeriodDays != period else { return }
+                    withAnimation(Animations.responsiveSpringSoft) {
+                        vm.revenuePeriodDays = period
+                    }
+                    Task { await vm.refreshRevenue() }
+                } label: {
+                    Text("\(period)D")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isSelected ? Color.white : Color.primary)
+                        .frame(minWidth: 34)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 8)
+                        .background(Capsule().fill(isSelected ? DS.ColorToken.primary : Color.clear))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(DS.ColorToken.surface, in: Capsule())
     }
 
     // MARK: - Monthly Performance
@@ -195,8 +214,7 @@ struct InsightsView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 Text("Monthly Performance").font(.headline)
 
-                let hasData = vm.monthlyGrowth.contains { $0.revenue > .zero }
-                if !hasData {
+                if vm.monthlyGrowth.isEmpty {
                     emptyState(icon: "chart.line.uptrend.xyaxis", message: "No monthly data yet")
                 } else {
                     Chart(vm.monthlyGrowth) { data in
@@ -207,13 +225,12 @@ struct InsightsView: View {
                         .foregroundStyle(DS.ColorToken.primary)
                         .lineStyle(StrokeStyle(lineWidth: 2.5))
                         .symbol(Circle().strokeBorder(lineWidth: 2))
-                        .symbolSize(36)
-
+                        
                         AreaMark(
                             x: .value("Month", data.month),
                             y: .value("Revenue", (data.revenue as NSDecimalNumber).doubleValue)
                         )
-                        .foregroundStyle(DS.ColorToken.primary.opacity(0.08))
+                        .foregroundStyle(DS.ColorToken.primary.opacity(0.1))
                     }
                     .frame(height: 155)
 
@@ -222,14 +239,9 @@ struct InsightsView: View {
                     HStack(spacing: 0) {
                         ForEach(vm.monthlyGrowth.suffix(3)) { data in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(data.month)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Text(data.revenue.moneyString)
-                                    .font(.subheadline.weight(.bold))
-                                Text("\(data.visitCount) visits")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                Text(data.month).font(.caption2).foregroundStyle(.secondary)
+                                Text(data.revenue.moneyString).font(.subheadline.weight(.bold))
+                                Text("\(data.visitCount) visits").font(.caption2).foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -244,12 +256,7 @@ struct InsightsView: View {
     private func serviceRevenueCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Top Services").font(.headline)
-                    Text("Last 30 days by revenue")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Top Services").font(.headline)
 
                 if vm.serviceDistribution.isEmpty {
                     emptyState(icon: "scissors", message: "No service data yet")
@@ -262,12 +269,6 @@ struct InsightsView: View {
                         )
                         .foregroundStyle(DS.ColorToken.success.gradient)
                         .cornerRadius(4)
-                        .annotation(position: .trailing, alignment: .leading) {
-                            Text(data.revenue.moneyString)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .padding(.leading, 2)
-                        }
                     }
                     .chartXAxis(.hidden)
                     .frame(height: CGFloat(top5.count) * 44)
@@ -276,17 +277,10 @@ struct InsightsView: View {
         }
     }
 
-    // MARK: - Payment Mix
-
     private func paymentMixCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Payment Mix").font(.headline)
-                    Text("Last 30 days by collected revenue")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Payment Mix").font(.headline)
 
                 if vm.paymentMethodDistribution.isEmpty {
                     emptyState(icon: "creditcard", message: "No payments recorded yet")
@@ -296,19 +290,14 @@ struct InsightsView: View {
                             Label(item.method.displayName, systemImage: item.method.systemImage)
                                 .font(.subheadline.weight(.semibold))
                             Spacer()
-                            Text("\(item.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(item.amount.moneyString)
-                                .font(.subheadline.weight(.bold))
+                            Text("\(item.count)").font(.caption).foregroundStyle(.secondary)
+                            Text(item.amount.moneyString).font(.subheadline.weight(.bold))
                         }
                     }
                 }
             }
         }
     }
-
-    // MARK: - Category Distribution
 
     private func categoryCard(_ vm: InsightsViewModel) -> some View {
         Card {
@@ -318,50 +307,27 @@ struct InsightsView: View {
                 if vm.categoryDistribution.isEmpty {
                     emptyState(icon: "square.grid.2x2", message: "No category data yet")
                 } else {
-                    let totalCount = vm.categoryDistribution.reduce(0) { $0 + $1.count }
-
                     Chart(vm.categoryDistribution) { data in
                         SectorMark(
                             angle: .value("Count", data.count),
-                            innerRadius: .ratio(0.60),
+                            innerRadius: .ratio(0.6),
                             angularInset: 2
                         )
                         .cornerRadius(4)
                         .foregroundStyle(by: .value("Category", data.name))
                     }
-                    .chartLegend(.hidden)
                     .frame(height: 155)
-                    .overlay(alignment: .center) {
-                        VStack(spacing: 1) {
-                            Text("\(totalCount)")
-                                .font(.system(size: 22, weight: .bold, design: .rounded))
-                            Text("visits")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
+                    .chartLegend(.hidden)
+                    .overlay {
+                        VStack {
+                            Text("\(vm.categoryDistribution.reduce(0, { $0 + $1.count }))").font(.headline)
+                            Text("visits").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
-
-                    // Text-only legend (chart assigns its own colors internally)
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(vm.categoryDistribution.prefix(5)) { data in
-                            HStack {
-                                Text(data.name)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text("\(data.count)")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(.top, 4)
                 }
             }
         }
     }
-
-    // MARK: - Retention
 
     private func retentionCard(_ vm: InsightsViewModel) -> some View {
         Card {
@@ -371,94 +337,45 @@ struct InsightsView: View {
                 if vm.retentionSeries.isEmpty {
                     emptyState(icon: "person.2", message: "Not enough client data yet")
                 } else {
-                    HStack(alignment: .center, spacing: DS.Spacing.xl) {
-                        ZStack {
-                            Chart(vm.retentionSeries) { data in
-                                SectorMark(
-                                    angle: .value("Value", data.value),
-                                    innerRadius: .ratio(0.65)
-                                )
-                                .foregroundStyle(
-                                    data.label == "Recurring"
-                                        ? DS.ColorToken.primary
-                                        : Color.secondary.opacity(0.22)
-                                )
-                            }
-                            .chartLegend(.hidden)
-                            .frame(width: 120, height: 120)
-
-                            VStack(spacing: 1) {
-                                Text("\(Int(vm.retentionRate * 100))%")
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                                    .foregroundStyle(DS.ColorToken.primary)
-                                Text("retained")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                            }
+                    HStack(spacing: 30) {
+                        Chart(vm.retentionSeries) { data in
+                            SectorMark(angle: .value("Value", data.value), innerRadius: .ratio(0.7))
+                                .foregroundStyle(data.label == "Recurring" ? DS.ColorToken.primary : Color.gray.opacity(0.2))
+                        }
+                        .frame(width: 100, height: 100)
+                        .chartLegend(.hidden)
+                        .overlay {
+                            Text("\(Int(vm.retentionRate * 100))%").font(.headline)
                         }
 
-                        VStack(alignment: .leading, spacing: 16) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Retention Rate")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(Int(vm.retentionRate * 100))%")
-                                    .font(.title2.weight(.bold))
-                                    .foregroundStyle(DS.ColorToken.primary)
-                            }
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Churn Risk")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(vm.churnRiskCount) clients")
-                                    .font(.title3.weight(.bold))
-                                    .foregroundStyle(DS.ColorToken.warning)
-                            }
+                        VStack(alignment: .leading, spacing: 10) {
+                            metricLabel(title: "Retention Rate", value: "\(Int(vm.retentionRate * 100))%", color: DS.ColorToken.primary)
+                            metricLabel(title: "Churn Risk", value: "\(vm.churnRiskCount) clients", color: DS.ColorToken.warning)
                         }
-                        Spacer()
                     }
                 }
             }
         }
     }
-
-    // MARK: - Top Clients
 
     private func topClientsCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                HStack {
-                    Text("Top Clients").font(.headline)
-                    Spacer()
-                    Text("All time")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Top Clients").font(.headline)
 
                 if vm.topClients.isEmpty {
-                    emptyState(icon: "person.crop.circle", message: "Complete a paid visit to see top clients")
+                    emptyState(icon: "person.crop.circle", message: "No client data yet")
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.topClients.enumerated()), id: \.element.id) { index, client in
-                            HStack(spacing: 10) {
-                                rankBadge(index + 1)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(client.name)
-                                        .font(.subheadline.weight(.semibold))
-                                        .lineLimit(1)
-                                    Text("\(client.visitCount) visit\(client.visitCount == 1 ? "" : "s")")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
+                            HStack {
+                                Text("\(index + 1)").font(.caption2.bold()).frame(width: 20)
+                                Text(client.name).font(.subheadline.weight(.medium))
                                 Spacer()
-                                Text(client.totalSpent.moneyString)
-                                    .font(.subheadline.weight(.bold))
+                                Text(client.totalSpent.moneyString).font(.subheadline.bold())
                             }
                             .padding(.vertical, 8)
-
-                            if index < vm.topClients.count - 1 {
-                                Divider()
-                            }
+                            if index < vm.topClients.count - 1 { Divider() }
                         }
                     }
                 }
@@ -466,75 +383,110 @@ struct InsightsView: View {
         }
     }
 
-    // MARK: - Report toolbar button
+    private func metricLabel(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+            Text(value).font(.headline).foregroundStyle(color)
+        }
+    }
 
-    @ViewBuilder
     private var reportButton: some View {
-        if let vm = viewModel, vm.hasLoadedOnce {
+        Group {
             if let pdfData = reportPDFData {
-                ShareLink(
-                    item: ReportDocument(
-                        pdfData: pdfData,
-                        filename: "Pawtrackr_Report_\(Date().formatted(.dateTime.month().year())).pdf"
-                    ),
-                    preview: SharePreview("Monthly Report", image: Image(systemName: "doc.pdf"))
-                ) {
-                    Label("Export Report", systemImage: "doc.badge.arrow.up")
+                let doc = ReportDocument(pdfData: pdfData, filename: "Report.pdf")
+                ShareLink(item: doc, preview: SharePreview("Report", image: Image(systemName: "doc.pdf"))) {
+                    Label("Export", systemImage: "doc.badge.arrow.up")
                 }
-                .accessibilityIdentifier("insights.shareReport")
             } else {
                 Button {
-                    guard !isPreparingReport else { return }
                     isPreparingReport = true
                     Task {
-                        let summary = await vm.generateReportSummary()
-                        let data = await BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
-                        reportPDFData = data
+                        if let vm = viewModel {
+                            let summary = await vm.generateReportSummary()
+                            reportPDFData = await BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
+                        }
                         isPreparingReport = false
                     }
                 } label: {
-                    if isPreparingReport {
-                        ProgressView()
-                    } else {
-                        Label("Export Report", systemImage: "doc.badge.arrow.up")
-                    }
+                    if isPreparingReport { ProgressView() } else { Label("Export", systemImage: "doc.badge.arrow.up") }
                 }
                 .disabled(isPreparingReport)
-                .accessibilityIdentifier("insights.exportReport")
             }
         }
     }
 
-    // MARK: - Shared helpers
-
     @ViewBuilder
     private func emptyState(icon: String, message: String) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 28))
-                .foregroundStyle(.secondary.opacity(0.35))
-            Text(message)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 8) {
+            Image(systemName: icon).font(.title).foregroundStyle(.secondary.opacity(0.3))
+            Text(message).font(.caption).foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 110)
+        .frame(maxWidth: .infinity).frame(height: 120)
     }
 
-    private func rankBadge(_ rank: Int) -> some View {
-        let bg: Color = switch rank {
-        case 1:  Color(red: 1.0,  green: 0.78, blue: 0.0)
-        case 2:  Color(white: 0.70)
-        case 3:  Color(red: 0.80, green: 0.50, blue: 0.20)
-        default: Color.secondary.opacity(0.12)
-        }
-        let fg: Color = rank <= 3 ? .white : .secondary
+    // MARK: - Skeleton / Loading
 
-        return Text("\(rank)")
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(fg)
-            .frame(width: 24, height: 24)
-            .background(bg, in: Circle())
+    private var loadingContent: some View {
+        ScrollView {
+            VStack(spacing: DS.Spacing.xl) {
+                HStack(spacing: DS.Spacing.sm) {
+                    ForEach(0..<3) { _ in SkeletonRect().frame(height: 90) }
+                }
+                
+                // Chart Skeletons
+                VStack(alignment: .leading, spacing: 12) {
+                    SkeletonRect().frame(width: 150, height: 20)
+                    SkeletonChart(type: .bar).frame(height: 160)
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    SkeletonRect().frame(width: 180, height: 20)
+                    SkeletonChart(type: .line).frame(height: 160)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    SkeletonRect().frame(width: 140, height: 20)
+                    SkeletonChart(type: .pie).frame(height: 160)
+                }
+            }
+            .padding(DS.Spacing.lg)
+        }
+    }
+}
+
+enum SkeletonChartType { case bar, line, pie }
+
+struct SkeletonChart: View {
+    let type: SkeletonChartType
+    
+    var body: some View {
+        Card {
+            HStack(alignment: .bottom, spacing: 8) {
+                if type == .bar {
+                    ForEach(0..<10) { i in
+                        SkeletonRect()
+                            .frame(height: CGFloat.random(in: 40...120))
+                    }
+                } else if type == .line {
+                    ZStack {
+                        SkeletonRect().opacity(0.1)
+                        Path { path in
+                            path.move(to: CGPoint(x: 0, y: 100))
+                            path.addLine(to: CGPoint(x: 50, y: 40))
+                            path.addLine(to: CGPoint(x: 100, y: 80))
+                            path.addLine(to: CGPoint(x: 150, y: 20))
+                            path.addLine(to: CGPoint(x: 200, y: 60))
+                        }
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 3)
+                    }
+                } else {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.1), lineWidth: 20)
+                        .frame(width: 100, height: 100)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(10)
+        }
     }
 }

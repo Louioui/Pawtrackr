@@ -29,6 +29,18 @@ final class PetHistoryViewModel {
         case thisWeek = "This Week"
         case thisMonth = "This Month"
         var id: String { rawValue }
+
+        /// Localized label shown in the Picker. The `rawValue` strings are
+        /// kept stable so existing call sites (e.g. analytics, persistence)
+        /// don't break, but UI now goes through this accessor.
+        var displayName: String {
+            switch self {
+            case .all:       return NSLocalizedString("pet_history.scope.all",        value: "All",        comment: "")
+            case .today:     return NSLocalizedString("pet_history.scope.today",      value: "Today",      comment: "")
+            case .thisWeek:  return NSLocalizedString("pet_history.scope.this_week",  value: "This Week",  comment: "")
+            case .thisMonth: return NSLocalizedString("pet_history.scope.this_month", value: "This Month", comment: "")
+            }
+        }
     }
 
     // MARK: - Inputs / Environment
@@ -39,7 +51,7 @@ final class PetHistoryViewModel {
     var scope: Scope = .thisMonth {
         didSet {
             currentLimit = pageSize
-            Task { await refresh() }
+            scheduleRefresh()
         }
     }
     var searchText: String = "" { didSet { applyFiltersAndKPIs() } }
@@ -64,6 +76,7 @@ final class PetHistoryViewModel {
     private let pageSize = 100
     private var currentLimit = 100
     private var refreshGeneration: UInt64 = 0
+    private var refreshTask: Task<Void, Never>?
     private var snapshots: [PetHistoryVisitSnapshot] = []
     private var filteredSnapshots: [PetHistoryVisitSnapshot] = []
     private var visitCompleteObserver: NotificationObserverToken?
@@ -78,7 +91,9 @@ final class PetHistoryViewModel {
         ) { [weak self] notification in
             guard let self else { return }
             if let completedPetID = notification.petID, completedPetID != petID { return }
-            Task { await self.refresh() }
+            Task { [weak self] in
+                await self?.refresh()
+            }
         }
         visitCompleteObserver = NotificationObserverToken(token)
     }
@@ -113,7 +128,7 @@ final class PetHistoryViewModel {
     func loadMore() {
         guard canLoadMore, !isLoading else { return }
         currentLimit += pageSize
-        Task { await refresh() }
+        scheduleRefresh()
     }
 
     func exportCSV() -> Data {
@@ -145,6 +160,13 @@ final class PetHistoryViewModel {
     private func nextRefreshGeneration() -> UInt64 {
         refreshGeneration &+= 1
         return refreshGeneration
+    }
+
+    private func scheduleRefresh() {
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            await self?.refresh()
+        }
     }
 
     private func fetchVisitSnapshots() async throws -> (rows: [PetHistoryVisitSnapshot], hasMore: Bool) {

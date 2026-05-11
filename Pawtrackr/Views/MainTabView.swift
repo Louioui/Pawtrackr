@@ -5,10 +5,11 @@ import SwiftUI
 struct MainTabView: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(AuthenticationViewModel.self) private var authViewModel
+    @Namespace var sharedNamespace
 
     var body: some View {
         TabView {
-            ClientsView()
+            ClientsView(namespace: sharedNamespace)
                 .tabItem {
                     Label("Clients", systemImage: "person.3.fill")
                 }

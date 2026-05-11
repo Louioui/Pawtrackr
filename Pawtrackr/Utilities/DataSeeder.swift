@@ -1,5 +1,8 @@
 import Foundation
 import SwiftData
+import OSLog
+
+private let dataSeederLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "DataSeeder")
 
 @MainActor
 class DataSeeder {
@@ -67,11 +70,10 @@ class DataSeeder {
             // Save changes if any were made
             if context.hasChanges {
                 try context.save()
-                print("Successfully synchronized services.")
+                dataSeederLog.info("Synchronized service catalog.")
             }
         } catch {
-            // Handle the error appropriately
-            print("Failed to synchronize services: \(error)")
+            dataSeederLog.error("Failed to synchronize services: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

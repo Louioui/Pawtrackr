@@ -6,6 +6,8 @@
 import Foundation
 import SwiftData
 import OSLog
+import Combine
+import SwiftUI
 
 private let dashboardLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Dashboard")
 
@@ -15,13 +17,17 @@ import UIKit
 import AppKit
 #endif
 
-// Converted from ObservableObject/@Published to @Observable so that
-// @State var vm in DashboardView correctly observes property changes.
 @Observable
 @MainActor
 final class DashboardViewModel {
 
-    struct KPI {
+    enum State: Equatable {
+        case loading
+        case loaded
+        case error(String)
+    }
+
+    struct KPI: Sendable {
         var appointmentsToday: Int = 0
         var inProgressCount: Int = 0
         var revenueToday: Decimal = .zero
@@ -39,7 +45,7 @@ final class DashboardViewModel {
         }
     }
 
-    struct RevenuePoint: Identifiable {
+    struct RevenuePoint: Identifiable, Sendable {
         let id = UUID()
         let date: Date
         let amount: Decimal
@@ -55,13 +61,14 @@ final class DashboardViewModel {
         #endif
     }
 
-    struct ChecklistItem: Identifiable {
+    struct ChecklistItem: Identifiable, Sendable {
         let id = UUID()
         let title: String
         let isCompleted: Bool
     }
 
     // MARK: - Observable state
+    var state: State = .loading
     var kpi = KPI()
     var activeVisits: [Visit] = []
     var upcomingAppointments: [Appointment] = []
@@ -70,11 +77,13 @@ final class DashboardViewModel {
     var revenueSeries: [RevenuePoint] = []
     var gallery: [GalleryItem] = []
     var checklist: [ChecklistItem] = []
+    var smartSuggestions: [SmartSuggestion] = []
     var appError: AppError? = nil
 
     // MARK: - Private
     private var isRefreshing = false
     private let repository: DashboardRepositoryProtocol
+    private let predictiveActor: PredictiveSchedulingActor
     private let revenueWindowDays = 7
     private let galleryWindowDays = 14
     private let recentClientLimit = 5
@@ -82,49 +91,65 @@ final class DashboardViewModel {
 
     private var dataStore: DataStoreService
     private var eventBus: GlobalEventBus
+    private var observers: [AnyCancellable] = []
     private var observationTask: Task<Void, Never>?
 
-    init(dataStore: DataStoreService, eventBus: GlobalEventBus) {
+    init(dataStore: DataStoreService, eventBus: GlobalEventBus, repository: DashboardRepositoryProtocol? = nil) {
         self.dataStore = dataStore
         self.eventBus = eventBus
-        self.repository = DashboardRepository(modelContainer: dataStore.container)
+        self.repository = repository ?? DashboardRepository(modelContainer: dataStore.container)
+        self.predictiveActor = PredictiveSchedulingActor(modelContainer: dataStore.container)
 
-        // Use [weak self] so the for-await loop does not retain the VM.
-        // The eventBus stream never terminates on its own; the loop exits
-        // naturally when self deallocates and the next event arrives.
-        self.observationTask = Task { [weak self] in
-            // Listen to EventBus for checkout and explicit refreshes
-            let streamTask = Task { [weak self] in
-                for await event in eventBus.stream {
-                    guard let self else { return }
-                    switch event {
-                    case .checkoutCompleted(_), .refreshRequired:
-                        await self.refresh()
-                    default:
-                        break
-                    }
+        setupObservers()
+        
+        Task { [weak self] in await self?.refresh() }
+    }
+
+    deinit {
+        // Cannot touch MainActor-isolated `observationTask` from a nonisolated
+        // deinit. The task uses `[weak self]` and reacquires self per iteration
+        // (see setupObservers), so once the VM is released the next yielded
+        // event causes the task to return on its own. The Task object lingers
+        // briefly but holds no strong reference to self.
+    }
+
+    private func setupObservers() {
+        // EventBus Stream
+        // Capture the stream outside the Task closure so we don't hold `self`
+        // strongly across the for-await suspension. The previous pattern
+        // (`guard let self` outside the loop) created a retain cycle: the
+        // suspended task kept `self` alive, so the VM never deallocated even
+        // after the dashboard was dismissed. Now `self` is reacquired weakly
+        // on every iteration.
+        let stream = eventBus.stream
+        observationTask = Task { [weak self] in
+            for await event in stream {
+                guard let self else { return }
+                switch event {
+                case .checkoutCompleted(_), .refreshRequired:
+                    await self.refresh()
+                default:
+                    break
                 }
             }
-
-            // Listen to NotificationCenter for legacy/repository-direct events
-            let center = NotificationCenter.default
-            let notifications = [
-                Notification.Name.clientDidCreate,
-                Notification.Name.visitDidStart,
-                Notification.Name.visitDidComplete,
-                Notification.Name.serviceDidUpdate
-            ]
-
-            for name in notifications {
-                center.addObserver(forName: name, object: nil, queue: .main) { _ in
-                    Task { [weak self] in await self?.refresh() }
-                }
-            }
-            
-            await streamTask.value
         }
 
-        Task { [weak self] in await self?.refresh() }
+        // NotificationCenter Observers
+        let center = NotificationCenter.default
+        let notifications = [
+            Notification.Name.clientDidCreate,
+            Notification.Name.visitDidStart,
+            Notification.Name.visitDidComplete,
+            Notification.Name.serviceDidUpdate
+        ]
+
+        for name in notifications {
+            center.publisher(for: name)
+                .sink { [weak self] _ in
+                    Task { [weak self] in await self?.refresh() }
+                }
+                .store(in: &observers)
+        }
     }
 
     // MARK: - Public
@@ -136,37 +161,49 @@ final class DashboardViewModel {
 
         appError = nil
 
-        async let kpis:    () = fetchKPIs()
-        async let active:  () = fetchActiveVisits()
-        async let upcoming:() = fetchUpcomingAppointments()
-        async let clients: () = fetchRecentClients()
-        async let overdue: () = fetchOverduePets()
-        async let revenue: () = buildRevenueSeries(days: revenueWindowDays)
-        async let gallery: () = buildGallery(days: galleryWindowDays)
-        async let checklist: () = fetchChecklistStatus()
+        // If it's the first load, keep .loading state.
+        // If it's a pull-to-refresh, we stay in .loaded but updates happen.
 
-        _ = await [kpis, active, upcoming, clients, overdue, revenue, gallery, checklist]
+        await PerformanceMonitor.measureAsyncNoThrow(label: "Dashboard.refresh") {
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await self.fetchKPIs() }
+                group.addTask { await self.fetchActiveVisits() }
+                group.addTask { await self.fetchUpcomingAppointments() }
+                group.addTask { await self.fetchRecentClients() }
+                group.addTask { await self.fetchOverduePets() }
+                group.addTask { await self.buildRevenueSeries(days: self.revenueWindowDays) }
+                group.addTask { await self.buildGallery(days: self.galleryWindowDays) }
+                group.addTask { await self.fetchChecklistStatus() }
+                group.addTask { await self.fetchSmartSuggestions() }
+            }
+        }
+
+        if case .loading = state {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                state = .loaded
+            }
+        }
     }
 
     private func fetchChecklistStatus() async {
-        let context = repository.modelContext
-        
+        // Since we are on @MainActor, we use a background task for SwiftData fetches
+        // that aren't yet in the repository.
+        let container = dataStore.container
         do {
-            // 1. Branding: Covered by BusinessConfig
-            let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
-            let isBrandingComplete = configs.first?.isSetupComplete ?? false
-            
-            // 2. Catalog: Any service with price > 0
-            let services = try context.fetch(FetchDescriptor<Service>())
-            let isCatalogConfigured = services.contains { ($0.basePrice ?? 0) > 0 }
-            
-            // 3. First Client
-            let clientCount = try context.fetchCount(FetchDescriptor<Client>())
-            let hasClient = clientCount > 0
-            
-            // 4. First Visit
-            let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
-            let hasVisit = visitCount > 0
+            let (isBrandingComplete, isCatalogConfigured, hasClient, hasVisit) = try await Task.detached {
+                let context = ModelContext(container)
+                
+                let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
+                let branding = configs.first?.isSetupComplete ?? false
+                
+                let services = try context.fetch(FetchDescriptor<Service>())
+                let catalog = services.contains { ($0.basePrice ?? 0) > 0 }
+                
+                let clientCount = try context.fetchCount(FetchDescriptor<Client>())
+                let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
+                
+                return (branding, catalog, clientCount > 0, visitCount > 0)
+            }.value
             
             checklist = [
                 ChecklistItem(title: NSLocalizedString("checklist.branding", value: "Add Business Branding", comment: ""), isCompleted: isBrandingComplete),
@@ -181,7 +218,7 @@ final class DashboardViewModel {
 
     func checkInFromAppointment(_ appointment: Appointment) async {
         do {
-            let visitRepo = VisitRepository(modelContainer: repository.modelContext.container, eventBus: eventBus)
+            let visitRepo = VisitRepository(modelContainer: dataStore.container, eventBus: eventBus)
             _ = try await visitRepo.checkIn(from: appointment)
             await refresh()
         } catch {
@@ -193,7 +230,7 @@ final class DashboardViewModel {
         guard pet.activeVisit == nil else { return }
 
         do {
-            let visitRepo = VisitRepository(modelContainer: repository.modelContext.container, eventBus: eventBus)
+            let visitRepo = VisitRepository(modelContainer: dataStore.container, eventBus: eventBus)
             _ = try await visitRepo.checkIn(pet: pet, date: Date.now)
             await refresh()
         } catch {
@@ -205,7 +242,8 @@ final class DashboardViewModel {
 
     private func fetchUpcomingAppointments() async {
         do {
-            upcomingAppointments = try await repository.fetchUpcomingAppointments(limit: 5)
+            let ids = try await repository.fetchUpcomingAppointments(limit: 5)
+            upcomingAppointments = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Appointment }
         } catch {
             setDashboardError(error, source: #function)
             upcomingAppointments = []
@@ -214,7 +252,8 @@ final class DashboardViewModel {
 
     private func fetchOverduePets() async {
         do {
-            overduePets = try await repository.fetchOverduePets(limit: overduePetLimit)
+            let ids = try await repository.fetchOverduePets(limit: overduePetLimit)
+            overduePets = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Pet }
         } catch {
             setDashboardError(error, source: #function)
             overduePets = []
@@ -222,13 +261,7 @@ final class DashboardViewModel {
     }
 
     private func setDashboardError(_ error: Error, source: String = #function) {
-        // Log the underlying error so we can identify which fetch failed
-        // (the alert message from SwiftData is unhelpful by itself).
         dashboardLog.error("[\(source)] \(String(describing: error))")
-        // Don't surface partial fetch failures as a blocking alert — sections
-        // that fail simply render empty. We still log so issues are visible.
-        // If you want to re-enable the alert for a specific source, uncomment:
-        // appError = .database("\(source): \(error.localizedDescription)")
     }
 
     private func fetchKPIs() async {
@@ -249,7 +282,8 @@ final class DashboardViewModel {
 
     private func fetchActiveVisits() async {
         do {
-            activeVisits = try await repository.fetchActiveVisits()
+            let ids = try await repository.fetchActiveVisits()
+            activeVisits = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Visit }
         } catch {
             setDashboardError(error, source: #function)
             activeVisits = []
@@ -258,7 +292,8 @@ final class DashboardViewModel {
 
     private func fetchRecentClients() async {
         do {
-            recentClients = try await repository.fetchRecentClients(limit: recentClientLimit)
+            let ids = try await repository.fetchRecentClients(limit: recentClientLimit)
+            recentClients = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Client }
         } catch {
             setDashboardError(error, source: #function)
             recentClients = []
@@ -297,6 +332,14 @@ final class DashboardViewModel {
         } catch {
             setDashboardError(error, source: #function)
             gallery = []
+        }
+    }
+
+    private func fetchSmartSuggestions() async {
+        do {
+            smartSuggestions = try await predictiveActor.generateSuggestions()
+        } catch {
+            dashboardLog.error("fetchSmartSuggestions failed: \(error)")
         }
     }
 

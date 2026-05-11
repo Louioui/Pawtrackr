@@ -28,6 +28,7 @@ final class RecentHistoryViewModel {
     private var dataStore: DataStoreService
     private let eventBus: GlobalEventBus
     private var searchTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
     private var workSeq: UInt64 = 0
     private var observationTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
@@ -58,19 +59,18 @@ final class RecentHistoryViewModel {
         }
         Task { [weak self] in self?.fetchVisits() }
     }
-    // No explicit deinit — the [weak self] captures above let each loop exit
-    // naturally on the next yield when the VM deallocates.
     
     private func scheduleFetch() {
         searchTask?.cancel()
-        searchTask = Task {
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300)) // Debounce search
             guard !Task.isCancelled else { return }
-            self.fetchVisits()
+            self?.fetchVisits()
         }
     }
     
     func fetchVisits() {
+        refreshTask?.cancel()
         self.isLoading = true
         let currentSeq = { workSeq &+= 1; return workSeq }()
 
@@ -91,18 +91,19 @@ final class RecentHistoryViewModel {
             }
         }()
 
-        Task {
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
             do {
-                let snaps = try await fetchCompletedVisitSnapshots(start: start, end: end)
+                let snaps = try await self.fetchCompletedVisitSnapshots(start: start, end: end)
                 let result = await Task.detached(priority: .utility) {
                     RecentHistoryComputer.filterAndSummarize(snaps: snaps, query: trimmedQuery)
                 }.value
 
-                guard currentSeq == self.workSeq else { return }
+                guard currentSeq == self.workSeq, !Task.isCancelled else { return }
                 let filteredModelIDs = snaps
                     .filter { result.filteredIDs.contains($0.id) }
                     .map(\.modelID)
-                let mainContext = dataStore.container.mainContext
+                let mainContext = self.dataStore.container.mainContext
                 let filtered = filteredModelIDs.compactMap { mainContext.model(for: $0) as? Visit }
                 let calendar = Calendar.current
                 self.summaryVisitCount = filtered.count
@@ -189,7 +190,7 @@ final class RecentHistoryViewModel {
 }
 
 extension RecentHistoryViewModel {
-    enum Scope: String, CaseIterable, Identifiable {
+    enum Scope: String, CaseIterable, Identifiable, Hashable {
         case all = "All", today = "Today", thisWeek = "This Week"
         var id: String { rawValue }
     }

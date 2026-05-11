@@ -57,7 +57,9 @@ enum PawtrackrSchemaV1: VersionedSchema {
             CheckoutTransaction.self,
             EmergencyContact.self,
             BusinessConfig.self,
-            MessageTemplate.self
+            MessageTemplate.self,
+            InventoryItem.self,
+            InventoryTransaction.self
         ]
     }
 }

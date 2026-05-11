@@ -109,7 +109,7 @@ struct CheckoutView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: shouldShowOverlay)
+        .animation(Animations.responsiveSpringSoft, value: shouldShowOverlay)
         #if os(macOS)
         .onChange(of: viewModel.currentStep) { _, newStep in
             guard !isGoingBack else { return }
@@ -158,12 +158,23 @@ struct CheckoutView: View {
     @ViewBuilder
     private var stepContent: some View {
         ZStack {
-            if viewModel.currentStep == .services { servicesStep }
-            if viewModel.currentStep == .details { detailsStep }
-            if viewModel.currentStep == .payment { paymentStep }
-            if viewModel.currentStep == .review { reviewStep }
+            switch viewModel.currentStep {
+            case .services:
+                servicesStep
+                    .transition(Animations.slideIn)
+            case .details:
+                detailsStep
+                    .transition(Animations.slideIn)
+            case .payment:
+                paymentStep
+                    .transition(Animations.slideIn)
+            case .review:
+                reviewStep
+                    .transition(Animations.slideIn)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(Animations.interactiveSpring, value: viewModel.currentStep)
     }
 
     private var stepIndicator: some View {
@@ -179,7 +190,7 @@ struct CheckoutView: View {
                         .foregroundStyle(isActive ? Color.primary : Color.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: viewModel.currentStep)
+                .animation(Animations.responsiveSpring, value: viewModel.currentStep)
 
                 if step != .review {
                     Rectangle()
@@ -187,7 +198,7 @@ struct CheckoutView: View {
                         .frame(height: 2)
                         .frame(maxWidth: .infinity)
                         .offset(y: -12)
-                        .animation(.easeInOut(duration: 0.3), value: viewModel.currentStep)
+                        .animation(Animations.responsiveSpringSoft, value: viewModel.currentStep)
                 }
             }
         }
@@ -206,9 +217,7 @@ struct CheckoutView: View {
                 )
 
                 if viewModel.isLoadingServices {
-                    ProgressView("Loading services…")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 32)
+                    servicesLoadingSkeleton
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Main Services").font(.headline).padding(.horizontal)
@@ -349,10 +358,54 @@ struct CheckoutView: View {
                                     #endif
                                 }
 
-                            Text("Auto-filled from selected services. You can adjust the total before charging the client.")
+                            Text("Auto-filled from selected services.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Add Tip").font(.headline).padding(.horizontal)
+                        Card {
+                            VStack(spacing: 16) {
+                                HStack(spacing: 10) {
+                                    ForEach([15, 20, 25], id: \.self) { pct in
+                                        Button {
+                                            HapticManager.impact(.light)
+                                            viewModel.selectTip(percentage: pct)
+                                        } label: {
+                                            VStack(spacing: 4) {
+                                                Text("\(pct)%")
+                                                    .font(.subheadline.weight(.bold))
+                                                Text((viewModel.subtotalDecimal * Decimal(pct) / 100).moneyString)
+                                                    .font(.caption2)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(RoundedRectangle(cornerRadius: 10).fill(viewModel.selectedTipPercentage == pct ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05)))
+                                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(viewModel.selectedTipPercentage == pct ? Color.blue : Color.clear, lineWidth: 1.5))
+                                            .foregroundStyle(viewModel.selectedTipPercentage == pct ? .blue : .primary)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                
+                                HStack {
+                                    Text("Manual Tip").font(.subheadline).foregroundStyle(.secondary)
+                                    Spacer()
+                                    HStack(spacing: 4) {
+                                        Text("$").font(.subheadline.bold())
+                                        TextField("0.00", text: tipBinding)
+                                            #if os(iOS)
+                                            .keyboardType(.decimalPad)
+                                            #endif
+                                            .multilineTextAlignment(.trailing)
+                                            .font(.subheadline.bold())
+                                            .frame(width: 80)
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -532,7 +585,7 @@ struct CheckoutView: View {
                 }
                 .disabled(!viewModel.isAdvanceEnabled)
                 .accessibilityIdentifier("checkout.primaryButton")
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isAdvanceEnabled)
+                .animation(Animations.responsiveSpring, value: viewModel.isAdvanceEnabled)
                 #if os(macOS)
                 .keyboardShortcut(.return)
                 #endif
@@ -637,7 +690,7 @@ struct CheckoutView: View {
             .padding(40)
             .background(RoundedRectangle(cornerRadius: 25).fill(DS.ColorToken.surface))
             .shadow(radius: 20)
-            .animation(.spring(response: 0.4, dampingFraction: 0.75), value: viewModel.state == .confirmed)
+            .animation(Animations.responsiveSpring, value: viewModel.state == .confirmed)
         }
         .onChange(of: viewModel.state) { _, newValue in
             if newValue == .confirmed {
@@ -672,51 +725,70 @@ struct CheckoutView: View {
 
     @ViewBuilder
     private var confirmedContent: some View {
-        Image(systemName: "checkmark.circle.fill")
-            .font(.system(size: 60))
-            .foregroundStyle(.green)
-        Text(NSLocalizedString("checkout.complete_title", comment: "")).font(Font.title3.weight(.bold))
-        Text(viewModel.finalTotalString).font(Font.title.bold())
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.1))
+                    .frame(width: 100, height: 100)
+                    .scaleEffect(viewModel.state == .confirmed ? 1.0 : 0.5)
+                
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.green)
+                    .symbolEffect(.bounce, value: viewModel.state == .confirmed)
+            }
+            
+            VStack(spacing: 8) {
+                Text(NSLocalizedString("checkout.complete_title", comment: ""))
+                    .font(Font.title3.weight(.bold))
+                Text(viewModel.finalTotalString)
+                    .font(Font.system(size: 44, weight: .black, design: .rounded))
+                    .foregroundStyle(.blue)
+            }
 
-        if let pdfData = receiptPDFData {
-            ShareLink(
-                item: ReceiptDocument(
-                    pdfData: pdfData,
-                    filename: "Receipt_\(viewModel.pet.name).pdf"
-                ),
-                preview: SharePreview("Receipt", image: Image(systemName: "doc.pdf"))
-            ) {
-                Label(NSLocalizedString("receipt.share", comment: ""), systemImage: "square.and.arrow.up")
+            if let pdfData = receiptPDFData {
+                ShareLink(
+                    item: ReceiptDocument(
+                        pdfData: pdfData,
+                        filename: "Receipt_\(viewModel.pet.name).pdf"
+                    ),
+                    preview: SharePreview("Receipt", image: Image(systemName: "doc.pdf"))
+                ) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                        Text(NSLocalizedString("receipt.share", comment: ""))
+                    }
                     .font(.headline)
                     .padding()
                     .frame(maxWidth: .infinity)
-                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 16))
                     .foregroundStyle(.white)
-            }
-            .padding(.top, 10)
-        } else if receiptFailed {
-            Label("Receipt unavailable", systemImage: "exclamationmark.triangle")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.top, 10)
-        } else {
-            HStack(spacing: 8) {
-                ProgressView()
-                Text(NSLocalizedString("receipt.preparing", comment: "Preparing receipt…"))
+                }
+                .transition(.scale.combined(with: .opacity))
+            } else if receiptFailed {
+                Label("Receipt unavailable", systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text(NSLocalizedString("receipt.preparing", comment: "Preparing receipt…"))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .padding(.top, 10)
-        }
 
-        Button(NSLocalizedString("common.done", comment: "")) {
-            dismiss()
+            Button {
+                dismiss()
+            } label: {
+                Text(NSLocalizedString("common.done", comment: ""))
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("checkout.doneButton")
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("checkout.doneButton")
-        .font(.headline)
-        .foregroundStyle(.secondary)
-        .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -736,7 +808,7 @@ struct CheckoutView: View {
         let isSelected = viewModel.isServiceSelected(service)
         return Button {
             HapticManager.impact(.light)
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            withAnimation(Animations.responsiveSpring) {
                 viewModel.toggleService(service)
             }
         } label: {
@@ -754,14 +826,14 @@ struct CheckoutView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("checkout.service.\(service.name)")
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
+        .animation(Animations.responsiveSpring, value: isSelected)
     }
 
     func addOnRow(_ service: Service) -> some View {
         let isSelected = viewModel.isAddOnSelected(service)
         return Button {
             HapticManager.impact(.light)
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
+            withAnimation(Animations.responsiveSpring) {
                 viewModel.toggleAddOn(service)
             }
         } label: {
@@ -781,7 +853,55 @@ struct CheckoutView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("checkout.addOn.\(service.name)")
-        .animation(.spring(response: 0.3, dampingFraction: 0.65), value: isSelected)
+        .animation(Animations.responsiveSpring, value: isSelected)
+    }
+
+    private var servicesLoadingSkeleton: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Main Services")
+                    .font(.headline)
+                    .padding(.horizontal)
+                Card {
+                    FlowLayout(spacing: 10, rowSpacing: 10) {
+                        ForEach(0..<6, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.secondary.opacity(0.12))
+                                .frame(width: 110, height: 36)
+                        }
+                    }
+                    .redacted(reason: .placeholder)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Add-ons")
+                    .font(.headline)
+                    .padding(.horizontal)
+                VStack(spacing: 10) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Card {
+                            HStack(spacing: 12) {
+                                Circle()
+                                    .fill(Color.secondary.opacity(0.15))
+                                    .frame(width: 28, height: 28)
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.secondary.opacity(0.12))
+                                    .frame(width: 150, height: 12)
+                                Spacer()
+                                Circle()
+                                    .fill(Color.secondary.opacity(0.10))
+                                    .frame(width: 24, height: 24)
+                            }
+                            .redacted(reason: .placeholder)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 16)
     }
 
     func behaviorTag(for raw: String) -> some View {
@@ -809,7 +929,7 @@ struct CheckoutView: View {
         let isSelected = viewModel.selectedPaymentMethod == option.method
         return Button {
             HapticManager.impact(.medium)
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
+            withAnimation(Animations.responsiveSpring) {
                 viewModel.choosePayment(option.method)
             }
         } label: {
@@ -827,7 +947,7 @@ struct CheckoutView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("checkout.payment.\(option.method.rawValue)")
-        .animation(.spring(response: 0.3, dampingFraction: 0.65), value: isSelected)
+        .animation(Animations.responsiveSpring, value: isSelected)
     }
 
     func summaryRow(title: String, value: String, isTotal: Bool = false) -> some View {
@@ -865,6 +985,18 @@ struct CheckoutView: View {
                 let normalized = viewModel.selectedPaymentMethod.normalizeReference(newValue)
                 referenceEditorText = normalized
                 viewModel.setExternalReference(normalized)
+            }
+        )
+    }
+
+    var tipBinding: Binding<String> {
+        Binding(
+            get: { viewModel.tipAmountString },
+            set: { newValue in
+                let allowed = "0123456789" + (Locale.current.decimalSeparator ?? ".")
+                let filtered = newValue.filter { allowed.contains($0) }
+                viewModel.tipAmountString = filtered
+                viewModel.selectedTipPercentage = nil // Clear percentage if manual edit
             }
         )
     }

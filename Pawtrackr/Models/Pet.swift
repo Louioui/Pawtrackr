@@ -63,6 +63,15 @@ final class Pet {
     var activeVisit: Visit? {
         (visits ?? []).first { $0.endedAt == nil }
     }
+    
+    /// Returns a list of before/after photo pairs from completed visits.
+    @Transient
+    var transformationHistory: [(before: Data?, after: Data?, date: Date)] {
+        (visits ?? [])
+            .filter { $0.isCompleted }
+            .sorted { $0.startedAt > $1.startedAt }
+            .map { ($0.beforePhotoData, $0.afterThumbnailData ?? $0.afterPhotoData, $0.startedAt) }
+    }
 
     // MARK: - Business Intelligence (Lifetime Value & Trends)
     

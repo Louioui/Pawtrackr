@@ -22,6 +22,7 @@ final class SpotlightIndexer: @unchecked Sendable {
             let attributeSet = CSSearchableItemAttributeSet(itemContentType: UTType.item.identifier)
             attributeSet.title = title
             attributeSet.contentDescription = description
+            attributeSet.keywords = ["pet", "grooming", "animal", title]
             if let data = thumbnailData {
                 attributeSet.thumbnailData = data
             }
@@ -51,6 +52,7 @@ final class SpotlightIndexer: @unchecked Sendable {
             let attributeSet = CSSearchableItemAttributeSet(itemContentType: UTType.item.identifier)
             attributeSet.title = title
             attributeSet.contentDescription = description
+            attributeSet.keywords = ["client", "customer", "owner", title]
             let item = CSSearchableItem(uniqueIdentifier: identifier, domainIdentifier: domain, attributeSet: attributeSet)
             CSSearchableIndex.default().indexSearchableItems([item]) { error in
                 if let error = error {
@@ -77,8 +79,12 @@ final class SpotlightIndexer: @unchecked Sendable {
     
     nonisolated func reindexAll() {
         queue.async {
-            CSSearchableIndex.default().deleteAllSearchableItems(completionHandler: nil)
-            // Re-indexing logic would ideally trigger here or be managed by a sync service.
+            CSSearchableIndex.default().deleteAllSearchableItems { error in
+                if let error = error {
+                    self.log.error("Failed to clear Spotlight index: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            // In a real app, you would then iterate and re-index all records here.
         }
     }
 }

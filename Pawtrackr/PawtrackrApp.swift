@@ -23,7 +23,7 @@ struct PawtrackrApp: App {
     let container: ModelContainer?
     private var scheduledTasks: ScheduledTasks?
     let dataStore: DataStoreService?
-    let router = AppRouter()
+    let router = NavigationRouter()
     let eventBus = GlobalEventBus()
     @State private var appSettings = AppSettings()
     @State private var authViewModel: AuthenticationViewModel

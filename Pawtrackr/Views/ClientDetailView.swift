@@ -79,12 +79,13 @@ struct ClientDetailView: View {
     @State private var showCommunication = false
 
     @Environment(NavigationRouter.self) private var router
-    @Namespace private var namespace
+    private var namespace: Namespace.ID
 
     // MARK: - Init
     private let client: Client
-    init(client: Client) {
+    init(client: Client, namespace: Namespace.ID) {
         self.client = client
+        self.namespace = namespace
     }
 
     // MARK: - Body
@@ -277,12 +278,13 @@ struct ClientDetailView: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    InitialsCircle(initials: clientInitials(client))
-                        .frame(width: 48, height: 48)
-                        .matchedGeometryEffect(id: client.id, in: namespace)
+                    AvatarView(.client(name: client.fullName), size: .lg)
+                        .matchedGeometryEffect(id: "avatar-\(client.id)", in: namespace)
+                    
                     VStack(alignment: .leading, spacing: 2) {
                         Text(client.fullName)
                             .font(.title3.weight(.semibold))
+                            .matchedGeometryEffect(id: "name-\(client.id)", in: namespace)
                         Text(String(format: NSLocalizedString("client_detail.client_since_fmt", comment: ""), Formatters.monthYear.string(from: client.createdAt)))
                             .font(.footnote)
                             .foregroundStyle(.secondary)

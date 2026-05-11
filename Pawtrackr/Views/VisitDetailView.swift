@@ -17,10 +17,16 @@ struct VisitDetailView: View {
     @Environment(\.modelContext) private var modelContext
     
     let visit: Visit
+    private let heroNamespace: Namespace.ID?
     @StateObject private var visitTimer = VisitTimer()
     @State private var showCheckout = false
     @State private var previewData: Data? = nil
     @State private var previewTitle: String = ""
+
+    init(visit: Visit, heroNamespace: Namespace.ID? = nil) {
+        self.visit = visit
+        self.heroNamespace = heroNamespace
+    }
 
     var body: some View {
         visitContent
@@ -123,37 +129,17 @@ struct VisitDetailView: View {
     private var header: some View {
         Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(visit.pet?.gender)), thickness: 4)) {
             HStack(spacing: 12) {
-                if let data = visit.pet?.photoData {
-#if canImport(UIKit)
-                    if let ui = ImageCache.shared.image(data: data, maxDimension: 128) {
-                        Image(uiImage: ui)
-                            .resizable().scaledToFill()
-                            .frame(width: 64, height: 64)
-                            .clipShape(Circle())
-                    } else {
-                        SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
-                    }
-#elseif canImport(AppKit)
-                    if let ns = NSImage(data: data) {
-                        Image(nsImage: ns)
-                            .resizable().scaledToFill()
-                            .frame(width: 64, height: 64)
-                            .clipShape(Circle())
-                    } else {
-                        SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
-                    }
-#else
-                    SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
-#endif
-                } else {
-                    SpeciesAndGenderIcons.badge(for: visit.pet?.species, gender: visit.pet?.gender, size: 64)
-                }
+                heroAvatar
                 VStack(alignment: .leading, spacing: 4) {
                     Text(visit.pet?.name ?? "Unknown")
                         .font(.title3.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Text(petSubtitle(visit.pet))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 Spacer()
                 if visit.isPaid {
@@ -188,6 +174,30 @@ struct VisitDetailView: View {
         guard let pet = pet else { return "" }
         if let breed = pet.breed, !breed.isEmpty { return "\(breed) • \(pet.species.displayName)" }
         return pet.species.displayName
+    }
+
+    @ViewBuilder
+    private var heroAvatar: some View {
+        let avatar = AvatarView(
+            .pet(
+                species: visit.pet?.species,
+                gender: visit.pet?.gender,
+                name: visit.pet?.name ?? "Unknown",
+                imageData: visit.pet?.photoData,
+                thumbnailData: visit.pet?.thumbnailData
+            ),
+            size: .lg
+        )
+
+        if let heroNamespace {
+            avatar.matchedGeometryEffect(id: heroID, in: heroNamespace)
+        } else {
+            avatar
+        }
+    }
+
+    private var heroID: String {
+        "visit-avatar-\(visit.uuid.uuidString)"
     }
     
     private var amountText: String? {
@@ -295,11 +305,16 @@ struct VisitDetailView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(item.displayName + (item.quantity > 1 ? " ×\(item.quantity)" : ""))
                         .font(.subheadline)
-                    Spacer()
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                    Spacer(minLength: 8)
                     Text(item.lineTotalString)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .layoutPriority(1)
                 }
             }
         }
@@ -353,6 +368,8 @@ struct VisitDetailView: View {
             Text(title)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Button {
                 if let data { previewData = data; previewTitle = title }
             } label: {
@@ -385,7 +402,14 @@ struct VisitDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
-                .frame(width: 180, height: 180)
+                // Fill available width and stay square. The previous fixed
+                // 180×180 frame plus 12pt spacing exceeded the usable width
+                // on iPhone SE (~288pt) once Card padding was applied,
+                // forcing the second box to clip or push off-screen. Going
+                // adaptive lets the boxes shrink together on small screens
+                // and grow together on iPad / Mac.
+                .frame(maxWidth: .infinity)
+                .aspectRatio(1, contentMode: .fit)
                 .accessibilityLabel(Text(String(format: NSLocalizedString("visit.photo_a11y_label_fmt", comment: ""), title)))
                 .accessibilityHint(Text(NSLocalizedString("visit.photo_a11y_hint", comment: "")))
             }

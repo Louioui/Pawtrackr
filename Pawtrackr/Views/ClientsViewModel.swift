@@ -26,34 +26,44 @@ final class ClientsViewModel {
     var appError: AppError? = nil
     
     // MARK: - Private Properties
+    private let modelContext: ModelContext
     private let repository: ClientRepositoryProtocol
     private var searchTask: Task<Void, Never>? = nil
     private var refreshTask: Task<Void, Never>? = nil
+    private var loadMoreTask: Task<Void, Never>? = nil
+    private var deleteTask: Task<Void, Never>? = nil
     private var cancellables: Set<AnyCancellable> = []
     private var pageSize: Int = 100
     private var fetchOffset: Int = 0
     
     // MARK: - Lifecycle
     init(modelContext: ModelContext, repository: ClientRepositoryProtocol? = nil) {
+        self.modelContext = modelContext
         self.repository = repository ?? ClientRepository(modelContainer: modelContext.container)
         fetchClients() // Initial fetch
-        
-        // Observe changes to the ModelContext to refresh client list
-        NotificationCenter.default.publisher(for: ModelContext.didSave)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.fetchClients() }
-            .store(in: &cancellables)
+
+        // Listen for specific events that change the client list rather than
+        // every ModelContext.didSave. The previous implementation refetched
+        // on every save anywhere in the app — including unrelated saves
+        // (visit photos, dashboard reloads, summary updates) — causing
+        // 5–10× redundant fetches per checkout.
+        let center = NotificationCenter.default
+        let names: [Notification.Name] = [.clientDidCreate, .visitDidComplete, .visitDidStart]
+        for name in names {
+            center.publisher(for: name)
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.fetchClients() }
+                .store(in: &cancellables)
+        }
     }
-    
-    deinit { /* Combine cancellables auto-cancel on deinit */ }
     
     // MARK: - Data Fetching
     private func scheduleFetch() {
         searchTask?.cancel()
-        searchTask = Task {
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(300)) // Debounce search
             guard !Task.isCancelled else { return }
-            self.fetchClients()
+            self?.fetchClients()
         }
     }
     
@@ -68,15 +78,15 @@ final class ClientsViewModel {
         refreshTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let inProgress = try await repository.fetchActiveClients(query: trimmedSearch)
+                let inProgressIDs = try await repository.fetchActiveClients(query: trimmedSearch)
                 guard !Task.isCancelled else { return }
 
-                let (page, hasMore) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: pageSize, offset: 0)
+                let (pageIDs, hasMore) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: pageSize, offset: 0)
                 guard !Task.isCancelled else { return }
 
-                inProgressClients = inProgress
-                otherClients = page
-                fetchOffset = page.count
+                inProgressClients = inProgressIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+                otherClients = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+                fetchOffset = otherClients.count
                 canLoadMore = hasMore
                 isLoadingMore = false
             } catch {
@@ -90,8 +100,10 @@ final class ClientsViewModel {
 
     func loadMore() {
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        Task {
-            await loadMoreOthers(query: trimmedSearch, resetOffset: false)
+        loadMoreTask?.cancel()
+        loadMoreTask = Task { [weak self] in
+            guard let self else { return }
+            await self.loadMoreOthers(query: trimmedSearch, resetOffset: false)
         }
     }
 
@@ -105,15 +117,16 @@ final class ClientsViewModel {
         }
 
         do {
-            let (page, hasMore) = try await repository.fetchInactiveClients(query: query, limit: pageSize, offset: fetchOffset)
+            let (pageIDs, hasMore) = try await repository.fetchInactiveClients(query: query, limit: pageSize, offset: fetchOffset)
+            let newPage = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
             
             if resetOffset {
-                otherClients = page
+                otherClients = newPage
             } else {
-                otherClients += page
+                otherClients += newPage
             }
 
-            fetchOffset += page.count
+            fetchOffset += newPage.count
             canLoadMore = hasMore
             isLoadingMore = false
         } catch {
@@ -124,12 +137,15 @@ final class ClientsViewModel {
     }
 
     func deleteClient(_ client: Client) {
-        Task {
+        let clientID = client.persistentModelID
+        deleteTask?.cancel()
+        deleteTask = Task { [weak self] in
+            guard let self else { return }
             do {
-                try await repository.deleteClient(client)
-                fetchClients() // Refresh list
+                try await repository.deleteClient(id: clientID)
+                self.fetchClients()
             } catch {
-                appError = .database(error.localizedDescription)
+                self.appError = .database(error.localizedDescription)
             }
         }
     }

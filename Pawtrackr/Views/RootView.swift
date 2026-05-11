@@ -19,17 +19,33 @@ struct RootView: View {
     @State private var didRunStartupMaintenance = false
     @State private var showFirstSyncGate = false
     @State private var bypassLockForCurrentSession = false
+    @State private var showPrivacyScreen = false
+    @State private var showWhatIsNew = false
 
     var body: some View {
-        Group {
-            if shouldBypassLockGate {
-                mainShell
-            } else {
-                PinLockGate(onUnlock: {
-                    authViewModel.signInAfterUnlock()
-                }) {
+        ZStack {
+            Group {
+                if shouldBypassLockGate {
                     mainShell
+                } else {
+                    PinLockGate(onUnlock: {
+                        authViewModel.signInAfterUnlock()
+                    }) {
+                        mainShell
+                    }
                 }
+            }
+            
+            if showPrivacyScreen {
+                PrivacyScreen()
+                    .transition(.opacity)
+                    .zIndex(100)
+            }
+        }
+        .sheet(isPresented: $showWhatIsNew) {
+            WhatIsNewView {
+                showWhatIsNew = false
+                UserDefaults.standard.set(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, forKey: "lastSeenVersion")
             }
         }
         .adaptiveCover(isPresented: $showOnboarding) {
@@ -41,6 +57,7 @@ struct RootView: View {
             .interactiveDismissDisabled(true)
         }
         .task {
+            evaluateWhatIsNew()
             // Show the first-sync gate exactly once: when iCloud is signed in
             // and the user has never seen a successful import yet. It auto-times
             // out after 30s so a stuck account never blocks the user.
@@ -52,9 +69,19 @@ struct RootView: View {
             switch phase {
             case .active:
                 TimeHub.shared.resume()
-            case .inactive, .background:
+                withAnimation {
+                    showPrivacyScreen = false
+                }
+            case .inactive:
+                // On iPad, inactive can mean the app is still visible (multitasking).
+                // Do not show the privacy screen yet.
+                break
+            case .background:
                 TimeHub.shared.pause()
                 bypassLockForCurrentSession = false
+                withAnimation {
+                    showPrivacyScreen = true
+                }
             @unknown default:
                 break
             }
@@ -91,6 +118,14 @@ struct RootView: View {
     private func updateFirstSyncGate(for accountState: CloudKitMonitor.AccountState) {
         guard accountState.isAvailable, !cloudKitMonitor.firstSyncCompleted else { return }
         showFirstSyncGate = true
+    }
+
+    private func evaluateWhatIsNew() {
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let lastSeenVersion = UserDefaults.standard.string(forKey: "lastSeenVersion")
+        if currentVersion != lastSeenVersion {
+            showWhatIsNew = true
+        }
     }
 
     private var canProceedPastFirstSync: Bool {

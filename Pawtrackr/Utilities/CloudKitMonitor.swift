@@ -136,7 +136,13 @@ final class CloudKitMonitor {
     /// Re-checks the iCloud account status. Safe to call repeatedly.
     func refreshAccountStatus() async {
         do {
-            let status = try await container.accountStatus()
+            let status = try await ResilienceCoordinator.run(
+                label: "CloudKit account status",
+                policy: .cloudKit,
+                classify: ResilienceCoordinator.cloudKitDisposition(for:)
+            ) { [self] in
+                try await self.container.accountStatus()
+            }
             await MainActor.run { self.applyAccountStatus(status) }
         } catch {
             log.error("Failed to fetch CKAccountStatus: \(error.localizedDescription, privacy: .public)")

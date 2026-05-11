@@ -18,14 +18,23 @@ class ClientsCoordinator: Coordinator {
     }
 
     func start() {
-        let clientsView = ClientsView()
-        navigationController.pushViewController(UIHostingController(rootView: clientsView), animated: false)
+        // Legacy coordinator doesn't support shared namespace transitions.
+        // Using @Namespace locally as a fallback.
+        struct DummyClientsView: View {
+            @Namespace var dummy
+            var body: some View { ClientsView(namespace: dummy) }
+        }
+        navigationController.pushViewController(UIHostingController(rootView: DummyClientsView()), animated: false)
     }
 
     @MainActor
-    func showClientDetail(client: Client, namespace: Namespace.ID) {
-        let clientDetailView = ClientDetailView(client: client)
-        navigationController.pushViewController(UIHostingController(rootView: clientDetailView), animated: true)
+    func showClientDetail(client: Client) {
+        struct DummyWrapper: View {
+            let client: Client
+            @Namespace var dummy
+            var body: some View { ClientDetailView(client: client, namespace: dummy) }
+        }
+        navigationController.pushViewController(UIHostingController(rootView: DummyWrapper(client: client)), animated: true)
     }
 
     func showVisitDetail(visit: Visit) {

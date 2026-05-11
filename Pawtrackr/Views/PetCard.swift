@@ -64,8 +64,8 @@ struct PetCard: View {
         HStack(alignment: .top, spacing: 12) {
             let avatar = AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData, thumbnailData: pet.thumbnailData), size: .md)
 
-            if let namespace = namespace {
-                avatar.matchedGeometryEffect(id: pet.id, in: namespace)
+            if let namespace {
+                avatar.matchedGeometryEffect(id: "pet-avatar-\(pet.id)", in: namespace)
             } else {
                 avatar
             }

@@ -2,7 +2,8 @@
 //  ClientRepository.swift
 //  Pawtrackr
 //
-//  Abstracts SwiftData operations for Clients to allow for better testability and decoupling.
+//  Elite background actor for Client data operations.
+//  Ensures that large dataset searches and filtering never hitch the main thread.
 //
 
 import Foundation
@@ -11,144 +12,126 @@ import OSLog
 
 private let clientRepoLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ClientRepository")
 
-@MainActor
-protocol ClientRepositoryProtocol: Sendable {
-    func fetchClients(query: String, limit: Int, offset: Int) async throws -> [Client]
-    func fetchActiveClients(query: String) async throws -> [Client]
-    func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([Client], Bool)
-    func findClient(byPhone phone: String) async throws -> Client?
-    func saveClient(_ client: Client) async throws
-    func deleteClient(_ client: Client) async throws
+struct NewPetData: Sendable {
+    let name: String
+    let species: Species
+    let gender: PetGender
+    let breed: String?
+    let color: String?
+    let photoData: Data?
+    let health: String?
+    let behaviorTags: [String]
+    let birthdate: Date?
 }
 
-@MainActor
-final class ClientRepository: ClientRepositoryProtocol {
-    private let modelContext: ModelContext
+struct NewContactData: Sendable {
+    let name: String
+    let relation: String?
+    let phone: String
+}
 
-    init(modelContainer: ModelContainer) {
-        self.modelContext = modelContainer.mainContext
-    }
+protocol ClientRepositoryProtocol: Sendable {
+    func fetchClients(query: String, limit: Int, offset: Int) async throws -> [PersistentIdentifier]
+    func fetchActiveClients(query: String) async throws -> [PersistentIdentifier]
+    func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([PersistentIdentifier], Bool)
+    func findClient(byPhone phone: String) async throws -> PersistentIdentifier?
+    func createClient(
+        firstName: String,
+        lastName: String,
+        phone: String,
+        email: String,
+        address: String,
+        pets: [NewPetData],
+        contacts: [NewContactData]
+    ) async throws -> PersistentIdentifier
+    func saveClient(id: PersistentIdentifier, firstName: String, lastName: String, phone: String, email: String) async throws
+    func deleteClient(id: PersistentIdentifier) async throws
+}
 
-    func fetchClients(query: String, limit: Int, offset: Int) async throws -> [Client] {
+@ModelActor
+final actor ClientRepository: ClientRepositoryProtocol {
+
+    func fetchClients(query: String, limit: Int, offset: Int) async throws -> [PersistentIdentifier] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-
         var descriptor = FetchDescriptor<Client>(
             sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
         )
 
-        do {
-            if trimmed.isEmpty {
-                descriptor.fetchLimit = limit
-                descriptor.fetchOffset = offset
-                return try modelContext.fetch(descriptor)
-            }
-
-            // SwiftData's #Predicate compiler does not reliably translate
-            // localizedStandardContains or flatMap-over-optional patterns,
-            // so the search runs in memory. The list is small enough.
+        if trimmed.isEmpty {
+            descriptor.fetchLimit = limit
+            descriptor.fetchOffset = offset
             let all = try modelContext.fetch(descriptor)
-            let filtered = all.filter { Self.matches(client: $0, query: trimmed) }
-            let pageStart = min(offset, filtered.count)
-            let pageEnd = min(offset + limit, filtered.count)
-            return Array(filtered[pageStart..<pageEnd])
-        } catch {
-            clientRepoLog.error("fetchClients failed: \(String(describing: error))")
-            throw error
+            return all.map { $0.persistentModelID }
         }
+
+        descriptor.fetchLimit = 5000
+        let all = try modelContext.fetch(descriptor)
+        let filtered = all.filter { Self.matches(client: $0, query: trimmed) }
+        
+        let pageStart = min(offset, filtered.count)
+        let pageEnd = min(offset + limit, filtered.count)
+        return filtered[pageStart..<pageEnd].map { $0.persistentModelID }
     }
 
-    /// Cached active-client IDs. Active visits are bounded by working hours; this
-    /// avoids re-walking the full Visit→Pet→Owner chain on every list refresh.
     private func activeClientIDs() throws -> Set<PersistentIdentifier> {
-        // Bounded fetch — even a stuck/abandoned active-visit dataset will not
-        // grow past this cap, so the menubar/list never freezes on cold start.
         var activeVisitDesc = FetchDescriptor<Visit>(
             predicate: #Predicate { $0.endedAt == nil }
         )
         activeVisitDesc.fetchLimit = 500
-        // Prefetch the pet relationship so we don't fault it per row. SwiftData's
-        // prefetch graph can't traverse optional-chained key paths like
-        // `\Visit.pet?.owner` — it crashes with _assertionFailure deep in the
-        // framework — so we only prefetch the first hop and accept the per-row
-        // owner fault. Bounded to 500 rows above, so the worst case is small.
         activeVisitDesc.relationshipKeyPathsForPrefetching = [\Visit.pet]
         let activeVisits = try modelContext.fetch(activeVisitDesc)
         return Set(activeVisits.compactMap { $0.pet?.owner?.persistentModelID })
     }
 
-    func fetchActiveClients(query: String) async throws -> [Client] {
+    func fetchActiveClients(query: String) async throws -> [PersistentIdentifier] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activeIDs = try activeClientIDs()
+        if activeIDs.isEmpty { return [] }
 
-        do {
-            let activeIDs = try activeClientIDs()
-            if activeIDs.isEmpty { return [] }
-
-            // Bounded by activeIDs.count, which is small (active visits, not all clients).
-            // Sorted in-memory by most recent visit — sortKey can't go in #Predicate.
-            let activeArray = Array(activeIDs)
-            var results: [Client] = []
-            results.reserveCapacity(activeArray.count)
-            for id in activeArray {
-                if let client = modelContext.model(for: id) as? Client {
-                    results.append(client)
-                }
+        var results: [Client] = []
+        for id in activeIDs {
+            if let client = modelContext.model(for: id) as? Client {
+                results.append(client)
             }
-
-            if !trimmed.isEmpty {
-                results = results.filter { Self.matches(client: $0, query: trimmed) }
-            }
-            return results.sorted { $0.sortKeyMostRecentVisit > $1.sortKeyMostRecentVisit }
-        } catch {
-            clientRepoLog.error("fetchActiveClients failed: \(String(describing: error))")
-            throw error
         }
+
+        if !trimmed.isEmpty {
+            results = results.filter { Self.matches(client: $0, query: trimmed) }
+        }
+        let sorted = results.sorted { $0.sortKeyMostRecentVisit > $1.sortKeyMostRecentVisit }
+        return sorted.map { $0.persistentModelID }
     }
 
-    func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([Client], Bool) {
+    func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([PersistentIdentifier], Bool) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activeIDs = try activeClientIDs()
 
-        do {
-            let activeIDs = try activeClientIDs()
-
-            // Free-text search has to fall back to the slow path (in-memory match
-            // because SwiftData #Predicate can't express the field-prefix syntax).
-            // Otherwise we can paginate at the SwiftData level and avoid loading
-            // the whole client table into memory.
-            if trimmed.isEmpty {
-                // Fast path: page directly from SwiftData, then drop active rows.
-                // We over-fetch by activeIDs.count to keep the page exactly `limit`
-                // after dropping actives.
-                var descriptor = FetchDescriptor<Client>(
-                    sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
-                )
-                descriptor.fetchOffset = offset
-                descriptor.fetchLimit = limit + activeIDs.count + 1
-                let raw = try modelContext.fetch(descriptor)
-                let filtered = raw.filter { !activeIDs.contains($0.persistentModelID) }
-                let page = Array(filtered.prefix(limit))
-                let canLoadMore = filtered.count > limit || raw.count == descriptor.fetchLimit
-                return (page, canLoadMore)
-            }
-
-            // Slow path (search): we still need every match to apply the in-memory
-            // matcher. Cap defensively so an abusive query can't load 100k rows.
-            var allDescriptor = FetchDescriptor<Client>(
+        if trimmed.isEmpty {
+            var descriptor = FetchDescriptor<Client>(
                 sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
             )
-            allDescriptor.fetchLimit = 5000
-            let inactive = try modelContext.fetch(allDescriptor)
-                .filter { !activeIDs.contains($0.persistentModelID) }
-                .filter { Self.matches(client: $0, query: trimmed) }
-
-            let pageStart = min(offset, inactive.count)
-            let pageEnd = min(offset + limit, inactive.count)
-            let page = Array(inactive[pageStart..<pageEnd])
-            let canLoadMore = pageEnd < inactive.count
-            return (page, canLoadMore)
-        } catch {
-            clientRepoLog.error("fetchInactiveClients failed: \(String(describing: error))")
-            throw error
+            descriptor.fetchOffset = offset
+            descriptor.fetchLimit = limit + activeIDs.count + 1
+            let raw = try modelContext.fetch(descriptor)
+            let filtered = raw.filter { !activeIDs.contains($0.persistentModelID) }
+            let page = Array(filtered.prefix(limit))
+            let canLoadMore = filtered.count > limit || raw.count == descriptor.fetchLimit
+            return (page.map { $0.persistentModelID }, canLoadMore)
         }
+
+        var allDescriptor = FetchDescriptor<Client>(
+            sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
+        )
+        allDescriptor.fetchLimit = 5000
+        let inactive = try modelContext.fetch(allDescriptor)
+            .filter { !activeIDs.contains($0.persistentModelID) }
+            .filter { Self.matches(client: $0, query: trimmed) }
+
+        let pageStart = min(offset, inactive.count)
+        let pageEnd = min(offset + limit, inactive.count)
+        let page = inactive[pageStart..<pageEnd]
+        let canLoadMore = pageEnd < inactive.count
+        return (page.map { $0.persistentModelID }, canLoadMore)
     }
 
     private static func matches(client: Client, query: String) -> Bool {
@@ -179,17 +162,58 @@ final class ClientRepository: ClientRepositoryProtocol {
         return SearchEngine.matches(query, in: Array(fieldMap.values))
     }
 
-    func findClient(byPhone phone: String) async throws -> Client? {
+    func findClient(byPhone phone: String) async throws -> PersistentIdentifier? {
         let descriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == phone })
-        return try modelContext.fetch(descriptor).first
+        return try modelContext.fetch(descriptor).first?.persistentModelID
     }
 
-    func saveClient(_ client: Client) async throws {
+    func createClient(
+        firstName: String,
+        lastName: String,
+        phone: String,
+        email: String,
+        address: String,
+        pets: [NewPetData],
+        contacts: [NewContactData]
+    ) async throws -> PersistentIdentifier {
+        let client = Client(firstName: firstName, lastName: lastName, phone: phone, email: email)
+        client.address = address
         modelContext.insert(client)
+        
+        for pd in pets {
+            let pet = Pet(name: pd.name, species: pd.species, gender: pd.gender)
+            pet.breed = pd.breed
+            pet.color = pd.color
+            pet.photoData = pd.photoData
+            pet.notes = pd.health
+            pet.behaviorTags = pd.behaviorTags
+            pet.birthdate = pd.birthdate
+            pet.owner = client
+            modelContext.insert(pet)
+        }
+        
+        for cd in contacts {
+            let contact = EmergencyContact(name: cd.name, relation: cd.relation, phone: cd.phone)
+            contact.owner = client
+            modelContext.insert(contact)
+        }
+        
+        try modelContext.save()
+        return client.persistentModelID
+    }
+
+    func saveClient(id: PersistentIdentifier, firstName: String, lastName: String, phone: String, email: String) async throws {
+        guard let client = modelContext.model(for: id) as? Client else { return }
+        client.firstName = firstName
+        client.lastName = lastName
+        client.phone = phone
+        client.email = email
         try modelContext.save()
     }
 
-    func deleteClient(_ client: Client) async throws {
+    func deleteClient(id: PersistentIdentifier) async throws {
+        guard let client = modelContext.model(for: id) as? Client else { return }
+        
         let pets = Array(client.pets ?? [])
         let visits = pets.flatMap { pet in Array(pet.visits ?? []) }
         let paymentDates = visits.compactMap { $0.payment?.paidAt }

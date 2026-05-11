@@ -11,6 +11,20 @@ import SwiftData
 import OSLog
 
 struct ContentView: View {
+    private enum SheetDestination: Identifiable {
+        case newClient
+        case recentHistory(RecentHistoryViewModel.Scope?)
+
+        var id: String {
+            switch self {
+            case .newClient:
+                return "new-client"
+            case .recentHistory(let scope):
+                return "recent-history-\(scope?.rawValue ?? "all")"
+            }
+        }
+    }
+
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
     @Environment(AuthenticationViewModel.self) private var authViewModel
@@ -18,7 +32,7 @@ struct ContentView: View {
     @State private var router = NavigationRouter()
     @State private var sidebarSelection: NavigationItem? = .dashboard
     @State private var tabSelection: NavigationItem = .dashboard
-    @State private var showingNewClientSheet = false
+    @State private var presentedSheet: SheetDestination?
     /// Last-handled (kind, uuid, timestamp) used to dedupe near-simultaneous
     /// navigation requests coming from both `.onReceive` and `consumePendingNavigation`
     /// at app launch / cold-start time.
@@ -43,7 +57,7 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .showNewClientSheet)) { _ in
                 consumePendingNewClientRequest()
-                showingNewClientSheet = true
+                presentedSheet = .newClient
             }
             .onReceive(NotificationCenter.default.publisher(for: .navigateToPet)) { notification in
                 handleNavigation(notification, type: .pet)
@@ -66,11 +80,19 @@ struct ContentView: View {
                 guard let item = notification.requestedNavigationItem else { return }
                 selectSurface(item, resetPath: notification.shouldResetNavigationPath)
             }
-            .sheet(isPresented: $showingNewClientSheet) {
-                NewClientSheet(modelContext: modelContext)
+            .adaptiveCover(item: $presentedSheet) { destination in
+                switch destination {
+                case .newClient:
+                    NewClientSheet(modelContext: modelContext)
+                case .recentHistory(let scope):
+                    NavigationStack {
+                        RecentHistoryView(initialScope: scope)
+                    }
+                }
             }
             .onAppear {
                 router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
+                applyUITestLaunchOverrides()
                 consumePendingNewClientRequest()
                 consumePendingNavigation()
             }
@@ -90,39 +112,54 @@ struct ContentView: View {
             return
         }
 
-        switch type {
-        case .client:
-            var descriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.uuid == uuid })
-            descriptor.fetchLimit = 1
-            do {
-                if let client = try modelContext.fetch(descriptor).first {
-                    selectClientsSurface()
-                    router.popClientsToRoot()
-                    router.navigateToClient(client)
-                    lastNavigationDedupeKey = dedupeKey
-                    lastNavigationDedupeAt = now
-                    clearPendingNavigation(kind: .client, uuid: uuid)
+        // Resolve the UUID off the main thread. These fetches fire on cold launch alongside
+        // CloudKit warmup, and the original sync path could perceptibly stall the first
+        // frame. Background context + PersistentIdentifier hand-off matches the pattern
+        // used in ClientDetailViewModel.fetchVisitsAsync and DashboardViewModel.fetchChecklistStatus.
+        let container = modelContext.container
+        Task { @MainActor in
+            let resolvedID: PersistentIdentifier? = await Task.detached(priority: .userInitiated) {
+                let bgCtx = ModelContext(container)
+                switch type {
+                case .client:
+                    var d = FetchDescriptor<Client>(predicate: #Predicate { $0.uuid == uuid })
+                    d.fetchLimit = 1
+                    do {
+                        return try bgCtx.fetch(d).first?.persistentModelID
+                    } catch {
+                        Logger.contentNav.error("Client navigation fetch failed: \(String(describing: error))")
+                        return nil
+                    }
+                case .pet:
+                    var d = FetchDescriptor<Pet>(predicate: #Predicate { $0.uuid == uuid })
+                    d.fetchLimit = 1
+                    do {
+                        return try bgCtx.fetch(d).first?.persistentModelID
+                    } catch {
+                        Logger.contentNav.error("Pet navigation fetch failed: \(String(describing: error))")
+                        return nil
+                    }
                 }
-            } catch {
-                Logger.contentNav.error("Client navigation fetch failed: \(String(describing: error))")
-            }
+            }.value
 
-        case .pet:
-            var petDescriptor = FetchDescriptor<Pet>(predicate: #Predicate { $0.uuid == uuid })
-            petDescriptor.fetchLimit = 1
-            do {
-                if let pet = try modelContext.fetch(petDescriptor).first, let owner = pet.owner {
-                    selectClientsSurface()
-                    router.popClientsToRoot()
-                    router.navigateToClient(owner)
-                    router.navigateToPet(pet)
-                    lastNavigationDedupeKey = dedupeKey
-                    lastNavigationDedupeAt = now
-                    clearPendingNavigation(kind: .pet, uuid: uuid)
-                }
-            } catch {
-                Logger.contentNav.error("Pet navigation fetch failed: \(String(describing: error))")
+            guard let id = resolvedID else { return }
+
+            switch type {
+            case .client:
+                guard let client = modelContext.model(for: id) as? Client else { return }
+                selectClientsSurface()
+                router.popClientsToRoot()
+                router.navigateToClient(client)
+            case .pet:
+                guard let pet = modelContext.model(for: id) as? Pet, let owner = pet.owner else { return }
+                selectClientsSurface()
+                router.popClientsToRoot()
+                router.navigateToClient(owner)
+                router.navigateToPet(pet)
             }
+            lastNavigationDedupeKey = dedupeKey
+            lastNavigationDedupeAt = now
+            clearPendingNavigation(kind: type == .client ? .client : .pet, uuid: uuid)
         }
     }
 
@@ -142,7 +179,21 @@ struct ContentView: View {
     private func consumePendingNewClientRequest() {
         guard UserDefaults.standard.string(forKey: AppMenuCommand.pendingNewClientRequestKey) != nil else { return }
         UserDefaults.standard.removeObject(forKey: AppMenuCommand.pendingNewClientRequestKey)
-        showingNewClientSheet = true
+        presentedSheet = .newClient
+    }
+
+    private func applyUITestLaunchOverrides() {
+        guard let rawValue = AppRuntime.uiTestingStartTab else { return }
+
+        if rawValue == "recenthistory" {
+            selectSurface(.dashboard, resetPath: true)
+            presentedSheet = .recentHistory(nil)
+            return
+        }
+
+        guard let item = NavigationItem(rawValue: rawValue) else { return }
+
+        selectSurface(item, resetPath: true)
     }
 
     private func consumePendingNavigation() {
@@ -180,7 +231,7 @@ struct ContentView: View {
     private var tabView: some View {
         TabView(selection: $tabSelection) {
             NavigationStack(path: $router.dashboardPath) {
-                DashboardView()
+                DashboardView(namespace: sharedNamespace)
                     .navigationDestination(for: AppDestination.self) { destination in
                         destinationView(for: destination)
                     }
@@ -189,7 +240,7 @@ struct ContentView: View {
             .tag(NavigationItem.dashboard)
 
             NavigationStack(path: $router.clientsPath) {
-                ClientsView()
+                ClientsView(namespace: sharedNamespace)
                     .navigationDestination(for: AppDestination.self) { destination in
                         destinationView(for: destination)
                     }
@@ -233,14 +284,14 @@ struct ContentView: View {
         switch sidebarSelection {
         case .dashboard:
             NavigationStack(path: $router.dashboardPath) {
-                DashboardView()
+                DashboardView(namespace: sharedNamespace)
                     .navigationDestination(for: AppDestination.self) { destination in
                         destinationView(for: destination)
                     }
             }
         case .clients:
             NavigationStack(path: $router.clientsPath) {
-                ClientsView()
+                ClientsView(namespace: sharedNamespace)
                     .navigationDestination(for: AppDestination.self) { destination in
                         destinationView(for: destination)
                     }
@@ -269,20 +320,30 @@ struct ContentView: View {
     @ViewBuilder
     private func destinationView(for destination: AppDestination) -> some View {
         switch destination {
-        case .clientDetail(let client):
-            ClientDetailView(client: client)
+        case .clientDetail(let id):
+            if let client = modelContext.model(for: id) as? Client {
+                ClientDetailView(client: client, namespace: sharedNamespace)
+            }
 
-        case .petDetail(let pet):
-            PetDetailView(pet: pet, namespace: sharedNamespace)
+        case .petDetail(let id):
+            if let pet = modelContext.model(for: id) as? Pet {
+                PetDetailView(pet: pet, namespace: sharedNamespace)
+            }
 
-        case .visitDetail(let visit):
-            VisitDetailView(visit: visit)
+        case .visitDetail(let id):
+            if let visit = modelContext.model(for: id) as? Visit {
+                VisitDetailView(visit: visit)
+            }
 
-        case .petHistory(let pet):
-            PetHistoryView(pet: pet, wrapsInNavigationStack: false)
+        case .petHistory(let id):
+            if let pet = modelContext.model(for: id) as? Pet {
+                PetHistoryView(pet: pet, wrapsInNavigationStack: false)
+            }
 
-        case .checkout(let pet):
-            CheckoutView(pet: pet, visit: pet.activeVisit)
+        case .checkout(let id):
+            if let pet = modelContext.model(for: id) as? Pet {
+                CheckoutView(pet: pet, visit: pet.activeVisit)
+            }
         }
     }
 }

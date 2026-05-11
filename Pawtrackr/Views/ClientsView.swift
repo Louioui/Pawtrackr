@@ -16,7 +16,12 @@ import UIKit
 struct ClientsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(NavigationRouter.self) private var router
-    @Namespace var namespace
+    var namespace: Namespace.ID
+
+    init(namespace: Namespace.ID) {
+        self.namespace = namespace
+        _viewModel = State(initialValue: nil)
+    }
 
     @State private var viewModel: ClientsViewModel?
     @State private var showingNewClientSheet = false
@@ -25,10 +30,6 @@ struct ClientsView: View {
     @State private var clientToDelete: Client?
 
     @FocusState private var isSearchFocused: Bool
-
-    init() {
-        _viewModel = State(initialValue: nil)
-    }
 
     var body: some View {
         ScrollView {
@@ -80,6 +81,7 @@ struct ClientsView: View {
             #endif
         }
         .toolbar {
+            #if os(macOS)
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showingNewClientSheet = true
@@ -89,6 +91,7 @@ struct ClientsView: View {
                 .keyboardShortcut("n", modifiers: .command)
                 .accessibilityIdentifier("clients.toolbar.addClient")
             }
+            #endif
 
             ToolbarItem(placement: .primaryAction) {
                 CloudKitStatusView()
@@ -120,6 +123,9 @@ struct ClientsView: View {
             await CloudKitMonitor.shared.forceSync()
         }
         .navigationTitle("Clients")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         #if os(macOS)
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -185,8 +191,7 @@ struct ClientsView: View {
         LazyVStack(spacing: 10) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { router.navigateToClient(client) }) {
-                    CardFactory.makeClientCard(client: client)
-                        .matchedGeometryEffect(id: client.id, in: namespace)
+                    ClientCard(client: client, namespace: namespace)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")

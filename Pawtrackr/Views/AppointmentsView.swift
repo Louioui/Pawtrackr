@@ -10,6 +10,7 @@ struct AppointmentsView: View {
     @State private var showingAddSheet = false
     @State private var selectedDate = Date()
     @State private var selectedPet: Pet?
+    @State private var appError: AppError?
     private let wrapsInNavigationStack: Bool
 
     init(wrapsInNavigationStack: Bool = true) {
@@ -29,21 +30,30 @@ struct AppointmentsView: View {
     private var appointmentsContent: some View {
         List {
             if appointments.isEmpty {
-                ContentUnavailableView("No Appointments", systemImage: "calendar.badge.plus", description: Text("Schedule your first appointment by tapping the plus button."))
+                ContentUnavailableView(
+                    NSLocalizedString("appointments.empty_title", value: "No Appointments", comment: ""),
+                    systemImage: "calendar.badge.plus",
+                    description: Text(NSLocalizedString("appointments.empty_description", value: "Schedule your first appointment by tapping the plus button.", comment: ""))
+                )
             } else {
                 ForEach(appointments) { appointment in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(appointment.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
                                 .font(.headline)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                             Text(appointment.date, style: .date)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                         Spacer()
                         Text(appointment.date, style: .time)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
                 .onDelete(perform: deleteAppointment)
@@ -60,6 +70,13 @@ struct AppointmentsView: View {
         .sheet(isPresented: $showingAddSheet) {
             AddAppointmentView(isPresented: $showingAddSheet, onSave: addAppointment)
         }
+        .alert(item: $appError) { error in
+            Alert(
+                title: Text(NSLocalizedString("common.error", comment: "")),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+            )
+        }
     }
 
     private func addAppointment(pet: Pet, date: Date) {
@@ -68,8 +85,14 @@ struct AppointmentsView: View {
         do {
             try modelContext.save()
         } catch {
+            // Roll back the insert before surfacing the error so the
+            // user retrying doesn't end up with a duplicate object in the
+            // context. SwiftData's `insert` is reversed by `delete` even
+            // before the next save.
+            modelContext.delete(newAppointment)
             Logger.appointments.error("addAppointment save failed: \(String(describing: error))")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving appointment")
+            appError = .database(error.localizedDescription)
         }
     }
 
@@ -90,6 +113,7 @@ struct AppointmentsView: View {
             } catch {
                 Logger.appointments.error("deleteAppointment save failed: \(String(describing: error))")
                 CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting appointment")
+                appError = .database(error.localizedDescription)
             }
         }
     }
@@ -102,7 +126,7 @@ private extension Logger {
 struct AddAppointmentView: View {
     @Binding var isPresented: Bool
     var onSave: (Pet, Date) -> Void
-    
+
     @Query(sort: \Pet.name) private var pets: [Pet]
     @State private var selectedPet: Pet?
     @State private var selectedDate = Date()
@@ -110,37 +134,48 @@ struct AddAppointmentView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Pet")) {
+                Section(header: Text(NSLocalizedString("appointments.section.pet", value: "Pet", comment: ""))) {
                     if pets.isEmpty {
-                        Text("No pets available. Please add a client and pet first.")
+                        Text(NSLocalizedString("appointments.no_pets_available", value: "No pets available. Please add a client and pet first.", comment: ""))
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("Select Pet", selection: $selectedPet) {
-                            Text("Select a pet").tag(nil as Pet?)
+                        Picker(NSLocalizedString("appointments.select_pet", value: "Select Pet", comment: ""), selection: $selectedPet) {
+                            Text(NSLocalizedString("appointments.select_pet_placeholder", value: "Select a pet", comment: "")).tag(nil as Pet?)
                             ForEach(pets) { pet in
                                 Text(pet.name).tag(pet as Pet?)
                             }
                         }
                     }
                 }
-                
-                Section(header: Text("Date & Time")) {
-                    DatePicker("Appointment Date", selection: $selectedDate)
+
+                Section(header: Text(NSLocalizedString("appointments.section.date_time", value: "Date & Time", comment: ""))) {
+                    DatePicker(
+                        NSLocalizedString("appointments.date_picker_label", value: "Appointment Date", comment: ""),
+                        selection: $selectedDate,
+                        in: Date()...   // disallow scheduling in the past
+                    )
                 }
             }
-            .navigationTitle("New Appointment")
+            .navigationTitle(NSLocalizedString("appointments.new_title", value: "New Appointment", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { isPresented = false }
+                    Button(NSLocalizedString("common.cancel", comment: "")) { isPresented = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(NSLocalizedString("common.save", comment: "")) {
                         if let pet = selectedPet {
                             onSave(pet, selectedDate)
                             isPresented = false
                         }
                     }
                     .disabled(selectedPet == nil)
+                }
+            }
+            .onAppear {
+                // Auto-select the only pet so the user can save immediately
+                // instead of being blocked by the "Save" disabled state.
+                if pets.count == 1, selectedPet == nil {
+                    selectedPet = pets.first
                 }
             }
         }

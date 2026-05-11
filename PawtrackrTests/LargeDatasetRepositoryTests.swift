@@ -42,6 +42,7 @@ final class LargeDatasetRepositoryTests: XCTestCase {
         XCTAssertEqual(active.count, 5)
         XCTAssertEqual(inactivePage.0.count, 50)
         XCTAssertTrue(inactivePage.1)
-        XCTAssertFalse(inactivePage.0.contains(where: \.hasActiveVisit))
+        let inactiveClients = inactivePage.0.compactMap { context.model(for: $0) as? Client }
+        XCTAssertFalse(inactiveClients.contains(where: \.hasActiveVisit))
     }
 }

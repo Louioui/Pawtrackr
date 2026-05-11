@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ClientCard: View {
     let client: Client
+    var namespace: Namespace.ID? = nil
     
     // IMPROVEMENT: Logic is self-contained within the card.
     private var isInProgress: Bool { client.hasActiveVisit }
@@ -47,10 +48,27 @@ struct ClientCard: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(client.fullName)
-                .font(.body.weight(.semibold))
-                .lineLimit(1)
+        HStack(alignment: .center, spacing: 12) {
+            if let namespace {
+                AvatarView(.client(name: client.fullName), size: .sm)
+                    .matchedGeometryEffect(id: "avatar-\(client.id)", in: namespace)
+            } else {
+                AvatarView(.client(name: client.fullName), size: .sm)
+            }
+            
+            VStack(alignment: .leading, spacing: 0) {
+                Text(client.fullName)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
+                    .id("name-\(client.id)")
+                
+                if let namespace {
+                    // Hidden anchor for name transition if needed
+                    Color.clear.frame(width: 0, height: 0)
+                        .matchedGeometryEffect(id: "name-\(client.id)", in: namespace)
+                }
+            }
+            
             Spacer()
             // FIX: Replaced 'Pill' with the correct 'Chip' component.
             if isInProgress {

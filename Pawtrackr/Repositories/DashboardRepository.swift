@@ -9,7 +9,7 @@ import OSLog
 
 private let dashboardRepoLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "DashboardRepository")
 
-struct DashboardKPI {
+struct DashboardKPI: Sendable {
     var appointmentsToday: Int = 0
     var inProgressCount: Int = 0
     var revenueToday: Decimal = .zero
@@ -17,127 +17,95 @@ struct DashboardKPI {
     var completedToday: Int = 0
 }
 
-@MainActor
 protocol DashboardRepositoryProtocol: Sendable {
-    var modelContext: ModelContext { get }
     func fetchKPIs() async throws -> DashboardKPI
-    func fetchActiveVisits() async throws -> [Visit]
-    func fetchUpcomingAppointments(limit: Int) async throws -> [Appointment]
-    func fetchRecentClients(limit: Int) async throws -> [Client]
-    func fetchOverduePets(limit: Int) async throws -> [Pet]
+    func fetchActiveVisits() async throws -> [PersistentIdentifier]
+    func fetchUpcomingAppointments(limit: Int) async throws -> [PersistentIdentifier]
+    func fetchRecentClients(limit: Int) async throws -> [PersistentIdentifier]
+    func fetchOverduePets(limit: Int) async throws -> [PersistentIdentifier]
     func fetchServiceDistribution(days: Int) async throws -> [String: Int]
     func fetchCategoryDistribution(days: Int) async throws -> [String: Int]
     func fetchRevenueSeries(days: Int) async throws -> [Date: Decimal]
     func fetchGalleryImages(days: Int, limit: Int) async throws -> [Data]
 }
 
-@MainActor
-final class DashboardRepository: DashboardRepositoryProtocol {
-    let modelContext: ModelContext
-    
-    init(modelContainer: ModelContainer) {
-        self.modelContext = modelContainer.mainContext
-    }
+@ModelActor
+final actor DashboardRepository: DashboardRepositoryProtocol {
     
     func fetchKPIs() async throws -> DashboardKPI {
         let cal = Calendar.current
         let start = cal.startOfDay(for: .now)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return DashboardKPI() }
 
-        do {
-            let todayApptDesc = FetchDescriptor<Appointment>(
-                predicate: #Predicate { a in a.date >= start && a.date < end }
-            )
-            let todaysCount = try modelContext.fetchCount(todayApptDesc)
+        let todayApptDesc = FetchDescriptor<Appointment>(
+            predicate: #Predicate { a in a.date >= start && a.date < end }
+        )
+        let todaysCount = try modelContext.fetchCount(todayApptDesc)
 
-            let inProgDesc = FetchDescriptor<Visit>(
-                predicate: #Predicate { v in v.endedAt == nil }
-            )
-            let inProgCount = try modelContext.fetchCount(inProgDesc)
+        let inProgDesc = FetchDescriptor<Visit>(
+            predicate: #Predicate { v in v.endedAt == nil }
+        )
+        let inProgCount = try modelContext.fetchCount(inProgDesc)
 
-            let summaryDesc = FetchDescriptor<DaySummary>(
-                predicate: #Predicate { summary in summary.day >= start && summary.day < end }
-            )
-            let summaries = try modelContext.fetch(summaryDesc)
-            let summary = SummaryUpdater.collapsedDayAggregates(from: summaries).values.first
+        let summaryDesc = FetchDescriptor<DaySummary>(
+            predicate: #Predicate { summary in summary.day >= start && summary.day < end }
+        )
+        let summaries = try modelContext.fetch(summaryDesc)
+        let summary = SummaryUpdater.collapsedDayAggregates(from: summaries).values.first
 
-            let yesterdayStart = cal.date(byAdding: .day, value: -1, to: start) ?? start
-            let yesterdayEnd = start
-            let yesterdayDesc = FetchDescriptor<DaySummary>(
-                predicate: #Predicate { summary in summary.day >= yesterdayStart && summary.day < yesterdayEnd }
-            )
-            let yesterdaySummaries = try modelContext.fetch(yesterdayDesc)
-            let yesterdaySummary = SummaryUpdater.collapsedDayAggregates(from: yesterdaySummaries).values.first
+        let yesterdayStart = cal.date(byAdding: .day, value: -1, to: start) ?? start
+        let yesterdayEnd = start
+        let yesterdayDesc = FetchDescriptor<DaySummary>(
+            predicate: #Predicate { summary in summary.day >= yesterdayStart && summary.day < yesterdayEnd }
+        )
+        let yesterdaySummaries = try modelContext.fetch(yesterdayDesc)
+        let yesterdaySummary = SummaryUpdater.collapsedDayAggregates(from: yesterdaySummaries).values.first
 
-            return DashboardKPI(
-                appointmentsToday: todaysCount,
-                inProgressCount: inProgCount,
-                revenueToday: summary?.revenue ?? .zero,
-                revenueYesterday: yesterdaySummary?.revenue ?? .zero,
-                completedToday: summary?.visitCount ?? 0
-            )
-        } catch {
-            dashboardRepoLog.error("fetchKPIs failed: \(String(describing: error))")
-            throw error
-        }
+        return DashboardKPI(
+            appointmentsToday: todaysCount,
+            inProgressCount: inProgCount,
+            revenueToday: summary?.revenue ?? .zero,
+            revenueYesterday: yesterdaySummary?.revenue ?? .zero,
+            completedToday: summary?.visitCount ?? 0
+        )
     }
     
-    func fetchActiveVisits() async throws -> [Visit] {
+    func fetchActiveVisits() async throws -> [PersistentIdentifier] {
         let descriptor = FetchDescriptor<Visit>(
             predicate: #Predicate { v in v.endedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
-        do {
-            return try modelContext.fetch(descriptor)
-        } catch {
-            dashboardRepoLog.error("fetchActiveVisits failed: \(String(describing: error))")
-            throw error
-        }
+        let visits = try modelContext.fetch(descriptor)
+        return visits.map { $0.persistentModelID }
     }
 
-    func fetchUpcomingAppointments(limit: Int) async throws -> [Appointment] {
+    func fetchUpcomingAppointments(limit: Int) async throws -> [PersistentIdentifier] {
         let now = Date()
-        // Filter by date in the predicate; filter status in memory.
-        // SwiftData's #Predicate compiler does not reliably translate
-        // captured enum comparisons into SQL, so doing the status filter
-        // in memory is the safe path.
         let descriptor = FetchDescriptor<Appointment>(
             predicate: #Predicate { a in a.date >= now },
             sortBy: [SortDescriptor(\.date, order: .forward)]
         )
-        do {
-            let upcoming = try modelContext.fetch(descriptor)
-            return Array(upcoming.filter { $0.status == .scheduled }.prefix(limit))
-        } catch {
-            dashboardRepoLog.error("fetchUpcomingAppointments failed: \(String(describing: error))")
-            throw error
-        }
+        let upcoming = try modelContext.fetch(descriptor)
+        let filtered = upcoming.filter { $0.status == .scheduled }.prefix(limit)
+        return filtered.map { $0.persistentModelID }
     }
     
-    func fetchRecentClients(limit: Int) async throws -> [Client] {
+    func fetchRecentClients(limit: Int) async throws -> [PersistentIdentifier] {
         var descriptor = FetchDescriptor<Client>(
             sortBy: [SortDescriptor(\.lastVisitDate, order: .reverse)]
         )
         descriptor.fetchLimit = limit
-        do {
-            return try modelContext.fetch(descriptor)
-        } catch {
-            dashboardRepoLog.error("fetchRecentClients failed: \(String(describing: error))")
-            throw error
-        }
+        let clients = try modelContext.fetch(descriptor)
+        return clients.map { $0.persistentModelID }
     }
 
-    func fetchOverduePets(limit: Int) async throws -> [Pet] {
+    func fetchOverduePets(limit: Int) async throws -> [PersistentIdentifier] {
         let descriptor = FetchDescriptor<Pet>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
-        do {
-            let pets = try modelContext.fetch(descriptor)
-            return Array(pets.filter { $0.isOverdue }.prefix(limit))
-        } catch {
-            dashboardRepoLog.error("fetchOverduePets failed: \(String(describing: error))")
-            throw error
-        }
+        let pets = try modelContext.fetch(descriptor)
+        let filtered = pets.filter { $0.isOverdue }.prefix(limit)
+        return filtered.map { $0.persistentModelID }
     }
 
     func fetchServiceDistribution(days: Int) async throws -> [String: Int] {
@@ -188,9 +156,8 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         descriptor.fetchLimit = limit * 2
 
         let visits = try modelContext.fetch(descriptor)
-        return visits
+        return Array(visits
             .compactMap { $0.afterThumbnailData ?? $0.beforeThumbnailData }
-            .prefix(limit)
-            .map { $0 }
+            .prefix(limit))
     }
 }

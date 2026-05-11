@@ -10,6 +10,8 @@ import SwiftUI
 
 enum Animations {
     // Springs
+    static let responsiveSpring = Animation.interpolatingSpring(stiffness: 170, damping: 15)
+    static let responsiveSpringSoft = Animation.interpolatingSpring(stiffness: 145, damping: 18)
     static let quickSpring = Animation.spring(response: 0.22, dampingFraction: 0.8)
     static let interactiveSpring = Animation.spring(response: 0.28, dampingFraction: 0.82)
     static let gentleSpring = Animation.spring(response: 0.42, dampingFraction: 0.9)
@@ -43,4 +45,3 @@ private struct ConditionalAnimation<Value: Equatable>: ViewModifier {
         content.animation(reduceMotion ? nil : animation, value: value)
     }
 }
-

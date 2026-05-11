@@ -56,30 +56,40 @@ class EditServiceViewModel {
 
     func save() async throws {
         try validate()
-        
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let serviceToSave: Service
-        if let service = service {
+
+        if let service {
+            // Editing existing — only run the duplicate check when the name
+            // actually changed. Otherwise we'd reject every save of an
+            // unchanged service against itself. Comparing case-insensitively
+            // matches the rule used at creation time.
+            if service.name.lowercased() != trimmedName.lowercased() {
+                let all = try await repository.fetchAllServices()
+                let editingID = service.persistentModelID
+                if all.contains(where: { $0.persistentModelID != editingID && $0.name.lowercased() == trimmedName.lowercased() }) {
+                    throw ValidationError.custom(message: "A service with this name already exists.")
+                }
+            }
             serviceToSave = service
         } else {
-            // Check for duplicate service name on creation
-            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Note: repository doesn't have findByName yet, but we can add it if needed
-            // For now, let's just use fetchAll and filter
+            // New service — straightforward duplicate check.
             let all = try await repository.fetchAllServices()
             if all.contains(where: { $0.name.lowercased() == trimmedName.lowercased() }) {
                 throw ValidationError.custom(message: "A service with this name already exists.")
             }
             serviceToSave = Service(name: trimmedName)
         }
-        
-        serviceToSave.rename(name)
+
+        serviceToSave.rename(trimmedName)
         serviceToSave.setCategory(category)
         serviceToSave.setBasePrice(price)
         serviceToSave.setEnabled(isEnabled)
         serviceToSave.isPackage = isPackage
         serviceToSave.setDefaultDurationMinutes(duration)
         serviceToSave.setSystemIcon(systemIcon)
-        
+
         try await repository.saveService(serviceToSave)
     }
 }

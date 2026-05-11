@@ -143,7 +143,61 @@ struct PetDetailView: View {
                         header(vm)
                         actionRow(vm)
                         quickStats(vm)
+                        transformationGallery(vm)
                         insightsSection(vm)
+...
+    private func transformationGallery(_ vm: PetDetailViewModel) -> some View {
+        let history = vm.pet.transformationHistory
+        guard !history.isEmpty else { return AnyView(EmptyView()) }
+        
+        return AnyView(
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Transformations").font(.headline).padding(.horizontal)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(0..<history.count, id: \.self) { idx in
+                            let item = history[idx]
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 4) {
+                                    photoBox(data: item.before, label: "Before")
+                                    photoBox(data: item.after, label: "After")
+                                }
+                                Text(item.date, style: .date)
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        )
+    }
+
+    private func photoBox(data: Data?, label: String) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if let data = data, let uiImage = ImageCache.shared.image(data: data, maxDimension: 300) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Color.gray.opacity(0.1)
+                        .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                }
+            }
+            .frame(width: 140, height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            
+            Text(label)
+                .font(.system(size: 10, weight: .black))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .padding(6)
+        }
+    }
                         visitsSection(vm)
                     }
                     .padding(.vertical, 8)
@@ -197,7 +251,7 @@ struct PetDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 16) {
                         AvatarView(.pet(species: vm.pet.species, gender: vm.pet.gender, name: vm.pet.name, imageData: vm.pet.photoData), size: .lg)
-                            .matchedGeometryEffect(id: vm.pet.id, in: namespace)
+                            .matchedGeometryEffect(id: "pet-avatar-\(vm.pet.id)", in: namespace)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(vm.pet.name).font(.title2.weight(.semibold))
                             Text(vm.pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
@@ -278,6 +332,8 @@ struct PetDetailView: View {
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(12)
@@ -342,8 +398,17 @@ struct PetDetailView: View {
 
     private func statTile(label: String, value: String, tint: Color) -> some View {
             VStack(spacing: 6) {
-                Text(value).font(.headline.weight(.bold)).foregroundStyle(tint)
-                Text(label).font(.caption).foregroundStyle(.secondary)
+                Text(value)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(10)

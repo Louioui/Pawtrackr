@@ -117,9 +117,14 @@ final class RandomWorkflowFuzzTests: XCTestCase {
 
             XCTAssertEqual(checkout.state, .confirmed)
             XCTAssertNil(checkout.appError)
-            XCTAssertNotNil(visit.endedAt)
-            XCTAssertEqual(visit.total, total)
-            XCTAssertEqual(visit.payment?.amount, total)
+            // Assert on `checkout.visit` (the post-actor refreshed reference), not the
+            // test's local `visit` — SwiftData does not propagate the actor's mutations
+            // back into the main context's cached Visit. The VM's `processPayment` now
+            // re-fetches via a fresh context, which is what a SwiftUI screen with @Query
+            // would see after .visitDidComplete fires.
+            XCTAssertNotNil(checkout.visit.endedAt)
+            XCTAssertEqual(checkout.visit.total, total)
+            XCTAssertEqual(checkout.visit.payment?.amount, total)
             expectedRevenue += total
         }
 

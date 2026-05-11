@@ -283,6 +283,14 @@ struct AddPetSheet: View {
             HapticManager.notify(.success)
             dismiss()
         } catch {
+            // Rolling back is what stops the silent-duplication bug: without
+            // this, a failed save leaves `newPet` stuck in client.pets and
+            // in the context. The user dismisses the alert, taps Save
+            // again, the function builds *another* Pet, appends it to the
+            // already-mutated list, and the next successful save persists
+            // both rows.
+            client.pets = (client.pets ?? []).filter { $0.persistentModelID != newPet.persistentModelID }
+            modelContext.delete(newPet)
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "adding pet")
             appError = .database(NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)")
         }

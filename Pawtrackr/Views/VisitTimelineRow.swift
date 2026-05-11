@@ -9,6 +9,7 @@ import SwiftUI
 
 struct VisitTimelineRow: View {
     let visit: Visit
+    var heroNamespace: Namespace.ID? = nil
 
     var body: some View {
         Card {
@@ -24,7 +25,7 @@ struct VisitTimelineRow: View {
     private var topRow: some View {
         HStack(alignment: .top) {
             HStack(spacing: 10) {
-                IconCircle(size: .md, style: .auto(species: visit.pet?.species, gender: visit.pet?.gender), lineWidth: 0)
+                heroAvatar
                 VStack(alignment: .leading, spacing: 2) {
                     Text(visit.pet?.name ?? "Unknown").font(.subheadline.weight(.semibold))
                     Text("\(visit.pet?.shortDescriptor ?? "") • \(visit.pet?.owner?.fullName ?? "")")
@@ -49,6 +50,30 @@ struct VisitTimelineRow: View {
                     .foregroundStyle(.white)
             }
         }
+    }
+
+    @ViewBuilder
+    private var heroAvatar: some View {
+        let avatar = AvatarView(
+            .pet(
+                species: visit.pet?.species,
+                gender: visit.pet?.gender,
+                name: visit.pet?.name ?? "Unknown",
+                imageData: visit.pet?.photoData,
+                thumbnailData: visit.pet?.thumbnailData
+            ),
+            size: .md
+        )
+
+        if let heroNamespace {
+            avatar.matchedGeometryEffect(id: heroID, in: heroNamespace)
+        } else {
+            avatar
+        }
+    }
+
+    private var heroID: String {
+        "visit-avatar-\(visit.uuid.uuidString)"
     }
 
     private var timingRow: some View {

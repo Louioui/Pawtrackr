@@ -1,0 +1,25 @@
+disabled_rules:
+  - trailing_whitespace
+  - force_cast
+  - function_body_length
+  - type_body_length
+  - file_length
+
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - missing_docs
+
+analyzer_rules:
+  - unused_import
+  - unused_private_declaration
+
+included:
+  - Pawtrackr
+  - PawtrackrTests
+  - PawtrackrUITests
+
+excluded:
+  - Pods
+  - .build
+  - DerivedData

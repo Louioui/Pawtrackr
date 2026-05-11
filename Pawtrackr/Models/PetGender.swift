@@ -11,7 +11,7 @@
 
 import Foundation
 
-public enum PetGender: String, CaseIterable, Codable, Identifiable {
+public enum PetGender: String, CaseIterable, Codable, Identifiable, Sendable {
     case male
     case female
 

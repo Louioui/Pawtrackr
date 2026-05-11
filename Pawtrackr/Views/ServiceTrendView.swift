@@ -9,6 +9,9 @@
 import SwiftUI
 import SwiftData
 import Charts
+import OSLog
+
+private let serviceTrendLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ServiceTrend")
 
 struct ServiceTrendView: View {
     let serviceName: String
@@ -30,16 +33,24 @@ struct ServiceTrendView: View {
             }
         }
         .navigationTitle(serviceName)
-        .onAppear(perform: fetchData)
+        .task(id: serviceName) {
+            await fetchData()
+        }
     }
 
-    private func fetchData() {
-        let predicate = #Predicate<ServiceDaySummary> { $0.serviceName == serviceName }
-        let descriptor = FetchDescriptor<ServiceDaySummary>(predicate: predicate, sortBy: [SortDescriptor(\ServiceDaySummary.day)])
+    private func fetchData() async {
+        let container = modelContext.container
+        let name = serviceName
         do {
-            data = try modelContext.fetch(descriptor)
+            let ids: [PersistentIdentifier] = try await Task.detached(priority: .userInitiated) {
+                let bgCtx = ModelContext(container)
+                let predicate = #Predicate<ServiceDaySummary> { $0.serviceName == name }
+                let descriptor = FetchDescriptor<ServiceDaySummary>(predicate: predicate, sortBy: [SortDescriptor(\ServiceDaySummary.day)])
+                return try bgCtx.fetch(descriptor).map(\.persistentModelID)
+            }.value
+            data = ids.compactMap { modelContext.model(for: $0) as? ServiceDaySummary }
         } catch {
-            print("Error fetching service data: \(error)")
+            serviceTrendLog.error("Failed to fetch service trend data: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

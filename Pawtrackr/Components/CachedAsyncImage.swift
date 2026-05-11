@@ -21,7 +21,8 @@ final class ImageRemoteLoader {
     func load(_ url: URL) {
         currentTask?.cancel()
         isLoading = true
-        currentTask = Task {
+        currentTask = Task { [weak self] in
+            guard let self else { return }
             do {
                 let data = try await ImageLoaderService.shared.fetch(for: url)
                 
@@ -75,4 +76,3 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
         .task { loader.load(url) }
     }
 }
-

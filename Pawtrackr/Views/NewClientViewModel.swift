@@ -57,48 +57,50 @@ final class NewClientViewModel {
             
             let e164 = PhoneUtils.toE164(phone)
             if let e164, let existing = try await repository.findClient(byPhone: e164) {
-                duplicateClientID = existing.persistentModelID
+                duplicateClientID = existing
                 showDuplicateAlert = true
                 return .duplicateFound
             }
 
-            let client = Client(firstName: first.capitalizedName,
-                                lastName: last.capitalizedName,
-                                phone: e164)
-            if !email.trimmed.isEmpty { client.email = email.trimmed.lowercased() }
-            if !address.trimmed.isEmpty { client.address = address.trimmed }
-
-            pets.forEach { tp in
-                guard !tp.name.trimmed.isEmpty, let gender = tp.gender else { return }
-                let pet = Pet(name: tp.name.capitalizedName, species: tp.species)
-                pet.gender = gender
-                if !tp.breed.trimmed.isEmpty { pet.breed = tp.breed.capitalizedName }
-                if !tp.color.trimmed.isEmpty { pet.color = tp.color.trimmed.lowercased() }
-                if let data = tp.photoData { pet.photoData = data }
-                if !tp.health.trimmed.isEmpty { pet.setHealth(tp.health.trimmed) }
-                if !tp.behaviorTags.isEmpty { pet.setBehaviorTags(Array(tp.behaviorTags)) }
-                if tp.hasBirthdate { pet.setBirthdate(tp.birthdate) }
-                pet.owner = client
+            let newPets = pets.compactMap { tp -> NewPetData? in
+                guard !tp.name.trimmed.isEmpty, let gender = tp.gender else { return nil }
+                return NewPetData(
+                    name: tp.name.capitalizedName,
+                    species: tp.species,
+                    gender: gender,
+                    breed: tp.breed.trimmed.isEmpty ? nil : tp.breed.capitalizedName,
+                    color: tp.color.trimmed.isEmpty ? nil : tp.color.trimmed.lowercased(),
+                    photoData: tp.photoData,
+                    health: tp.health.trimmed.isEmpty ? nil : tp.health.trimmed,
+                    behaviorTags: Array(tp.behaviorTags),
+                    birthdate: tp.hasBirthdate ? tp.birthdate : nil
+                )
             }
 
-            for c in contacts {
+            let newContacts = contacts.compactMap { c -> NewContactData? in
                 let name = c.name.capitalizedName
                 let relation = c.relation.trimmed.lowercased()
                 let ph = c.phone.trimmed
-                guard !name.isEmpty, let e164c = PhoneUtils.toE164(ph) else { continue }
-                let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
-                ec.owner = client
-                client.emergencyContacts = (client.emergencyContacts ?? []) + [ec]
+                guard !name.isEmpty, let e164c = PhoneUtils.toE164(ph) else { return nil }
+                return NewContactData(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
             }
-            
-            try await repository.saveClient(client)
+
+            let clientID = try await repository.createClient(
+                firstName: first.capitalizedName,
+                lastName: last.capitalizedName,
+                phone: e164 ?? "",
+                email: email.trimmed.lowercased(),
+                address: address.trimmed,
+                pets: newPets,
+                contacts: newContacts
+            )
 
             NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
-                ClientDidCreateKey.clientID.rawValue: client.persistentModelID,
+                ClientDidCreateKey.clientID.rawValue: clientID,
                 ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.created.rawValue
             ])
             NotificationCenter.default.post(name: .clientOpenRequested, object: nil, userInfo: [
-                ClientOpenKey.clientID.rawValue: client.persistentModelID
+                ClientOpenKey.clientID.rawValue: clientID
             ])
             
             HapticManager.notify(.success)

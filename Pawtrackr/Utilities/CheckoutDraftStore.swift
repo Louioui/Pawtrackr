@@ -10,25 +10,16 @@ actor CheckoutDraftStore {
     static let shared = CheckoutDraftStore()
 
     private let directoryURL: URL
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
 
     init(directoryURL: URL? = nil) {
         self.directoryURL = directoryURL ?? Self.defaultDirectoryURL()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        decoder.dateDecodingStrategy = .iso8601
     }
 
     func loadDraft(for visitID: UUID) async -> CheckoutDraft? {
         let url = draftURL(for: visitID)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return nil
-        }
 
         do {
-            let data = try Data(contentsOf: url)
-            return try decoder.decode(CheckoutDraft.self, from: data)
+            return try await CheckoutDraftFileIO.loadDraft(at: url)
         } catch {
             Logger.checkoutDraft.error("Failed to load draft for \(visitID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return nil
@@ -36,26 +27,15 @@ actor CheckoutDraftStore {
     }
 
     func saveDraft(_ draft: CheckoutDraft) async throws {
-        try ensureDirectory()
-        let url = draftURL(for: draft.visitID)
-        let data = try encoder.encode(draft)
-        try data.write(to: url, options: .atomic)
+        try await CheckoutDraftFileIO.saveDraft(draft, at: draftURL(for: draft.visitID), directoryURL: directoryURL)
     }
 
     func deleteDraft(for visitID: UUID) async throws {
-        let url = draftURL(for: visitID)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return
-        }
-        try FileManager.default.removeItem(at: url)
+        try await CheckoutDraftFileIO.deleteDraft(at: draftURL(for: visitID))
     }
 
     private func draftURL(for visitID: UUID) -> URL {
         directoryURL.appendingPathComponent("\(visitID.uuidString).json")
-    }
-
-    private func ensureDirectory() throws {
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
     }
 
     private static func defaultDirectoryURL() -> URL {
@@ -65,6 +45,42 @@ actor CheckoutDraftStore {
         return base
             .appendingPathComponent("Pawtrackr", isDirectory: true)
             .appendingPathComponent("CheckoutDrafts", isDirectory: true)
+    }
+}
+
+private enum CheckoutDraftFileIO {
+    static func loadDraft(at url: URL) async throws -> CheckoutDraft? {
+        try await Task.detached(priority: .utility) {
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                return nil
+            }
+
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let data = try Data(contentsOf: url)
+            return try decoder.decode(CheckoutDraft.self, from: data)
+        }.value
+    }
+
+    static func saveDraft(_ draft: CheckoutDraft, at url: URL, directoryURL: URL) async throws {
+        try await Task.detached(priority: .utility) {
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(draft)
+            try data.write(to: url, options: .atomic)
+        }.value
+    }
+
+    static func deleteDraft(at url: URL) async throws {
+        try await Task.detached(priority: .utility) {
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                return
+            }
+            try FileManager.default.removeItem(at: url)
+        }.value
     }
 }
 

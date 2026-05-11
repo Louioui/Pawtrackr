@@ -109,6 +109,29 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.servicesTotalDecimal, Decimal(60.00))
     }
 
+    func testAmount_PercentageTipUsesDecimalMoneyMath() {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        vm.selectTip(percentage: 20)
+
+        XCTAssertEqual(vm.tipAmountString, "$6.00")
+        XCTAssertEqual(vm.selectedTipPercentage, 20)
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(36.00))
+        XCTAssertEqual(vm.finalTotalString, "$36.00")
+    }
+
+    func testAmount_ManualTipClearsPercentageAndAddsToTotal() {
+        let vm = makeVM()
+        vm.toggleService(bath)
+        vm.selectTip(percentage: 15)
+        vm.tipAmountString = "7.25"
+        vm.selectedTipPercentage = nil
+
+        XCTAssertNil(vm.selectedTipPercentage)
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(37.25))
+        XCTAssertEqual(vm.finalTotalString, "$37.25")
+    }
+
     func testAmount_EmptySelectionIsZero() {
         let vm = makeVM()
         XCTAssertEqual(vm.servicesTotalDecimal, .zero)

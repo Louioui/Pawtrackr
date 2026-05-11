@@ -31,6 +31,7 @@ struct CSVDoc: Transferable {
 struct PetHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var envModelContext
+    @Namespace private var visitHeroNamespace
     @State private var viewModel: PetHistoryViewModel? = nil
     private let pet: Pet
     private let wrapsInNavigationStack: Bool
@@ -51,7 +52,7 @@ struct PetHistoryView: View {
                     historyContent(vm)
                 }
             } else {
-                ProgressView()
+                loadingState
                     .task {
                         // Initialize using the pet's context if available, else environment.
                         let ctx = pet.modelContext ?? envModelContext
@@ -70,9 +71,7 @@ struct PetHistoryView: View {
                     .padding(.horizontal)
 
                 if vm.isLoading && vm.filtered.isEmpty {
-                    ProgressView("Loading history…")
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
+                    historyRowsSkeleton
                 } else if vm.visits.isEmpty {
                     ContentUnavailableView(
                         NSLocalizedString("pet_history.empty_title", comment: ""),
@@ -82,9 +81,9 @@ struct PetHistoryView: View {
                     .padding(.top, 40)
                 } else if vm.filtered.isEmpty {
                     ContentUnavailableView(
-                        "No Matching Visits",
+                        NSLocalizedString("pet_history.no_matches_title", value: "No Matching Visits", comment: ""),
                         systemImage: "magnifyingglass",
-                        description: Text("Try a different service, note, or reference.")
+                        description: Text(NSLocalizedString("pet_history.no_matches_desc", value: "Try a different service, note, or reference.", comment: ""))
                     )
                     .padding(.top, 40)
                 } else {
@@ -103,9 +102,9 @@ struct PetHistoryView: View {
             set: { vm.appError = $0 }
         )) { error in
             Alert(
-                title: Text("History Error"),
+                title: Text(NSLocalizedString("pet_history.error_title", value: "History Error", comment: "")),
                 message: Text(error.localizedDescription),
-                dismissButton: .default(Text("OK"))
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
             )
         }
         .task { await vm.refresh() }
@@ -119,9 +118,9 @@ struct PetHistoryView: View {
             ForEach(sortedDays, id: \.self) { day in
                 Section {
                     ForEach(groups[day]!.sorted { $0.sortKeyDate > $1.sortKeyDate }) { visit in
-                        NavigationLink(destination: VisitDetailView(visit: visit)) {
+                        NavigationLink(destination: VisitDetailView(visit: visit, heroNamespace: visitHeroNamespace)) {
                             // Use the new, standalone VisitTimelineRow.
-                            VisitTimelineRow(visit: visit)
+                            VisitTimelineRow(visit: visit, heroNamespace: visitHeroNamespace)
                         }
                         .buttonStyle(.plain)
                     }
@@ -153,21 +152,24 @@ struct PetHistoryView: View {
                     .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("petHistory.loadMore")
             }
         }
         .padding(.horizontal)
+        .accessibilityIdentifier("petHistory.list")
     }
 
     private func controls(_ vm: PetHistoryViewModel) -> some View {
         @Bindable var vm = vm
         return VStack(spacing: 10) {
-            SearchField(text: $vm.searchText)
-            Picker("History Range", selection: $vm.scope) {
+            SearchField(text: $vm.searchText, accessibilityIdentifier: "petHistory.search")
+            Picker(NSLocalizedString("pet_history.range", value: "History Range", comment: ""), selection: $vm.scope) {
                 ForEach(PetHistoryViewModel.Scope.allCases) { scope in
-                    Text(scope.rawValue).tag(scope)
+                    Text(scope.displayName).tag(scope)
                 }
             }
             .pickerStyle(.segmented)
+            .accessibilityIdentifier("petHistory.scope")
         }
     }
 
@@ -224,5 +226,66 @@ struct PetHistoryView: View {
                 Label("common.export", systemImage: "square.and.arrow.up")
             }
         }
+    }
+
+    private var loadingState: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                headerSkeleton
+                    .padding(.horizontal)
+                controlsSkeleton
+                    .padding(.horizontal)
+                historyRowsSkeleton
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    private var headerSkeleton: some View {
+        Card(elevation: .regular) {
+            HStack(spacing: 12) {
+                Circle().fill(Color.secondary.opacity(0.15)).frame(width: 56, height: 56)
+                VStack(alignment: .leading, spacing: 6) {
+                    RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.15)).frame(width: 120, height: 14)
+                    RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.10)).frame(width: 160, height: 12)
+                    RoundedRectangle(cornerRadius: 12).fill(Color.secondary.opacity(0.12)).frame(width: 90, height: 24)
+                }
+                Spacer()
+            }
+        }
+        .redacted(reason: .placeholder)
+    }
+
+    private var controlsSkeleton: some View {
+        VStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(0.12))
+                .frame(height: 44)
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(0.10))
+                .frame(height: 32)
+        }
+        .redacted(reason: .placeholder)
+    }
+
+    private var historyRowsSkeleton: some View {
+        VStack(spacing: 12) {
+            ForEach(0..<4, id: \.self) { _ in
+                Card {
+                    HStack(spacing: 12) {
+                        Circle().fill(Color.secondary.opacity(0.15)).frame(width: 40, height: 40)
+                        VStack(alignment: .leading, spacing: 6) {
+                            RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.15)).frame(width: 170, height: 12)
+                            RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)).frame(width: 120, height: 10)
+                            RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.10)).frame(width: 200, height: 10)
+                        }
+                        Spacer()
+                    }
+                }
+                .redacted(reason: .placeholder)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 12)
     }
 }

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct VisitRow: View {
     let visit: Visit
+    var heroNamespace: Namespace.ID? = nil
 
     var body: some View {
         // FIX: Use the correct Card initializer.
@@ -18,7 +19,7 @@ struct VisitRow: View {
         ) {
             HStack(alignment: .top, spacing: 12) {
                 VStack {
-                    AvatarView(.pet(species: visit.pet?.species, gender: visit.pet?.gender, name: visit.pet?.name ?? "Unknown"), size: .md)
+                    heroAvatar
                     Spacer()
                 }
 
@@ -29,6 +30,30 @@ struct VisitRow: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var heroAvatar: some View {
+        let avatar = AvatarView(
+            .pet(
+                species: visit.pet?.species,
+                gender: visit.pet?.gender,
+                name: visit.pet?.name ?? "Unknown",
+                imageData: visit.pet?.photoData,
+                thumbnailData: visit.pet?.thumbnailData
+            ),
+            size: .md
+        )
+
+        if let heroNamespace {
+            avatar.matchedGeometryEffect(id: heroID, in: heroNamespace)
+        } else {
+            avatar
+        }
+    }
+
+    private var heroID: String {
+        "visit-avatar-\(visit.uuid.uuidString)"
     }
 
     private var header: some View {

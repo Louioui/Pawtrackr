@@ -89,11 +89,25 @@ public struct PinLockGate<Content: View>: View {
 
 // MARK: - Lock Screen (4 digits; default PIN 1994)
 public struct PinLockView: View {
+    /// After this many consecutive failed attempts the user is forced to wait
+    /// `lockoutSeconds` before another attempt is accepted. The window resets
+    /// on a successful unlock or when the cooldown expires.
+    private static let lockoutThreshold = 5
+    private static let lockoutSeconds: TimeInterval = 30
+
     @Environment(AppSettings.self) private var appSettings
     @State private var authenticator = BiometricAuthenticator()
+    /// Cached biometric type — computing this allocates a fresh `LAContext`
+    /// each call, so we resolve once on appear instead of inside `body`
+    /// (which would churn an LAContext on every redraw).
+    @State private var cachedBiometricType: BiometricType = .none
     @Binding var isUnlocked: Bool
     @State private var digits: [Int] = []
     @State private var shakeOffset: CGFloat = 0
+    @State private var failedAttempts: Int = 0
+    @State private var lockoutUntil: Date? = nil
+    @State private var lockoutCountdown: TimeInterval = 0
+    @State private var lockoutTimer: Timer? = nil
 
     // Uses AppSettings.appPIN for a changeable PIN.
 
@@ -106,8 +120,20 @@ public struct PinLockView: View {
             .padding(24)
             .frame(maxWidth: 420)
             .onChange(of: digits) { _, _ in validateIfComplete() }
-            .onAppear(perform: authenticateWithBiometrics)
+            .onAppear {
+                cachedBiometricType = authenticator.biometricType()
+                authenticateWithBiometrics()
+            }
+            .onDisappear {
+                lockoutTimer?.invalidate()
+                lockoutTimer = nil
+            }
             .accessibilityElement(children: .contain)
+    }
+
+    private var isLockedOut: Bool {
+        guard let lockoutUntil else { return false }
+        return Date() < lockoutUntil
     }
 
     private var lockContent: some View {
@@ -123,9 +149,18 @@ public struct PinLockView: View {
     private var titleSection: some View {
         VStack(spacing: 8) {
             Text(NSLocalizedString("pin.enter", comment: "")).font(.title2).bold()
-            Text(NSLocalizedString("pin.requirement", comment: ""))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if isLockedOut {
+                Text(String(format: NSLocalizedString("pin.lockout_fmt", value: "Too many incorrect attempts. Try again in %ds.", comment: ""), Int(lockoutCountdown.rounded(.up))))
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            } else {
+                Text(NSLocalizedString("pin.requirement", comment: ""))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -152,8 +187,8 @@ public struct PinLockView: View {
 
     private var keypadBottomRow: some View {
         HStack(spacing: 12) {
-            if authenticator.biometricType() != .none {
-                KeyButton(systemName: authenticator.biometricType() == .faceID ? "faceid" : "touchid") {
+            if cachedBiometricType != .none {
+                KeyButton(systemName: cachedBiometricType == .faceID ? "faceid" : "touchid") {
                     authenticateWithBiometrics()
                 }
                 .accessibilityLabel("Authenticate with Biometrics")
@@ -167,11 +202,15 @@ public struct PinLockView: View {
     }
 
     private func authenticateWithBiometrics() {
-        if authenticator.biometricType() != .none {
-            authenticator.authenticate { success, error in
-                if success {
-                    isUnlocked = true
-                }
+        // Biometric path bypasses the PIN lockout intentionally — the
+        // operating system already enforces its own retry limits and
+        // failure thresholds, so a successful Face ID / Touch ID is a
+        // strong enough signal to clear the cooldown.
+        guard cachedBiometricType != .none else { return }
+        authenticator.authenticate { success, _ in
+            if success {
+                resetLockoutState()
+                isUnlocked = true
             }
         }
     }
@@ -188,6 +227,7 @@ public struct PinLockView: View {
 
     // MARK: - Actions
     private func tapDigit(_ v: Int) {
+        guard !isLockedOut else { return }
         guard digits.count < 4 else { return }
         digits.append(v)
     }
@@ -199,17 +239,61 @@ public struct PinLockView: View {
 
     private func validateIfComplete() {
         guard digits.count == 4 else { return }
+        // Defense in depth: the keypad refuses input during lockout, but
+        // also reject here in case state ever advances some other way.
+        guard !isLockedOut else {
+            digits.removeAll()
+            return
+        }
+
         let entered = digits.map(String.init).joined()
         if appSettings.validatePIN(entered) {
+            resetLockoutState()
             isUnlocked = true
         } else {
+            failedAttempts += 1
             performShake()
             HapticManager.notify(.error)
+
+            if failedAttempts >= Self.lockoutThreshold {
+                startLockout()
+            }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 digits.removeAll()
             }
         }
+    }
+
+    private func startLockout() {
+        let until = Date().addingTimeInterval(Self.lockoutSeconds)
+        lockoutUntil = until
+        lockoutCountdown = Self.lockoutSeconds
+        lockoutTimer?.invalidate()
+        lockoutTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            let remaining = until.timeIntervalSinceNow
+            if remaining <= 0 {
+                Task { @MainActor in
+                    timer.invalidate()
+                    lockoutCountdown = 0
+                    lockoutUntil = nil
+                    failedAttempts = 0
+                    lockoutTimer = nil
+                }
+            } else {
+                Task { @MainActor in
+                    lockoutCountdown = remaining
+                }
+            }
+        }
+    }
+
+    private func resetLockoutState() {
+        lockoutTimer?.invalidate()
+        lockoutTimer = nil
+        lockoutUntil = nil
+        lockoutCountdown = 0
+        failedAttempts = 0
     }
 
     private func performShake() {

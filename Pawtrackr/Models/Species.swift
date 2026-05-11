@@ -6,7 +6,7 @@
 //
 
 // FIX: Added 'public' to match the access level of AvatarView.
-public enum Species: String, CaseIterable, Codable, Identifiable {
+public enum Species: String, CaseIterable, Codable, Identifiable, Sendable {
     case dog
     case cat
 

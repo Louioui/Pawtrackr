@@ -6,10 +6,27 @@
 //
 
 import SwiftUI
+import Observation
 
 #if os(macOS)
 import AppKit // Import AppKit for NSColor on macOS
 #endif
+
+/// Observable theme manager to support dynamic branding across the app.
+@Observable
+final class ThemeManager {
+    static let shared = ThemeManager()
+    
+    var brandPrimary: Color = Color(red: 99/255,  green: 102/255, blue: 241/255)
+    
+    private init() {}
+    
+    func updateBrandColor(hex: String) {
+        if let color = Color(hex: hex) {
+            brandPrimary = color
+        }
+    }
+}
 
 // Access control alignment: keep DS internal so it can reference internal model types (PetGender, Species) without exposing them in a public API.
 enum DS {
@@ -26,8 +43,9 @@ enum DS {
         static let shadow     = Color.black.opacity(0.08)
 
         // Accents
-        // Tailwind-inspired palette
-        static let primary    = Color(red: 99/255,  green: 102/255, blue: 241/255) // #6366F1
+        // Dynamic primary based on ThemeManager
+        static var primary: Color { ThemeManager.shared.brandPrimary }
+        
         static let success    = Color(red: 16/255,  green: 185/255, blue: 129/255) // #10B981
         static let warning    = Color(red: 245/255, green: 158/255, blue: 11/255)  // #F59E0B
         static let danger     = Color(red: 239/255, green: 68/255,  blue: 68/255)  // #EF4444
@@ -160,6 +178,45 @@ private struct HairlineBorderModifier: ViewModifier {
         return content.overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(color, lineWidth: width)
+        )
+    }
+}
+
+// MARK: - Hex Extension
+extension Color {
+    init?(hex: String) {
+        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+
+        if hexSanitized.hasPrefix("#") {
+            hexSanitized.remove(at: hexSanitized.startIndex)
+        }
+
+        var rgb: UInt64 = 0
+
+        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else { return nil }
+
+        let r, g, b, a: UInt64
+        switch hexSanitized.count {
+        case 6:
+            r = (rgb & 0xFF0000) >> 16
+            g = (rgb & 0x00FF00) >> 8
+            b = (rgb & 0x0000FF)
+            a = 255
+        case 8:
+            r = (rgb & 0xFF000000) >> 24
+            g = (rgb & 0x00FF0000) >> 16
+            b = (rgb & 0x0000FF00) >> 8
+            a = (rgb & 0x000000FF)
+        default:
+            return nil
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
         )
     }
 }

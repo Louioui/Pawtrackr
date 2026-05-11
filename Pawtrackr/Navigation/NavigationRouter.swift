@@ -12,12 +12,12 @@ import SwiftData
 // MARK: - Navigation Destinations
 
 /// Type-safe navigation destinations for the app.
-enum AppDestination: Hashable {
-    case clientDetail(Client)
-    case petDetail(Pet)
-    case visitDetail(Visit)
-    case petHistory(Pet)
-    case checkout(Pet)
+enum AppDestination: Hashable, Sendable {
+    case clientDetail(PersistentIdentifier)
+    case petDetail(PersistentIdentifier)
+    case visitDetail(PersistentIdentifier)
+    case petHistory(PersistentIdentifier)
+    case checkout(PersistentIdentifier)
 }
 
 enum PendingNavigationCommand {
@@ -56,35 +56,47 @@ final class NavigationRouter {
     // MARK: - Navigation Actions
 
     func navigateToClient(_ client: Client) {
-        append(AppDestination.clientDetail(client))
+        append(AppDestination.clientDetail(client.persistentModelID))
     }
 
     func navigateToPet(_ pet: Pet) {
-        append(AppDestination.petDetail(pet))
+        append(AppDestination.petDetail(pet.persistentModelID))
     }
 
     func navigateToVisit(_ visit: Visit) {
-        append(AppDestination.visitDetail(visit))
+        append(AppDestination.visitDetail(visit.persistentModelID))
     }
 
     func navigateToPetHistory(_ pet: Pet) {
-        append(AppDestination.petHistory(pet))
+        append(AppDestination.petHistory(pet.persistentModelID))
     }
 
     func navigateToCheckout(_ pet: Pet) {
-        append(AppDestination.checkout(pet))
+        append(AppDestination.checkout(pet.persistentModelID))
     }
 
     func pop() {
         switch activeNavigationItem {
         case .dashboard:
-            if !dashboardPath.isEmpty { dashboardPath.removeLast() }
+            guard !dashboardPath.isEmpty else { return }
+            var path = dashboardPath
+            path.removeLast()
+            dashboardPath = path
         case .clients:
-            if !clientsPath.isEmpty { clientsPath.removeLast() }
+            guard !clientsPath.isEmpty else { return }
+            var path = clientsPath
+            path.removeLast()
+            clientsPath = path
         case .insights:
-            if !insightsPath.isEmpty { insightsPath.removeLast() }
+            guard !insightsPath.isEmpty else { return }
+            var path = insightsPath
+            path.removeLast()
+            insightsPath = path
         case .settings:
-            if !settingsPath.isEmpty { settingsPath.removeLast() }
+            guard !settingsPath.isEmpty else { return }
+            var path = settingsPath
+            path.removeLast()
+            settingsPath = path
         }
     }
 
@@ -112,13 +124,21 @@ final class NavigationRouter {
     private func append(_ destination: AppDestination) {
         switch activeNavigationItem {
         case .dashboard:
-            dashboardPath.append(destination)
+            var path = dashboardPath
+            path.append(destination)
+            dashboardPath = path
         case .clients:
-            clientsPath.append(destination)
+            var path = clientsPath
+            path.append(destination)
+            clientsPath = path
         case .insights:
-            insightsPath.append(destination)
+            var path = insightsPath
+            path.append(destination)
+            insightsPath = path
         case .settings:
-            settingsPath.append(destination)
+            var path = settingsPath
+            path.append(destination)
+            settingsPath = path
         }
     }
 }

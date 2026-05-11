@@ -2,8 +2,6 @@
 //  DashboardView.swift
 //  Pawtrackr
 //
-//  Created by mac on 9/11/25.
-//
 
 import SwiftUI
 import SwiftData
@@ -19,9 +17,8 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
-    @State private var showContent = false
     @State private var selectedRevenueDate: Date?
-    @Namespace var namespace
+    var namespace: Namespace.ID
 
     var body: some View {
         dashboardContent
@@ -41,18 +38,26 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var dashboardContent: some View {
-        // Single owner of VM creation — previously two `.task` modifiers raced and
-        // could spawn two VMs (each with its own observer task and notification
-        // observers, leaking until process exit).
         if let vm {
-            content(vm)
+            switch vm.state {
+            case .loading:
+                skeletonView
+                    .transition(.opacity)
+            case .loaded:
+                content(vm)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            case .error(let message):
+                ContentUnavailableView(
+                    NSLocalizedString("common.error", comment: ""),
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(message)
+                )
+            }
         } else {
-            ProgressView()
+            Color.clear
                 .task {
                     guard self.vm == nil else { return }
-                    let model = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
-                    vm = model
-                    await model.refresh()
+                    vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
                 }
         }
     }
@@ -86,76 +91,162 @@ struct DashboardView: View {
             .keyboardShortcut("r", modifiers: .command)
         }
         #endif
-
-        ToolbarItem(placement: .status) {
-            if let vm = vm, !vm.activeVisits.isEmpty {
-                Text("\(vm.activeVisits.count) Active Sessions")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
     @ViewBuilder
     private func content(_ vm: DashboardViewModel) -> some View {
         ScrollView {
             LazyVStack(spacing: 24) {
-                if showContent {
-                    smartSummary(vm)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                    
-                    if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
-                        checklistSection(vm)
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    }
+                smartSummary(vm)
+                
+                if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
+                    checklistSection(vm)
+                }
 
-                    #if os(macOS)
-                    HStack(alignment: .top, spacing: 20) {
-                        VStack(spacing: 24) {
-                            kpiSection(vm)
-                            activeSessionsSection(vm)
-                            reengagementSection(vm)
-                            revenueSection(vm)
-                        }
-                        .frame(maxWidth: .infinity)
-
-                        VStack(spacing: 24) {
-                            quickActionsSection
-                            upcomingSection(vm)
-                            overduePetsSection(vm)
-                            recentClientsSection(vm)
-                            gallerySection(vm)
-                        }
-                        .frame(maxWidth: 350)
-                    }
-                    #else
+                #if os(macOS)
+                HStack(alignment: .top, spacing: 20) {
                     VStack(spacing: 24) {
                         kpiSection(vm)
-                        quickActionsSection
-                        if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
+                        activeSessionsSection(vm)
                         reengagementSection(vm)
-                        if !vm.upcomingAppointments.isEmpty { upcomingSection(vm) }
-                        if !vm.overduePets.isEmpty { overduePetsSection(vm) }
-                        if !vm.recentClients.isEmpty { recentClientsSection(vm) }
                         revenueSection(vm)
-                        if !vm.gallery.isEmpty { gallerySection(vm) }
                     }
-                    #endif
+                    .frame(maxWidth: .infinity)
+
+                    VStack(spacing: 24) {
+                        quickActionsSection
+                        upcomingSection(vm)
+                        overduePetsSection(vm)
+                        recentClientsSection(vm)
+                        gallerySection(vm)
+                    }
+                    .frame(maxWidth: 350)
                 }
+                #else
+                VStack(spacing: 24) {
+                    kpiSection(vm)
+                    quickActionsSection
+                    if !vm.smartSuggestions.isEmpty { smartSuggestionsSection(vm) }
+                    if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
+                    reengagementSection(vm)
+                    if !vm.upcomingAppointments.isEmpty { upcomingSection(vm) }
+                    if !vm.overduePets.isEmpty { overduePetsSection(vm) }
+                    if !vm.recentClients.isEmpty { recentClientsSection(vm) }
+                    revenueSection(vm)
+                    if !vm.gallery.isEmpty { gallerySection(vm) }
+                }
+                #endif
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 24)
         }
         .accessibilityIdentifier("dashboard.scroll")
-        .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                showContent = true
-            }
-        }
         .refreshable {
             async let local: Void = vm.refresh()
             async let cloud: Void = CloudKitMonitor.shared.forceSync()
             _ = await (local, cloud)
+        }
+    }
+
+    // MARK: - Skeleton View
+    private var skeletonView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Smart Summary Skeleton
+                VStack(alignment: .leading, spacing: 8) {
+                    SkeletonRect().frame(width: 150, height: 24)
+                    SkeletonRect().frame(maxWidth: .infinity).frame(height: 16)
+                    SkeletonRect().frame(width: 200, height: 16)
+                }
+                .padding(.bottom, 8)
+
+                // KPI Skeleton
+                Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                    GridRow {
+                        SkeletonRect().frame(height: 80)
+                        SkeletonRect().frame(height: 80)
+                    }
+                    GridRow {
+                        SkeletonRect().frame(height: 80)
+                        SkeletonRect().frame(height: 80)
+                    }
+                }
+
+                // Quick Actions Skeleton
+                HStack(spacing: 12) {
+                    ForEach(0..<3) { _ in
+                        SkeletonRect().frame(width: 130, height: 100)
+                    }
+                }
+
+                // List Skeleton
+                VStack(alignment: .leading, spacing: 12) {
+                    SkeletonRect().frame(width: 120, height: 20)
+                    ForEach(0..<3) { _ in
+                        SkeletonRect().frame(height: 120)
+                    }
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    // MARK: - Sections (unchanged logic, just ensuring they use the VM)
+
+    private func smartSuggestionsSection(_ vm: DashboardViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Smart Suggestions", systemImage: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(.purple)
+                Spacer()
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
+                    ForEach(vm.smartSuggestions) { suggestion in
+                        suggestionCard(suggestion)
+                    }
+                }
+            }
+        }
+    }
+
+    private func suggestionCard(_ suggestion: SmartSuggestion) -> some View {
+        Card(elevation: .regular, accent: .leading(.color(.purple), thickness: 4)) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(suggestion.petName).font(.subheadline.weight(.bold))
+                        Text(suggestion.ownerName).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: suggestion.actionType == .text ? "message.fill" : "phone.fill")
+                        .foregroundStyle(.purple)
+                        .font(.caption)
+                }
+                
+                Text(suggestion.message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                Button {
+                    // Logic to open client and start communication
+                    if let clientID = suggestion.clientID, let client = modelContext.model(for: clientID) as? Client {
+                        openClient(client)
+                    }
+                } label: {
+                    Text("Re-engage")
+                        .font(.caption.bold())
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.purple)
+                .controlSize(.small)
+            }
+            .frame(width: 200)
         }
     }
 
@@ -316,10 +407,10 @@ struct DashboardView: View {
             Text(NSLocalizedString("dashboard.today", comment: "")).font(.headline)
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
-                    NavigationLink { RecentHistoryView(initialScope: .today) } label: {
+                    recentHistoryLink(scope: .today) {
                         kpiCard(title: NSLocalizedString("dashboard.appointments", comment: ""), value: vm.kpi.appointmentsTodayText, symbol: "calendar")
                     }
-                    NavigationLink { RecentHistoryView(initialScope: .today) } label: {
+                    recentHistoryLink(scope: .today) {
                         kpiCard(title: NSLocalizedString("dashboard.in_progress", comment: ""), value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
                     }
                 }
@@ -330,7 +421,7 @@ struct DashboardView: View {
                         kpiCard(title: NSLocalizedString("dashboard.revenue", comment: ""), value: vm.kpi.revenueTodayString, symbol: "dollarsign.circle", trend: vm.kpi.revenueTrend)
                     }
                     .buttonStyle(.plain)
-                    NavigationLink { RecentHistoryView(initialScope: .today) } label: {
+                    recentHistoryLink(scope: .today) {
                         kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
                     }
                 }
@@ -343,18 +434,32 @@ struct DashboardView: View {
             Text(NSLocalizedString("dashboard.quick_actions", comment: "")).font(.headline)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    actionCard(title: NSLocalizedString("dashboard.new_client", comment: ""), symbol: "person.crop.circle.badge.plus") { showNewClient = true }
-                        .accessibilityIdentifier("dashboard.quickAction.newClient")
-                    actionCard(title: NSLocalizedString("dashboard.check_in", comment: ""), symbol: "play.circle") {
+                    actionCard(
+                        title: NSLocalizedString("dashboard.new_client", comment: ""),
+                        symbol: "person.crop.circle.badge.plus",
+                        accessibilityIdentifier: "dashboard.quickAction.newClient"
+                    ) { showNewClient = true }
+                    actionCard(
+                        title: NSLocalizedString("dashboard.check_in", comment: ""),
+                        symbol: "play.circle",
+                        accessibilityIdentifier: "dashboard.quickAction.checkIn"
+                    ) {
                         selectSurface(.clients, resetPath: true)
                     }
-                    .accessibilityIdentifier("dashboard.quickAction.checkIn")
-                    NavigationLink { RecentHistoryView() } label: { actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle") }
-                        .accessibilityIdentifier("dashboard.quickAction.checkOut")
-                    actionCard(title: NSLocalizedString("dashboard.reports", comment: ""), symbol: "chart.bar.fill") {
+                    recentHistoryLink(
+                        scope: nil,
+                        accessibilityIdentifier: "dashboard.quickAction.checkOut",
+                        accessibilityLabel: NSLocalizedString("dashboard.check_out", comment: "")
+                    ) {
+                        actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle")
+                    }
+                    actionCard(
+                        title: NSLocalizedString("dashboard.reports", comment: ""),
+                        symbol: "chart.bar.fill",
+                        accessibilityIdentifier: "dashboard.quickAction.reports"
+                    ) {
                         selectSurface(.insights, resetPath: true)
                     }
-                    .accessibilityIdentifier("dashboard.quickAction.reports")
                 }
             }
         }
@@ -423,9 +528,10 @@ struct DashboardView: View {
                                 PetCard(
                                     pet: pet,
                                     activeVisit: pet.activeVisit,
-                                    onViewDetails: { openClient(owner) },
+                                    onViewDetails: { openPet(pet) },
                                     onCheckIn: { Task { await vm.checkInPet(pet) } },
-                                    onCheckOut: { router.navigateToCheckout(pet) }
+                                    onCheckOut: { router.navigateToCheckout(pet) },
+                                    namespace: namespace
                                 )
 
                                 if owner.smsURL != nil || owner.telURL != nil {
@@ -589,11 +695,39 @@ struct DashboardView: View {
                 Spacer()
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
+        .accessibilityHint(trend != nil ? "Trend: \(trend! >= 0 ? "Up" : "Down") \(Formatters.percentString(abs(trend!), showSign: false) ?? "")" : "")
     }
 
-    private func actionCard(title: String, symbol: String, action: @escaping () -> Void) -> some View {
+    private func actionCard(title: String, symbol: String, accessibilityIdentifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { actionCardLabel(title: title, symbol: symbol) }
             .buttonStyle(.plain)
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(title))
+            .accessibilityIdentifier(accessibilityIdentifier)
+            .accessibilityAddTraits(.isButton)
+    }
+
+    private func recentHistoryLink<Label: View>(
+        scope: RecentHistoryViewModel.Scope?,
+        accessibilityIdentifier: String? = nil,
+        accessibilityLabel: String? = nil,
+        @ViewBuilder label: @escaping () -> Label
+    ) -> some View {
+        NavigationLink {
+            RecentHistoryView(initialScope: scope)
+        } label: {
+            label()
+        }
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(accessibilityLabel ?? "Recent History"))
+        .applyAccessibilityIdentifier(accessibilityIdentifier)
+        .accessibilityAddTraits(.isButton)
     }
 
     private func actionCardLabel(title: String, symbol: String) -> some View {
@@ -621,5 +755,53 @@ struct DashboardView: View {
         NotificationCenter.default.post(name: .navigateToClient, object: nil, userInfo: [
             "uuid": client.uuid
         ])
+    }
+    
+    private func openPet(_ pet: Pet) {
+        // Post notification to trigger navigation to PetDetailView with MatchedGeometry
+        NotificationCenter.default.post(name: .navigateToPet, object: nil, userInfo: [
+            "pet": pet,
+            "namespace": namespace
+        ])
+    }
+}
+
+// MARK: - Skeleton Components
+
+struct SkeletonRect: View {
+    @State private var phase: CGFloat = 0
+    
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.secondary.opacity(0.1))
+            .overlay(
+                GeometryReader { geo in
+                    Color.white.opacity(0.3)
+                        .mask(
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(colors: [.clear, .white, .clear], startPoint: .leading, endPoint: .trailing)
+                                )
+                                .frame(width: geo.size.width * 0.5)
+                                .offset(x: -geo.size.width * 0.5 + (geo.size.width * 1.5 * phase))
+                        )
+                }
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func applyAccessibilityIdentifier(_ identifier: String?) -> some View {
+        if let identifier {
+            accessibilityIdentifier(identifier)
+        } else {
+            self
+        }
     }
 }

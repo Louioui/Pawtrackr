@@ -28,7 +28,8 @@ final class AuthenticationViewModel {
 
     /// Signs in using the PIN from AppSettings (not hardcoded).
     /// Call this after PIN validation succeeds in PinLockView.
-    func signInAfterPINValidation() {
+    @discardableResult
+    func signInAfterPINValidation() -> Bool {
         signInLocalUser()
     }
 
@@ -36,8 +37,11 @@ final class AuthenticationViewModel {
     /// NOTE: Prefer using PinLockView for PIN validation and call signInAfterPINValidation() on success.
     func signInWithPIN(_ pin: String, appSettings: AppSettings) -> Bool {
         guard pin == appSettings.appPIN else { return false }
-        signInLocalUser()
-        return true
+        // Propagate the actual outcome — if the model context isn't
+        // available (recovery-mode launch), the local user can't be
+        // created and we mustn't tell the caller authentication
+        // succeeded.
+        return signInLocalUser()
     }
 
     func signIn(email: String) {
@@ -59,24 +63,31 @@ final class AuthenticationViewModel {
         isAuthenticated = false
     }
 
-    func signInAfterUnlock() {
+    @discardableResult
+    func signInAfterUnlock() -> Bool {
         signInLocalUser()
     }
 
     // MARK: - Private Helpers
 
-    private func signInLocalUser() {
-        guard let modelContext else { return }
+    /// Returns true when the local user was found-or-created and the VM
+    /// is now in an authenticated state. Returns false in recovery-mode
+    /// launches where there is no model context (and therefore no User
+    /// table to read from).
+    @discardableResult
+    private func signInLocalUser() -> Bool {
+        guard let modelContext else { return false }
         if let user = fetchUser(byEmail: localEmail) {
             currentUser = user
             isAuthenticated = true
-            return
+            return true
         }
         let newUser = User(name: "Local User", email: localEmail)
         modelContext.insert(newUser)
         persist(modelContext, label: "signInLocalUser")
         currentUser = newUser
         isAuthenticated = true
+        return true
     }
 
     /// Fetches at most one user matching the given email. The User table is single-row

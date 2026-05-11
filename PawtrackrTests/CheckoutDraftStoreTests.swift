@@ -16,6 +16,8 @@ final class CheckoutDraftStoreTests: XCTestCase {
             currentStepRawValue: 2,
             sessionNotes: "Calm during groom",
             amountString: "$42.00",
+            tipAmountString: "$6.30",
+            selectedTipPercentage: 15,
             selectedServiceUUIDs: [UUID()],
             selectedAddOnUUIDs: [UUID()],
             selectedPaymentMethodRawValue: Payment.Method.cash.rawValue,
@@ -32,6 +34,8 @@ final class CheckoutDraftStoreTests: XCTestCase {
         XCTAssertEqual(loaded?.currentStepRawValue, draft.currentStepRawValue)
         XCTAssertEqual(loaded?.sessionNotes, draft.sessionNotes)
         XCTAssertEqual(loaded?.amountString, draft.amountString)
+        XCTAssertEqual(loaded?.tipAmountString, draft.tipAmountString)
+        XCTAssertEqual(loaded?.selectedTipPercentage, draft.selectedTipPercentage)
         XCTAssertEqual(loaded?.selectedServiceUUIDs, draft.selectedServiceUUIDs)
         XCTAssertEqual(loaded?.selectedAddOnUUIDs, draft.selectedAddOnUUIDs)
         XCTAssertEqual(loaded?.selectedPaymentMethodRawValue, draft.selectedPaymentMethodRawValue)
@@ -43,5 +47,34 @@ final class CheckoutDraftStoreTests: XCTestCase {
         try await store.deleteDraft(for: visitID)
         let deleted = await store.loadDraft(for: visitID)
         XCTAssertNil(deleted)
+    }
+
+    func testLegacyDraftWithoutTipFieldsStillDecodes() throws {
+        let visitID = UUID()
+        let petID = UUID()
+        let serviceID = UUID()
+        let json = """
+        {
+          "visitID" : "\(visitID.uuidString)",
+          "petID" : "\(petID.uuidString)",
+          "updatedAt" : "2026-05-11T16:00:00Z",
+          "currentStepRawValue" : 2,
+          "sessionNotes" : "Legacy draft",
+          "amountString" : "$42.00",
+          "selectedServiceUUIDs" : ["\(serviceID.uuidString)"],
+          "selectedAddOnUUIDs" : [],
+          "selectedPaymentMethodRawValue" : "\(Payment.Method.cash.rawValue)",
+          "externalReference" : "",
+          "tags" : []
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let draft = try decoder.decode(CheckoutDraft.self, from: Data(json.utf8))
+
+        XCTAssertEqual(draft.visitID, visitID)
+        XCTAssertEqual(draft.tipAmountString, "")
+        XCTAssertNil(draft.selectedTipPercentage)
     }
 }
