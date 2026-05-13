@@ -59,10 +59,13 @@ final class GlobalEventBusTests: XCTestCase {
 
 // Helper for PersistentIdentifier in tests
 extension PersistentIdentifier {
+    /// Memoized demo identifier. Building a fresh ModelContainer per access
+    /// (the original behavior) made the IDs unstable across calls — mocks that
+    /// returned this value couldn't be looked up by ID, and stress harnesses
+    /// allocated dozens of containers. Cache so a single container backs all
+    /// uses within a test process.
     @MainActor
-    static var demoClient: PersistentIdentifier {
-        // This is a hack for testing purposes to create a 'valid-looking' ID
-        // In real SwiftData tests, we'd fetch one from a container.
+    private static let demoClientStorage: PersistentIdentifier = {
         let schema = Schema([Client.self])
         do {
             let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
@@ -72,5 +75,8 @@ extension PersistentIdentifier {
         } catch {
             preconditionFailure("Failed to create demo PersistentIdentifier: \(error.localizedDescription)")
         }
-    }
+    }()
+
+    @MainActor
+    static var demoClient: PersistentIdentifier { demoClientStorage }
 }

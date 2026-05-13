@@ -27,12 +27,9 @@ final class SupportService {
         
         // 1. Data Stats
         report += "STORE STATISTICS:\n"
-        let clientCount = (try? context.fetchCount(FetchDescriptor<Client>())) ?? -1
-        let petCount = (try? context.fetchCount(FetchDescriptor<Pet>())) ?? -1
-        let visitCount = (try? context.fetchCount(FetchDescriptor<Visit>())) ?? -1
-        report += "- Clients: \(clientCount)\n"
-        report += "- Pets: \(petCount)\n"
-        report += "- Visits: \(visitCount)\n\n"
+        report += "- Clients: \(describeCount(try context.fetchCount(FetchDescriptor<Client>())))\n"
+        report += "- Pets: \(describeCount(try context.fetchCount(FetchDescriptor<Pet>())))\n"
+        report += "- Visits: \(describeCount(try context.fetchCount(FetchDescriptor<Visit>())))\n\n"
         
         // 2. iCloud Status
         report += "ICLOUD STATUS:\n"
@@ -46,5 +43,13 @@ final class SupportService {
         report += "- Low Power Mode: \(ProcessInfo.processInfo.isLowPowerModeEnabled)\n\n"
         
         return DiagnosticReport(content: report)
+    }
+
+    private func describeCount(_ block: @autoclosure () throws -> Int) -> String {
+        do {
+            return String(try block())
+        } catch {
+            return "<error: \(error.localizedDescription)>"
+        }
     }
 }

@@ -1,0 +1,15 @@
+# Golden Record Schema for Pawtrackr
+# This file serves as the baseline for Pawtrackr database integrity.
+# Any schema deviation in production should be compared against this baseline.
+
+schema_version: 1.0.0
+models:
+  Pet:
+    attributes: [uuid, createdAt, updatedAt, name, species, gender, weightLbs]
+  Visit:
+    attributes: [uuid, startedAt, endedAt, total]
+  Client:
+    attributes: [uuid, fullName]
+
+# Run this validation if corruption is reported:
+# PawtrackrSchemaValidator.validate(current: storeURL, baseline: "GoldenRecord.json")

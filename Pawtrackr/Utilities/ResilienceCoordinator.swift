@@ -73,7 +73,9 @@ struct ResilienceCoordinator {
                 log.warning(
                     "\(label, privacy: .public) attempt \(attempt) failed; retrying in \(milliseconds, format: .fixed(precision: 0))ms"
                 )
-                try? await Task.sleep(nanoseconds: delay)
+                // Propagate cancellation: a cancelled parent task should abort the
+                // retry loop instead of looping until the next operation throws.
+                try await Task.sleep(nanoseconds: delay)
             }
         }
 

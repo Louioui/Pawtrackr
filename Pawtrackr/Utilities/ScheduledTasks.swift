@@ -14,12 +14,11 @@ class ScheduledTasks {
     private let lastRunKey = "com.pawtrackr.lastMaintenanceDate"
 
     func start() {
-        timer?.invalidate()
-        // Check every hour to see if a new day has passed since the last run.
-        timer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in
-            self?.checkAndRunMaintenance()
-        }
-        // Run immediately after launch if due.
+        // No periodic in-process Timer: iOS suspends timers when the app
+        // backgrounds, so an hourly tick rarely fires for a typical
+        // foreground-briefly-then-background usage pattern. The launch-time
+        // check below is the real driver. For true background scheduling,
+        // migrate to BGAppRefreshTask.
         checkAndRunMaintenance()
     }
 
@@ -32,12 +31,16 @@ class ScheduledTasks {
     }
 
     private func runMaintenance() {
-        defaults.set(Date(), forKey: lastRunKey)
         let container = modelContainer
+        let defaults = self.defaults
+        let lastRunKey = self.lastRunKey
         Task.detached(priority: .background) {
             let context = ModelContext(container)
             SummaryUpdater.rebuildAllSummaries(in: context)
             DataPruner.pruneOldPhotos(olderThan: 180, downsampleOnly: true, in: context)
+            // Mark "ran today" only after maintenance succeeded; if the work
+            // crashed or threw, we want tomorrow's launch to retry.
+            defaults.set(Date(), forKey: lastRunKey)
         }
     }
 }

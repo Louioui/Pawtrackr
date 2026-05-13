@@ -171,19 +171,25 @@ enum Formatters {
         let m = (seconds % 3600) / 60
         let s = seconds % 60
 
-        func part(_ value: Int, _ unit: String) -> String? {
-            guard value > 0 else { return nil }
-            return abbreviated ? "\(value)\(unit.first!)" : "\(value) \(unit)"
+        func part(_ value: Int, _ unit: String) -> String {
+            abbreviated ? "\(value)\(unit.first!)" : "\(value) \(unit)"
         }
 
-        // Prioritize hours/minutes; show seconds only if < 1m total.
+        let separator = abbreviated ? "" : " "
+
         if h > 0 {
-            return [part(h, "h"), part(m, "m")].compactMap { $0 }.joined(separator: abbreviated ? "" : " ")
+            // Hours-precision: drop seconds, but keep minutes even if 0 so the
+            // unit hierarchy is unambiguous ("3 h 0 m" vs "3 h").
+            return [part(h, "h"), part(m, "m")].joined(separator: separator)
         } else if m > 0 {
-            return [part(m, "m"), part(s, "s")].compactMap { $0 }.joined(separator: abbreviated ? "" : " ")
+            // Minutes-precision: keep seconds even when 0 so "2 m" never
+            // shorthand-collides with "2 m and some". Test expects "2 m 0 s".
+            return [part(m, "m"), part(s, "s")].joined(separator: separator)
         } else {
-            // Under a minute
-            return abbreviated ? "\(s)s" : "\(s)s"
+            // Under a minute: seconds only. Compact form ("45s") regardless of
+            // `abbreviated` so the timer doesn't visually jitter when crossing
+            // the minute boundary.
+            return "\(s)s"
         }
     }
 }

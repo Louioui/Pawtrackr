@@ -12,7 +12,7 @@ final class ConcurrencyStressHarness: XCTDataTestCase {
         await withTaskGroup(of: Void.self) { group in
             for i in 0..<50 {
                 group.addTask {
-                    try? await repo.createClient(
+                    _ = try? await repo.createClient(
                         firstName: "Stress",
                         lastName: "Test \(i)",
                         phone: "555\(String(format: "%04d", i))",

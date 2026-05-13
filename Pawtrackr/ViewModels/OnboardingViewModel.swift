@@ -195,7 +195,12 @@ final class OnboardingViewModel {
     }
 
     var isBiometricsAvailable: Bool {
-        biometrics.biometricType() != .none
+        switch biometrics.biometricType() {
+        case .faceID, .touchID:
+            return true
+        case .none, .unavailable:
+            return false
+        }
     }
 
     var biometricTitle: String {
@@ -204,15 +209,22 @@ final class OnboardingViewModel {
             return "Face ID Unlock"
         case .touchID:
             return "Touch ID Unlock"
+        case .unavailable:
+            return "Biometric Unlock (currently unavailable)"
         case .none:
             return "Biometric Unlock"
         }
     }
 
     var biometricSubtitle: String {
-        isBiometricsAvailable
-            ? "Use biometrics alongside your PIN for faster unlock."
-            : "This device does not have biometric unlock available right now."
+        switch biometrics.biometricType() {
+        case .faceID, .touchID:
+            return "Use biometrics alongside your PIN for faster unlock."
+        case .unavailable:
+            return "Biometrics are temporarily unavailable on this device. Sign in with your PIN."
+        case .none:
+            return "This device does not have biometric unlock available right now."
+        }
     }
     
     // MARK: - Actions
@@ -286,15 +298,23 @@ final class OnboardingViewModel {
             try context.save()
 
             let container = context.container
-            await Task.detached(priority: .userInitiated) {
+            // Propagate save errors so the user sees "couldn't finish setup"
+            // instead of being dropped into an empty dashboard with no idea
+            // why their service catalog / templates / demo data didn't appear.
+            try await Task.detached(priority: .userInitiated) {
                 let bg = ModelContext(container)
                 DataMigrations.ensureServiceCatalog(in: bg)
                 DataMigrations.ensureMessageTemplates(in: bg)
                 if seedSampleData {
-                    try? DemoDataSeeder.seedIfNeeded(in: bg)
+                    do {
+                        try DemoDataSeeder.seedIfNeeded(in: bg)
+                    } catch {
+                        // Demo data is optional — log and continue.
+                        Logger.database.error("Demo data seed failed during onboarding: \(error.localizedDescription, privacy: .public)")
+                    }
                 }
                 if bg.hasChanges {
-                    try? bg.save()
+                    try bg.save()
                 }
             }.value
 
@@ -308,6 +328,9 @@ final class OnboardingViewModel {
             settings.hasConfiguredPrices = seedSampleData
             settings.hasAddedFirstClient = seedSampleData
             settings.hasCompletedFirstVisit = seedSampleData
+            // Arm the post-onboarding feature tour for fresh installs.
+            // (Default registered value is `true`, so existing users skip it.)
+            settings.hasSeenAppTour = false
 
             guard settings.changePIN(to: currentPIN) else {
                 throw ValidationError.custom(message: "The selected PIN could not be saved.")

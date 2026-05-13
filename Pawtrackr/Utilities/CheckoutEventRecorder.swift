@@ -23,7 +23,11 @@ actor CheckoutEventRecorder {
 
     func record(_ event: String, visitID: UUID, petName: String) {
         let line = "\(iso8601.string(from: .now)) | visit=\(visitID.uuidString) | pet=\(petName) | \(event)"
-        Logger.checkoutTrace.info("\(line, privacy: .public)")
+        // OSLog goes to system-wide captures (sysdiagnose, support bundles) where pet
+        // name counts as customer PII. Keep the visit UUID public for cross-referencing
+        // and redact the rest. The on-disk file log (below) keeps full detail for the
+        // user to share intentionally.
+        Logger.checkoutTrace.info("checkout event=\(event, privacy: .public) visit=\(visitID.uuidString, privacy: .public) pet=\(petName, privacy: .private(mask: .hash))")
 
         pendingLines.append(line)
 

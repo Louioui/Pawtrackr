@@ -114,12 +114,21 @@ final class ExportService: @unchecked Sendable {
 
     private static func makeVisitsCSV(from visits: [Visit], dateString: String) -> ExportDocument {
         let rowFormatter = makeRowDateFormatter()
+        // Decimal-aware formatter so we don't round-trip through Double and lose
+        // precision on large totals.
+        let totalFormatter = NumberFormatter()
+        totalFormatter.numberStyle = .decimal
+        totalFormatter.minimumFractionDigits = 2
+        totalFormatter.maximumFractionDigits = 2
+        totalFormatter.usesGroupingSeparator = false
+        totalFormatter.locale = Locale(identifier: "en_US_POSIX")
+
         var csv = "Date,Pet,Client,Total,Payment Method,Status,Notes\n"
         for visit in visits {
             let date = rowFormatter.string(from: visit.startedAt)
             let petName = visit.pet?.name ?? "Unknown"
             let clientName = visit.pet?.owner?.fullName ?? "Unknown"
-            let total = String(format: "%.2f", (visit.total as NSDecimalNumber).doubleValue)
+            let total = totalFormatter.string(from: visit.total as NSDecimalNumber) ?? "0.00"
             let payment = visit.payment?.method.displayName ?? "Pending"
             let status = visit.isCompleted ? "Completed" : "Active"
             let notes = visit.note ?? ""

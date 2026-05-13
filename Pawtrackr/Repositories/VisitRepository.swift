@@ -24,7 +24,10 @@ final class VisitRepository: VisitRepositoryProtocol {
     private let modelContext: ModelContext
     private let eventBus: GlobalEventBus
     
-    init(modelContainer: ModelContainer, eventBus: GlobalEventBus = GlobalEventBus()) {
+    /// `eventBus` is required: a default would create a fresh bus with no
+    /// subscribers and silently swallow every `.refreshRequired` / checkout
+    /// completion event. Pass the same bus the rest of the app holds.
+    init(modelContainer: ModelContainer, eventBus: GlobalEventBus) {
         self.modelContext = modelContainer.mainContext
         self.eventBus = eventBus
     }

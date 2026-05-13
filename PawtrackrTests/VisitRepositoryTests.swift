@@ -25,7 +25,7 @@ final class VisitRepositoryTests: XCTestCase {
         context.insert(pet)
         try context.save()
 
-        repository = VisitRepository(modelContainer: container)
+        repository = VisitRepository(modelContainer: container, eventBus: GlobalEventBus())
     }
 
     override func tearDownWithError() throws {

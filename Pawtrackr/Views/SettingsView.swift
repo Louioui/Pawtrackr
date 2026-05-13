@@ -118,6 +118,15 @@ struct SettingsView: View {
                 }
             }
 
+            Section(header: Text("Help")) {
+                Button {
+                    appSettings.hasSeenAppTour = false
+                } label: {
+                    Label("Replay App Tour", systemImage: "sparkles.rectangle.stack")
+                }
+                .accessibilityIdentifier("settings.replayTour")
+            }
+
             Section(header: Text("Data Export")) {
                 Button {
                     runExport(kind: .clients)

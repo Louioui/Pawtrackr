@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import OSLog
 import SwiftData
 
 @Model
@@ -185,14 +186,27 @@ final class Visit {
         lastModifiedAt = updatedAt
         // Only attempt to update the client's last visit date if we can safely reach it.
         // In background contexts, we avoid forcing a load of the entire owner hierarchy.
+        // Use max() so editing an older visit can't regress a more-recent lastVisitDate.
         if let owner = pet?.owner {
-            owner.lastVisitDate = sortKeyDate
+            let candidate = sortKeyDate
+            if let existing = owner.lastVisitDate {
+                if candidate > existing { owner.lastVisitDate = candidate }
+            } else {
+                owner.lastVisitDate = candidate
+            }
         }
     }
 
     private static func decodeBehaviorTags(from raw: String) -> [String] {
         guard !raw.isEmpty, let data = raw.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        do {
+            return try JSONDecoder().decode([String].self, from: data)
+        } catch {
+            // Don't return [] — that would silently destroy the original on next save.
+            // Treat the raw string as a single legacy tag so it can be repaired later.
+            Logger.dataIntegrity.error("Visit.behaviorTags JSON decode failed; preserving raw as single tag. error=\(error.localizedDescription, privacy: .public)")
+            return [raw]
+        }
     }
 
     private static func encodeBehaviorTags(_ tags: [String]) -> String {

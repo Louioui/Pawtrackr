@@ -84,24 +84,40 @@ actor ImageLoaderService {
         if let existing = publishers[url] {
             return existing
         }
-        
+
         let publisher = URLSession.shared.dataTaskPublisher(for: url)
             .map(\.data)
             .mapError { $0 as Error }
-            .handleEvents(receiveOutput: { [weak self] data in
-                Task { [weak self] in
-                    await self?.finalizeDownload(url: url, data: data)
+            .handleEvents(
+                receiveOutput: { [weak self] data in
+                    Task { [weak self] in
+                        await self?.finalizeDownload(url: url, data: data)
+                    }
+                },
+                receiveCompletion: { [weak self] completion in
+                    // Failure case: the previous code only cleared `publishers[url]`
+                    // on `receiveOutput`, so a failed download left a stale
+                    // publisher entry forever. Clear on any terminal completion.
+                    if case .failure = completion {
+                        Task { [weak self] in
+                            await self?.discardPublisher(for: url)
+                        }
+                    }
                 }
-            })
+            )
             .share()
             .eraseToAnyPublisher()
-        
+
         publishers[url] = publisher
         return publisher
     }
-    
+
     private func finalizeDownload(url: URL, data: Data) {
         cache.setObject(data as NSData, forKey: url as NSURL)
+        publishers[url] = nil
+    }
+
+    private func discardPublisher(for url: URL) {
         publishers[url] = nil
     }
 }

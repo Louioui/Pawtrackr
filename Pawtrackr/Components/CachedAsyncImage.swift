@@ -73,6 +73,8 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
                 placeholder()
             }
         }
-        .task { loader.load(url) }
+        // Use `.task(id:)` so a URL change re-triggers the load instead of
+        // showing stale data from the previous URL.
+        .task(id: url) { loader.load(url) }
     }
 }

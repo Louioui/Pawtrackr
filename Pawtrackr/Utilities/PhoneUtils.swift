@@ -19,12 +19,16 @@ public enum PhoneUtils {
         "R":"7", "S":"7", "T":"8", "U":"8", "V":"8", "W":"9", "X":"9", "Y":"9", "Z":"9"
     ]
 
-    private static let nanpRegex: NSRegularExpression? = {
-        try? NSRegularExpression(pattern: #"^[2-9]\d{2}[2-9]\d{6}$"#)
+    // Static patterns; force-try is intentional. If they ever fail to compile,
+    // crash at launch rather than silently degrading validation to "accept all".
+    private static let nanpRegex: NSRegularExpression = {
+        // swiftlint:disable:next force_try
+        try! NSRegularExpression(pattern: #"^[2-9]\d{2}[2-9]\d{6}$"#)
     }()
-    
-    private static let extRegex: NSRegularExpression? = {
-        try? NSRegularExpression(pattern: #"\s*(x|ext\.?|extension|#)\s*(\d{1,10})\s*$"#)
+
+    private static let extRegex: NSRegularExpression = {
+        // swiftlint:disable:next force_try
+        try! NSRegularExpression(pattern: #"\s*(x|ext\.?|extension|#)\s*(\d{1,10})\s*$"#)
     }()
 
     // MARK: - Public API
@@ -50,9 +54,8 @@ public enum PhoneUtils {
         if area.hasSuffix("11") || exchange.hasSuffix("11") { return false }
         
         // Use regex to enforce NANP rules ([2-9]XX [2-9]XX XXXX)
-        guard let regex = nanpRegex else { return true } // Fallback to basic length check if regex fails
         let range = NSRange(location: 0, length: digits.utf16.count)
-        return regex.firstMatch(in: digits, options: [], range: range) != nil
+        return nanpRegex.firstMatch(in: digits, options: [], range: range) != nil
     }
 
     /// Converts any valid US phone number string into the canonical E.164 format.
@@ -176,9 +179,7 @@ public enum PhoneUtils {
         let lowercasedInput = input.lowercased()
         let fullRange = NSRange(location: 0, length: lowercasedInput.utf16.count)
         
-        guard let regex = extRegex else { return (input.trimmingCharacters(in: .whitespacesAndNewlines), nil) }
-        
-        if let match = regex.firstMatch(in: lowercasedInput, options: [], range: fullRange) {
+        if let match = extRegex.firstMatch(in: lowercasedInput, options: [], range: fullRange) {
             if let extRange = Range(match.range(at: 2), in: lowercasedInput) {
                 let extDigits = String(lowercasedInput[extRange])
                 // Convert the whole match range from `lowercasedInput` to the corresponding prefix in the original `input` string.

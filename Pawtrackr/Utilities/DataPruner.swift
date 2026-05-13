@@ -31,57 +31,73 @@ enum DataPruner {
         
         Logger.maintenance.info("Starting photo pruning for items older than \(days) days (Downsample only: \(downsampleOnly))")
         
+        // Batch the work so a long-lived store with thousands of old visits
+        // doesn't hold every match in memory + a single save at the end.
+        let batchSize = 100
+        var offset = 0
+        var processedCount = 0
+
         do {
-            // Fetch visits older than cutoff
-            let descriptor = FetchDescriptor<Visit>(
-                predicate: #Predicate<Visit> { $0.startedAt < cutoffDate }
-            )
-            let oldVisits = try context.fetch(descriptor)
-            
-            var processedCount = 0
-            for visit in oldVisits {
-                var changed = false
-                
-                // Process Before Photo
-                if let beforeData = visit.beforePhotoData {
-                    if downsampleOnly {
-                        // Ensure we have a thumbnail before removing high-res
-                        if visit.beforeThumbnailData == nil {
-                            visit.beforeThumbnailData = ImageCache.shared.downsampleToData(data: beforeData, maxDimension: 200)
+            while true {
+                var descriptor = FetchDescriptor<Visit>(
+                    predicate: #Predicate<Visit> { $0.startedAt < cutoffDate },
+                    sortBy: [SortDescriptor(\.startedAt, order: .forward)]
+                )
+                descriptor.fetchOffset = offset
+                descriptor.fetchLimit = batchSize
+
+                let batch = try context.fetch(descriptor)
+                if batch.isEmpty { break }
+
+                var batchChanged = false
+                for visit in batch {
+                    var changed = false
+
+                    // Process Before Photo
+                    if let beforeData = visit.beforePhotoData {
+                        if downsampleOnly {
+                            if visit.beforeThumbnailData == nil {
+                                visit.beforeThumbnailData = ImageCache.shared.downsampleToData(data: beforeData, maxDimension: 200)
+                            }
+                            visit.beforePhotoData = nil
+                        } else {
+                            visit.beforePhotoData = nil
+                            visit.beforeThumbnailData = nil
                         }
-                        visit.beforePhotoData = nil // Remove high-res
-                    } else {
-                        visit.beforePhotoData = nil
-                        visit.beforeThumbnailData = nil
+                        changed = true
                     }
-                    changed = true
-                }
-                
-                // Process After Photo
-                if let afterData = visit.afterPhotoData {
-                    if downsampleOnly {
-                        if visit.afterThumbnailData == nil {
-                            visit.afterThumbnailData = ImageCache.shared.downsampleToData(data: afterData, maxDimension: 200)
+
+                    // Process After Photo
+                    if let afterData = visit.afterPhotoData {
+                        if downsampleOnly {
+                            if visit.afterThumbnailData == nil {
+                                visit.afterThumbnailData = ImageCache.shared.downsampleToData(data: afterData, maxDimension: 200)
+                            }
+                            visit.afterPhotoData = nil
+                        } else {
+                            visit.afterPhotoData = nil
+                            visit.afterThumbnailData = nil
                         }
-                        visit.afterPhotoData = nil // Remove high-res
-                    } else {
-                        visit.afterPhotoData = nil
-                        visit.afterThumbnailData = nil
+                        changed = true
                     }
-                    changed = true
+
+                    if changed {
+                        processedCount += 1
+                        batchChanged = true
+                    }
                 }
-                
-                if changed {
-                    processedCount += 1
+
+                if batchChanged {
+                    try context.save()
                 }
-            }
-            
-            if context.hasChanges {
-                try context.save()
+                offset += batch.count
+
+                // If the batch was short, we're done.
+                if batch.count < batchSize { break }
             }
             Logger.maintenance.info("Pruning complete. Processed \(processedCount) visits.")
         } catch {
-            Logger.maintenance.error("Pruning failed: \(error.localizedDescription)")
+            Logger.maintenance.error("Pruning failed at offset \(offset): \(error.localizedDescription)")
         }
     }
 }

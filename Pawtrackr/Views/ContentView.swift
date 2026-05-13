@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var sidebarSelection: NavigationItem? = .dashboard
     @State private var tabSelection: NavigationItem = .dashboard
     @State private var presentedSheet: SheetDestination?
+    @State private var showFeatureTour: Bool = false
     /// Last-handled (kind, uuid, timestamp) used to dedupe near-simultaneous
     /// navigation requests coming from both `.onReceive` and `consumePendingNavigation`
     /// at app launch / cold-start time.
@@ -90,12 +91,32 @@ struct ContentView: View {
                     }
                 }
             }
+            .adaptiveCover(isPresented: $showFeatureTour) {
+                FeatureTourView {
+                    appSettings.hasSeenAppTour = true
+                    showFeatureTour = false
+                }
+                .interactiveDismissDisabled(true)
+            }
             .onAppear {
                 router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
                 applyUITestLaunchOverrides()
                 consumePendingNewClientRequest()
                 consumePendingNavigation()
+                evaluateFeatureTourIfReady()
             }
+            .onChange(of: appSettings.hasSeenAppTour) { _, seen in
+                // Pick up the OnboardingViewModel arming the tour without
+                // requiring a fresh ContentView appear.
+                if !seen { showFeatureTour = true }
+            }
+    }
+
+    private func evaluateFeatureTourIfReady() {
+        guard !AppRuntime.isUITesting else { return }
+        if !appSettings.hasSeenAppTour {
+            showFeatureTour = true
+        }
     }
 
     private enum NavigationType { case pet, client }

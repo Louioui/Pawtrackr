@@ -64,10 +64,27 @@ final actor ClientRepository: ClientRepositoryProtocol {
             return all.map { $0.persistentModelID }
         }
 
-        descriptor.fetchLimit = 5000
+        // Field-prefixed query (e.g. "n:Sara" / "p:555" / "pet:Bella") still
+        // needs the in-memory matcher because we filter against custom views
+        // including the joined pet list. Cap the fetch to a smaller window so
+        // a salon with thousands of clients doesn't load the entire table per
+        // keystroke. Page from the candidate window — pagination beyond that
+        // window requires a query refinement.
+        let candidateLimit = max(limit * 4, 200)
+        descriptor.fetchLimit = candidateLimit
+
+        // For simple unstructured queries, push name match into the predicate
+        // first. localizedStandardContains is diacritic+case insensitive.
+        if !trimmed.contains(":") {
+            descriptor.predicate = #Predicate { client in
+                client.lastName.localizedStandardContains(trimmed) ||
+                client.firstName.localizedStandardContains(trimmed)
+            }
+        }
+
         let all = try modelContext.fetch(descriptor)
         let filtered = all.filter { Self.matches(client: $0, query: trimmed) }
-        
+
         let pageStart = min(offset, filtered.count)
         let pageEnd = min(offset + limit, filtered.count)
         return filtered[pageStart..<pageEnd].map { $0.persistentModelID }
@@ -163,8 +180,18 @@ final actor ClientRepository: ClientRepositoryProtocol {
     }
 
     func findClient(byPhone phone: String) async throws -> PersistentIdentifier? {
-        let descriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == phone })
-        return try modelContext.fetch(descriptor).first?.persistentModelID
+        // Try the input as-given first (handles canonical E.164 stored phones).
+        let exact = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == phone })
+        if let hit = try modelContext.fetch(exact).first {
+            return hit.persistentModelID
+        }
+        // Fall back to normalizing the lookup so we still match clients whose
+        // stored phone couldn't be parsed into E.164 at write time.
+        guard let normalized = PhoneUtils.toE164(phone), normalized != phone else {
+            return nil
+        }
+        let normalizedDescriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == normalized })
+        return try modelContext.fetch(normalizedDescriptor).first?.persistentModelID
     }
 
     func createClient(

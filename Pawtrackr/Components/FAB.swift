@@ -12,6 +12,7 @@
 //  Updated by mac on 8/16/25.
 //
 
+import OSLog
 import SwiftUI
 #if os(iOS)
 import UIKit
@@ -123,13 +124,13 @@ public struct FAB: View {
                         .accessibilityHidden(true)
                 }
             }
-            .accessibilityLabel(Text(accessibilityLabel))
-            .accessibilityValue(Text(accessibilityValueText))
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint(Text(NSLocalizedString("a11y.primary_action", comment: "")))
-            .keyboardShortcut(.defaultAction)
-            .opacity(isDisabled ? 0.6 : 1.0)
         }
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityValue(Text(accessibilityValueText))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(Text(NSLocalizedString("a11y.primary_action", comment: "")))
+        .keyboardShortcut(.defaultAction)
+        .opacity(isDisabled ? 0.6 : 1.0)
         .buttonStyle(PressedScaleStyle())
         .disabled(isDisabled || isLoading)
         .accessibilityRespondsToUserInteraction(!(isDisabled || isLoading))
@@ -245,8 +246,10 @@ struct FAB_Previews: PreviewProvider {
             }
             .fabOverlay {
                 FAB(size: .regular, style: .primary, tint: .accentColor) {
-                    print("FAB tapped")
+                    Logger.ui.debug("FAB tapped")
                 }
+                // Note: do NOT add .accessibilityLabel here — FAB sets its own
+                // dynamic label internally and outer modifiers would shadow it.
             }
             .previewDisplayName("Default")
 
@@ -275,7 +278,7 @@ struct FAB_Previews: PreviewProvider {
             }
             .fabOverlay {
                 FAB(size: .regular, style: .primary, tint: .accentColor, badgeCount: 7) {
-                    print("FAB tapped with badge")
+                    Logger.ui.debug("FAB tapped with badge")
                 }
             }
             .previewDisplayName("Badge")

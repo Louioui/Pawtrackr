@@ -79,10 +79,12 @@ final class RandomWorkflowFuzzTests: XCTestCase {
         let clientRepository = ClientRepository(modelContainer: container)
         let firstCreated = try XCTUnwrap(created.first)
         let nameMatches = try await clientRepository.fetchClients(query: "n:\(firstCreated.last)", limit: 10, offset: 0)
-        XCTAssertTrue(nameMatches.contains { $0.lastName == firstCreated.last })
+        let nameMatchClients = nameMatches.compactMap { context.model(for: $0) as? Client }
+        XCTAssertTrue(nameMatchClients.contains { $0.lastName == firstCreated.last })
 
         let petMatches = try await clientRepository.fetchClients(query: "pet:\(firstCreated.pet)", limit: 10, offset: 0)
-        XCTAssertTrue(petMatches.contains { ($0.pets ?? []).contains { $0.name == firstCreated.pet } })
+        let petMatchClients = petMatches.compactMap { context.model(for: $0) as? Client }
+        XCTAssertTrue(petMatchClients.contains { ($0.pets ?? []).contains { $0.name == firstCreated.pet } })
 
         let checkoutPets = Array(pets.prefix(8))
         let visitRepository = VisitRepository(modelContainer: container, eventBus: eventBus)

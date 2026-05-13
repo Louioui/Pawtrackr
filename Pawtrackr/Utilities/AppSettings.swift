@@ -13,7 +13,12 @@ import Observation
 enum AppSettingsKeys {
     static let isLockEnabled = "isLockEnabled"
     static let isBiometricLockEnabled = "isBiometricLockEnabled"
-    static let appPIN = "appPIN"
+    /// Legacy UserDefaults key — kept only so we can migrate any existing
+    /// plaintext PIN out of UserDefaults and into the Keychain on launch,
+    /// then erase it. New writes should never set this key.
+    static let legacyAppPIN = "appPIN"
+    /// Keychain account name for the current PIN.
+    static let appPINKeychainAccount = "appPIN"
     static let lastPINChangeDate = "lastPINChangeDate"
     static let autoLockOnBackground = "autoLockOnBackground"
     static let autoLockAfterInactivity = "autoLockAfterInactivity"
@@ -23,6 +28,7 @@ enum AppSettingsKeys {
     static let hasAddedFirstClient = "hasAddedFirstClient"
     static let hasCompletedFirstVisit = "hasCompletedFirstVisit"
     static let isChecklistDismissed = "isChecklistDismissed"
+    static let hasSeenAppTour = "hasSeenAppTour"
 }
 
 @Observable
@@ -62,6 +68,12 @@ final class AppSettings {
         didSet { UserDefaults.standard.set(isChecklistDismissed, forKey: AppSettingsKeys.isChecklistDismissed) }
     }
 
+    /// True once the new-user feature tour has been seen (or explicitly skipped).
+    /// Defaults to `false` so a fresh install gets the tour after onboarding.
+    var hasSeenAppTour: Bool {
+        didSet { UserDefaults.standard.set(hasSeenAppTour, forKey: AppSettingsKeys.hasSeenAppTour) }
+    }
+
     var businessName: String {
         didSet {
             UserDefaults.standard.set(businessName, forKey: AppSettingsKeys.businessName)
@@ -87,9 +99,11 @@ final class AppSettings {
     }
 
     /// 4-digit App PIN. Validated to ensure it's exactly 4 digits.
+    /// Backed by the Keychain (kSecAttrAccessibleWhenUnlockedThisDeviceOnly)
+    /// instead of UserDefaults, so it's not in plaintext device backups.
     private(set) var appPIN: String {
         didSet {
-            UserDefaults.standard.set(appPIN, forKey: AppSettingsKeys.appPIN)
+            KeychainStorage.set(appPIN, forKey: AppSettingsKeys.appPINKeychainAccount)
         }
     }
 
@@ -130,16 +144,20 @@ final class AppSettings {
         }
 
         // Register defaults first
+        // hasSeenAppTour defaults to TRUE so existing installs (which never
+        // explicitly set the key) don't suddenly see the tour on update.
+        // OnboardingViewModel writes `false` after a fresh setup completes,
+        // which is the only path that arms the tour.
         UserDefaults.standard.register(defaults: [
             AppSettingsKeys.isLockEnabled: AppRuntime.isUITesting ? false : Defaults.isLockEnabled,
             AppSettingsKeys.isBiometricLockEnabled: AppRuntime.isUITesting ? false : Defaults.biometricEnabled,
-            AppSettingsKeys.appPIN: Defaults.pin,
             AppSettingsKeys.autoLockOnBackground: AppRuntime.isUITesting ? false : Defaults.autoLockBackground,
             AppSettingsKeys.autoLockAfterInactivity: AppRuntime.isUITesting ? false : Defaults.autoLockInactivity,
             AppSettingsKeys.hasConfiguredPrices: Defaults.hasConfiguredPrices,
             AppSettingsKeys.hasAddedFirstClient: Defaults.hasAddedFirstClient,
             AppSettingsKeys.hasCompletedFirstVisit: Defaults.hasCompletedFirstVisit,
-            AppSettingsKeys.isChecklistDismissed: Defaults.isChecklistDismissed
+            AppSettingsKeys.isChecklistDismissed: Defaults.isChecklistDismissed,
+            AppSettingsKeys.hasSeenAppTour: true
         ])
 
         // Read values
@@ -155,10 +173,27 @@ final class AppSettings {
         self.hasAddedFirstClient = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasAddedFirstClient)
         self.hasCompletedFirstVisit = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasCompletedFirstVisit)
         self.isChecklistDismissed = UserDefaults.standard.bool(forKey: AppSettingsKeys.isChecklistDismissed)
+        self.hasSeenAppTour = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasSeenAppTour)
 
-        // Validate stored PIN
-        let storedPIN = UserDefaults.standard.string(forKey: AppSettingsKeys.appPIN) ?? Defaults.pin
+        // Migrate any existing plaintext PIN out of UserDefaults into the
+        // Keychain, then erase the UserDefaults copy. Future reads come from
+        // the Keychain only.
+        let legacyPIN = UserDefaults.standard.string(forKey: AppSettingsKeys.legacyAppPIN)
+        if let legacy = legacyPIN, Self.isValidPIN(legacy),
+           KeychainStorage.string(forKey: AppSettingsKeys.appPINKeychainAccount) == nil {
+            KeychainStorage.set(legacy, forKey: AppSettingsKeys.appPINKeychainAccount)
+        }
+        if legacyPIN != nil {
+            UserDefaults.standard.removeObject(forKey: AppSettingsKeys.legacyAppPIN)
+        }
+
+        let storedPIN = KeychainStorage.string(forKey: AppSettingsKeys.appPINKeychainAccount) ?? Defaults.pin
         self.appPIN = Self.isValidPIN(storedPIN) ? storedPIN : Defaults.pin
+        // If we just defaulted (no Keychain entry yet, no legacy migration),
+        // make sure the Keychain has a value so subsequent reads are stable.
+        if KeychainStorage.string(forKey: AppSettingsKeys.appPINKeychainAccount) == nil {
+            KeychainStorage.set(self.appPIN, forKey: AppSettingsKeys.appPINKeychainAccount)
+        }
     }
 
     // MARK: - PIN Management

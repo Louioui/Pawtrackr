@@ -143,10 +143,11 @@ final class CloudKitMonitor {
             ) { [self] in
                 try await self.container.accountStatus()
             }
-            await MainActor.run { self.applyAccountStatus(status) }
+            // We're already @MainActor — no need for an explicit hop.
+            applyAccountStatus(status)
         } catch {
             log.error("Failed to fetch CKAccountStatus: \(error.localizedDescription, privacy: .public)")
-            await MainActor.run { self.accountState = .couldNotDetermine }
+            accountState = .couldNotDetermine
             postChange()
         }
     }

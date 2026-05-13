@@ -257,7 +257,7 @@ final class OnboardingViewModelTests: XCTestCase {
         [
             AppSettingsKeys.isLockEnabled,
             AppSettingsKeys.isBiometricLockEnabled,
-            AppSettingsKeys.appPIN,
+            AppSettingsKeys.legacyAppPIN,
             AppSettingsKeys.lastPINChangeDate,
             AppSettingsKeys.autoLockOnBackground,
             AppSettingsKeys.autoLockAfterInactivity,
@@ -266,9 +266,12 @@ final class OnboardingViewModelTests: XCTestCase {
             AppSettingsKeys.hasConfiguredPrices,
             AppSettingsKeys.hasAddedFirstClient,
             AppSettingsKeys.hasCompletedFirstVisit,
-            AppSettingsKeys.isChecklistDismissed
+            AppSettingsKeys.isChecklistDismissed,
+            AppSettingsKeys.hasSeenAppTour
         ].forEach { key in
             defaults.removeObject(forKey: key)
         }
+        // PIN now lives in the Keychain; clear it explicitly so tests start fresh.
+        KeychainStorage.remove(forKey: AppSettingsKeys.appPINKeychainAccount)
     }
 }

@@ -3,36 +3,115 @@ import Foundation
 import SwiftData
 import OSLog
 
+// MARK: - Pet Entity for Assistant Awareness
+struct PetEntity: AppEntity {
+    typealias ID = UUID
+
+    let id: UUID
+    let name: String
+    
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Pet")
+    var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
+    
+    static var defaultQuery = PetEntityQuery()
+}
+
+private extension PetEntity {
+    init(pet: Pet) {
+        self.id = pet.uuid
+        self.name = pet.name
+    }
+}
+
+struct PetEntityQuery: EntityStringQuery {
+    @MainActor
+    func entities(for identifiers: [UUID]) async throws -> [PetEntity] {
+        let container = try IntentContainerProvider.sharedContainer()
+        let context = container.mainContext
+        var entities: [PetEntity] = []
+        entities.reserveCapacity(identifiers.count)
+
+        for identifier in identifiers {
+            let descriptor = FetchDescriptor<Pet>(
+                predicate: #Predicate { pet in pet.uuid == identifier },
+                sortBy: [SortDescriptor(\Pet.name)]
+            )
+            if let pet = try context.fetch(descriptor).first {
+                entities.append(PetEntity(pet: pet))
+            }
+        }
+
+        return entities
+    }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [PetEntity] {
+        let container = try IntentContainerProvider.sharedContainer()
+        let context = container.mainContext
+        let normalizedQuery = string.trimmingCharacters(in: .whitespacesAndNewlines).localizedLowercase
+
+        // Push the predicate into the FetchDescriptor instead of fetching the
+        // whole Pet table and filtering in memory. With many pets, the old
+        // approach made every Siri lookup O(n) on disk + memory.
+        var descriptor: FetchDescriptor<Pet>
+        if normalizedQuery.isEmpty {
+            descriptor = FetchDescriptor<Pet>(sortBy: [SortDescriptor(\Pet.name)])
+        } else {
+            descriptor = FetchDescriptor<Pet>(
+                predicate: #Predicate { pet in pet.name.localizedStandardContains(normalizedQuery) },
+                sortBy: [SortDescriptor(\Pet.name)]
+            )
+        }
+        descriptor.fetchLimit = 10
+
+        return try context.fetch(descriptor).map(PetEntity.init(pet:))
+    }
+
+    @MainActor
+    func suggestedEntities() async throws -> [PetEntity] {
+        let container = try IntentContainerProvider.sharedContainer()
+        let context = container.mainContext
+        var descriptor = FetchDescriptor<Pet>(sortBy: [SortDescriptor(\Pet.updatedAt, order: .reverse)])
+        descriptor.fetchLimit = 10
+        return try context.fetch(descriptor).map(PetEntity.init(pet:))
+    }
+}
+
 // MARK: - Check In Pet Intent
 struct CheckInPetIntent: AppIntent {
     static var title: LocalizedStringResource = "Check In Pet"
-    static var description = IntentDescription("Starts a new grooming session for a specific pet.")
+    static var description = IntentDescription("Starts a new grooming session.")
+    static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "Pet Name")
-    var petName: String
+    @Parameter(title: "Pet")
+    var pet: PetEntity
 
     @MainActor
-    func perform() async throws -> some IntentResult {
+    func perform() async throws -> some IntentResult & ProvidesDialog {
         let container = try IntentContainerProvider.sharedContainer()
-        let context = ModelContext(container)
-        
-        var descriptor = FetchDescriptor<Pet>(
-            predicate: #Predicate { $0.name == petName }
+        let context = container.mainContext
+        let petID = pet.id
+        let descriptor = FetchDescriptor<Pet>(
+            predicate: #Predicate { model in model.uuid == petID },
+            sortBy: [SortDescriptor(\Pet.name)]
         )
-        descriptor.fetchLimit = 1
-        
-        guard let pet = try context.fetch(descriptor).first else {
-            throw AppError.database("Pet '\(petName)' not found.")
+
+        guard let model = try context.fetch(descriptor).first else {
+            throw AppError.database("Could not find \(pet.name).")
         }
-        
-        if pet.activeVisit != nil {
-            return .result()
+
+        guard model.activeVisit == nil else {
+            return .result(dialog: "\(model.name) is already checked in.")
         }
-        
-        let visitRepo = VisitRepository(modelContainer: container, eventBus: GlobalEventBus())
-        _ = try await visitRepo.checkIn(pet: pet, date: .now)
-        
-        return .result()
+
+        // Use a fresh GlobalEventBus here: the running app's bus instance is
+        // owned by PawtrackrApp and isn't reachable from this process boundary.
+        // The intent's downstream consumers rely on NotificationCenter posts
+        // from VisitRepository.checkIn (which use the global NotificationCenter),
+        // so dashboards still refresh via that path.
+        let repo = VisitRepository(modelContainer: container, eventBus: GlobalEventBus())
+        _ = try await repo.checkIn(pet: model, date: .now)
+        return .result(dialog: "Checked in \(model.name).")
     }
 }
 
@@ -61,8 +140,19 @@ struct GetBusinessStatsIntent: AppIntent {
 }
 
 // MARK: - Container Provider
-struct IntentContainerProvider {
+enum IntentContainerProvider {
+    /// Memoized container shared across all AppIntents invocations within a
+    /// process. Constructing one per call (the previous behavior) opened
+    /// multiple ModelContainers against the same CloudKit-backed store —
+    /// wasted memory + cross-container cache divergence.
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cached: ModelContainer?
+
     static func sharedContainer() throws -> ModelContainer {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached { return cached }
+
         let schema = Schema(PawtrackrSchema.models)
         let config = ModelConfiguration(
             "Pawtrackr",
@@ -70,11 +160,13 @@ struct IntentContainerProvider {
             isStoredInMemoryOnly: false,
             cloudKitDatabase: .automatic
         )
-        return try ModelContainer(
+        let container = try ModelContainer(
             for: schema,
             migrationPlan: PawtrackrMigrationPlan.self,
             configurations: [config]
         )
+        cached = container
+        return container
     }
 }
 
@@ -85,8 +177,8 @@ struct PawtrackrShortcuts: AppShortcutsProvider {
             intent: CheckInPetIntent(),
             phrases: [
                 "Check in a pet in \(.applicationName)",
-                "Start session for \(\.$petName) in \(.applicationName)",
-                "Check in \(\.$petName) with \(.applicationName)"
+                "Start session for \(\.$pet) in \(.applicationName)",
+                "Check in \(\.$pet) with \(.applicationName)"
             ],
             shortTitle: "Check In Pet",
             systemImageName: "play.circle.fill"

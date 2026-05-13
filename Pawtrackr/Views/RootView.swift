@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
@@ -65,16 +66,15 @@ struct RootView: View {
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            Logger.ui.debug("ScenePhase changed from \(String(describing: oldPhase)) to \(String(describing: newPhase))")
+            switch newPhase {
             case .active:
                 TimeHub.shared.resume()
                 withAnimation {
                     showPrivacyScreen = false
                 }
             case .inactive:
-                // On iPad, inactive can mean the app is still visible (multitasking).
-                // Do not show the privacy screen yet.
                 break
             case .background:
                 TimeHub.shared.pause()

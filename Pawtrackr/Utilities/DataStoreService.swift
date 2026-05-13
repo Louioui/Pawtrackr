@@ -61,9 +61,15 @@ final class DataStoreService {
         }.value
     }
 
-    /// Registers for change notifications for a specific model type.
-    /// In a production-grade app, we leverage the `NSManagedObjectContextObjectsDidChange`
-    /// or SwiftData's internal change notifications via a background task.
+    /// Yields a tick whenever the main context records changes.
+    ///
+    /// FRAGILE: SwiftData wraps Core Data, so the Core Data
+    /// `NSManagedObjectContextObjectsDidChange` notification *currently* fires
+    /// when a SwiftData ModelContext mutates. This is undocumented — Apple
+    /// could rev SwiftData's internals at any release and silently break this
+    /// stream. If the UI stops reacting to writes after a future iOS update,
+    /// this observer is the first thing to suspect; replace with a SwiftData-
+    /// native subscription if/when one ships.
     func observeChanges<T: PersistentModel>(_ modelType: T.Type) -> AsyncStream<Void> {
         AsyncStream { continuation in
             let observer = NotificationCenter.default.addObserver(

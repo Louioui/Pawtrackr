@@ -114,10 +114,6 @@ enum DS {
         static let width: CGFloat = 4
     }
 
-    // MARK: - Shadows
-    // This enum is removed because SwiftUI.ShadowStyle cannot be initialized directly.
-    // Shadows are applied via the .shadow() modifier in components like Card.swift.
-
     // MARK: - Typography helpers
     enum TypeScale {
         static let title    = Font.title3.weight(.semibold)
@@ -166,6 +162,9 @@ extension View {
                 .frame(height: 3)
         }
     }
+
+    // Note: pressScaleStyle() lives in MotionSystem.swift and supports a
+    // hapticsEnabled parameter; do not redeclare it here.
 }
 
 private struct HairlineBorderModifier: ViewModifier {

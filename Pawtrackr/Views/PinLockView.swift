@@ -187,12 +187,16 @@ public struct PinLockView: View {
 
     private var keypadBottomRow: some View {
         HStack(spacing: 12) {
-            if cachedBiometricType != .none {
-                KeyButton(systemName: cachedBiometricType == .faceID ? "faceid" : "touchid") {
-                    authenticateWithBiometrics()
-                }
-                .accessibilityLabel("Authenticate with Biometrics")
-            } else {
+            switch cachedBiometricType {
+            case .faceID:
+                KeyButton(systemName: "faceid") { authenticateWithBiometrics() }
+                    .accessibilityLabel("Authenticate with Face ID")
+            case .touchID:
+                KeyButton(systemName: "touchid") { authenticateWithBiometrics() }
+                    .accessibilityLabel("Authenticate with Touch ID")
+            case .unavailable, .none:
+                // Biometrics either don't exist on this device, or are
+                // temporarily unavailable (lockout/not-enrolled). PIN-only.
                 KeypadSpacer()
             }
             KeyButton(label: "0") { tapDigit(0) }
@@ -206,7 +210,12 @@ public struct PinLockView: View {
         // operating system already enforces its own retry limits and
         // failure thresholds, so a successful Face ID / Touch ID is a
         // strong enough signal to clear the cooldown.
-        guard cachedBiometricType != .none else { return }
+        switch cachedBiometricType {
+        case .faceID, .touchID:
+            break
+        case .none, .unavailable:
+            return
+        }
         authenticator.authenticate { success, _ in
             if success {
                 resetLockoutState()

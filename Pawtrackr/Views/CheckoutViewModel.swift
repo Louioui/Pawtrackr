@@ -635,7 +635,14 @@ final class CheckoutViewModel {
         let addOnIDs = Set(addOnServices.filter { draft.selectedAddOnUUIDs.contains($0.uuid) }.map(\.persistentModelID))
         selectedServiceIDs = mainIDs
         selectedAddOnIDs = addOnIDs
-        currentStep = CheckoutFlowStep(rawValue: draft.currentStepRawValue) ?? .services
+        if let restoredStep = CheckoutFlowStep(rawValue: draft.currentStepRawValue) {
+            currentStep = restoredStep
+        } else {
+            // Don't silently regress to step 1 — that confuses the user when their
+            // selections look filled in but the wizard rewinds. Log loudly, leave
+            // the user where they were (default `currentStep` from init).
+            Logger.checkout.error("Draft restore: unknown step rawValue=\(draft.currentStepRawValue, privacy: .public). Keeping current step.")
+        }
         recalculateCachedStrings()
         lastSavedDraftFingerprint = currentFingerprint()
         suppressDraftAutosave = false
@@ -716,6 +723,12 @@ final class CheckoutViewModel {
     }
 
     private func makeDraft() -> CheckoutDraft {
+        // FIXME: photos are intentionally NOT persisted here, which means a
+        // crash mid-checkout silently loses the user's before/after pictures.
+        // Either persist them (size-capped, in the draft directory next to
+        // the JSON) or surface a banner on restore so the user knows to
+        // re-pick them. Leaving as-is for now to avoid bloating draft files
+        // without a product decision on the cap.
         CheckoutDraft(
             visitID: visit.uuid,
             petID: pet.uuid,

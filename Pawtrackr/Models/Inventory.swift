@@ -6,9 +6,9 @@ final class InventoryItem {
     var uuid: UUID = UUID()
     var name: String = ""
     var category: String = ""
-    var currentStock: Double = 0.0
+    var currentStock: Decimal = 0.0
     var unit: String = "" // e.g., "Gallons", "Bottles", "Sets"
-    var reorderLevel: Double = 5.0
+    var reorderLevel: Decimal = 5.0
     var costPerUnit: Decimal = 0.0
     
     @Relationship(deleteRule: .cascade, inverse: \InventoryTransaction.item) 
@@ -27,12 +27,12 @@ final class InventoryItem {
 final class InventoryTransaction {
     var uuid: UUID = UUID()
     var date: Date = Date()
-    var quantityChange: Double = 0.0 // Negative for usage, positive for restock
+    var quantityChange: Decimal = 0.0 // Negative for usage, positive for restock
     var note: String? = ""
     
     var item: InventoryItem?
 
-    init(item: InventoryItem, quantityChange: Double, note: String? = nil) {
+    init(item: InventoryItem, quantityChange: Decimal, note: String? = nil) {
         self.uuid = UUID()
         self.date = Date()
         self.item = item

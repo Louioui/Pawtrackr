@@ -32,6 +32,24 @@ import OSLog
 // IMPORTANT: never delete a version once it has shipped to users; it must
 // remain in the chain so their store can climb forward to the latest.
 
+// FIXME: Schema migration owed — Pet.weightLbs and InventoryItem.{currentStock,
+// reorderLevel,quantityChange} were changed Double → Decimal in the working
+// tree without bumping a new schema version or adding a custom MigrationStage.
+// SwiftData lightweight migration does not handle column type changes; existing
+// installs may fail to load on first launch after this change.
+//
+// To do this properly:
+//   1. Restore V1 below as a frozen snapshot of the OLD model definitions
+//      (i.e. weightLbs: Double?, currentStock: Double, etc.) inside its own
+//      enum (e.g. PawtrackrSchemaV1Models).
+//   2. Define PawtrackrSchemaV2 with the current Decimal-typed models.
+//   3. Update the typealias to V2: `typealias PawtrackrSchema = PawtrackrSchemaV2`.
+//   4. Add a `.custom(...)` MigrationStage that copies V1's Double values
+//      into V2's Decimal columns inside `willMigrate`/`didMigrate`.
+//   5. Test by launching against a pre-change `.store` snapshot.
+//
+// Until that's done, the patch-version bump below is the only thing telling
+// SwiftData anything changed at all.
 enum PawtrackrSchemaV1: VersionedSchema {
     static var versionIdentifier: Schema.Version = .init(1, 0, 1)
 

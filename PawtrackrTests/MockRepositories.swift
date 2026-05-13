@@ -27,7 +27,7 @@ final class MockClientRepository: ClientRepositoryProtocol, @unchecked Sendable 
     }
     
     func createClient(firstName: String, lastName: String, phone: String, email: String, address: String, pets: [NewPetData], contacts: [NewContactData]) async throws -> PersistentIdentifier {
-        let id = PersistentIdentifier.demoClient
+        let id = await PersistentIdentifier.demoClient
         clients.append(id)
         return id
     }

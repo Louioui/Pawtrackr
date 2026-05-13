@@ -2,9 +2,10 @@ import Foundation
 import LocalAuthentication
 
 enum BiometricType {
-    case none
+    case none           // Device has no biometric hardware (or device unsupported)
     case touchID
     case faceID
+    case unavailable    // Hardware exists but is currently unusable (lockout, not enrolled, no passcode set)
 }
 
 final class BiometricAuthenticator {
@@ -15,6 +16,19 @@ final class BiometricAuthenticator {
         var error: NSError?
 
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            // Distinguish "device has no biometrics" from "biometrics are
+            // temporarily unavailable" so the UI can guide the user (e.g.
+            // "Face ID is locked, use your PIN instead").
+            if let laError = error as? LAError {
+                switch laError.code {
+                case .biometryLockout, .biometryNotEnrolled, .passcodeNotSet:
+                    return .unavailable
+                case .biometryNotAvailable:
+                    return .none
+                default:
+                    return .none
+                }
+            }
             return .none
         }
 

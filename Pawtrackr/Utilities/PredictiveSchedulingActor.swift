@@ -20,7 +20,10 @@ struct SmartSuggestion: Identifiable, Sendable {
     let ownerName: String
     let message: String
     let actionType: ActionType
-    
+    /// Days overdue divided by typical interval. Higher = more urgent.
+    /// Used to sort suggestions so the groomer sees the most-overdue pets first.
+    let overdueRatio: Double
+
     enum ActionType: Sendable {
         case call, text, rebook
     }
@@ -57,20 +60,24 @@ final actor PredictiveSchedulingActor {
             let daysSinceLastVisit = Date.now.timeIntervalSince(lastVisitDate)
             
             // Suggest re-engagement if pet is 20% past their typical schedule
-            if daysSinceLastVisit > (avgInterval * 1.2) {
-                let weeks = Int(avgInterval / (7 * 24 * 3600))
+            if avgInterval > 0, daysSinceLastVisit > (avgInterval * 1.2) {
+                let weeks = max(1, Int(avgInterval / (7 * 24 * 3600)))
+                let weeksWord = weeks == 1 ? "week" : "weeks"
+                let daysOverdue = Int(daysSinceLastVisit / (24 * 3600))
                 let suggestion = SmartSuggestion(
                     petID: pet.persistentModelID,
                     clientID: pet.owner?.persistentModelID,
                     petName: pet.name,
                     ownerName: pet.owner?.fullName ?? "Unknown Owner",
-                    message: "\(pet.name) usually visits every \(weeks) weeks. It's been \(Int(daysSinceLastVisit / (24 * 3600))) days since their last visit.",
-                    actionType: .text
+                    message: "\(pet.name) usually visits every \(weeks) \(weeksWord). It's been \(daysOverdue) days since their last visit.",
+                    actionType: .text,
+                    overdueRatio: daysSinceLastVisit / avgInterval
                 )
                 suggestions.append(suggestion)
             }
         }
-        
-        return suggestions.sorted { $0.message.count < $1.message.count } // Simple sort for now
+
+        // Most overdue first.
+        return suggestions.sorted { $0.overdueRatio > $1.overdueRatio }
     }
 }

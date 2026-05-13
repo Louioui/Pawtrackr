@@ -33,7 +33,7 @@ struct CheckoutRequest: Sendable {
 
 struct CheckoutResult: Sendable {
     let visitID: PersistentIdentifier
-    let petID: PersistentIdentifier
+    let petID: PersistentIdentifier?
     let clientID: PersistentIdentifier?
     let endedAt: Date
     let total: Decimal
@@ -108,7 +108,12 @@ final actor CheckoutTransactionActor {
             )
         } catch {
             transaction.markFailed(error.localizedDescription)
-            try? context.save()
+            do {
+                try context.save()
+            } catch let saveError {
+                checkoutLog.error("Checkout failed AND failed-state save also failed: original=\(error.localizedDescription) save=\(saveError.localizedDescription)")
+                throw saveError
+            }
             checkoutLog.error("Checkout failed: \(error.localizedDescription)")
             throw error
         }
@@ -257,7 +262,7 @@ final actor CheckoutTransactionActor {
         }
         return CheckoutResult(
             visitID: visit.persistentModelID,
-            petID: visit.pet?.persistentModelID ?? visit.persistentModelID, // Fallback if pet is gone
+            petID: visit.pet?.persistentModelID,
             clientID: visit.pet?.owner?.persistentModelID,
             endedAt: endedAt,
             total: visit.total

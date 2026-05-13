@@ -102,7 +102,8 @@ final class DashboardRepositoryTests: XCTestCase {
         try context.save()
         
         let overdue = try await repository.fetchOverduePets(limit: 10)
+        let overduePets = overdue.compactMap { context.model(for: $0) as? Pet }
         XCTAssertEqual(overdue.count, 1)
-        XCTAssertEqual(overdue.first?.name, "OldTimer")
+        XCTAssertEqual(overduePets.first?.name, "OldTimer")
     }
 }

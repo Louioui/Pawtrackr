@@ -145,59 +145,6 @@ struct PetDetailView: View {
                         quickStats(vm)
                         transformationGallery(vm)
                         insightsSection(vm)
-...
-    private func transformationGallery(_ vm: PetDetailViewModel) -> some View {
-        let history = vm.pet.transformationHistory
-        guard !history.isEmpty else { return AnyView(EmptyView()) }
-        
-        return AnyView(
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Transformations").font(.headline).padding(.horizontal)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(0..<history.count, id: \.self) { idx in
-                            let item = history[idx]
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 4) {
-                                    photoBox(data: item.before, label: "Before")
-                                    photoBox(data: item.after, label: "After")
-                                }
-                                Text(item.date, style: .date)
-                                    .font(.caption2.bold())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-            }
-        )
-    }
-
-    private func photoBox(data: Data?, label: String) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            Group {
-                if let data = data, let uiImage = ImageCache.shared.image(data: data, maxDimension: 300) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Color.gray.opacity(0.1)
-                        .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
-                }
-            }
-            .frame(width: 140, height: 140)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            
-            Text(label)
-                .font(.system(size: 10, weight: .black))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .padding(6)
-        }
-    }
                         visitsSection(vm)
                     }
                     .padding(.vertical, 8)
@@ -243,6 +190,65 @@ struct PetDetailView: View {
                 ProgressView()
                     .task { viewModel = PetDetailViewModel(pet: initialPet, modelContext: modelContext, eventBus: eventBus) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func transformationGallery(_ vm: PetDetailViewModel) -> some View {
+        let history = vm.pet.transformationHistory
+
+        if !history.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Transformations").font(.headline).padding(.horizontal)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(0..<history.count, id: \.self) { idx in
+                            let item = history[idx]
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 4) {
+                                    photoBox(data: item.before, label: "Before")
+                                    photoBox(data: item.after, label: "After")
+                                }
+                                Text(item.date, style: .date)
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+
+    private func photoBox(data: Data?, label: String) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if let data, let image = ImageCache.shared.image(data: data, maxDimension: 300) {
+                    #if canImport(UIKit)
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                    #elseif canImport(AppKit)
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                    #endif
+                } else {
+                    Color.gray.opacity(0.1)
+                        .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+                }
+            }
+            .frame(width: 140, height: 140)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            Text(label)
+                .font(.system(size: 10, weight: .black))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .padding(6)
         }
     }
     
@@ -357,8 +363,8 @@ struct PetDetailView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(NSLocalizedString("insights.engagement", comment: "")).font(.caption).foregroundStyle(.secondary)
                         HStack(spacing: 6) {
-                            Text("\(Int(vm.pet.engagementScore * 100))%").font(.title3.weight(.bold))
-                            EngagementIndicator(score: vm.pet.engagementScore)
+                            Text("\(NSDecimalNumber(decimal: vm.pet.engagementScore * 100).intValue)%").font(.title3.weight(.bold))
+                            EngagementIndicator(score: NSDecimalNumber(decimal: vm.pet.engagementScore).doubleValue)
                         }
                     }
                     

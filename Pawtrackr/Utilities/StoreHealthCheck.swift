@@ -27,11 +27,18 @@ struct StoreHealthCheck {
         }
     }
 
-    /// Attempts to repair the store by clearing auxiliary caches.
-    static func repairStore() {
-        log.info("Attempting store repair...")
+    /// Clears auxiliary caches and rebuilds Spotlight index. Does NOT touch the
+    /// SwiftData store itself — if that's unhealthy, callers need a full
+    /// `DataStoreRecoveryView` flow.
+    static func clearAuxiliaryCaches() {
+        log.info("Clearing auxiliary caches and re-indexing Spotlight…")
         ImageCache.shared.clearCache()
         SpotlightIndexer.shared.reindexAll()
-        log.info("Store repair completed (caches/indexes cleared).")
+        log.info("Auxiliary caches cleared.")
+    }
+
+    @available(*, deprecated, renamed: "clearAuxiliaryCaches", message: "This never repaired the SwiftData store; only cleared image cache and Spotlight.")
+    static func repairStore() {
+        clearAuxiliaryCaches()
     }
 }

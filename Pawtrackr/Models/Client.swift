@@ -90,7 +90,10 @@ final class Client {
     func setPhone(_ value: String?) {
         let trimmed = value?.trimmed
         if let t = trimmed, !t.isEmpty {
-            phone = PhoneUtils.toE164(t) ?? t // prefer canonical E.164, fallback to trimmed
+            // Prefer canonical E.164. If the input doesn't parse, fall back to
+            // the user's literal text — but `findClient(byPhone:)` normalizes
+            // both stored and lookup values, so unparseable phones still match.
+            phone = PhoneUtils.toE164(t) ?? t
         } else {
             phone = nil
         }
@@ -132,11 +135,15 @@ final class Client {
     // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
-        // Spotlight indexing is nonisolated; it self-dispatches to a utility queue.
+        // Spotlight indexing is nonisolated; it self-dispatches to a utility queue
+        // and debounces per-id so a multi-field edit (name + phone + email) only
+        // produces one re-index.
         let id = uuid
         let title = fullName
-        let description = "Client with \((pets ?? []).count) pets • Phone: \(phone ?? "N/A")"
-        SpotlightIndexer.shared.indexClient(id: id, title: title, description: description)
+        let petCount = (pets ?? []).count
+        let petWord = petCount == 1 ? "pet" : "pets"
+        let description = "Client with \(petCount) \(petWord) • Phone: \(phone ?? "N/A")"
+        SpotlightIndexer.shared.scheduleClientIndex(id: id, title: title, description: description)
     }
 
     func updateThumbnail() {

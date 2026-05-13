@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import OSLog
 import SwiftData
 
 @Model
@@ -45,7 +46,7 @@ final class Pet {
     var specialInstructions: String?
 
     // MARK: - Grooming & Vet Info
-    var weightLbs: Double?
+    var weightLbs: Decimal?
     var preferredGroomingFrequency: GroomingFrequency?
     var veterinarianName: String?
     var veterinarianPhoneE164: String?
@@ -91,7 +92,7 @@ final class Pet {
     }
     
     /// Calculates the "Engagement Score" (0.0 to 1.0) based on visit frequency vs. preferred frequency.
-    var engagementScore: Double {
+    var engagementScore: Decimal {
         guard let avg = averageVisitInterval, let preferred = preferredGroomingFrequency else { return 0.5 }
         
         let preferredInterval: TimeInterval
@@ -107,7 +108,8 @@ final class Pet {
         if avg <= preferredInterval { return 1.0 }
         
         // Otherwise, score decays as the interval lengthens
-        return max(0, 1.0 - (avg - preferredInterval) / preferredInterval)
+        let score = 1.0 - (avg - preferredInterval) / preferredInterval
+        return max(0, Decimal(score))
     }
 
     // MARK: - Prediction Engine (Business Intelligence)
@@ -125,7 +127,7 @@ final class Pet {
             totalInterval += completedVisits[i].startedAt.timeIntervalSince(completedVisits[i-1].startedAt)
         }
         
-        return totalInterval / Double(completedVisits.count - 1)
+        return totalInterval / TimeInterval(completedVisits.count - 1)
     }
 
     /// Predicts the next suggested grooming date based on history or preferred frequency.
@@ -320,7 +322,7 @@ final class Pet {
         didUpdate()
     }
 
-    func setWeightLbs(_ value: Double?) {
+    func setWeightLbs(_ value: Decimal?) {
         if let v = value { weightLbs = max(0, v) } else { weightLbs = nil }
         didUpdate()
     }
@@ -355,7 +357,7 @@ final class Pet {
         let title = name
         let description = "\(shortDescriptor) • Owner: \(owner?.fullName ?? "Unknown")"
         let imageData = thumbnailData ?? photoData
-        SpotlightIndexer.shared.indexPet(id: id, title: title, description: description, thumbnailData: imageData)
+        SpotlightIndexer.shared.schedulePetIndex(id: id, title: title, description: description, thumbnailData: imageData)
     }
 
     func updateThumbnail() {
@@ -371,7 +373,15 @@ final class Pet {
 
     private static func decodeBehaviorTags(from raw: String) -> [String] {
         guard !raw.isEmpty, let data = raw.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        do {
+            return try JSONDecoder().decode([String].self, from: data)
+        } catch {
+            // Don't return [] — that would silently destroy the original on next save.
+            // Instead, treat the raw string as a single legacy tag so downstream code
+            // sees something to preserve and a human can untangle it later.
+            Logger.dataIntegrity.error("Pet.behaviorTags JSON decode failed; preserving raw as single tag. error=\(error.localizedDescription, privacy: .public)")
+            return [raw]
+        }
     }
 
     private static func encodeBehaviorTags(_ tags: [String]) -> String {
