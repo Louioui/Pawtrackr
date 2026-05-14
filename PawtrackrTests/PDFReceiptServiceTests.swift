@@ -56,8 +56,8 @@ final class PDFReceiptServiceTests: XCTestCase {
         let pet = makePet()
         let visit = Visit(pet: pet)
         context.insert(visit)
-        visit.addItem(title: "Bath", unitPrice: 30.00)
-        visit.markCheckedOut(total: 30.00)
+        visit.addItem(title: "Bath", unitPrice: Decimal(30))
+        visit.markCheckedOut(total: Decimal(30))
 
         let snapshot = PDFReceiptService.shared.makeSnapshot(for: visit)
         XCTAssertNil(snapshot.payment)
@@ -69,7 +69,7 @@ final class PDFReceiptServiceTests: XCTestCase {
         context.insert(pet)
         let visit = Visit(pet: pet)
         context.insert(visit)
-        visit.markCheckedOut(total: 10.00)
+        visit.markCheckedOut(total: Decimal(10))
 
         let snapshot = PDFReceiptService.shared.makeSnapshot(for: visit)
         XCTAssertEqual(snapshot.clientName, "Valued Customer")
@@ -99,12 +99,12 @@ final class PDFReceiptServiceTests: XCTestCase {
         let pet = makePet()
         let visit = Visit(pet: pet)
         context.insert(visit)
-        visit.addItem(title: "Bath", unitPrice: 30.00)
-        visit.addItem(title: "Nail Trim", unitPrice: 15.00)
-        let payment = Payment(amount: 45.00, method: .cash, paidAt: .now)
+        visit.addItem(title: "Bath", unitPrice: Decimal(30))
+        visit.addItem(title: "Nail Trim", unitPrice: Decimal(15))
+        let payment = Payment(amount: Decimal(45), method: .cash, paidAt: .now)
         context.insert(payment)
         visit.attachPayment(payment)
-        visit.markCheckedOut(total: 45.00)
+        visit.markCheckedOut(total: Decimal(45))
         try context.save()
         return visit
     }

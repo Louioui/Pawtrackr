@@ -6,6 +6,10 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import UserNotifications
+import UIKit
+#endif
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -23,91 +27,134 @@ struct SettingsView: View {
     @State private var isExportingVisits = false
     @State private var exportError: String? = nil
     @State private var showDisableLockConfirm = false
+    @State private var lockEnabledOverride: Bool?
+    @State private var lockToggleProxy = false
+    @State private var notificationAuthState: NotificationAuthState = .unknown
+    @State private var showResetFirstRunConfirm = false
     private let wrapsInNavigationStack: Bool
 
     init(wrapsInNavigationStack: Bool = true) {
         self.wrapsInNavigationStack = wrapsInNavigationStack
     }
 
+    enum NotificationAuthState {
+        case unknown, authorized, denied, notDetermined, provisional, ephemeral
+
+        var label: String {
+            switch self {
+            case .unknown:       return NSLocalizedString("settings.notifications.unknown",       value: "Checking…",               comment: "")
+            case .authorized:    return NSLocalizedString("settings.notifications.authorized",    value: "Allowed",                 comment: "")
+            case .denied:        return NSLocalizedString("settings.notifications.denied",        value: "Blocked in iOS Settings", comment: "")
+            case .notDetermined: return NSLocalizedString("settings.notifications.notDetermined", value: "Not Yet Requested",       comment: "")
+            case .provisional:   return NSLocalizedString("settings.notifications.provisional",   value: "Quiet Delivery",          comment: "")
+            case .ephemeral:     return NSLocalizedString("settings.notifications.ephemeral",     value: "App Clip Only",           comment: "")
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .authorized, .provisional, .ephemeral: return "bell.badge.fill"
+            case .denied:                               return "bell.slash.fill"
+            case .notDetermined:                        return "bell.fill"
+            case .unknown:                              return "bell"
+            }
+        }
+
+        var tint: Color {
+            switch self {
+            case .authorized, .provisional, .ephemeral: return DS.ColorToken.success
+            case .denied:                               return DS.ColorToken.danger
+            case .notDetermined:                        return DS.ColorToken.warning
+            case .unknown:                              return .secondary
+            }
+        }
+    }
+
     var body: some View {
         if wrapsInNavigationStack {
-            NavigationStack {
-                settingsContent
-            }
+            NavigationStack { settingsContent }
         } else {
             settingsContent
         }
     }
 
-    private var iCloudStatusRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: cloudKitMonitor.statusIconName)
-                .font(.title3)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(cloudKitTintColor)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(cloudKitMonitor.accountState.displayLabel)
-                    .font(.subheadline.weight(.medium))
-                Text(syncStateLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var cloudKitTintColor: Color {
-        switch cloudKitMonitor.statusTint {
-        case .success: return .green
-        case .neutral: return .secondary
-        case .warning: return .orange
-        case .danger: return .red
-        }
-    }
-
-    private var syncStateLabel: String {
-        switch cloudKitMonitor.syncState {
-        case .syncing: return NSLocalizedString("cloudkit.status.syncing", value: "Syncing…", comment: "")
-        case .error: return NSLocalizedString("cloudkit.status.error", value: "Sync error", comment: "")
-        case .idle: return NSLocalizedString("cloudkit.status.idle", value: "Idle", comment: "")
-        }
-    }
-
-    private var appVersionString: String {
-        let dict = Bundle.main.infoDictionary ?? [:]
-        let version = (dict["CFBundleShortVersionString"] as? String) ?? "—"
-        let build = (dict["CFBundleVersion"] as? String) ?? "—"
-        return "\(version) (\(build))"
-    }
+    // MARK: - Body
 
     private var settingsContent: some View {
         @Bindable var appSettings = appSettings
 
         return Form {
-            Section(header: Text("Business Profile")) {
-                TextField("Business Name", text: $appSettings.businessName)
-                TextField("Currency Symbol", text: $appSettings.currencySymbol)
-                    .frame(width: 50)
+            // MARK: Header card
+            Section {
+                headerCard
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 12, trailing: 0))
             }
 
-            Section(header: Text("Security")) {
+            // MARK: Business Profile
+            Section {
+                TextField(NSLocalizedString("settings.businessName", value: "Business Name", comment: ""),
+                          text: $appSettings.businessName)
+                TextField(NSLocalizedString("settings.currencySymbol", value: "Currency Symbol", comment: ""),
+                          text: $appSettings.currencySymbol)
+                    .frame(width: 50)
+            } header: {
+                sectionHeader(NSLocalizedString("settings.section.businessProfile", value: "Business Profile", comment: ""),
+                              icon: "building.2.fill")
+            }
+
+            // MARK: Preferences (theme, haptics, notifications)
+            Section {
+                Picker(selection: $appSettings.preferredColorScheme) {
+                    ForEach(AppColorScheme.allCases) { scheme in
+                        Text(scheme.displayName).tag(scheme)
+                    }
+                } label: {
+                    Label(NSLocalizedString("settings.appearance", value: "Appearance", comment: ""),
+                          systemImage: "circle.lefthalf.filled")
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("settings.themePicker")
+
+                Toggle(isOn: $appSettings.hapticsEnabled) {
+                    Label(NSLocalizedString("settings.haptics", value: "Haptic Feedback", comment: ""),
+                          systemImage: "hand.tap.fill")
+                }
+                .accessibilityIdentifier("settings.hapticsToggle")
+
+                #if os(iOS)
+                notificationStatusRow
+                #endif
+            } header: {
+                sectionHeader(NSLocalizedString("settings.section.preferences", value: "Preferences", comment: ""),
+                              icon: "slider.horizontal.3")
+            } footer: {
+                Text(NSLocalizedString("settings.preferences.footer",
+                                       value: "Appearance applies to the entire app. Haptics affect button taps, toggles, and confirmations.",
+                                       comment: ""))
+                    .font(.caption)
+            }
+
+            // MARK: Security
+            Section {
                 securityStatusCard
                     .listRowInsets(EdgeInsets())
 
-                Toggle("Enable App Lock", isOn: Binding(
-                    get: { appSettings.isLockEnabled },
-                    set: { newValue in
-                        if !newValue && appSettings.isLockEnabled {
-                            // Confirm before disabling — wallet/business app, the lock is
-                            // a major safety boundary that shouldn't be removed by a stray tap.
-                            showDisableLockConfirm = true
-                        } else {
-                            appSettings.isLockEnabled = newValue
-                        }
+                Toggle("Enable App Lock", isOn: $lockToggleProxy)
+                    .accessibilityIdentifier("settings.appLockToggle")
+                    .allowsHitTesting(false)
+                    .overlay {
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .onTapGesture(perform: handleLockToggleTap)
+                            .accessibilityHidden(true)
                     }
-                ))
-                .accessibilityIdentifier("settings.appLockToggle")
+                    .onChange(of: lockToggleProxy) { oldValue, newValue in
+                        handleLockToggleChange(from: oldValue, to: newValue)
+                    }
 
-                if appSettings.isLockEnabled {
+                if effectiveLockEnabled {
                     Toggle("Biometric Unlock", isOn: $appSettings.isBiometricLockEnabled)
                         .accessibilityIdentifier("settings.biometricToggle")
 
@@ -116,23 +163,18 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("settings.changePIN")
                 }
+            } header: {
+                sectionHeader(NSLocalizedString("settings.section.security", value: "Security", comment: ""),
+                              icon: "lock.shield.fill")
             }
 
-            Section(header: Text("Help")) {
-                Button {
-                    appSettings.hasSeenAppTour = false
-                } label: {
-                    Label("Replay App Tour", systemImage: "sparkles.rectangle.stack")
-                }
-                .accessibilityIdentifier("settings.replayTour")
-            }
-
-            Section(header: Text("Data Export")) {
+            // MARK: Data Export
+            Section {
                 Button {
                     runExport(kind: .clients)
                 } label: {
                     HStack {
-                        Label("Export Clients (CSV)", systemImage: "square.and.arrow.up")
+                        Label("Export Clients (CSV)", systemImage: "person.3.fill")
                         Spacer()
                         if isExportingClients { ProgressView() }
                     }
@@ -144,15 +186,19 @@ struct SettingsView: View {
                     runExport(kind: .visits)
                 } label: {
                     HStack {
-                        Label("Export Visits (CSV)", systemImage: "square.and.arrow.up")
+                        Label("Export Visits (CSV)", systemImage: "calendar")
                         Spacer()
                         if isExportingVisits { ProgressView() }
                     }
                 }
                 .accessibilityIdentifier("settings.exportVisits")
                 .disabled(isExportingVisits)
+            } header: {
+                sectionHeader(NSLocalizedString("settings.section.dataExport", value: "Data Export", comment: ""),
+                              icon: "square.and.arrow.up")
             }
 
+            // MARK: iCloud
             Section {
                 iCloudStatusRow
                 if cloudKitMonitor.accountState.isAvailable {
@@ -176,7 +222,8 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                Text(NSLocalizedString("settings.section.icloud", value: "iCloud", comment: ""))
+                sectionHeader(NSLocalizedString("settings.section.icloud", value: "iCloud", comment: ""),
+                              icon: "icloud.fill")
             } footer: {
                 if let err = cloudKitMonitor.lastErrorMessage, case .error = cloudKitMonitor.syncState {
                     Text(err).foregroundStyle(.red)
@@ -185,6 +232,28 @@ struct SettingsView: View {
                 }
             }
 
+            // MARK: Help & Support
+            Section {
+                Button {
+                    appSettings.hasSeenAppTour = false
+                } label: {
+                    Label("Replay App Tour", systemImage: "sparkles.rectangle.stack")
+                }
+                .accessibilityIdentifier("settings.replayTour")
+
+                Button(role: .destructive) {
+                    showResetFirstRunConfirm = true
+                } label: {
+                    Label(NSLocalizedString("settings.firstRun.reset.action", value: "Reset First-Run State", comment: ""),
+                          systemImage: "arrow.counterclockwise.circle")
+                }
+                .accessibilityIdentifier("settings.resetFirstRun")
+            } header: {
+                sectionHeader(NSLocalizedString("settings.section.help", value: "Help & Support", comment: ""),
+                              icon: "questionmark.circle.fill")
+            }
+
+            // MARK: About
             Section {
                 HStack {
                     Text(NSLocalizedString("settings.version", value: "Version", comment: ""))
@@ -199,9 +268,19 @@ struct SettingsView: View {
                         versionTapCount = 0
                     }
                 }
+            } header: {
+                sectionHeader(NSLocalizedString("settings.section.about", value: "About", comment: ""),
+                              icon: "info.circle.fill")
             }
         }
         .navigationTitle(NSLocalizedString("settings.title", comment: ""))
+        .onAppear {
+            syncLockToggleProxy()
+            refreshNotificationStatus()
+        }
+        .onChange(of: appSettings.isLockEnabled) { _, _ in
+            syncLockToggleProxy()
+        }
 #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
 #endif
@@ -225,19 +304,260 @@ struct SettingsView: View {
                 previewTitle: NSLocalizedString("settings.export.visits_title", value: "Visits Export", comment: "")
             )
         }
-        .alert(NSLocalizedString("common.error", comment: ""), isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
+        .alert(NSLocalizedString("common.error", comment: ""),
+               isPresented: Binding(get: { pinChangeError != nil }, set: { if !$0 { pinChangeError = nil } })) {
             Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
         } message: { Text(pinChangeError ?? "") }
-        .alert("Export Failed", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+        .alert("Export Failed",
+               isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("OK", role: .cancel) { }
         } message: { Text(exportError ?? "") }
         .alert("Disable App Lock?", isPresented: $showDisableLockConfirm) {
             Button("Cancel", role: .cancel) { }
             Button("Disable", role: .destructive) {
+                lockEnabledOverride = false
                 appSettings.isLockEnabled = false
+                lockToggleProxy = false
             }
         } message: {
             Text("Anyone with access to this device will be able to view client data. You can re-enable the lock at any time.")
+        }
+        .alert(NSLocalizedString("settings.firstRun.reset.title", value: "Reset First-Run State?", comment: ""),
+               isPresented: $showResetFirstRunConfirm) {
+            Button(NSLocalizedString("common.cancel", value: "Cancel", comment: ""), role: .cancel) { }
+            Button(NSLocalizedString("settings.firstRun.reset.confirm", value: "Reset", comment: ""), role: .destructive) {
+                resetFirstRunState()
+            }
+        } message: {
+            Text(NSLocalizedString("settings.firstRun.reset.message",
+                                   value: "Onboarding flags will be cleared so the app tour and setup checklist appear again on next launch. No client data is affected.",
+                                   comment: ""))
+        }
+    }
+
+    // MARK: - Reusable pieces
+
+    /// Branded header card showing business name + iCloud sync state.
+    private var headerCard: some View {
+        HStack(spacing: 14) {
+            Circle()
+                .fill(DS.ColorToken.primary.opacity(0.15))
+                .frame(width: 52, height: 52)
+                .overlay(
+                    Image(systemName: "pawprint.fill")
+                        .font(.title2)
+                        .foregroundStyle(DS.ColorToken.primary)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(appSettings.businessName.isEmpty
+                     ? NSLocalizedString("settings.header.placeholder", value: "Your Business", comment: "")
+                     : appSettings.businessName)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                HStack(spacing: 6) {
+                    Image(systemName: cloudKitMonitor.statusIconName)
+                        .font(.caption2)
+                        .foregroundStyle(cloudKitTintColor)
+                    Text(cloudKitMonitor.accountState.displayLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("•").font(.caption).foregroundStyle(.secondary)
+                    Text(syncStateLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
+    }
+
+    /// Consistent Form-section header: small icon + title, no upper-case
+    /// transform.
+    private func sectionHeader(_ title: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .foregroundStyle(DS.ColorToken.primary)
+            Text(title)
+        }
+        .textCase(nil)
+    }
+
+    private var iCloudStatusRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: cloudKitMonitor.statusIconName)
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(cloudKitTintColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(cloudKitMonitor.accountState.displayLabel)
+                    .font(.subheadline.weight(.medium))
+                Text(syncStateLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    #if os(iOS)
+    private var notificationStatusRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: notificationAuthState.icon)
+                .font(.body)
+                .foregroundStyle(notificationAuthState.tint)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NSLocalizedString("settings.notifications", value: "Notifications", comment: ""))
+                    .font(.body)
+                Text(notificationAuthState.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Button {
+                openSystemNotificationSettings()
+            } label: {
+                Text(NSLocalizedString("settings.notifications.manage", value: "Manage", comment: ""))
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityIdentifier("settings.notificationsManage")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("settings.notificationsRow")
+    }
+    #endif
+
+    private var cloudKitTintColor: Color {
+        switch cloudKitMonitor.statusTint {
+        case .success: return .green
+        case .neutral: return .secondary
+        case .warning: return .orange
+        case .danger: return .red
+        }
+    }
+
+    private var syncStateLabel: String {
+        switch cloudKitMonitor.syncState {
+        case .syncing: return NSLocalizedString("cloudkit.status.syncing", value: "Syncing…", comment: "")
+        case .error:   return NSLocalizedString("cloudkit.status.error",   value: "Sync error", comment: "")
+        case .idle:    return NSLocalizedString("cloudkit.status.idle",    value: "Idle",      comment: "")
+        }
+    }
+
+    private var appVersionString: String {
+        let dict = Bundle.main.infoDictionary ?? [:]
+        let version = (dict["CFBundleShortVersionString"] as? String) ?? "—"
+        let build = (dict["CFBundleVersion"] as? String) ?? "—"
+        return "\(version) (\(build))"
+    }
+
+    private var securityStatusCard: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    effectiveLockEnabled ? DS.ColorToken.success : Color.gray,
+                    effectiveLockEnabled ? Color.green.opacity(0.8) : Color.gray.opacity(0.8)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: 48, height: 48)
+                    .overlay(
+                        Image(systemName: effectiveLockEnabled ? "checkmark.shield.fill" : "lock.open.fill")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(NSLocalizedString(effectiveLockEnabled ? "settings.security.status.active_title" : "settings.security.status.inactive_title", comment: ""))
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text(NSLocalizedString(effectiveLockEnabled ? "settings.security.status.active_subtitle" : "settings.security.status.inactive_subtitle", comment: ""))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+                Spacer()
+            }
+            .padding(16)
+        }
+        .padding(.horizontal)
+        .frame(height: 96)
+    }
+
+    @ViewBuilder
+    private func exportShareSheet(doc: ExportDocument, title: String, icon: String, previewTitle: String) -> some View {
+        VStack(spacing: 20) {
+            Spacer()
+            Image(systemName: icon)
+                .font(.largeTitle)
+                .foregroundStyle(DS.ColorToken.primary)
+            Text(title).font(.headline)
+            ShareLink(
+                item: doc,
+                preview: SharePreview(previewTitle, image: Image(systemName: icon))
+            ) {
+                Label(NSLocalizedString("settings.export.share_action", value: "Share via…", comment: ""),
+                      systemImage: "square.and.arrow.up")
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(DS.ColorToken.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .foregroundStyle(.white)
+                    .font(.headline)
+            }
+            Spacer()
+        }
+        .padding()
+#if os(iOS)
+        .presentationDetents([.height(240)])
+        .presentationDragIndicator(.visible)
+#endif
+    }
+
+    // MARK: - Actions
+
+    private var effectiveLockEnabled: Bool {
+        lockEnabledOverride ?? appSettings.isLockEnabled
+    }
+
+    private func syncLockToggleProxy() {
+        lockToggleProxy = effectiveLockEnabled
+    }
+
+    private func handleLockToggleChange(from oldValue: Bool, to newValue: Bool) {
+        guard oldValue != newValue else { return }
+
+        if !newValue && effectiveLockEnabled {
+            // Keep the switch visually enabled until the user confirms the
+            // destructive action.
+            lockEnabledOverride = true
+            showDisableLockConfirm = true
+            lockToggleProxy = true
+        } else {
+            lockEnabledOverride = newValue
+            appSettings.isLockEnabled = newValue
+        }
+    }
+
+    private func handleLockToggleTap() {
+        if effectiveLockEnabled {
+            lockEnabledOverride = true
+            lockToggleProxy = true
+            showDisableLockConfirm = true
+        } else {
+            lockEnabledOverride = true
+            appSettings.isLockEnabled = true
+            lockToggleProxy = true
         }
     }
 
@@ -271,108 +591,41 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - UI Sections
-    private var headerBar: some View {
-        HStack {
-            Text(NSLocalizedString("settings.security.title", comment: "")).font(.headline)
-            Spacer()
-            Button { } label: { Image(systemName: "questionmark.circle").foregroundStyle(.secondary) }
-                .accessibilityLabel(Text(NSLocalizedString("settings.security.question_a11y", comment: "")))
-        }
-        .padding(.horizontal)
+    /// Clears all first-run / onboarding flags so the new-user tour and
+    /// dashboard checklist re-appear on next launch. Does not touch any
+    /// client, pet, visit, or financial data.
+    private func resetFirstRunState() {
+        appSettings.hasConfiguredPrices = false
+        appSettings.hasAddedFirstClient = false
+        appSettings.hasCompletedFirstVisit = false
+        appSettings.isChecklistDismissed = false
+        appSettings.hasSeenAppTour = false
+        HapticManager.notify(.success)
     }
 
-    private var securityStatusCard: some View {
-        ZStack {
-            LinearGradient(colors: [appSettings.isLockEnabled ? DS.ColorToken.success : Color.gray, appSettings.isLockEnabled ? Color.green.opacity(0.8) : Color.gray.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            HStack(spacing: 12) {
-                Circle().fill(Color.white.opacity(0.2)).frame(width: 48, height: 48)
-                    .overlay(Image(systemName: appSettings.isLockEnabled ? "checkmark.shield.fill" : "lock.open.fill").font(.title2).foregroundStyle(.white))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString(appSettings.isLockEnabled ? "settings.security.status.active_title" : "settings.security.status.inactive_title", comment: ""))
-                        .font(.headline).foregroundStyle(.white)
-                    Text(NSLocalizedString(appSettings.isLockEnabled ? "settings.security.status.active_subtitle" : "settings.security.status.inactive_subtitle", comment: ""))
-                        .font(.caption).foregroundStyle(.white.opacity(0.9))
-                }
-                Spacer()
+    private func refreshNotificationStatus() {
+        #if os(iOS)
+        Task { @MainActor in
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            switch settings.authorizationStatus {
+            case .authorized:    notificationAuthState = .authorized
+            case .denied:        notificationAuthState = .denied
+            case .notDetermined: notificationAuthState = .notDetermined
+            case .provisional:   notificationAuthState = .provisional
+            case .ephemeral:     notificationAuthState = .ephemeral
+            @unknown default:    notificationAuthState = .unknown
             }
-            .padding(16)
         }
-        .padding(.horizontal)
-        .frame(height: 96)
+        #else
+        notificationAuthState = .authorized
+        #endif
     }
 
-    private var pinManagementCard: some View {
-        Card(elevation: .regular) {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(NSLocalizedString("settings.pin.title", comment: "")).font(.headline)
-                    Text(NSLocalizedString("settings.pin.subtitle", comment: "")).font(.caption).foregroundStyle(.secondary)
-                }
-                Divider()
-                HStack {
-                    HStack(spacing: 10) {
-                        Circle().fill(DS.ColorToken.primary.opacity(0.12)).frame(width: 40, height: 40)
-                            .overlay(Image(systemName: "key.fill").foregroundStyle(DS.ColorToken.primary))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(NSLocalizedString("settings.pin.status", comment: "")).font(.subheadline.weight(.semibold))
-                            Text(pinStatusSubtitle).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
-                    Text(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.pin.status.enabled" : "settings.pin.status.disabled", comment: ""))
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(appSettings.isBiometricLockEnabled ? DS.ColorToken.success : Color.gray.opacity(0.5), in: Capsule())
-                        .foregroundStyle(.white)
-                }
-                Button {
-                    showChangePIN = true
-                } label: {
-                    Label(NSLocalizedString("settings.pin.change", comment: ""), systemImage: "pencil").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(DS.ColorToken.primary)
-                Button {
-                    appSettings.isBiometricLockEnabled.toggle()
-                } label: {
-                    Label(NSLocalizedString(appSettings.isBiometricLockEnabled ? "settings.pin.disable" : "settings.pin.enable", comment: ""), systemImage: appSettings.isBiometricLockEnabled ? "xmark.circle" : "checkmark.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding(.horizontal)
-    }
-
-    @ViewBuilder
-    private func exportShareSheet(doc: ExportDocument, title: String, icon: String, previewTitle: String) -> some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: icon)
-                .font(.largeTitle)
-                .foregroundStyle(DS.ColorToken.primary)
-            Text(title).font(.headline)
-            ShareLink(
-                item: doc,
-                preview: SharePreview(previewTitle, image: Image(systemName: icon))
-            ) {
-                Label(NSLocalizedString("settings.export.share_action", value: "Share via…", comment: ""),
-                      systemImage: "square.and.arrow.up")
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(DS.ColorToken.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .foregroundStyle(.white)
-                    .font(.headline)
-            }
-            Spacer()
-        }
-        .padding()
-#if os(iOS)
-        .presentationDetents([.height(240)])
-        .presentationDragIndicator(.visible)
-#endif
+    private func openSystemNotificationSettings() {
+        #if os(iOS)
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+        #endif
     }
 
     private var pinStatusSubtitle: String {
@@ -385,9 +638,6 @@ struct SettingsView: View {
             return NSLocalizedString("settings.pin.status.never_changed", comment: "")
         }
     }
-
-
-
 }
 
 // MARK: - Change PIN Sheet

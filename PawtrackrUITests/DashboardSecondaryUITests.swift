@@ -64,6 +64,17 @@ final class DashboardSecondaryUITests: XCTestCase {
                       "Reports quick action should land on Insights screen.")
     }
 
+    func testRevenueKPI_NavigatesToInsights() throws {
+        waitForDashboard()
+
+        let action = app.buttons["dashboard.kpi.revenueInsights"]
+        XCTAssertTrue(action.waitForHittable(timeout: 8), "Revenue KPI Insights button must be hittable.")
+        action.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 10),
+                      "Revenue KPI should land on Insights screen.")
+    }
+
     func testQuickAction_CheckIn_NavigatesToClients() throws {
         waitForDashboard()
 

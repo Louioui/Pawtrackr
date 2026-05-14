@@ -75,10 +75,10 @@ final class ExportServiceTests: XCTestCase {
         let pet = Pet(name: "Buddy", species: .dog)
         context.insert(pet)
         let visit = Visit(pet: pet, startedAt: .now)
-        let payment = Payment(amount: 1234.56, method: .cash, paidAt: .now)
+        let payment = Payment(amount: Decimal(string: "1234.56")!, method: .cash, paidAt: .now)
         context.insert(payment)
         visit.attachPayment(payment)
-        visit.markCheckedOut(total: 1234.56, now: .now)
+        visit.markCheckedOut(total: Decimal(string: "1234.56")!, now: .now)
         context.insert(visit)
         try context.save()
 

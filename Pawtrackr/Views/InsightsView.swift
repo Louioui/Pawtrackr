@@ -8,12 +8,32 @@ import Charts
 import SwiftData
 import CoreTransferable
 
+private struct InsightsDrilldown: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let rows: [InsightsDrilldownRow]
+}
+
+private struct InsightsDrilldownRow: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let trailing: String
+}
+
 struct InsightsView: View {
     @Environment(DataStoreService.self) private var dataStore
     @Environment(GlobalEventBus.self) private var eventBus
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel: InsightsViewModel?
     @State private var reportPDFData: Data?
+    @State private var reportCSVDocument: ExportDocument?
     @State private var isPreparingReport = false
+    @State private var selectedDrilldown: InsightsDrilldown?
+    @State private var scheduleConfirmation = ""
+    @State private var showingScheduleConfirmation = false
+    @State private var isSchedulingRecall = false
 
     var body: some View {
         Group {
@@ -38,10 +58,21 @@ struct InsightsView: View {
                     }
             }
         }
-        .background(DS.ColorToken.background)
+        .background {
+            InsightsMeshBackground()
+                .allowsHitTesting(false)
+        }
         .navigationTitle("Insights")
         .refreshable {
             await viewModel?.refresh()
+        }
+        .sheet(item: $selectedDrilldown) { drilldown in
+            drilldownSheet(drilldown)
+        }
+        .alert("Appointment Scheduled", isPresented: $showingScheduleConfirmation) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(scheduleConfirmation)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -57,11 +88,17 @@ struct InsightsView: View {
             VStack(spacing: DS.Spacing.xl) {
                 kpiSummaryRow(vm)
                 revenueCard(vm)
+                forecastCard(vm)
+                comparisonCard(vm)
+                if !vm.dataQualityIssues.isEmpty {
+                    dataQualityCard(vm)
+                }
                 monthlyPerformanceCard(vm)
                 serviceRevenueCard(vm)
                 paymentMixCard(vm)
                 categoryCard(vm)
                 retentionCard(vm)
+                lapsedClientsCard(vm)
                 topClientsCard(vm)
             }
             .padding(DS.Spacing.lg)
@@ -80,21 +117,27 @@ struct InsightsView: View {
                 icon: "dollarsign.circle.fill",
                 color: DS.ColorToken.primary,
                 accessibilityIdentifier: "insights.kpi.revenue"
-            )
+            ) {
+                showRevenueDrilldown(vm)
+            }
             kpiTile(
                 title: "Avg Visit",
                 value: vm.averageVisitValue > 0 ? vm.averageVisitValue.moneyString : "—",
                 icon: "chart.line.uptrend.xyaxis",
                 color: DS.ColorToken.success,
                 accessibilityIdentifier: "insights.kpi.avgVisit"
-            )
+            ) {
+                showAverageVisitDrilldown(vm)
+            }
             kpiTile(
                 title: "Retention",
                 value: "\(Int(vm.retentionRate * 100))%",
                 icon: "person.2.fill",
                 color: DS.ColorToken.warning,
                 accessibilityIdentifier: "insights.kpi.retention"
-            )
+            ) {
+                showRetentionDrilldown(vm)
+            }
         }
     }
 
@@ -103,24 +146,68 @@ struct InsightsView: View {
         value: String,
         icon: String,
         color: Color,
-        accessibilityIdentifier: String
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
     ) -> some View {
-        Card(padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)) {
-            VStack(alignment: .leading, spacing: 5) {
-                Image(systemName: icon)
-                    .font(.callout)
-                    .foregroundStyle(color)
-                Text(value)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .contentTransition(.numericText())
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        Button(action: action) {
+            Card(padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Image(systemName: icon)
+                        .font(.callout)
+                        .foregroundStyle(color)
+                    Text(value)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .contentTransition(.numericText())
+                    Text(title)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    // MARK: - Data Quality
+
+    private func dataQualityCard(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                Label("Data Quality", systemImage: "checklist.checked")
+                    .font(.headline)
+
+                ForEach(vm.dataQualityIssues.prefix(4)) { issue in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: dataQualityIcon(for: issue.severity))
+                            .foregroundStyle(dataQualityColor(for: issue.severity))
+                            .frame(width: 24)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(issue.title)
+                                .font(.subheadline.weight(.semibold))
+                            Text(issue.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        Text("\(issue.count)")
+                            .font(.headline)
+                            .contentTransition(.numericText())
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
+        .accessibilityIdentifier("insights.section.dataQuality")
     }
 
     // MARK: - Revenue
@@ -135,6 +222,8 @@ struct InsightsView: View {
                         Text("\(vm.revenuePeriodDays)-day window")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("insights.revenue.window")
+                            .accessibilityValue("\(vm.revenuePeriodDays)-day window")
                     }
                     Spacer()
                     revenuePeriodSelector(vm)
@@ -164,6 +253,32 @@ struct InsightsView: View {
                         }
                     }
                     .frame(height: 155)
+                    .chartOverlay { proxy in
+                        GeometryReader { geo in
+                            Rectangle()
+                                .fill(.clear)
+                                .contentShape(Rectangle())
+                                .onTapGesture { location in
+                                    if let plotFrame = proxy.plotFrame {
+                                        let frame = geo[plotFrame]
+                                        let x = location.x - frame.origin.x
+                                        let selectedDate: Date? = proxy.value(atX: x)
+                                        if let selectedDate {
+                                            showRevenueDrilldown(for: selectedDate, vm: vm)
+                                        } else {
+                                            showRevenueDrilldown(vm)
+                                        }
+                                    } else {
+                                        let selectedDate: Date? = proxy.value(atX: location.x)
+                                        if let selectedDate {
+                                            showRevenueDrilldown(for: selectedDate, vm: vm)
+                                        } else {
+                                            showRevenueDrilldown(vm)
+                                        }
+                                    }
+                                }
+                        }
+                    }
                     .animation(.spring(), value: vm.revenueSeries.count)
 
                     HStack {
@@ -175,9 +290,21 @@ struct InsightsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    Button {
+                        showRevenueDrilldown(vm)
+                    } label: {
+                        Label("View visits behind this number", systemImage: "list.bullet.rectangle")
+                            .font(.caption.weight(.semibold))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("insights.revenue.drilldown")
                 }
             }
         }
+        .accessibilityIdentifier("insights.section.revenue")
     }
 
     private func revenuePeriodSelector(_ vm: InsightsViewModel) -> some View {
@@ -190,6 +317,8 @@ struct InsightsView: View {
                     withAnimation(Animations.responsiveSpringSoft) {
                         vm.revenuePeriodDays = period
                     }
+                    reportPDFData = nil
+                    reportCSVDocument = nil
                     Task { await vm.refreshRevenue() }
                 } label: {
                     Text("\(period)D")
@@ -199,12 +328,84 @@ struct InsightsView: View {
                         .padding(.vertical, 8)
                         .padding(.horizontal, 8)
                         .background(Capsule().fill(isSelected ? DS.ColorToken.primary : Color.clear))
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("insights.period.\(period)")
             }
         }
         .padding(4)
         .background(DS.ColorToken.surface, in: Capsule())
+    }
+
+    // MARK: - Forecasting
+
+    private func forecastCard(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                HStack {
+                    Label("30-Day Forecast", systemImage: "wand.and.stars")
+                        .font(.headline)
+                    Spacer()
+                    Text(vm.forecast?.confidenceLabel ?? "No baseline")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let forecast = vm.forecast {
+                    HStack(spacing: 12) {
+                        metricPill(title: "Projected", value: forecast.projectedRevenue.moneyString, tint: DS.ColorToken.primary)
+                        metricPill(title: "Visits", value: "\(forecast.projectedVisits)", tint: DS.ColorToken.success)
+                    }
+
+                    Text("\(forecast.dailyAverageRevenue.moneyString) average daily revenue. \(forecast.basis).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    emptyState(icon: "chart.line.uptrend.xyaxis", message: "Complete a few visits to unlock forecasting")
+                }
+            }
+        }
+        .accessibilityIdentifier("insights.section.forecast")
+    }
+
+    private func comparisonCard(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                Text("Comparison Windows").font(.headline)
+
+                if vm.comparisons.isEmpty {
+                    emptyState(icon: "arrow.left.arrow.right", message: "No comparison data yet")
+                } else {
+                    ForEach(vm.comparisons) { item in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.label)
+                                    .font(.subheadline.weight(.semibold))
+                                Text("\(item.currentVisits) vs \(item.previousVisits) visits")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(item.currentRevenue.moneyString)
+                                    .font(.subheadline.weight(.bold))
+                                    .contentTransition(.numericText())
+                                Text(percentString(item.percentChange))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(item.percentChange >= 0 ? DS.ColorToken.success : DS.ColorToken.danger)
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("insights.section.comparisons")
     }
 
     // MARK: - Monthly Performance
@@ -256,12 +457,15 @@ struct InsightsView: View {
     private func serviceRevenueCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                Text("Top Services").font(.headline)
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.topServices", label: "Top Services")
+                Text("Service Profitability").font(.headline)
 
-                if vm.serviceDistribution.isEmpty {
+                if vm.serviceProfitability.isEmpty && vm.serviceDistribution.isEmpty {
                     emptyState(icon: "scissors", message: "No service data yet")
                 } else {
-                    let top5 = Array(vm.serviceDistribution.prefix(5))
+                    let top5 = Array((vm.serviceProfitability.isEmpty ? vm.serviceDistribution : vm.serviceProfitability.map {
+                        InsightsViewModel.DistributionData(name: $0.name, count: $0.count, revenue: $0.revenue)
+                    }).prefix(5))
                     Chart(top5) { data in
                         BarMark(
                             x: .value("Revenue", (data.revenue as NSDecimalNumber).doubleValue),
@@ -272,14 +476,47 @@ struct InsightsView: View {
                     }
                     .chartXAxis(.hidden)
                     .frame(height: CGFloat(top5.count) * 44)
+
+                    if !vm.serviceProfitability.isEmpty {
+                        Divider()
+
+                        VStack(spacing: 0) {
+                            ForEach(Array(vm.serviceProfitability.prefix(5).enumerated()), id: \.element.id) { index, service in
+                                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(service.name)
+                                            .font(.subheadline.weight(.semibold))
+                                        Text("\(service.category) • \(service.count) sold • avg \(service.averageTicket.moneyString)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text(service.revenue.moneyString)
+                                            .font(.subheadline.bold())
+                                        Text(percentString(service.trendPercent))
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(service.trendPercent >= 0 ? DS.ColorToken.success : DS.ColorToken.danger)
+                                    }
+                                }
+                                .padding(.vertical, 8)
+                                .accessibilityElement(children: .combine)
+
+                                if index < min(vm.serviceProfitability.count, 5) - 1 { Divider() }
+                            }
+                        }
+                    }
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("insights.section.topServices")
     }
 
     private func paymentMixCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.paymentMix", label: "Payment Mix")
                 Text("Payment Mix").font(.headline)
 
                 if vm.paymentMethodDistribution.isEmpty {
@@ -297,11 +534,14 @@ struct InsightsView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("insights.section.paymentMix")
     }
 
     private func categoryCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.category", label: "Visits by Category")
                 Text("Visits by Category").font(.headline)
 
                 if vm.categoryDistribution.isEmpty {
@@ -327,11 +567,14 @@ struct InsightsView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("insights.section.category")
     }
 
     private func retentionCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.retention", label: "Client Retention")
                 Text("Client Retention").font(.headline)
 
                 if vm.retentionSeries.isEmpty {
@@ -356,11 +599,81 @@ struct InsightsView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("insights.section.retention")
+    }
+
+    private func lapsedClientsCard(_ vm: InsightsViewModel) -> some View {
+        Card {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.lapsedClients", label: "Lapsed Clients")
+                HStack {
+                    Text("Lapsed Clients").font(.headline)
+                    Spacer()
+                    Text("\(vm.lapsedClients.count)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+
+                if vm.lapsedClients.isEmpty {
+                    emptyState(icon: "person.crop.circle.badge.checkmark", message: "No 90-day lapsed clients")
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(vm.lapsedClients.enumerated()), id: \.element.id) { index, client in
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(alignment: .top) {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(client.name)
+                                            .font(.subheadline.weight(.semibold))
+                                        Text("\(client.petNames) • \(client.daysSinceLastVisit) days since last visit")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+
+                                    Spacer()
+
+                                    Text(client.totalSpent.moneyString)
+                                        .font(.subheadline.bold())
+                                }
+
+                                HStack(spacing: 10) {
+                                    Button {
+                                        messageLapsedClient(client)
+                                    } label: {
+                                        Label("Message", systemImage: "message.fill")
+                                    }
+                                    .disabled(client.phone == nil)
+                                    .buttonStyle(.bordered)
+                                    .accessibilityIdentifier("insights.lapsed.message.\(index)")
+
+                                    Button {
+                                        scheduleLapsedClient(client)
+                                    } label: {
+                                        Label("Schedule", systemImage: "calendar.badge.plus")
+                                    }
+                                    .disabled(client.primaryPetUUID == nil || isSchedulingRecall)
+                                    .buttonStyle(.borderedProminent)
+                                    .accessibilityIdentifier("insights.lapsed.schedule.\(index)")
+                                }
+                                .font(.caption.weight(.semibold))
+                            }
+                            .padding(.vertical, 10)
+
+                            if index < vm.lapsedClients.count - 1 { Divider() }
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("insights.section.lapsedClients")
     }
 
     private func topClientsCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.topClients", label: "Top Clients")
                 Text("Top Clients").font(.headline)
 
                 if vm.topClients.isEmpty {
@@ -381,6 +694,8 @@ struct InsightsView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("insights.section.topClients")
     }
 
     private func metricLabel(title: String, value: String, color: Color) -> some View {
@@ -390,20 +705,55 @@ struct InsightsView: View {
         }
     }
 
+    private func metricPill(title: String, value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.headline)
+                .foregroundStyle(tint)
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func lowerSectionAccessibilityAnchor(identifier: String, label: String) -> some View {
+        Color.primary.opacity(0.001)
+            .frame(width: 1, height: 1)
+            .accessibilityElement()
+            .accessibilityLabel(label)
+            .accessibilityIdentifier(identifier)
+    }
+
     private var reportButton: some View {
         Group {
-            if let pdfData = reportPDFData {
-                let doc = ReportDocument(pdfData: pdfData, filename: "Report.pdf")
-                ShareLink(item: doc, preview: SharePreview("Report", image: Image(systemName: "doc.pdf"))) {
-                    Label("Export", systemImage: "doc.badge.arrow.up")
+            if let pdfData = reportPDFData, let csvDoc = reportCSVDocument {
+                Menu {
+                    let pdfDoc = ReportDocument(pdfData: pdfData, filename: "Report.pdf")
+                    ShareLink(item: pdfDoc, preview: SharePreview("PDF Report", image: Image(systemName: "doc.pdf"))) {
+                        Label("PDF Report", systemImage: "doc.richtext")
+                    }
+                    ShareLink(item: csvDoc, preview: SharePreview("Insights CSV", image: Image(systemName: "tablecells"))) {
+                        Label("CSV Data", systemImage: "tablecells")
+                    }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
+                .accessibilityLabel("Share Report")
+                .accessibilityIdentifier("insights.shareReport")
             } else {
                 Button {
                     isPreparingReport = true
                     Task {
                         if let vm = viewModel {
                             let summary = await vm.generateReportSummary()
-                            reportPDFData = await BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
+                            async let pdfData = BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
+                            let csvDoc = vm.generateInsightsCSVDocument()
+                            reportPDFData = await pdfData
+                            reportCSVDocument = csvDoc
                         }
                         isPreparingReport = false
                     }
@@ -411,6 +761,44 @@ struct InsightsView: View {
                     if isPreparingReport { ProgressView() } else { Label("Export", systemImage: "doc.badge.arrow.up") }
                 }
                 .disabled(isPreparingReport)
+                .accessibilityLabel("Export Report")
+                .accessibilityIdentifier("insights.exportReport")
+            }
+        }
+    }
+
+    private func drilldownSheet(_ drilldown: InsightsDrilldown) -> some View {
+        NavigationStack {
+            List {
+                Section {
+                    if drilldown.rows.isEmpty {
+                        ContentUnavailableView("No Rows", systemImage: "list.bullet.rectangle", description: Text("There is no supporting data for this selection yet."))
+                    } else {
+                        ForEach(drilldown.rows) { row in
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(row.title)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(row.subtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text(row.trailing)
+                                    .font(.subheadline.bold())
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                } header: {
+                    Text(drilldown.subtitle)
+                }
+            }
+            .navigationTitle(drilldown.title)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { selectedDrilldown = nil }
+                }
             }
         }
     }
@@ -422,6 +810,135 @@ struct InsightsView: View {
             Text(message).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity).frame(height: 120)
+    }
+
+    private func showRevenueDrilldown(_ vm: InsightsViewModel) {
+        selectedDrilldown = InsightsDrilldown(
+            title: "Revenue Detail",
+            subtitle: "\(vm.revenuePeriodDays)-day window",
+            rows: visitDrilldownRows(vm.revenueDrilldown)
+        )
+    }
+
+    private func showRevenueDrilldown(for date: Date, vm: InsightsViewModel) {
+        let rows = vm.revenueDrilldown.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
+        selectedDrilldown = InsightsDrilldown(
+            title: date.formatted(date: .abbreviated, time: .omitted),
+            subtitle: rows.isEmpty ? "No visits recorded for this day" : "Visits behind this chart bar",
+            rows: visitDrilldownRows(rows.isEmpty ? vm.revenueDrilldown : rows)
+        )
+    }
+
+    private func showAverageVisitDrilldown(_ vm: InsightsViewModel) {
+        selectedDrilldown = InsightsDrilldown(
+            title: "Average Visit Detail",
+            subtitle: "Highest-value visits in the selected revenue window",
+            rows: visitDrilldownRows(vm.revenueDrilldown.sorted { $0.total > $1.total })
+        )
+    }
+
+    private func showRetentionDrilldown(_ vm: InsightsViewModel) {
+        let lapsedRows = vm.lapsedClients.map {
+            InsightsDrilldownRow(
+                title: $0.name,
+                subtitle: "\($0.petNames) • \($0.daysSinceLastVisit) days since last visit",
+                trailing: $0.totalSpent.moneyString
+            )
+        }
+
+        let rows = lapsedRows.isEmpty
+            ? vm.topClients.map {
+                InsightsDrilldownRow(
+                    title: $0.name,
+                    subtitle: "\($0.visitCount) visits",
+                    trailing: $0.totalSpent.moneyString
+                )
+            }
+            : lapsedRows
+
+        selectedDrilldown = InsightsDrilldown(
+            title: "Retention Detail",
+            subtitle: lapsedRows.isEmpty ? "Top recurring clients" : "Clients ready for recall",
+            rows: rows
+        )
+    }
+
+    private func visitDrilldownRows(_ rows: [InsightsViewModel.RevenueVisitData]) -> [InsightsDrilldownRow] {
+        rows.map {
+            InsightsDrilldownRow(
+                title: "\($0.petName) • \($0.clientName)",
+                subtitle: "\($0.date.formatted(date: .abbreviated, time: .omitted)) • \($0.serviceSummary) • \($0.paymentMethod)",
+                trailing: $0.total.moneyString
+            )
+        }
+    }
+
+    private func messageLapsedClient(_ client: InsightsViewModel.LapsedClientData) {
+        guard let phone = client.phone,
+              let sms = PhoneUtils.smsURLString(phone, body: client.suggestedMessage)
+        else { return }
+        URLOpener.open(sms)
+    }
+
+    private func scheduleLapsedClient(_ client: InsightsViewModel.LapsedClientData) {
+        guard let petUUID = client.primaryPetUUID else { return }
+        guard !isSchedulingRecall else { return }
+
+        isSchedulingRecall = true
+        let container = modelContext.container
+        let date = suggestedRecallDate()
+
+        Task {
+            do {
+                let scheduler = await Task.detached(priority: .utility) {
+                    RecallSchedulingActor(modelContainer: container)
+                }.value
+                let recall = try await scheduler.scheduleRecall(forPetID: petUUID, date: date)
+                await MainActor.run {
+                    scheduleConfirmation = "\(recall.petName) is scheduled for \(recall.date.formatted(date: .abbreviated, time: .shortened))."
+                    showingScheduleConfirmation = true
+                    isSchedulingRecall = false
+                }
+            } catch {
+                await MainActor.run {
+                    scheduleConfirmation = "Could not schedule this appointment: \(error.localizedDescription)"
+                    showingScheduleConfirmation = true
+                    isSchedulingRecall = false
+                }
+            }
+        }
+    }
+
+    private func suggestedRecallDate() -> Date {
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: .now) ?? .now.addingTimeInterval(86_400)
+        return calendar.nextDate(
+            after: tomorrow,
+            matching: DateComponents(hour: 9, minute: 0),
+            matchingPolicy: .nextTime
+        ) ?? tomorrow
+    }
+
+    private func percentString(_ value: Double) -> String {
+        guard value.isFinite else { return "0%" }
+        let sign = value > 0 ? "+" : ""
+        return "\(sign)\(Int((value * 100).rounded()))%"
+    }
+
+    private func dataQualityIcon(for severity: InsightsViewModel.DataQualityIssue.Severity) -> String {
+        switch severity {
+        case .info: return "info.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .critical: return "xmark.octagon.fill"
+        }
+    }
+
+    private func dataQualityColor(for severity: InsightsViewModel.DataQualityIssue.Severity) -> Color {
+        switch severity {
+        case .info: return DS.ColorToken.primary
+        case .warning: return DS.ColorToken.warning
+        case .critical: return DS.ColorToken.danger
+        }
     }
 
     // MARK: - Skeleton / Loading

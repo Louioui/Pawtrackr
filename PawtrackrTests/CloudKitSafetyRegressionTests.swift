@@ -63,7 +63,7 @@ final class CloudKitSafetyRegressionTests: XCTestCase {
         let day = Calendar.current.startOfDay(for: oldDate)
         let pet = Pet(name: "Buddy", species: .dog)
         let visit = Visit(pet: pet, startedAt: oldDate)
-        visit.markCheckedOut(total: 72.50, now: oldDate.addingTimeInterval(1800))
+        visit.markCheckedOut(total: Decimal(string: "72.50")!, now: oldDate.addingTimeInterval(1800))
 
         UserDefaults.standard.set(Date(), forKey: "lastSummarySyncDate")
 
@@ -75,7 +75,7 @@ final class CloudKitSafetyRegressionTests: XCTestCase {
 
         let summaries = try context.fetch(FetchDescriptor<DaySummary>())
         let summary = try XCTUnwrap(summaries.first { $0.day == day })
-        XCTAssertEqual(summary.revenue, Decimal(72.50))
+        XCTAssertEqual(summary.revenue, Decimal(string: "72.50")!)
         XCTAssertEqual(summary.visitCount, 1)
     }
 

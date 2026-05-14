@@ -11,7 +11,7 @@ final class MessageTemplateTests: XCTestCase {
         pet.owner = owner
         
         let visit = Visit(pet: pet, startedAt: Calendar.current.date(from: DateComponents(hour: 14, minute: 0))!)
-        visit.total = 65.50
+        visit.total = Decimal(string: "65.50")!
         
         let template = MessageTemplate(title: "Test", content: "Hi [OwnerName], [PetName] is ready! Total: [Total] at [Time].")
         

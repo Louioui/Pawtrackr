@@ -13,13 +13,36 @@ import Combine
 @Observable
 @MainActor
 final class ClientsViewModel {
+    enum Filter: String, CaseIterable {
+        case all = "All"
+        case active = "Active"
+        case overdue = "Overdue"
+        case missingInfo = "Missing Info"
+    }
+
+    enum SortOption: String, CaseIterable {
+        case name = "Name"
+        case lastVisit = "Last Visit"
+        case newest = "Newest"
+    }
+
     // MARK: - Published Properties
     var inProgressClients: [Client] = []
     var otherClients: [Client] = []
+    var needsAttentionClients: [Client] = []
+    
     var searchText = "" {
         didSet { scheduleFetch() }
     }
     
+    var selectedFilter: Filter = .all {
+        didSet { fetchClients() }
+    }
+
+    var sortOption: SortOption = .name {
+        didSet { fetchClients() }
+    }
+
     var inProgressCount: Int { inProgressClients.count }
     var canLoadMore: Bool = false
     var isLoadingMore: Bool = false
@@ -78,23 +101,66 @@ final class ClientsViewModel {
         refreshTask = Task { [weak self] in
             guard let self else { return }
             do {
+                // 1. Fetch Active/In-Progress Clients
                 let inProgressIDs = try await repository.fetchActiveClients(query: trimmedSearch)
                 guard !Task.isCancelled else { return }
+                
+                var inProgress = inProgressIDs.compactMap { self.modelContext.model(for: $0) as? Client }
 
-                let (pageIDs, hasMore) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: pageSize, offset: 0)
+                // 2. Fetch Others based on filter
+                let (pageIDs, _) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: 1000, offset: 0)
                 guard !Task.isCancelled else { return }
+                
+                var others = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
 
-                inProgressClients = inProgressIDs.compactMap { self.modelContext.model(for: $0) as? Client }
-                otherClients = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
-                fetchOffset = otherClients.count
-                canLoadMore = hasMore
-                isLoadingMore = false
+                // Apply Smart Filters
+                switch selectedFilter {
+                case .all:
+                    break
+                case .active:
+                    others = [] // Handled by inProgress
+                case .overdue:
+                    inProgress = []
+                    others = others.filter { client in
+                        (client.pets ?? []).contains { $0.isOverdue }
+                    }
+                case .missingInfo:
+                    inProgress = inProgress.filter { $0.phone == nil || $0.email == nil }
+                    others = others.filter { $0.phone == nil || $0.email == nil }
+                }
+
+                // Apply Sorting
+                let sortedInProgress = sortClients(inProgress)
+                let sortedOthers = sortClients(others)
+
+                // Identify "Needs Attention" (Overdue but not active)
+                self.needsAttentionClients = sortedOthers.filter { client in
+                    (client.pets ?? []).contains { $0.isOverdue }
+                }
+
+                self.inProgressClients = sortedInProgress
+                self.otherClients = sortedOthers
+                
+                self.fetchOffset = self.otherClients.count
+                self.canLoadMore = false // For now, we fetch up to 1000 and handle locally for speed with filters
+                self.isLoadingMore = false
             } catch {
                 guard !Task.isCancelled else { return }
                 appError = .database(error.localizedDescription)
                 canLoadMore = false
                 isLoadingMore = false
             }
+        }
+    }
+
+    private func sortClients(_ clients: [Client]) -> [Client] {
+        switch sortOption {
+        case .name:
+            return clients.sorted { $0.fullName.localizedStandardCompare($1.fullName) == .orderedAscending }
+        case .lastVisit:
+            return clients.sorted { ($0.lastVisitDate ?? .distantPast) > ($1.lastVisitDate ?? .distantPast) }
+        case .newest:
+            return clients.sorted { $0.createdAt > $1.createdAt }
         }
     }
 

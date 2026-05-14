@@ -2,6 +2,7 @@ import XCTest
 import SwiftData
 @testable import Pawtrackr
 
+@MainActor
 final class SyncConflictTests: XCTestCase {
     var container: ModelContainer!
     var context: ModelContext!
@@ -21,7 +22,10 @@ final class SyncConflictTests: XCTestCase {
         visit.behaviorTags = ["Calm"]
         try context.save()
         
-        let actor = SyncConflictActor(modelContainer: container)
+        let container = try XCTUnwrap(container)
+        let actor = await Task.detached {
+            SyncConflictActor(modelContainer: container)
+        }.value
         
         let remoteData = SyncConflictActor.VisitData(
             note: "Remote edit.",
@@ -39,5 +43,33 @@ final class SyncConflictTests: XCTestCase {
         XCTAssertEqual(result.behaviorTags.count, 2)
         XCTAssertTrue(result.behaviorTags.contains("Anxious"))
         XCTAssertTrue(result.behaviorTags.contains("Calm"))
+    }
+
+    func testResolveVisitConflict_IsIdempotentAndSanitizesTags() async throws {
+        let pet = Pet(name: "Buddy", species: .dog)
+        context.insert(pet)
+        let visit = Visit(pet: pet)
+        visit.note = "Local note."
+        visit.behaviorTags = ["Calm"]
+        try context.save()
+
+        let container = try XCTUnwrap(container)
+        let actor = await Task.detached {
+            SyncConflictActor(modelContainer: container)
+        }.value
+        let remoteData = SyncConflictActor.VisitData(
+            note: "Remote edit.",
+            behaviorTags: ["Anxious", " ", "Calm"]
+        )
+
+        try await actor.resolveVisitConflict(localID: visit.persistentModelID, remoteData: remoteData)
+        try await actor.resolveVisitConflict(localID: visit.persistentModelID, remoteData: remoteData)
+
+        let verificationContext = ModelContext(container)
+        let result = try XCTUnwrap(try verificationContext.fetch(FetchDescriptor<Visit>()).first)
+        let note = try XCTUnwrap(result.note)
+
+        XCTAssertEqual(note.components(separatedBy: "[Remote Edit]:").count - 1, 1)
+        XCTAssertEqual(result.behaviorTags, ["Anxious", "Calm"])
     }
 }

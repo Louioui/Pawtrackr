@@ -20,7 +20,7 @@ final class CheckoutResilienceTests: XCTestCase {
             visitUUID: visitUUID,
             petUUID: pet.uuid,
             clientUUID: nil,
-            amount: 50.0,
+            amount: Decimal(50),
             paymentMethod: .cash,
             externalReference: nil,
             sessionNotes: "Test notes",
@@ -33,7 +33,7 @@ final class CheckoutResilienceTests: XCTestCase {
         
         // 2. First Checkout
         let result1 = try await actor.process(request)
-        XCTAssertEqual(result1.total, 50.0)
+        XCTAssertEqual(result1.total, Decimal(50))
         
         // 3. Second Checkout (Same Idempotency Key)
         // Should return the same result without creating duplicate payments or visits
@@ -64,7 +64,7 @@ final class CheckoutResilienceTests: XCTestCase {
             visitUUID: visitUUID,
             petUUID: pet.uuid,
             clientUUID: nil,
-            amount: 100.0,
+            amount: Decimal(100),
             paymentMethod: .creditCard,
             externalReference: "REF123",
             sessionNotes: "Recovery test",
@@ -81,7 +81,7 @@ final class CheckoutResilienceTests: XCTestCase {
             visitUUID: visitUUID,
             petUUID: pet.uuid,
             clientUUID: nil,
-            amount: 100.0,
+            amount: Decimal(100),
             method: .creditCard,
             externalReference: "REF123"
         )
@@ -91,7 +91,7 @@ final class CheckoutResilienceTests: XCTestCase {
         
         // Now run the actor process - it should pick up the processing transaction and complete it
         let result = try await actor.process(request)
-        XCTAssertEqual(result.total, 100.0)
+        XCTAssertEqual(result.total, Decimal(100))
         
         let transactions = try container.mainContext.fetch(FetchDescriptor<CheckoutTransaction>())
         XCTAssertEqual(transactions.first?.status, .succeeded)

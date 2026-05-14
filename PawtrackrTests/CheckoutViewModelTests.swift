@@ -26,9 +26,9 @@ final class CheckoutViewModelTests: XCTestCase {
         pet.owner = client
         context.insert(pet)
 
-        bath    = Service(name: "Bath",     basePrice: 30.00)
-        haircut = Service(name: "Haircut",  basePrice: 45.00)
-        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: 10.00)
+        bath    = Service(name: "Bath",     basePrice: Decimal(30))
+        haircut = Service(name: "Haircut",  basePrice: Decimal(45))
+        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: Decimal(10))
         context.insert(bath)
         context.insert(haircut)
         context.insert(nailTrim)
@@ -91,7 +91,7 @@ final class CheckoutViewModelTests: XCTestCase {
     func testAmount_SingleService() {
         let vm = makeVM()
         vm.toggleService(bath)
-        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(30.00))
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(30))
     }
 
     func testAmount_MultipleServicesAndAddOn() {
@@ -99,14 +99,14 @@ final class CheckoutViewModelTests: XCTestCase {
         vm.toggleService(bath)
         vm.toggleService(haircut)
         vm.toggleAddOn(nailTrim)
-        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(85.00))
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(85))
     }
 
     func testAmount_ManualOverrideTakesPrecedence() {
         let vm = makeVM()
         vm.toggleService(bath)           // auto = $30
         vm.setAmountDirectly("60.00")   // manual override
-        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(60.00))
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(60))
     }
 
     func testAmount_PercentageTipUsesDecimalMoneyMath() {
@@ -116,7 +116,7 @@ final class CheckoutViewModelTests: XCTestCase {
 
         XCTAssertEqual(vm.tipAmountString, "$6.00")
         XCTAssertEqual(vm.selectedTipPercentage, 20)
-        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(36.00))
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(36))
         XCTAssertEqual(vm.finalTotalString, "$36.00")
     }
 
@@ -128,7 +128,7 @@ final class CheckoutViewModelTests: XCTestCase {
         vm.selectedTipPercentage = nil
 
         XCTAssertNil(vm.selectedTipPercentage)
-        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(37.25))
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(string: "37.25")!)
         XCTAssertEqual(vm.finalTotalString, "$37.25")
     }
 
@@ -335,7 +335,7 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertNil(vm.appError)
         // Visit should be marked checked-out
         XCTAssertNotNil(vm.visit.endedAt)
-        XCTAssertEqual(vm.visit.total, Decimal(30.00))
+        XCTAssertEqual(vm.visit.total, Decimal(30))
         XCTAssertNotNil(vm.visit.payment)
         XCTAssertEqual(vm.visit.payment?.method, .cash)
         XCTAssertEqual(vm.visit.payment?.paidAt, vm.visit.endedAt)
@@ -345,7 +345,7 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(transactions.count, 1)
         XCTAssertEqual(transaction.idempotencyKey, "checkout:\(vm.visit.uuid.uuidString)")
         XCTAssertEqual(transaction.status, .succeeded)
-        XCTAssertEqual(transaction.amount, Decimal(30.00))
+        XCTAssertEqual(transaction.amount, Decimal(30))
         XCTAssertEqual(transaction.attemptCount, 1)
 
         await vm.processPayment()
@@ -366,15 +366,15 @@ final class CheckoutViewModelTests: XCTestCase {
         await vm.processPayment()
 
         XCTAssertEqual(vm.state, .confirmed)
-        XCTAssertEqual(vm.visit.total, Decimal(100.00))
-        XCTAssertEqual(vm.visit.payment?.amount, Decimal(100.00))
-        XCTAssertEqual((vm.visit.items ?? []).reduce(Decimal.zero) { $0 + $1.lineTotal }, Decimal(100.00))
+        XCTAssertEqual(vm.visit.total, Decimal(100))
+        XCTAssertEqual(vm.visit.payment?.amount, Decimal(100))
+        XCTAssertEqual((vm.visit.items ?? []).reduce(Decimal.zero) { $0 + $1.lineTotal }, Decimal(100))
 
         let day = Calendar.current.startOfDay(for: vm.visit.endedAt ?? Date())
         let summaries = try context.fetch(FetchDescriptor<DaySummary>(
             predicate: #Predicate<DaySummary> { $0.day == day }
         ))
-        XCTAssertEqual(SummaryUpdater.collapsedDayAggregates(from: summaries)[day]?.revenue, Decimal(100.00))
+        XCTAssertEqual(SummaryUpdater.collapsedDayAggregates(from: summaries)[day]?.revenue, Decimal(100))
     }
 
     func testProcessPayment_RequiresReviewStep() async {

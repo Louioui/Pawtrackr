@@ -32,8 +32,8 @@ final class CheckoutFlowTests: XCTestCase {
         context.insert(pet)
 
         // Real-world prices the audit named: $65 main + $15 add-on = $80 total.
-        fullGroom = Service(name: "Full Groom", category: .groom, basePrice: 65.00)
-        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: 15.00)
+        fullGroom = Service(name: "Full Groom", category: .groom, basePrice: Decimal(65))
+        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: Decimal(15))
         context.insert(fullGroom)
         context.insert(nailTrim)
         try context.save()

@@ -27,8 +27,8 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
         pet = Pet(name: "Buddy", species: .dog)
         pet.owner = client
         context.insert(pet)
-        bath = Service(name: "Bath", category: .groom, basePrice: 30.00)
-        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: 15.00)
+        bath = Service(name: "Bath", category: .groom, basePrice: Decimal(30))
+        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: Decimal(15))
         context.insert(bath)
         context.insert(nailTrim)
         try context.save()
@@ -45,7 +45,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_PersistedVisitFetchableByUUID() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        let result = try await processCheckout(visit: visit, total: 45.00)
+        let result = try await processCheckout(visit: visit, total: Decimal(45))
 
         // Use a fresh ModelContext to bust the main context's cached (pre-actor) Visit
         // instance. This mirrors what a SwiftUI screen opening after checkout sees via @Query.
@@ -62,7 +62,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_VisitDiscoverableViaClientPetRelationship() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        _ = try await processCheckout(visit: visit, total: 45.00)
+        _ = try await processCheckout(visit: visit, total: Decimal(45))
 
         // The Client → Pet → Visit path used by ClientDetailViewModel must surface this visit.
         let visitsViaClient = (client.pets ?? []).flatMap { $0.visits ?? [] }
@@ -72,7 +72,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_DaySummaryReflectsRevenueAndCount() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        let result = try await processCheckout(visit: visit, total: 45.00)
+        let result = try await processCheckout(visit: visit, total: Decimal(45))
 
         let day = Calendar.current.startOfDay(for: result.endedAt)
         let summaries = try context.fetch(FetchDescriptor<DaySummary>(predicate: #Predicate<DaySummary> { $0.day == day }))
@@ -83,7 +83,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_ServiceDaySummaryHasEachLineItem() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        let result = try await processCheckout(visit: visit, total: 45.00)
+        let result = try await processCheckout(visit: visit, total: Decimal(45))
         let day = Calendar.current.startOfDay(for: result.endedAt)
 
         let summaries = try context.fetch(FetchDescriptor<ServiceDaySummary>(predicate: #Predicate<ServiceDaySummary> { $0.day == day }))
@@ -94,7 +94,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_CategoryDaySummaryReflectsMixedCategories() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        let result = try await processCheckout(visit: visit, total: 45.00)
+        let result = try await processCheckout(visit: visit, total: Decimal(45))
         let day = Calendar.current.startOfDay(for: result.endedAt)
 
         let summaries = try context.fetch(FetchDescriptor<CategoryDaySummary>(predicate: #Predicate<CategoryDaySummary> { $0.day == day }))
@@ -105,7 +105,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_AuditTransactionRecorded() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        _ = try await processCheckout(visit: visit, total: 45.00)
+        _ = try await processCheckout(visit: visit, total: Decimal(45))
 
         let transactions = try context.fetch(FetchDescriptor<CheckoutTransaction>())
         let txn = try XCTUnwrap(transactions.first)
@@ -118,7 +118,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_PaymentLinkedWithMethodAndReference() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        _ = try await processCheckout(visit: visit, total: 45.00, method: .creditCard, reference: "1234")
+        _ = try await processCheckout(visit: visit, total: Decimal(45), method: .creditCard, reference: "1234")
 
         let freshContext = ModelContext(container)
         let visitUUID = visit.uuid
@@ -132,8 +132,8 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
 
     func testCheckInThenCheckout_RetryIsIdempotent() async throws {
         let visit = try await visitRepo.checkIn(pet: pet, date: .now)
-        let first = try await processCheckout(visit: visit, total: 45.00)
-        let second = try await processCheckout(visit: visit, total: 45.00)
+        let first = try await processCheckout(visit: visit, total: Decimal(45))
+        let second = try await processCheckout(visit: visit, total: Decimal(45))
 
         XCTAssertEqual(first.endedAt, second.endedAt, "Idempotent retry must return the original completion timestamp.")
         XCTAssertEqual(try context.fetch(FetchDescriptor<CheckoutTransaction>()).count, 1)

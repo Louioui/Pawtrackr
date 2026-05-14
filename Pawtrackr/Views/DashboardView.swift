@@ -419,8 +419,16 @@ struct DashboardView: View {
                         selectSurface(.insights, resetPath: true)
                     } label: {
                         kpiCard(title: NSLocalizedString("dashboard.revenue", comment: ""), value: vm.kpi.revenueTodayString, symbol: "dollarsign.circle", trend: vm.kpi.revenueTrend)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text(NSLocalizedString("dashboard.revenue", comment: "")))
+                    .accessibilityValue(Text(vm.kpi.revenueTodayString))
+                    .accessibilityHint(Text("Opens Insights"))
+                    .accessibilityIdentifier("dashboard.kpi.revenueInsights")
+                    .accessibilityAddTraits(.isButton)
                     recentHistoryLink(scope: .today) {
                         kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
                     }
@@ -432,34 +440,32 @@ struct DashboardView: View {
     private var quickActionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(NSLocalizedString("dashboard.quick_actions", comment: "")).font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    actionCard(
-                        title: NSLocalizedString("dashboard.new_client", comment: ""),
-                        symbol: "person.crop.circle.badge.plus",
-                        accessibilityIdentifier: "dashboard.quickAction.newClient"
-                    ) { showNewClient = true }
-                    actionCard(
-                        title: NSLocalizedString("dashboard.check_in", comment: ""),
-                        symbol: "play.circle",
-                        accessibilityIdentifier: "dashboard.quickAction.checkIn"
-                    ) {
-                        selectSurface(.clients, resetPath: true)
-                    }
-                    recentHistoryLink(
-                        scope: nil,
-                        accessibilityIdentifier: "dashboard.quickAction.checkOut",
-                        accessibilityLabel: NSLocalizedString("dashboard.check_out", comment: "")
-                    ) {
-                        actionCardLabel(title: NSLocalizedString("dashboard.check_out", comment: ""), symbol: "stop.circle")
-                    }
-                    actionCard(
-                        title: NSLocalizedString("dashboard.reports", comment: ""),
-                        symbol: "chart.bar.fill",
-                        accessibilityIdentifier: "dashboard.quickAction.reports"
-                    ) {
-                        selectSurface(.insights, resetPath: true)
-                    }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                actionCard(
+                    title: NSLocalizedString("dashboard.new_client", comment: ""),
+                    symbol: "person.crop.circle.badge.plus",
+                    accessibilityIdentifier: "dashboard.quickAction.newClient"
+                ) { showNewClient = true }
+                actionCard(
+                    title: NSLocalizedString("dashboard.check_in", comment: ""),
+                    symbol: "play.circle",
+                    accessibilityIdentifier: "dashboard.quickAction.checkIn"
+                ) {
+                    selectSurface(.clients, resetPath: true)
+                }
+                actionCard(
+                    title: NSLocalizedString("dashboard.check_out", comment: ""),
+                    symbol: "stop.circle",
+                    accessibilityIdentifier: "dashboard.quickAction.checkOut"
+                ) {
+                    selectRecentHistory(resetPath: true)
+                }
+                actionCard(
+                    title: NSLocalizedString("dashboard.reports", comment: ""),
+                    symbol: "chart.bar.fill",
+                    accessibilityIdentifier: "dashboard.quickAction.reports"
+                ) {
+                    selectSurface(.insights, resetPath: true)
                 }
             }
         }
@@ -694,6 +700,8 @@ struct DashboardView: View {
                 }
                 Spacer()
             }
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
@@ -702,13 +710,17 @@ struct DashboardView: View {
     }
 
     private func actionCard(title: String, symbol: String, accessibilityIdentifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { actionCardLabel(title: title, symbol: symbol) }
+        Button(action: action) {
+            actionCardLabel(title: title, symbol: symbol)
+                .contentShape(Rectangle())
+        }
             .buttonStyle(.plain)
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(title))
             .accessibilityIdentifier(accessibilityIdentifier)
             .accessibilityAddTraits(.isButton)
+            .frame(maxWidth: .infinity)
     }
 
     private func recentHistoryLink<Label: View>(
@@ -721,9 +733,10 @@ struct DashboardView: View {
             RecentHistoryView(initialScope: scope)
         } label: {
             label()
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel ?? "Recent History"))
         .applyAccessibilityIdentifier(accessibilityIdentifier)
@@ -740,13 +753,21 @@ struct DashboardView: View {
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.8)
             }
-            .frame(width: 130, height: 100)
+            .frame(maxWidth: .infinity)
+            .frame(height: 100)
         }
     }
 
     private func selectSurface(_ item: NavigationItem, resetPath: Bool = false) {
         NotificationCenter.default.post(name: .selectNavigationItem, object: nil, userInfo: [
             NavigationSelectionKey.item.rawValue: item.rawValue,
+            NavigationSelectionKey.resetPath.rawValue: resetPath
+        ])
+    }
+
+    private func selectRecentHistory(resetPath: Bool = false) {
+        NotificationCenter.default.post(name: .selectNavigationItem, object: nil, userInfo: [
+            NavigationSelectionKey.item.rawValue: "recenthistory",
             NavigationSelectionKey.resetPath.rawValue: resetPath
         ])
     }
@@ -758,10 +779,8 @@ struct DashboardView: View {
     }
     
     private func openPet(_ pet: Pet) {
-        // Post notification to trigger navigation to PetDetailView with MatchedGeometry
         NotificationCenter.default.post(name: .navigateToPet, object: nil, userInfo: [
-            "pet": pet,
-            "namespace": namespace
+            "uuid": pet.uuid
         ])
     }
 }

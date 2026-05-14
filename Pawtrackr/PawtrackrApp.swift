@@ -124,8 +124,7 @@ struct PawtrackrApp: App {
                     CloudKitMonitor.shared.start(modelContainer: localContainer)
                 }
 
-                // Register for silent CloudKit pushes (used by NSPersistentCloudKitContainer
-                // to trigger background fetches when records change on other devices).
+                // Register for silent CloudKit pushes.
                 #if canImport(UIKit) && !targetEnvironment(macCatalyst)
                 DispatchQueue.main.async {
                     UIApplication.shared.registerForRemoteNotifications()
@@ -135,6 +134,11 @@ struct PawtrackrApp: App {
                     NSApplication.shared.registerForRemoteNotifications()
                 }
                 #endif
+
+                // Fetch remote configuration
+                Task {
+                    await RemoteConfigService.shared.fetchConfig()
+                }
             }
 
             // Access UserDefaults directly to avoid using StateObject before it is installed on a view

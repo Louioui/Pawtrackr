@@ -29,6 +29,31 @@ enum AppSettingsKeys {
     static let hasCompletedFirstVisit = "hasCompletedFirstVisit"
     static let isChecklistDismissed = "isChecklistDismissed"
     static let hasSeenAppTour = "hasSeenAppTour"
+    static let preferredColorScheme = "preferredColorScheme"
+    static let hapticsEnabled = "hapticsEnabled"
+}
+
+/// User-selectable color scheme preference. `system` defers to the OS.
+enum AppColorScheme: String, CaseIterable, Identifiable {
+    case system, light, dark
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system: return NSLocalizedString("settings.appearance.system", value: "Follow System", comment: "")
+        case .light:  return NSLocalizedString("settings.appearance.light",  value: "Light",         comment: "")
+        case .dark:   return NSLocalizedString("settings.appearance.dark",   value: "Dark",          comment: "")
+        }
+    }
+
+    var swiftUIScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light:  return .light
+        case .dark:   return .dark
+        }
+    }
 }
 
 @Observable
@@ -48,6 +73,8 @@ final class AppSettings {
         static let hasAddedFirstClient = false
         static let hasCompletedFirstVisit = false
         static let isChecklistDismissed = false
+        static let preferredColorScheme = AppColorScheme.system.rawValue
+        static let hapticsEnabled = true
     }
 
     // MARK: - Properties
@@ -129,6 +156,23 @@ final class AppSettings {
         }
     }
 
+    /// User-selected appearance. The SettingsView surfaces this; ContentView
+    /// applies it via `.preferredColorScheme(...)` so the whole tree responds.
+    var preferredColorScheme: AppColorScheme {
+        didSet {
+            UserDefaults.standard.set(preferredColorScheme.rawValue, forKey: AppSettingsKeys.preferredColorScheme)
+        }
+    }
+
+    /// Global haptics toggle. `HapticManager` reads this on each call so any
+    /// view that triggers feedback (buttons, toggles, etc.) is silenced when
+    /// disabled — no per-callsite changes required.
+    var hapticsEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(hapticsEnabled, forKey: AppSettingsKeys.hapticsEnabled)
+        }
+    }
+
     /// Fixed idle threshold (minutes) for auto-lock.
     let idleLockMinutes: Int = Defaults.idleLockMinutes
 
@@ -157,7 +201,9 @@ final class AppSettings {
             AppSettingsKeys.hasAddedFirstClient: Defaults.hasAddedFirstClient,
             AppSettingsKeys.hasCompletedFirstVisit: Defaults.hasCompletedFirstVisit,
             AppSettingsKeys.isChecklistDismissed: Defaults.isChecklistDismissed,
-            AppSettingsKeys.hasSeenAppTour: true
+            AppSettingsKeys.hasSeenAppTour: true,
+            AppSettingsKeys.preferredColorScheme: Defaults.preferredColorScheme,
+            AppSettingsKeys.hapticsEnabled: Defaults.hapticsEnabled
         ])
 
         // Read values
@@ -174,6 +220,10 @@ final class AppSettings {
         self.hasCompletedFirstVisit = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasCompletedFirstVisit)
         self.isChecklistDismissed = UserDefaults.standard.bool(forKey: AppSettingsKeys.isChecklistDismissed)
         self.hasSeenAppTour = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasSeenAppTour)
+
+        let storedSchemeRaw = UserDefaults.standard.string(forKey: AppSettingsKeys.preferredColorScheme) ?? Defaults.preferredColorScheme
+        self.preferredColorScheme = AppColorScheme(rawValue: storedSchemeRaw) ?? .system
+        self.hapticsEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.hapticsEnabled)
 
         // Migrate any existing plaintext PIN out of UserDefaults into the
         // Keychain, then erase the UserDefaults copy. Future reads come from

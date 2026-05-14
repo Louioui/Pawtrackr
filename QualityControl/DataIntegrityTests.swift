@@ -5,12 +5,13 @@ import SwiftData
 final class DataIntegrityTests: XCTestCase {
 
     func testDecimalMoneyPrecision() {
-        let amount: Decimal = 100.12345
+        let amount = Decimal(string: "100.12345")!
         let rounded = amount.roundedMoney()
-        XCTAssertEqual(rounded, 100.12, "Money rounding should be exactly 2 decimal places")
+        XCTAssertEqual(rounded, Decimal(string: "100.12")!, "Money rounding should be exactly 2 decimal places")
         
-        let sum = (0..<100).reduce(Decimal.zero) { acc, _ in acc + Decimal(0.01) }
-        XCTAssertEqual(sum, 1.0, "Accumulated decimals should maintain precision")
+        let cent = Decimal(string: "0.01")!
+        let sum = (0..<100).reduce(Decimal.zero) { acc, _ in acc + cent }
+        XCTAssertEqual(sum, Decimal(1), "Accumulated decimals should maintain precision")
     }
     
     @MainActor

@@ -556,9 +556,9 @@ final class CheckoutViewModel {
             var userInfo: [String: Any] = [
                 VisitDidCompleteKey.visitID.rawValue: result.visitID,
                 VisitDidCompleteKey.endedAt.rawValue: result.endedAt,
-                VisitDidCompleteKey.total.rawValue: result.total,
-                VisitDidCompleteKey.petID.rawValue: result.petID
+                VisitDidCompleteKey.total.rawValue: result.total
             ]
+            if let petID = result.petID { userInfo[VisitDidCompleteKey.petID.rawValue] = petID }
             if let clientID = result.clientID { userInfo[VisitDidCompleteKey.clientID.rawValue] = clientID }
             
             NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: userInfo)

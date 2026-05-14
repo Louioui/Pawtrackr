@@ -39,7 +39,7 @@ final class OmniChaosTests: XCTestCase {
                             visitUUID: visit.uuid,
                             petUUID: pet.uuid,
                             clientUUID: client.uuid,
-                            amount: 100.0,
+                            amount: Decimal(100),
                             paymentMethod: .cash,
                             externalReference: nil,
                             sessionNotes: nil,

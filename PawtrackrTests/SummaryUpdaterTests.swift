@@ -21,12 +21,12 @@ final class SummaryUpdaterTests: XCTestCase {
         
         // Visit 1: $50
         let v1 = Visit(pet: pet, startedAt: today.addingTimeInterval(3600))
-        v1.total = 50.0
+        v1.total = Decimal(50)
         v1.endedAt = today.addingTimeInterval(7200)
         
         // Visit 2: $75
         let v2 = Visit(pet: pet, startedAt: today.addingTimeInterval(10000))
-        v2.total = 75.0
+        v2.total = Decimal(75)
         v2.endedAt = today.addingTimeInterval(14000)
         
         try context.save()
@@ -37,7 +37,7 @@ final class SummaryUpdaterTests: XCTestCase {
         // Verify DaySummary
         let summaries = try context.fetch(FetchDescriptor<DaySummary>())
         XCTAssertEqual(summaries.count, 1)
-        XCTAssertEqual(summaries.first?.revenue, 125.0)
+        XCTAssertEqual(summaries.first?.revenue, Decimal(125))
         XCTAssertEqual(summaries.first?.visitCount, 2)
     }
     

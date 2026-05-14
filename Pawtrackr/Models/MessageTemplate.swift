@@ -41,7 +41,8 @@ final class MessageTemplate {
         }
         if let visit = visit {
             result = result.replacingOccurrences(of: "[Time]", with: visit.startedAt.formatted(date: .omitted, time: .shortened))
-            result = result.replacingOccurrences(of: "[Total]", with: visit.totalCurrencyString)
+            let total = visit.total > .zero ? visit.total : visit.effectiveTotal
+            result = result.replacingOccurrences(of: "[Total]", with: total.moneyString)
         }
         return result
     }

@@ -6,6 +6,10 @@ import SwiftUI
 
 @Observable
 final class OnboardingViewModel {
+    @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Onboarding")
+    @ObservationIgnored private let biometrics = BiometricAuthenticator()
+    @ObservationIgnored private var hasLoadedInitialState = false
+
     private var modelContext: ModelContext?
     private var appSettings: AppSettings?
 
@@ -25,29 +29,56 @@ final class OnboardingViewModel {
     }
 
     var currentStep: Step = .welcome
-    var name: String = ""
-    var email: String = ""
-    var phone: String = ""
-    var address: String = ""
-    var logoData: Data? = nil
-    var pin: String = ""
-    var confirmPin: String = ""
-    var biometricsEnabled: Bool = false
-    var lockOnBackgroundEnabled: Bool = true
-    var autoLockAfterInactivityEnabled: Bool = false
-    var currentCurrency: String = "$"
+    var name: String = "" { didSet { saveDraft() } }
+    var email: String = "" { didSet { saveDraft() } }
+    var phone: String = "" { didSet { saveDraft() } }
+    var address: String = "" { didSet { saveDraft() } }
+    var logoData: Data? = nil { didSet { saveDraft() } }
+    var pin: String = "" { didSet { saveDraft() } }
+    var confirmPin: String = "" { didSet { saveDraft() } }
+    var biometricsEnabled: Bool = false { didSet { saveDraft() } }
+    var lockOnBackgroundEnabled: Bool = true { didSet { saveDraft() } }
+    var autoLockAfterInactivityEnabled: Bool = false { didSet { saveDraft() } }
+    var currentCurrency: String = "$" { didSet { saveDraft() } }
     var isSaving: Bool = false
-    var saveError: String? = nil
-    
+    var saveError: String?
+
     var currencySymbol: String {
         get { currentCurrency }
         set { currentCurrency = newValue }
     }
-
-    private let logger = Logger(subsystem: "com.pawtrackr", category: "Onboarding")
-    private let biometrics = BiometricAuthenticator()
-    private var hasLoadedInitialState = false
     
+    private let draftKey = "com.pawtrackr.onboarding.draft"
+
+    private func saveDraft() {
+        let draft: [String: Any] = [
+            "name": name, "email": email, "phone": phone, "address": address,
+            "pin": pin, "confirmPin": confirmPin, "biometricsEnabled": biometricsEnabled,
+            "lockOnBackgroundEnabled": lockOnBackgroundEnabled,
+            "autoLockAfterInactivityEnabled": autoLockAfterInactivityEnabled,
+            "currency": currentCurrency
+        ]
+        UserDefaults.standard.set(draft, forKey: draftKey)
+    }
+
+    private func loadDraft() {
+        guard let draft = UserDefaults.standard.dictionary(forKey: draftKey) else { return }
+        name = draft["name"] as? String ?? ""
+        email = draft["email"] as? String ?? ""
+        phone = draft["phone"] as? String ?? ""
+        address = draft["address"] as? String ?? ""
+        pin = draft["pin"] as? String ?? ""
+        confirmPin = draft["confirmPin"] as? String ?? ""
+        biometricsEnabled = draft["biometricsEnabled"] as? Bool ?? false
+        lockOnBackgroundEnabled = draft["lockOnBackgroundEnabled"] as? Bool ?? true
+        autoLockAfterInactivityEnabled = draft["autoLockAfterInactivityEnabled"] as? Bool ?? false
+        currentCurrency = draft["currency"] as? String ?? "$"
+    }
+
+    private func clearDraft() {
+        UserDefaults.standard.removeObject(forKey: draftKey)
+    }
+
     // MARK: - Init
     init(modelContext: ModelContext?, appSettings: AppSettings?) {
         self.modelContext = modelContext
@@ -56,6 +87,8 @@ final class OnboardingViewModel {
         self.lockOnBackgroundEnabled = appSettings?.autoLockOnBackground ?? true
         self.autoLockAfterInactivityEnabled = appSettings?.autoLockAfterInactivity ?? false
         self.biometricsEnabled = (appSettings?.isBiometricLockEnabled ?? false) && isBiometricsAvailable
+
+        loadDraft()
     }
 
     func bindIfNeeded(modelContext: ModelContext, appSettings: AppSettings) {
@@ -313,11 +346,21 @@ final class OnboardingViewModel {
                         Logger.database.error("Demo data seed failed during onboarding: \(error.localizedDescription, privacy: .public)")
                     }
                 }
+                if !seedSampleData {
+                    let defaultService = Service(
+                        name: "Basic Groom",
+                        category: .groom,
+                        systemIcon: "scissors",
+                        basePrice: Decimal(50),
+                        defaultDurationMinutes: 60
+                    )
+                    bg.insert(defaultService)
+                }
+
                 if bg.hasChanges {
                     try bg.save()
                 }
-            }.value
-
+                }.value
             settings.isLockEnabled = true
             settings.isBiometricLockEnabled = useBiometrics
             settings.autoLockOnBackground = lockOnBackgroundEnabled
@@ -338,6 +381,7 @@ final class OnboardingViewModel {
 
             TelemetryService.shared.track(event: "onboarding_finished", parameters: ["seedSampleData": String(seedSampleData)])
 
+            clearDraft()
             Formatters.updateCurrencySymbol(currentCurrency)
             HapticManager.notify(.success)
             isSaving = false

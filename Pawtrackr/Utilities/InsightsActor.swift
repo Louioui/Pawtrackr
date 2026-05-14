@@ -34,6 +34,15 @@ final actor InsightsActor {
         let churnRiskCount: Int
         let retentionSeries: [InsightsViewModel.RetentionData]
     }
+
+    struct ActionableInsightsResult: Sendable {
+        let revenueDrilldown: [InsightsViewModel.RevenueVisitData]
+        let serviceProfitability: [InsightsViewModel.ServiceProfitabilityData]
+        let lapsedClients: [InsightsViewModel.LapsedClientData]
+        let forecast: InsightsViewModel.ForecastData?
+        let comparisons: [InsightsViewModel.ComparisonData]
+        let dataQualityIssues: [InsightsViewModel.DataQualityIssue]
+    }
     
     // MARK: - Core Analytics
     
@@ -203,6 +212,62 @@ final actor InsightsActor {
             InsightsViewModel.MonthlyGrowthData(month: $0.label, revenue: $0.revenue, visitCount: $0.count)
         }
     }
+
+    func fetchActionableInsights(periodDays: Int) async throws -> ActionableInsightsResult {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: .now)
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today.addingTimeInterval(86_400)
+        let normalizedPeriod = max(1, min(periodDays, 365))
+        let currentStart = cal.date(byAdding: .day, value: -(normalizedPeriod - 1), to: today) ?? today
+        let priorStart = cal.date(byAdding: .day, value: -normalizedPeriod, to: currentStart) ?? currentStart
+
+        var visitDescriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { visit in
+                if let endedAt = visit.endedAt {
+                    endedAt >= priorStart && endedAt < tomorrow
+                } else {
+                    false
+                }
+            }
+        )
+        visitDescriptor.fetchLimit = 10_000
+        visitDescriptor.relationshipKeyPathsForPrefetching = [\.items]
+        let visits = try modelContext.fetch(visitDescriptor)
+
+        let currentVisits = visits
+            .filter { ($0.endedAt ?? $0.startedAt) >= currentStart && ($0.endedAt ?? $0.startedAt) < tomorrow }
+            .sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
+
+        let priorVisits = visits
+            .filter { ($0.endedAt ?? $0.startedAt) >= priorStart && ($0.endedAt ?? $0.startedAt) < currentStart }
+
+        let revenueRows = currentVisits.prefix(50).map { visit in
+            InsightsViewModel.RevenueVisitData(
+                date: visit.endedAt ?? visit.startedAt,
+                petName: visit.pet?.name ?? "Unknown pet",
+                clientName: visit.pet?.owner?.fullName ?? "Unknown client",
+                serviceSummary: Self.serviceSummary(for: visit),
+                total: visit.total,
+                paymentMethod: visit.payment?.method.displayName ?? "Unpaid"
+            )
+        }
+
+        let serviceProfitability = Self.serviceProfitability(currentVisits: currentVisits, priorVisits: priorVisits)
+        let lapsedClients = try fetchLapsedClients(calendar: cal, today: today)
+        let daySummaries = try fetchDayAggregates(startingDaysBack: 395, calendar: cal, end: tomorrow)
+        let forecast = Self.forecast(from: daySummaries, calendar: cal, today: today, end: tomorrow)
+        let comparisons = Self.comparisons(from: daySummaries, calendar: cal, today: today, end: tomorrow)
+        let quality = try fetchDataQualityIssues(calendar: cal, today: today, end: tomorrow)
+
+        return ActionableInsightsResult(
+            revenueDrilldown: revenueRows,
+            serviceProfitability: serviceProfitability,
+            lapsedClients: lapsedClients,
+            forecast: forecast,
+            comparisons: comparisons,
+            dataQualityIssues: quality
+        )
+    }
     
     // MARK: - Private Helpers
     
@@ -241,5 +306,298 @@ final actor InsightsActor {
             churnRiskCount: churn,
             retentionSeries: series
         )
+    }
+
+    private func fetchLapsedClients(calendar cal: Calendar, today: Date) throws -> [InsightsViewModel.LapsedClientData] {
+        var summaryDesc = FetchDescriptor<ClientInsightSummary>()
+        summaryDesc.fetchLimit = 5_000
+        let collapsedSummaries = SummaryUpdater.collapsedClientInsightSummaries(from: try modelContext.fetch(summaryDesc))
+
+        var clientDesc = FetchDescriptor<Client>(sortBy: [SortDescriptor(\.lastVisitDate)])
+        clientDesc.relationshipKeyPathsForPrefetching = [\.pets]
+        clientDesc.fetchLimit = 5_000
+        let clients = try modelContext.fetch(clientDesc)
+        let clientsByUUID = Dictionary(uniqueKeysWithValues: clients.map { ($0.uuid, $0) })
+
+        if !collapsedSummaries.isEmpty {
+            return collapsedSummaries.values.compactMap { summary -> InsightsViewModel.LapsedClientData? in
+                guard let lastVisit = summary.lastVisitAt,
+                      let client = clientsByUUID[summary.clientUUID]
+                else { return nil }
+
+                return makeLapsedClientRow(
+                    client: client,
+                    fallbackName: summary.clientName,
+                    totalSpent: summary.totalSpent,
+                    lastVisit: lastVisit,
+                    calendar: cal,
+                    today: today
+                )
+            }
+            .sorted {
+                if $0.daysSinceLastVisit == $1.daysSinceLastVisit {
+                    return $0.totalSpent > $1.totalSpent
+                }
+                return $0.daysSinceLastVisit > $1.daysSinceLastVisit
+            }
+            .prefix(8)
+            .map { $0 }
+        }
+
+        return clients.compactMap { client in
+            guard let lastVisit = client.lastVisitDate else { return nil }
+            return makeLapsedClientRow(
+                client: client,
+                fallbackName: client.fullName,
+                totalSpent: .zero,
+                lastVisit: lastVisit,
+                calendar: cal,
+                today: today
+            )
+        }
+        .sorted { $0.daysSinceLastVisit > $1.daysSinceLastVisit }
+        .prefix(8)
+        .map { $0 }
+    }
+
+    private func makeLapsedClientRow(
+        client: Client,
+        fallbackName: String,
+        totalSpent: Decimal,
+        lastVisit: Date,
+        calendar cal: Calendar,
+        today: Date
+    ) -> InsightsViewModel.LapsedClientData? {
+            let daysSince = cal.dateComponents([.day], from: cal.startOfDay(for: lastVisit), to: today).day ?? 0
+            guard daysSince >= 90 else { return nil }
+
+            let pets = client.pets ?? []
+            let petNames = pets.map(\.name).filter { !$0.isEmpty }.joined(separator: ", ")
+            let primaryPetUUID = pets.first?.uuid
+            let firstPetName = pets.first?.name ?? "your pet"
+            let message = "Hi \(client.firstName.isEmpty ? client.fullName : client.firstName), it has been a while since \(firstPetName)'s last visit. Would you like to schedule a grooming appointment?"
+
+            return InsightsViewModel.LapsedClientData(
+                id: client.uuid,
+                name: client.fullName.isEmpty ? (fallbackName.isEmpty ? "Unnamed client" : fallbackName) : client.fullName,
+                petNames: petNames.isEmpty ? "No pets listed" : petNames,
+                daysSinceLastVisit: daysSince,
+                totalSpent: totalSpent,
+                phone: client.phone,
+                primaryPetUUID: primaryPetUUID,
+                suggestedMessage: message
+            )
+    }
+
+    private func fetchDayAggregates(startingDaysBack daysBack: Int, calendar cal: Calendar, end: Date) throws -> [SummaryUpdater.DayAggregate] {
+        let start = cal.date(byAdding: .day, value: -daysBack, to: end) ?? end
+        let descriptor = FetchDescriptor<DaySummary>(
+            predicate: #Predicate<DaySummary> { $0.day >= start && $0.day < end }
+        )
+        let summaries = try modelContext.fetch(descriptor)
+        return Array(SummaryUpdater.collapsedDayAggregates(from: summaries).values)
+    }
+
+    private func fetchDataQualityIssues(calendar cal: Calendar, today: Date, end: Date) throws -> [InsightsViewModel.DataQualityIssue] {
+        let staleActiveCutoff = cal.date(byAdding: .day, value: -1, to: .now) ?? .now
+        let qualityStart = cal.date(byAdding: .day, value: -365, to: today) ?? today
+
+        let activeDescriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { visit in
+                visit.endedAt == nil && visit.startedAt < staleActiveCutoff
+            }
+        )
+        let staleActiveCount = try modelContext.fetchCount(activeDescriptor)
+
+        var completedDescriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { visit in
+                if let endedAt = visit.endedAt {
+                    endedAt >= qualityStart && endedAt < end
+                } else {
+                    false
+                }
+            }
+        )
+        completedDescriptor.fetchLimit = 10_000
+        let completed = try modelContext.fetch(completedDescriptor)
+
+        let missingPayment = completed.filter { $0.payment == nil }.count
+        let zeroRevenue = completed.filter { $0.total <= .zero }.count
+
+        let missingReference = completed.filter { visit in
+            guard let payment = visit.payment, payment.method.requiresExternalReference else { return false }
+            return (payment.externalReference ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+
+        var clientDescriptor = FetchDescriptor<Client>()
+        clientDescriptor.fetchLimit = 10_000
+        let clients = try modelContext.fetch(clientDescriptor)
+        let missingContact = clients.filter {
+            ($0.phone ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            ($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+
+        var issues: [InsightsViewModel.DataQualityIssue] = []
+        if staleActiveCount > 0 {
+            issues.append(.init(title: "Stale active visits", detail: "Visits checked in for more than 24 hours can distort active workload.", count: staleActiveCount, severity: .critical))
+        }
+        if missingPayment > 0 {
+            issues.append(.init(title: "Completed visits without payment", detail: "These visits are finished but do not have a payment record.", count: missingPayment, severity: .warning))
+        }
+        if zeroRevenue > 0 {
+            issues.append(.init(title: "Zero-dollar completed visits", detail: "Review comped or incomplete checkouts before relying on revenue totals.", count: zeroRevenue, severity: .warning))
+        }
+        if missingReference > 0 {
+            issues.append(.init(title: "Card/Zelle references missing", detail: "Payment references help reconcile deposits and charge disputes.", count: missingReference, severity: .info))
+        }
+        if missingContact > 0 {
+            issues.append(.init(title: "Clients missing contact info", detail: "Add phone or email so recall campaigns can reach every client.", count: missingContact, severity: .info))
+        }
+
+        return issues
+    }
+
+    private static func serviceSummary(for visit: Visit) -> String {
+        let names = (visit.items ?? []).map(\.displayName).filter { !$0.isEmpty }
+        if names.isEmpty { return "No services listed" }
+        if names.count <= 2 { return names.joined(separator: ", ") }
+        return "\(names.prefix(2).joined(separator: ", ")) +\(names.count - 2)"
+    }
+
+    private static func serviceProfitability(currentVisits: [Visit], priorVisits: [Visit]) -> [InsightsViewModel.ServiceProfitabilityData] {
+        typealias ServiceStats = (category: String, count: Int, revenue: Decimal)
+        var current: [String: ServiceStats] = [:]
+        var prior: [String: ServiceStats] = [:]
+
+        func add(_ item: VisitItem, to stats: inout [String: ServiceStats]) {
+            let category = item.serviceCategoryRaw.flatMap(Service.Category.init(rawValue:))?.rawValue ?? "Uncategorized"
+            let existing = stats[item.name] ?? (category, 0, .zero)
+            stats[item.name] = (existing.category, existing.count + item.quantity, existing.revenue + item.lineTotal)
+        }
+
+        for visit in currentVisits {
+            for item in visit.items ?? [] {
+                add(item, to: &current)
+            }
+        }
+
+        for visit in priorVisits {
+            for item in visit.items ?? [] {
+                add(item, to: &prior)
+            }
+        }
+
+        return current.map { name, stats in
+            let priorRevenue = prior[name]?.revenue ?? .zero
+            let trend: Double
+            if priorRevenue > .zero {
+                trend = (((stats.revenue - priorRevenue) / priorRevenue) as NSDecimalNumber).doubleValue
+            } else {
+                trend = stats.revenue > .zero ? 1 : 0
+            }
+
+            return InsightsViewModel.ServiceProfitabilityData(
+                name: name,
+                category: stats.category,
+                count: stats.count,
+                revenue: stats.revenue,
+                averageTicket: stats.count > 0 ? (stats.revenue / Decimal(stats.count)).roundedMoney() : .zero,
+                trendPercent: trend
+            )
+        }
+        .sorted { $0.revenue > $1.revenue }
+        .prefix(10)
+        .map { $0 }
+    }
+
+    private static func forecast(
+        from summaries: [SummaryUpdater.DayAggregate],
+        calendar cal: Calendar,
+        today: Date,
+        end: Date
+    ) -> InsightsViewModel.ForecastData? {
+        let start = cal.date(byAdding: .day, value: -89, to: today) ?? today
+        let rows = summaries.filter { $0.day >= start && $0.day < end }
+        let visits = rows.reduce(0) { $0 + $1.visitCount }
+        guard visits > 0 else { return nil }
+
+        let revenue = rows.reduce(Decimal.zero) { $0 + $1.revenue }
+        let dayCount = max(1, cal.dateComponents([.day], from: start, to: end).day ?? 90)
+        let dailyAverage = (revenue / Decimal(dayCount)).roundedMoney()
+        let projectedVisits = Int((Double(visits) / Double(dayCount) * 30.0).rounded())
+
+        let confidence: String
+        switch visits {
+        case 50...:
+            confidence = "High confidence"
+        case 15..<50:
+            confidence = "Medium confidence"
+        default:
+            confidence = "Low confidence"
+        }
+
+        return InsightsViewModel.ForecastData(
+            projectedRevenue: (dailyAverage * Decimal(30)).roundedMoney(),
+            projectedVisits: max(1, projectedVisits),
+            dailyAverageRevenue: dailyAverage,
+            confidenceLabel: confidence,
+            basis: "Based on \(visits) visits across the last \(dayCount) days"
+        )
+    }
+
+    private static func comparisons(
+        from summaries: [SummaryUpdater.DayAggregate],
+        calendar cal: Calendar,
+        today: Date,
+        end: Date
+    ) -> [InsightsViewModel.ComparisonData] {
+        func totals(start: Date, end: Date) -> (revenue: Decimal, visits: Int) {
+            let rows = summaries.filter { $0.day >= start && $0.day < end }
+            return (
+                rows.reduce(.zero) { $0 + $1.revenue },
+                rows.reduce(0) { $0 + $1.visitCount }
+            )
+        }
+
+        func comparison(label: String, currentStart: Date, currentEnd: Date, priorStart: Date, priorEnd: Date) -> InsightsViewModel.ComparisonData {
+            let current = totals(start: currentStart, end: currentEnd)
+            let prior = totals(start: priorStart, end: priorEnd)
+            return InsightsViewModel.ComparisonData(
+                label: label,
+                currentRevenue: current.revenue,
+                previousRevenue: prior.revenue,
+                currentVisits: current.visits,
+                previousVisits: prior.visits
+            )
+        }
+
+        let currentWeekStart = cal.date(byAdding: .day, value: -6, to: today) ?? today
+        let priorWeekStart = cal.date(byAdding: .day, value: -7, to: currentWeekStart) ?? currentWeekStart
+        let currentMonthStart = cal.date(byAdding: .day, value: -29, to: today) ?? today
+        let priorMonthStart = cal.date(byAdding: .day, value: -30, to: currentMonthStart) ?? currentMonthStart
+
+        var result: [InsightsViewModel.ComparisonData] = [
+            comparison(label: "7 days vs prior 7", currentStart: currentWeekStart, currentEnd: end, priorStart: priorWeekStart, priorEnd: currentWeekStart),
+            comparison(label: "30 days vs prior 30", currentStart: currentMonthStart, currentEnd: end, priorStart: priorMonthStart, priorEnd: currentMonthStart)
+        ]
+
+        if let lastYearStart = cal.date(byAdding: .year, value: -1, to: currentMonthStart),
+           let lastYearEnd = cal.date(byAdding: .year, value: -1, to: end) {
+            let prior = totals(start: lastYearStart, end: lastYearEnd)
+            if prior.visits > 0 || prior.revenue > .zero {
+                let current = totals(start: currentMonthStart, end: end)
+                result.append(
+                    InsightsViewModel.ComparisonData(
+                        label: "30 days vs last year",
+                        currentRevenue: current.revenue,
+                        previousRevenue: prior.revenue,
+                        currentVisits: current.visits,
+                        previousVisits: prior.visits
+                    )
+                )
+            }
+        }
+
+        return result
     }
 }

@@ -29,8 +29,8 @@ final class MoneyArithmeticTests: XCTestCase {
         let visit = Visit(pet: pet)
         context.insert(visit)
 
-        visit.addItem(title: "Bath", unitPrice: 65.00)
-        visit.addItem(title: "Nail Trim", unitPrice: 15.00)
+        visit.addItem(title: "Bath", unitPrice: Decimal(65))
+        visit.addItem(title: "Nail Trim", unitPrice: Decimal(15))
 
         XCTAssertEqual(visit.servicesSubtotal, Decimal(string: "80.00"))
         XCTAssertEqual(visit.calculatedTotal, Decimal(string: "80.00"))
@@ -41,7 +41,7 @@ final class MoneyArithmeticTests: XCTestCase {
         let pet = makePet()
         let visit = Visit(pet: pet)
         context.insert(visit)
-        visit.addItem(title: "Premium Wash", unitPrice: 12.99, quantity: 3)
+        visit.addItem(title: "Premium Wash", unitPrice: Decimal(string: "12.99")!, quantity: 3)
 
         let item = try XCTUnwrap(visit.items?.first)
         XCTAssertEqual(item.lineTotal, Decimal(string: "38.97"))
@@ -54,7 +54,7 @@ final class MoneyArithmeticTests: XCTestCase {
         context.insert(visit)
 
         for _ in 0..<10 {
-            visit.addItem(title: "Cent", unitPrice: 0.01)
+            visit.addItem(title: "Cent", unitPrice: Decimal(string: "0.01")!)
         }
 
         XCTAssertEqual(visit.calculatedTotal, Decimal(string: "0.10"))
@@ -66,7 +66,7 @@ final class MoneyArithmeticTests: XCTestCase {
         let visit = Visit(pet: pet)
         context.insert(visit)
 
-        let payment = Payment(amount: 123.45, method: .cash)
+        let payment = Payment(amount: Decimal(string: "123.45")!, method: .cash)
         context.insert(payment)
         visit.attachPayment(payment)
         try context.save()
@@ -79,14 +79,14 @@ final class MoneyArithmeticTests: XCTestCase {
 
     /// Negative payment amounts must clamp to zero (Payment.init guard).
     func testPayment_RejectsNegativeAmounts() {
-        let payment = Payment(amount: -5.00, method: .cash)
+        let payment = Payment(amount: Decimal(-5), method: .cash)
         XCTAssertEqual(payment.amount, Decimal.zero)
     }
 
     /// Two-step Payment.setAmount must also clamp negatives.
     func testPayment_SetAmountClampsNegatives() {
         let payment = Payment(amount: 10, method: .cash)
-        payment.setAmount(-7.5)
+        payment.setAmount(Decimal(string: "-7.5")!)
         XCTAssertEqual(payment.amount, Decimal.zero)
     }
 
@@ -95,9 +95,9 @@ final class MoneyArithmeticTests: XCTestCase {
         let pet = makePet()
         let visit = Visit(pet: pet)
         context.insert(visit)
-        visit.addItem(title: "Bath", unitPrice: 30.00)
+        visit.addItem(title: "Bath", unitPrice: Decimal(30))
         // Forcibly desync the stored total.
-        visit.total = 999.99
+        visit.total = Decimal(string: "999.99")!
         visit.recalcTotal()
         XCTAssertEqual(visit.total, Decimal(string: "30.00"))
     }

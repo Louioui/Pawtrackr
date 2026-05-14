@@ -30,7 +30,7 @@ final class GlobalEventBusTests: XCTestCase {
         let bus = GlobalEventBus()
         let expectation = XCTestExpectation(description: "Checkout event received")
         let testID = PersistentIdentifier.demoClient // Using a demo ID for test
-        let testTotal = Decimal(75.0)
+        let testTotal = Decimal(75)
         
         let task = Task {
             for await event in bus.stream {

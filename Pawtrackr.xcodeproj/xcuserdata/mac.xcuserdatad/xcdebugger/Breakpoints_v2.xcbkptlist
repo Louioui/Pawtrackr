@@ -18,36 +18,6 @@
             endingLineNumber = "2"
             landmarkName = "unknown"
             landmarkType = "0">
-            <Locations>
-               <Location
-                  uuid = "BC48C12B-0BFD-4092-869D-A2BF9ADBF23E - 59ac7a2f46c95e3d"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "Pawtrackr.Payment.init(amount: __C.NSDecimal, method: Pawtrackr.Payment.Method, paidAt: Foundation.Date, note: Swift.Optional&lt;Swift.String&gt;, externalReference: Swift.Optional&lt;Swift.String&gt;) -&gt; Pawtrackr.Payment"
-                  moduleName = "Pawtrackr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr7Payment5ModelfMm_.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "2"
-                  endingLineNumber = "2">
-               </Location>
-               <Location
-                  uuid = "BC48C12B-0BFD-4092-869D-A2BF9ADBF23E - b2b1fdfdc02cb310"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "Pawtrackr.Payment.init(backingData: any SwiftData.BackingData&lt;Self.SwiftData.BackingData.Model == Pawtrackr.Payment&gt;) -&gt; Pawtrackr.Payment"
-                  moduleName = "Pawtrackr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr7Payment5ModelfMm_.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "2"
-                  endingLineNumber = "2">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -176,36 +146,6 @@
             endingLineNumber = "47"
             landmarkName = "body"
             landmarkType = "24">
-            <Locations>
-               <Location
-                  uuid = "7506B4A8-AF78-4B40-B30F-D63A7ADBBE45 - f9ce4e7d0e304fba"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "closure #3 () -&gt; &lt;&lt;opaque return type of static SwiftUI.ToolbarContentBuilder.buildBlock&lt;&#x3c4;_0_0 where &#x3c4;_0_0: SwiftUI.ToolbarContent&gt;(&#x3c4;_0_0) -&gt; some&gt;&gt;.0 in Pawtrackr.InsightsView.body.getter : some"
-                  moduleName = "Pawtrackr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/mac/Desktop/Pawtrackr/Pawtrackr/Views/InsightsView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "47"
-                  endingLineNumber = "47">
-               </Location>
-               <Location
-                  uuid = "7506B4A8-AF78-4B40-B30F-D63A7ADBBE45 - 81cf1346e6c59f2f"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "closure #1 () -&gt; &lt;&lt;opaque return type of Pawtrackr.InsightsView.reportButton : some&gt;&gt;.0 in closure #3 () -&gt; &lt;&lt;opaque return type of static SwiftUI.ToolbarContentBuilder.buildBlock&lt;&#x3c4;_0_0 where &#x3c4;_0_0: SwiftUI.ToolbarContent&gt;(&#x3c4;_0_0) -&gt; some&gt;&gt;.0 in Pawtrackr.InsightsView.body.getter : some"
-                  moduleName = "Pawtrackr.debug.dylib"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/mac/Desktop/Pawtrackr/Pawtrackr/Views/InsightsView.swift"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "47"
-                  endingLineNumber = "47">
-               </Location>
-            </Locations>
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

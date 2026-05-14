@@ -339,6 +339,16 @@ struct CheckoutView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 12) {
+                        Text("Payment Method").font(.headline).padding(.horizontal)
+                        LazyVGrid(columns: paymentGridColumns, spacing: 12) {
+                            ForEach(Self.paymentOptions) { option in
+                                paymentCard(for: option)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Final Amount").font(.headline).padding(.horizontal)
                         Card {
                             TextField("$0.00", text: amountBinding)
@@ -407,16 +417,6 @@ struct CheckoutView: View {
                                 }
                             }
                         }
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Payment Method").font(.headline).padding(.horizontal)
-                        LazyVGrid(columns: paymentGridColumns, spacing: 12) {
-                            ForEach(Self.paymentOptions) { option in
-                                paymentCard(for: option)
-                            }
-                        }
-                        .padding(.horizontal)
                     }
 
                     if viewModel.requiresExternalReference {
@@ -946,7 +946,10 @@ struct CheckoutView: View {
             .scaleEffect(isSelected ? 1.03 : 1.0)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(option.label)
         .accessibilityIdentifier("checkout.payment.\(option.method.rawValue)")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(.isButton)
         .animation(Animations.responsiveSpring, value: isSelected)
     }
 

@@ -24,16 +24,16 @@ final class PDFGenerationTests: XCTestCase {
         context.insert(pet)
         
         let visit = Visit(pet: pet, startedAt: Date())
-        visit.total = 85.0
+        visit.total = Decimal(85)
         context.insert(visit)
         
-        let service = Service(name: "Full Groom", category: .groom, basePrice: 85.0)
+        let service = Service(name: "Full Groom", category: .groom, basePrice: Decimal(85))
         context.insert(service)
         let item = VisitItem.from(service: service, visit: visit)
         context.insert(item)
         visit.items = [item]
         
-        let payment = Payment(amount: 85.0, method: .creditCard, paidAt: Date())
+        let payment = Payment(amount: Decimal(85), method: .creditCard, paidAt: Date())
         payment.externalReference = "TXN-123"
         context.insert(payment)
         visit.payment = payment
@@ -52,10 +52,10 @@ final class PDFGenerationTests: XCTestCase {
     func testReportSnapshot_BuildsCorrectSummary() {
         let summary = BusinessReportService.MonthlySummary(
             month: Date(),
-            totalRevenue: 5000.0,
+            totalRevenue: Decimal(5000),
             visitCount: 60,
             newClients: 5,
-            topServices: [(name: "Bath", count: 20, revenue: 1000.0)],
+            topServices: [(name: "Bath", count: 20, revenue: Decimal(1000))],
             retentionRate: 0.85
         )
         

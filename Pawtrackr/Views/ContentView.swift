@@ -78,6 +78,11 @@ struct ContentView: View {
                 ])
             }
             .onReceive(NotificationCenter.default.publisher(for: .selectNavigationItem)) { notification in
+                if notification.userInfo?[NavigationSelectionKey.item.rawValue] as? String == "recenthistory" {
+                    selectSurface(.dashboard, resetPath: notification.shouldResetNavigationPath)
+                    presentedSheet = .recentHistory(nil)
+                    return
+                }
                 guard let item = notification.requestedNavigationItem else { return }
                 selectSurface(item, resetPath: notification.shouldResetNavigationPath)
             }
@@ -238,15 +243,18 @@ struct ContentView: View {
 
     @ViewBuilder
     private var rootContent: some View {
-        #if os(macOS)
-        splitView
-        #else
-        if horizontalSizeClass == .compact {
-            tabView
-        } else {
+        Group {
+            #if os(macOS)
             splitView
+            #else
+            if horizontalSizeClass == .compact {
+                tabView
+            } else {
+                splitView
+            }
+            #endif
         }
-        #endif
+        .preferredColorScheme(appSettings.preferredColorScheme.swiftUIScheme)
     }
 
     private var tabView: some View {
@@ -275,6 +283,7 @@ struct ContentView: View {
                         destinationView(for: destination)
                     }
             }
+            .accessibilityIdentifier("tab.content.insights")
             .tabItem { Label("Insights", systemImage: "chart.bar.fill") }
             .tag(NavigationItem.insights)
 
@@ -287,6 +296,7 @@ struct ContentView: View {
             .tabItem { Label("Settings", systemImage: "gear") }
             .tag(NavigationItem.settings)
         }
+        .accessibilityIdentifier("content.tabView")
     }
 
     private var splitView: some View {

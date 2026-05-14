@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum NavigationItem: String, CaseIterable, Identifiable {
+enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
     case dashboard
     case clients
     case insights
@@ -35,22 +35,30 @@ struct SidebarView: View {
             Section("Business") {
                 NavigationLink(value: NavigationItem.dashboard) {
                     Label(NavigationItem.dashboard.label, systemImage: NavigationItem.dashboard.icon)
+                        .contentShape(Rectangle())
                 }
+                .contentShape(Rectangle())
                 NavigationLink(value: NavigationItem.clients) {
                     Label(NavigationItem.clients.label, systemImage: NavigationItem.clients.icon)
+                        .contentShape(Rectangle())
                 }
+                .contentShape(Rectangle())
             }
 
             Section("Analysis") {
                 NavigationLink(value: NavigationItem.insights) {
                     Label(NavigationItem.insights.label, systemImage: NavigationItem.insights.icon)
+                        .contentShape(Rectangle())
                 }
+                .contentShape(Rectangle())
             }
 
             Section("System") {
                 NavigationLink(value: NavigationItem.settings) {
                     Label(NavigationItem.settings.label, systemImage: NavigationItem.settings.icon)
+                        .contentShape(Rectangle())
                 }
+                .contentShape(Rectangle())
             }
         }
         .listStyle(.sidebar)

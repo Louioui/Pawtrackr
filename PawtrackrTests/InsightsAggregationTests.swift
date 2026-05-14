@@ -27,8 +27,8 @@ final class InsightsAggregationTests: XCTestCase {
         pet.owner = client
         context.insert(pet)
 
-        bath = Service(name: "Bath", category: .groom, basePrice: 30.00)
-        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: 15.00)
+        bath = Service(name: "Bath", category: .groom, basePrice: Decimal(30))
+        nailTrim = Service(name: "Nail Trim", category: .addOn, basePrice: Decimal(15))
         context.insert(bath)
         context.insert(nailTrim)
         try context.save()

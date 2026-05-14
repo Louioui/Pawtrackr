@@ -107,7 +107,7 @@ final class RecentHistoryViewModel {
                 let filtered = filteredModelIDs.compactMap { mainContext.model(for: $0) as? Visit }
                 let calendar = Calendar.current
                 self.summaryVisitCount = filtered.count
-                self.summaryRevenueString = Decimal(result.totalRevenue).moneyString
+                self.summaryRevenueString = result.totalRevenue.moneyString
                 self.groupedVisits = Dictionary(grouping: filtered, by: { calendar.startOfDay(for: $0.endedAt ?? $0.startedAt) })
                 self.sortedDays = self.groupedVisits.keys.sorted(by: >)
                 self.isLoading = false
@@ -159,7 +159,7 @@ final class RecentHistoryViewModel {
                     ownerFirst: v.pet?.owner?.firstName ?? "",
                     ownerLast: v.pet?.owner?.lastName ?? "",
                     itemNames: (v.items ?? []).map { $0.name },
-                    total: (v.total as NSDecimalNumber).doubleValue
+                    total: v.total.roundedMoney()
                 )
             }
         }.value
@@ -206,26 +206,26 @@ fileprivate struct HistoryVisitSnap: Sendable {
     let ownerFirst: String
     let ownerLast: String
     let itemNames: [String]
-    let total: Double
+    let total: Decimal
 }
 
 fileprivate enum RecentHistoryComputer {
-    static func filterAndSummarize(snaps: [HistoryVisitSnap], query: String) -> (filteredIDs: Set<UUID>, totalRevenue: Double) {
+    static func filterAndSummarize(snaps: [HistoryVisitSnap], query: String) -> (filteredIDs: Set<UUID>, totalRevenue: Decimal) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            let total = snaps.reduce(0.0) { $0 + $1.total }
-            return (Set(snaps.map { $0.id }), total)
+            let total = snaps.reduce(Decimal.zero) { ($0 + $1.total).roundedMoney() }
+            return (Set(snaps.map { $0.id }), total.roundedMoney())
         }
         
         var ids: Set<UUID> = []
-        var total: Double = 0
+        var total: Decimal = .zero
         for s in snaps {
             let fields: [String] = [s.petName, s.ownerFirst, s.ownerLast] + s.itemNames
             if SearchEngine.matches(trimmed, in: fields) {
                 ids.insert(s.id)
-                total += s.total
+                total = (total + s.total).roundedMoney()
             }
         }
-        return (ids, total)
+        return (ids, total.roundedMoney())
     }
 }

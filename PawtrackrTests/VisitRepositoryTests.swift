@@ -68,10 +68,10 @@ final class VisitRepositoryTests: XCTestCase {
 
     func testCheckOut_SetsEndedAtAndTotal() async throws {
         let visit = try await repository.checkIn(pet: pet, date: .now)
-        visit.addItem(title: "Bath", unitPrice: 30.00)
+        visit.addItem(title: "Bath", unitPrice: Decimal(30))
         let endedAt = Date()
 
-        try await repository.checkOut(visit: visit, total: 30.00, now: endedAt)
+        try await repository.checkOut(visit: visit, total: Decimal(30), now: endedAt)
 
         XCTAssertNotNil(visit.endedAt)
         XCTAssertTrue(visit.isCompleted)
@@ -80,12 +80,12 @@ final class VisitRepositoryTests: XCTestCase {
 
     func testCheckOut_RebuildsDaySummaryForThatDay() async throws {
         let visit = try await repository.checkIn(pet: pet, date: .now)
-        visit.addItem(title: "Bath", unitPrice: 30.00)
-        let payment = Payment(amount: 30.00, method: .cash, paidAt: .now)
+        visit.addItem(title: "Bath", unitPrice: Decimal(30))
+        let payment = Payment(amount: Decimal(30), method: .cash, paidAt: .now)
         context.insert(payment)
         visit.attachPayment(payment)
 
-        try await repository.checkOut(visit: visit, total: 30.00, now: .now)
+        try await repository.checkOut(visit: visit, total: Decimal(30), now: .now)
 
         let day = Calendar.current.startOfDay(for: try XCTUnwrap(visit.endedAt))
         let summaries = try context.fetch(FetchDescriptor<DaySummary>(predicate: #Predicate<DaySummary> { $0.day == day }))
@@ -97,7 +97,7 @@ final class VisitRepositoryTests: XCTestCase {
     func testCheckOut_PostsVisitDidCompleteNotification() async throws {
         let visit = try await repository.checkIn(pet: pet, date: .now)
         let exp = expectation(forNotification: .visitDidComplete, object: nil, handler: nil)
-        try await repository.checkOut(visit: visit, total: 25.00, now: .now)
+        try await repository.checkOut(visit: visit, total: Decimal(25), now: .now)
         await fulfillment(of: [exp], timeout: 1.0)
     }
 
@@ -116,8 +116,8 @@ final class VisitRepositoryTests: XCTestCase {
 
     func testDeleteVisit_RemovesFromStoreAndRebuildsDaySummary() async throws {
         let visit = try await repository.checkIn(pet: pet, date: .now)
-        visit.addItem(title: "Bath", unitPrice: 30.00)
-        try await repository.checkOut(visit: visit, total: 30.00, now: .now)
+        visit.addItem(title: "Bath", unitPrice: Decimal(30))
+        try await repository.checkOut(visit: visit, total: Decimal(30), now: .now)
         let day = Calendar.current.startOfDay(for: try XCTUnwrap(visit.endedAt))
 
         try await repository.deleteVisit(visit)

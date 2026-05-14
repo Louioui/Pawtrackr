@@ -56,7 +56,7 @@ final class ClientDetailViewModel {
         self.modelContext  = modelContext
         self.visitRepository = VisitRepository(modelContainer: modelContext.container, eventBus: eventBus)
         self.pets          = client.pets ?? []
-        self.currentLimit  = max(initialLimit, pageSize)
+        self.currentLimit  = max(1, initialLimit)
         let clientID = client.persistentModelID
         let token = NotificationCenter.default.addObserver(
             forName: .visitDidComplete, object: nil, queue: .main
@@ -90,7 +90,7 @@ final class ClientDetailViewModel {
 
     // Non-async entry-point — creates an internal Task for background work.
     func refreshRecentVisits(limit: Int? = nil) {
-        if let limit { currentLimit = max(limit, pageSize) }
+        if let limit { currentLimit = max(1, limit) }
         fetchTask?.cancel()
         fetchTask = Task { [weak self] in
             await self?.fetchVisitsAsync()

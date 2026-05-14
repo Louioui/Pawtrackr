@@ -54,7 +54,7 @@ final class PetHistoryViewModelTests: XCTestCase {
         // Visit without payment — must NOT appear in pet history.
         let unpaid = Visit(pet: pet, startedAt: Date().addingTimeInterval(-1800))
         context.insert(unpaid)
-        unpaid.markCheckedOut(total: 25.00)
+        unpaid.markCheckedOut(total: Decimal(25))
         try context.save()
 
         let vm = PetHistoryViewModel(pet: pet, modelContext: context)

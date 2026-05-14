@@ -18,14 +18,14 @@ final class PetBITests: XCTestCase {
         context.insert(pet)
         
         let visit1 = Visit(pet: pet, startedAt: .now.addingTimeInterval(-86400))
-        visit1.total = 50.0
+        visit1.total = Decimal(50)
         visit1.endedAt = .now.addingTimeInterval(-86400 + 3600)
         
         let visit2 = Visit(pet: pet, startedAt: .now)
-        visit2.total = 75.0
+        visit2.total = Decimal(75)
         visit2.endedAt = .now.addingTimeInterval(3600)
         
-        XCTAssertEqual(pet.lifetimeValue, 125.0)
+        XCTAssertEqual(pet.lifetimeValue, Decimal(125))
         XCTAssertEqual(pet.completedVisitCount, 2)
     }
 

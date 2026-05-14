@@ -185,42 +185,59 @@ final actor CheckoutTransactionActor {
     private func syncVisitItems(visit: Visit, serviceIDs: [PersistentIdentifier]) throws {
         let context = modelContext
         let currentItems = visit.items ?? []
-        
-        // Remove items not in selection
+        var nextItems: [VisitItem] = []
+
+        // Remove items not in selection and keep selected existing items.
         for item in currentItems {
             if let serviceID = item.service?.persistentModelID, !serviceIDs.contains(serviceID) {
                 visit.removeItem(item)
                 context.delete(item)
+            } else {
+                nextItems.append(item)
             }
         }
-        
+
         // Add missing items
         let existingServiceIDs = Set(currentItems.compactMap { $0.service?.persistentModelID })
         for id in serviceIDs where !existingServiceIDs.contains(id) {
             guard let service = context.model(for: id) as? Service else { continue }
             let item = VisitItem.from(service: service, visit: visit)
             context.insert(item)
-            var items = visit.items ?? []
-            items.append(item)
-            visit.items = items
+            nextItems.append(item)
+        }
+
+        let order = Dictionary(uniqueKeysWithValues: serviceIDs.enumerated().map { ($0.element, $0.offset) })
+        visit.items = nextItems.sorted { lhs, rhs in
+            let lhsOrder = lhs.service.map { order[$0.persistentModelID] ?? Int.max } ?? Int.max
+            let rhsOrder = rhs.service.map { order[$0.persistentModelID] ?? Int.max } ?? Int.max
+            if lhsOrder != rhsOrder { return lhsOrder < rhsOrder }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }
     
     private func reconcileLineItemPrices(visit: Visit, finalTotal: Decimal) {
-        let items = visit.items ?? []
+        let items = (visit.items ?? []).sorted { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+        visit.items = items
         guard !items.isEmpty else { return }
 
         let subtotal = items.reduce(Decimal.zero) { $0 + $1.lineTotal }
         let normalizedTotal = finalTotal.roundedMoney()
-        guard subtotal != normalizedTotal else { return }
+        let normalizedSubtotal = subtotal.roundedMoney()
+        guard normalizedSubtotal != normalizedTotal else {
+            visit.recalcTotal()
+            return
+        }
 
         var allocated = Decimal.zero
         for (index, item) in items.enumerated() {
             let lineTotal: Decimal
             if index == items.count - 1 {
                 lineTotal = (normalizedTotal - allocated).roundedMoney()
-            } else if subtotal > .zero {
-                lineTotal = ((item.lineTotal / subtotal) * normalizedTotal).roundedMoney()
+            } else if normalizedSubtotal > .zero {
+                lineTotal = ((item.lineTotal / normalizedSubtotal) * normalizedTotal).roundedMoney()
                 allocated += lineTotal
             } else {
                 lineTotal = (normalizedTotal / Decimal(items.count)).roundedMoney()

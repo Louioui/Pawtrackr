@@ -14,17 +14,17 @@ final class InventoryTests: XCTestCase {
     }
 
     func testInventoryItem_TracksStockChanges() throws {
-        let item = InventoryItem(name: "Shampoo", category: "Supplies", unit: "Bottles", costPerUnit: 15.0)
-        item.currentStock = 10.0
+        let item = InventoryItem(name: "Shampoo", category: "Supplies", unit: "Bottles", costPerUnit: Decimal(15))
+        item.currentStock = Decimal(10)
         context.insert(item)
         
-        let tx = InventoryTransaction(item: item, quantityChange: -1.0, note: "Used for session")
+        let tx = InventoryTransaction(item: item, quantityChange: Decimal(-1), note: "Used for session")
         context.insert(tx)
         
         item.currentStock += tx.quantityChange
         try context.save()
         
-        XCTAssertEqual(item.currentStock, 9.0)
+        XCTAssertEqual(item.currentStock, Decimal(9))
         XCTAssertEqual(item.transactions?.count, 1)
     }
 }

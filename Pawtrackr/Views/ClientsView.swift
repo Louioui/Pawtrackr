@@ -28,16 +28,15 @@ struct ClientsView: View {
     @State private var showNotifications = false
     @State private var storedNotifications: [NotificationItem] = []
     @State private var clientToDelete: Client?
-
-    @FocusState private var isSearchFocused: Bool
+    @State private var isSearchPresented = false
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                headerBar
-
+            VStack(spacing: 20) {
                 if let viewModel {
-                    if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
+                    filterChips(viewModel)
+                    
+                    if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty && viewModel.needsAttentionClients.isEmpty {
                         emptyState(viewModel)
                     } else {
                         clientSections(viewModel)
@@ -46,15 +45,14 @@ struct ClientsView: View {
                     clientsSkeleton
                 }
             }
-            .padding(.top, 20)
-            .padding(.bottom, 80) // Padding to avoid the FAB
+            .padding(.top, 12)
+            .padding(.bottom, 80)
         }
         .searchable(text: searchTextBinding,
-                    isPresented: .init(get: { isSearchFocused }, set: { isSearchFocused = $0 }),
+                    isPresented: $isSearchPresented,
+                    placement: .navigationBarDrawer(displayMode: .always),
                     prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
-        .focused($isSearchFocused)
         .background(DS.ColorToken.background)
-        .ignoresSafeArea(edges: .top)
         .alert(item: errorBinding) { error in
             Alert(
                 title: Text(NSLocalizedString("common.error", comment: "")),
@@ -97,23 +95,28 @@ struct ClientsView: View {
                 CloudKitStatusView()
             }
 
-            ToolbarItem(placement: .navigation) {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                sortingMenu
+            }
+
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     showNotifications = true
                 } label: {
-                    Image(systemName: "bell")
+                    Image(systemName: "bell.fill")
+                        .overlay(alignment: .topTrailing) {
+                            if notificationsCount > 0 {
+                                Text("\(min(notificationsCount, 9))")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 14, height: 14)
+                                    .background(Color.red, in: Circle())
+                                    .offset(x: 4, y: -4)
+                            }
+                        }
                 }
                 .accessibilityIdentifier("clients.toolbar.notifications")
-            }
-
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    isSearchFocused = true
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .keyboardShortcut("f", modifiers: .command)
-                .accessibilityIdentifier("clients.toolbar.search")
+                .accessibilityLabel("Notifications, \(notificationsCount) unread")
             }
         }
         .refreshable {
@@ -160,12 +163,74 @@ struct ClientsView: View {
     }
 
     @ViewBuilder
+    private func filterChips(_ viewModel: ClientsViewModel) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(ClientsViewModel.Filter.allCases, id: \.self) { filter in
+                    Button {
+                        withAnimation(.spring(duration: 0.3)) {
+                            viewModel.selectedFilter = filter
+                        }
+                    } label: {
+                        Text(filter.rawValue)
+                            .font(.subheadline.weight(.medium))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                viewModel.selectedFilter == filter ? DS.ColorToken.primary : Color.secondary.opacity(0.1),
+                                in: Capsule()
+                            )
+                            .foregroundStyle(viewModel.selectedFilter == filter ? .white : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private var sortingMenu: some View {
+        Menu {
+            Picker("Sort By", selection: sortOptionBinding) {
+                ForEach(ClientsViewModel.SortOption.allCases, id: \.self) { option in
+                    Label(option.rawValue, systemImage: sortIcon(for: option))
+                        .tag(option)
+                }
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.title3)
+        }
+    }
+
+    private func sortIcon(for option: ClientsViewModel.SortOption) -> String {
+        switch option {
+        case .name: return "textformat"
+        case .lastVisit: return "clock"
+        case .newest: return "calendar.badge.plus"
+        }
+    }
+
+    private var sortOptionBinding: Binding<ClientsViewModel.SortOption> {
+        Binding(
+            get: { viewModel?.sortOption ?? .name },
+            set: { viewModel?.sortOption = $0 }
+        )
+    }
+
+    @ViewBuilder
     private func clientSections(_ viewModel: ClientsViewModel) -> some View {
         if !viewModel.inProgressClients.isEmpty {
             sectionHeader(NSLocalizedString("clients.in_progress", comment: ""), count: viewModel.inProgressCount, topPadding: 0)
             clientList(for: viewModel.inProgressClients)
         }
-        sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: viewModel.inProgressClients.isEmpty ? 0 : 16)
+        
+        if !viewModel.needsAttentionClients.isEmpty && viewModel.selectedFilter == .all {
+            sectionHeader("Needs Attention", count: viewModel.needsAttentionClients.count, topPadding: 16)
+            clientList(for: viewModel.needsAttentionClients)
+        }
+
+        sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: 16)
         VStack(spacing: 10) {
             clientList(for: viewModel.otherClients, enableInfiniteScroll: true)
             if viewModel.canLoadMore {
@@ -188,7 +253,7 @@ struct ClientsView: View {
 
     @ViewBuilder
     private func clientList(for clients: [Client], enableInfiniteScroll: Bool = false) -> some View {
-        LazyVStack(spacing: 10) {
+        LazyVStack(spacing: 12) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { router.navigateToClient(client) }) {
                     ClientCard(client: client, namespace: namespace)
@@ -196,10 +261,10 @@ struct ClientsView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")
                 .contextMenu {
-                    Button(role: .destructive) {
-                        clientToDelete = client
+                    Button {
+                        router.navigateToClient(client)
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label("View Details", systemImage: "person.crop.circle")
                     }
 
                     #if canImport(UIKit)
@@ -211,12 +276,32 @@ struct ClientsView: View {
                             Label("Call", systemImage: "phone")
                         }
                     }
+                    
+                    if let phone = client.phone, let sms = PhoneUtils.smsURLString(phone), let url = URL(string: sms) {
+                        Button {
+                            UIApplication.shared.open(url)
+                            HapticManager.selectionChanged()
+                        } label: {
+                            Label("Message", systemImage: "message")
+                        }
+                    }
+
+                    if let email = client.email, let url = URL(string: "mailto:\(email)") {
+                        Button {
+                            UIApplication.shared.open(url)
+                            HapticManager.selectionChanged()
+                        } label: {
+                            Label("Email", systemImage: "envelope")
+                        }
+                    }
                     #endif
 
-                    Button {
-                        router.navigateToClient(client)
+                    Divider()
+
+                    Button(role: .destructive) {
+                        clientToDelete = client
                     } label: {
-                        Label("View Details", systemImage: "person.crop.circle")
+                        Label("Delete", systemImage: "trash")
                     }
                 }
                 .onAppear {
@@ -234,10 +319,33 @@ struct ClientsView: View {
 
     private func emptyState(_ viewModel: ClientsViewModel) -> some View {
         let isSearching = !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        var title = isSearching ? "No Results Found" : "No Clients Yet"
+        var description = isSearching ? "No clients match \"\(viewModel.searchText)\"." : "Tap the + button to add your first client."
+        var icon = isSearching ? "magnifyingglass" : "person.3.sequence.fill"
+
+        if !isSearching {
+            switch viewModel.selectedFilter {
+            case .active:
+                title = "No Active Sessions"
+                description = "There are no pets currently checked in."
+                icon = "hourglass.badge.plus"
+            case .overdue:
+                title = "All Caught Up!"
+                description = "No clients have pets that are overdue for a visit."
+                icon = "checkmark.seal.fill"
+            case .missingInfo:
+                title = "Data looks great!"
+                description = "All your clients have phone numbers and emails on file."
+                icon = "vial.viewfinder"
+            default:
+                break
+            }
+        }
+
         return ContentUnavailableView(
-            isSearching ? "No Results Found" : "No Clients Yet",
-            systemImage: isSearching ? "magnifyingglass" : "person.3.sequence.fill",
-            description: Text(isSearching ? "No clients match \"\(viewModel.searchText)\"." : "Tap the + button to add your first client.")
+            title,
+            systemImage: icon,
+            description: Text(description)
         )
         .padding(40)
     }
@@ -259,42 +367,6 @@ struct ClientsView: View {
         }
         .padding(.horizontal)
         .padding(.top, topPadding)
-    }
-
-    // MARK: - Header (Refined UI)
-    private var headerBar: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Welcome Back!")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text("Pawtrackr")
-                    .font(.title.weight(.bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            Spacer(minLength: 8)
-            Button { showNotifications = true } label: {
-                Image(systemName: "bell.fill")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                    .overlay(alignment: .topTrailing) {
-                        if notificationsCount > 0 {
-                            Text("\(min(notificationsCount, 9))")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(minWidth: 16, minHeight: 16)
-                                .padding(2)
-                                .background(Color.red, in: Circle())
-                                .offset(x: 6, y: -6)
-                        }
-                    }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Notifications, \(notificationsCount) unread")
-        }
-        .padding(.horizontal)
-        .padding(.top, 16)
     }
 
     private var notificationsCount: Int { storedNotifications.count }

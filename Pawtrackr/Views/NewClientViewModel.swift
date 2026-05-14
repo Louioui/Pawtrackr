@@ -32,9 +32,11 @@ final class NewClientViewModel {
     var showDuplicateAlert: Bool = false
     var duplicateClientID: PersistentIdentifier? = nil
 
+    @ObservationIgnored private let modelContext: ModelContext
     @ObservationIgnored private let repository: ClientRepositoryProtocol
     
     init(modelContext: ModelContext, repository: ClientRepositoryProtocol? = nil) {
+        self.modelContext = modelContext
         self.repository = repository ?? ClientRepository(modelContainer: modelContext.container)
     }
 
@@ -85,15 +87,29 @@ final class NewClientViewModel {
                 return NewContactData(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
             }
 
-            let clientID = try await repository.createClient(
-                firstName: first.capitalizedName,
-                lastName: last.capitalizedName,
-                phone: e164 ?? "",
-                email: email.trimmed.lowercased(),
-                address: address.trimmed,
-                pets: newPets,
-                contacts: newContacts
-            )
+            let clientID: PersistentIdentifier
+            if newPets.isEmpty && newContacts.isEmpty {
+                let client = Client(
+                    firstName: first.capitalizedName,
+                    lastName: last.capitalizedName,
+                    phone: e164 ?? "",
+                    email: email.trimmed.lowercased()
+                )
+                client.address = address.trimmed
+                modelContext.insert(client)
+                try modelContext.save()
+                clientID = client.persistentModelID
+            } else {
+                clientID = try await repository.createClient(
+                    firstName: first.capitalizedName,
+                    lastName: last.capitalizedName,
+                    phone: e164 ?? "",
+                    email: email.trimmed.lowercased(),
+                    address: address.trimmed,
+                    pets: newPets,
+                    contacts: newContacts
+                )
+            }
 
             NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
                 ClientDidCreateKey.clientID.rawValue: clientID,
@@ -127,12 +143,6 @@ final class NewClientViewModel {
         }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             throw ValidationError.custom(message: "Please enter a valid email address.")
-        }
-        
-        // Filter out completely empty pet entries if they exist
-        let nonHeroPets = pets.filter { !$0.name.trimmed.isEmpty }
-        if nonHeroPets.isEmpty {
-            throw ValidationError.custom(message: "Add at least one pet with a name before creating this client.")
         }
         
         // Ensure all pets in the list have names if they have other data

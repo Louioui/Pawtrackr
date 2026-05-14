@@ -53,6 +53,18 @@ final class RecentHistoryViewModelTests: XCTestCase {
             "sortedDays must be in descending order — today before yesterday.")
     }
 
+    func testFetchVisits_SumsCentsWithoutBinaryFloatingPointDrift() async throws {
+        seedCheckedOutVisit(pet: pet, endedAt: .now, total: Decimal(string: "0.10")!)
+        seedCheckedOutVisit(pet: pet, endedAt: .now, total: Decimal(string: "0.20")!)
+
+        let vm = RecentHistoryViewModel(dataStore: dataStore, eventBus: eventBus)
+        vm.fetchVisits()
+        await waitForFetch(vm)
+
+        XCTAssertEqual(vm.summaryVisitCount, 2)
+        XCTAssertEqual(vm.summaryRevenueString, "$0.30")
+    }
+
     func testFetchVisits_TodayScope_ExcludesYesterday() async throws {
         let yesterday = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -1, to: .now))
         seedCheckedOutVisit(pet: pet, endedAt: .now, total: 30)

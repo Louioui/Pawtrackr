@@ -46,33 +46,43 @@ enum Formatters {
             return n.decimalValue.roundedMoney()
         }
 
-        // Fallback: strip everything except digits and locale decimal separator
-        let decSep = Locale.current.decimalSeparator ?? "."
-        // Allow digits and the current locale's decimal separator.
-        let allowed = CharacterSet(charactersIn: "0123456789" + decSep)
-        let compact = raw.unicodeScalars.filter { allowed.contains($0) }
-        let cleaned = String(String.UnicodeScalarView(compact))
+        let allowed = CharacterSet(charactersIn: "0123456789.,")
+        let token = String(String.UnicodeScalarView(raw.unicodeScalars.filter { allowed.contains($0) }))
+        guard !token.isEmpty else { return nil }
 
-        // If there's more than one decimal separator, keep the first and drop the rest.
-        var normalized = cleaned
-        if decSep != "." {
-            normalized = normalized.replacingOccurrences(of: decSep, with: ".")
-        }
-        let parts = normalized.split(separator: ".", omittingEmptySubsequences: false)
-        let sanitized: String = {
-            switch parts.count {
-            case 0:
-                return "0"
-            case 1:
-                return String(parts[0])
-            default:
-                // Join only first two segments -> "12" + "." + "34xxxx" (we keep all fractional digits, rounding happens later)
-                return String(parts[0]) + "." + parts[1...].joined()
+        let lastDot = token.lastIndex(of: ".")
+        let lastComma = token.lastIndex(of: ",")
+        let decimalSeparatorIndex: String.Index? = {
+            switch (lastDot, lastComma) {
+            case let (dot?, comma?):
+                return dot > comma ? dot : comma
+            case let (dot?, nil):
+                return shouldTreatAsDecimalSeparator(dot, in: token) ? dot : nil
+            case let (nil, comma?):
+                return shouldTreatAsDecimalSeparator(comma, in: token) ? comma : nil
+            case (nil, nil):
+                return nil
             }
         }()
 
-        guard let dec = Decimal(string: sanitized) else { return nil }
+        var sanitized = ""
+        for index in token.indices {
+            let character = token[index]
+            if index == decimalSeparatorIndex {
+                sanitized.append(".")
+            } else if character.isNumber {
+                sanitized.append(character)
+            }
+        }
+
+        guard !sanitized.isEmpty, sanitized != ".", let dec = Decimal(string: sanitized) else { return nil }
         return dec.roundedMoney()
+    }
+
+    private static func shouldTreatAsDecimalSeparator(_ index: String.Index, in token: String) -> Bool {
+        let fractionalDigits = token[token.index(after: index)...].filter(\.isNumber).count
+        let wholeDigits = token[..<index].filter(\.isNumber).count
+        return wholeDigits > 0 && fractionalDigits > 0 && fractionalDigits != 3
     }
 
     // MARK: - Percentage

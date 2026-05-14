@@ -116,11 +116,13 @@ struct RootView: View {
     }
 
     private func updateFirstSyncGate(for accountState: CloudKitMonitor.AccountState) {
+        guard !AppRuntime.isUITesting else { return }
         guard accountState.isAvailable, !cloudKitMonitor.firstSyncCompleted else { return }
         showFirstSyncGate = true
     }
 
     private func evaluateWhatIsNew() {
+        guard !AppRuntime.isUITesting else { return }
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         let lastSeenVersion = UserDefaults.standard.string(forKey: "lastSeenVersion")
         if currentVersion != lastSeenVersion {

@@ -15,11 +15,15 @@ struct ClientCard: View {
     
     // IMPROVEMENT: Logic is self-contained within the card.
     private var isInProgress: Bool { client.hasActiveVisit }
+    private var isOverdue: Bool { (client.pets ?? []).contains { $0.isOverdue } }
+    private var hasMissingInfo: Bool { client.phone == nil || client.email == nil }
+    
     @State private var pulse: Bool = false
 
     var body: some View {
         // FIX: Use the correct Card initializer with a Card.Accent struct.
-        Card(elevation: .regular, accent: isInProgress ? .leading(.color(DS.ColorToken.success), thickness: 4) : nil) {
+        let accentColor = isInProgress ? DS.ColorToken.success : (isOverdue ? Color.orange : nil)
+        Card(elevation: .regular, accent: accentColor != nil ? .leading(.color(accentColor!), thickness: 4) : nil) {
             VStack(alignment: .leading, spacing: 10) {
                 header
                 phoneInfo
@@ -73,6 +77,10 @@ struct ClientCard: View {
             // FIX: Replaced 'Pill' with the correct 'Chip' component.
             if isInProgress {
                 Chip.success("In Session")
+            } else if isOverdue {
+                Chip.warning("Overdue")
+            } else if hasMissingInfo {
+                Chip.info("Missing Info")
             }
         }
     }

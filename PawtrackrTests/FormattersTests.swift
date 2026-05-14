@@ -6,16 +6,16 @@ final class FormattersTests: XCTestCase {
     @MainActor
     func testCurrencyString_FormatsCorrectly() {
         Formatters.updateCurrencySymbol("$")
-        let val = Decimal(12.50)
+        let val = Decimal(string: "12.50")!
         XCTAssertEqual(Formatters.currencyString(val), "$12.50")
     }
     
     @MainActor
     func testParseCurrency_HandlesSloppyInput() {
-        XCTAssertEqual(Formatters.parseCurrency("12.50"), 12.50)
-        XCTAssertEqual(Formatters.parseCurrency("$12.50"), 12.50)
-        XCTAssertEqual(Formatters.parseCurrency("$ 12, 50"), 12.50)
-        XCTAssertEqual(Formatters.parseCurrency("abc 12.50 def"), 12.50)
+        XCTAssertEqual(Formatters.parseCurrency("12.50"), Decimal(string: "12.50")!)
+        XCTAssertEqual(Formatters.parseCurrency("$12.50"), Decimal(string: "12.50")!)
+        XCTAssertEqual(Formatters.parseCurrency("$ 12, 50"), Decimal(string: "12.50")!)
+        XCTAssertEqual(Formatters.parseCurrency("abc 12.50 def"), Decimal(string: "12.50")!)
     }
     
     @MainActor

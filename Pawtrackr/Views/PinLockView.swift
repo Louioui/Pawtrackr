@@ -26,8 +26,7 @@ public struct PinLockGate<Content: View>: View {
     }
 
     public var body: some View {
-        gateContent
-            .simultaneousGesture(activityResetGesture)
+        trackedGateContent
             .onChange(of: scenePhase) { _, phase in
                 if appSettings.autoLockOnBackground, phase != .active {
                     isUnlocked = false
@@ -39,7 +38,10 @@ public struct PinLockGate<Content: View>: View {
             .onChange(of: appSettings.autoLockAfterInactivity) { _, _ in resetInactivityLock() }
             .onChange(of: appSettings.isBiometricLockEnabled) { _, _ in resetInactivityLock() }
             .onChange(of: appSettings.isLockEnabled) { _, enabled in
-                if !enabled { onUnlock() }
+                if !enabled {
+                    isUnlocked = true
+                    onUnlock()
+                }
                 resetInactivityLock()
             }
             .onChange(of: isUnlocked) { _, unlocked in
@@ -51,10 +53,22 @@ public struct PinLockGate<Content: View>: View {
                 }
             }
             .onAppear {
-                if !appSettings.isLockEnabled { onUnlock() }
+                if !appSettings.isLockEnabled {
+                    isUnlocked = true
+                    onUnlock()
+                }
                 resetInactivityLock()
             }
             .onDisappear { invalidateInactivityTimer() }
+    }
+
+    @ViewBuilder
+    private var trackedGateContent: some View {
+        if shouldTrackInactivity {
+            gateContent.simultaneousGesture(activityResetGesture)
+        } else {
+            gateContent
+        }
     }
 
     @ViewBuilder
@@ -64,6 +78,10 @@ public struct PinLockGate<Content: View>: View {
         } else {
             PinLockView(isUnlocked: $isUnlocked)
         }
+    }
+
+    private var shouldTrackInactivity: Bool {
+        appSettings.autoLockAfterInactivity && appSettings.isLockEnabled
     }
 
     private var activityResetGesture: some Gesture {
