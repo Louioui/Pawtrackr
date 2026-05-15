@@ -48,10 +48,15 @@ struct ClientsView: View {
             .padding(.top, 12)
             .padding(.bottom, 80)
         }
+        #if os(macOS)
+        .searchable(text: searchTextBinding,
+                    prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
+        #else
         .searchable(text: searchTextBinding,
                     isPresented: $isSearchPresented,
                     placement: .navigationBarDrawer(displayMode: .always),
                     prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
+        #endif
         .background(DS.ColorToken.background)
         .alert(item: errorBinding) { error in
             Alert(
@@ -95,11 +100,11 @@ struct ClientsView: View {
                 CloudKitStatusView()
             }
 
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: toolbarTrailingPlacement) {
                 sortingMenu
             }
 
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: toolbarTrailingPlacement) {
                 Button {
                     showNotifications = true
                 } label: {
@@ -160,6 +165,14 @@ struct ClientsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .visitDidComplete)) { note in
             storedNotifications.insert(NotificationItem(title: "Visit Completed", message: "A visit was checked out.", date: Date(), relatedID: note.visitID), at: 0)
         }
+    }
+
+    private var toolbarTrailingPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .automatic
+        #else
+        .navigationBarTrailing
+        #endif
     }
 
     @ViewBuilder

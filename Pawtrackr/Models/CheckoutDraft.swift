@@ -19,6 +19,8 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
     var selectedPaymentMethodRawValue: String
     var beforePhotoData: Data?
     var afterPhotoData: Data?
+    var hadBeforePhoto: Bool
+    var hadAfterPhoto: Bool
     var externalReference: String
     var tags: [String]
 
@@ -36,6 +38,8 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         case selectedPaymentMethodRawValue
         case beforePhotoData
         case afterPhotoData
+        case hadBeforePhoto
+        case hadAfterPhoto
         case externalReference
         case tags
     }
@@ -54,6 +58,8 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         selectedPaymentMethodRawValue: String,
         beforePhotoData: Data?,
         afterPhotoData: Data?,
+        hadBeforePhoto: Bool = false,
+        hadAfterPhoto: Bool = false,
         externalReference: String,
         tags: [String]
     ) {
@@ -70,6 +76,8 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         self.selectedPaymentMethodRawValue = selectedPaymentMethodRawValue
         self.beforePhotoData = beforePhotoData
         self.afterPhotoData = afterPhotoData
+        self.hadBeforePhoto = hadBeforePhoto
+        self.hadAfterPhoto = hadAfterPhoto
         self.externalReference = externalReference
         self.tags = tags
     }
@@ -89,6 +97,8 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         selectedPaymentMethodRawValue = try container.decode(String.self, forKey: .selectedPaymentMethodRawValue)
         beforePhotoData = try container.decodeIfPresent(Data.self, forKey: .beforePhotoData)
         afterPhotoData = try container.decodeIfPresent(Data.self, forKey: .afterPhotoData)
+        hadBeforePhoto = try container.decodeIfPresent(Bool.self, forKey: .hadBeforePhoto) ?? (beforePhotoData != nil)
+        hadAfterPhoto = try container.decodeIfPresent(Bool.self, forKey: .hadAfterPhoto) ?? (afterPhotoData != nil)
         externalReference = try container.decode(String.self, forKey: .externalReference)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
     }

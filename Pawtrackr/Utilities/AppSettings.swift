@@ -31,6 +31,8 @@ enum AppSettingsKeys {
     static let hasSeenAppTour = "hasSeenAppTour"
     static let preferredColorScheme = "preferredColorScheme"
     static let hapticsEnabled = "hapticsEnabled"
+    static let brandColorHex = "brandColorHex"
+    static let defaultLaunchTab = "defaultLaunchTab"
 }
 
 /// User-selectable color scheme preference. `system` defers to the OS.
@@ -75,6 +77,8 @@ final class AppSettings {
         static let isChecklistDismissed = false
         static let preferredColorScheme = AppColorScheme.system.rawValue
         static let hapticsEnabled = true
+        static let brandColorHex = "#6366F1"
+        static let defaultLaunchTab = "dashboard"
     }
 
     // MARK: - Properties
@@ -173,6 +177,25 @@ final class AppSettings {
         }
     }
 
+    /// Persisted accent color (`#RRGGBB`) for `DS.ColorToken.primary`.
+    /// The didSet pushes the value into `ThemeManager` so existing views
+    /// using `DS.ColorToken.primary` recolor live without a relaunch.
+    var brandColorHex: String {
+        didSet {
+            UserDefaults.standard.set(brandColorHex, forKey: AppSettingsKeys.brandColorHex)
+            ThemeManager.shared.updateBrandColor(hex: brandColorHex)
+        }
+    }
+
+    /// Which tab to open on cold launch. Stored as the `NavigationItem` raw
+    /// value (e.g. "dashboard", "clients", "insights", "settings"). UI tests
+    /// override this via `applyUITestLaunchOverrides()`.
+    var defaultLaunchTab: String {
+        didSet {
+            UserDefaults.standard.set(defaultLaunchTab, forKey: AppSettingsKeys.defaultLaunchTab)
+        }
+    }
+
     /// Fixed idle threshold (minutes) for auto-lock.
     let idleLockMinutes: Int = Defaults.idleLockMinutes
 
@@ -203,7 +226,9 @@ final class AppSettings {
             AppSettingsKeys.isChecklistDismissed: Defaults.isChecklistDismissed,
             AppSettingsKeys.hasSeenAppTour: true,
             AppSettingsKeys.preferredColorScheme: Defaults.preferredColorScheme,
-            AppSettingsKeys.hapticsEnabled: Defaults.hapticsEnabled
+            AppSettingsKeys.hapticsEnabled: Defaults.hapticsEnabled,
+            AppSettingsKeys.brandColorHex: Defaults.brandColorHex,
+            AppSettingsKeys.defaultLaunchTab: Defaults.defaultLaunchTab
         ])
 
         // Read values
@@ -224,6 +249,8 @@ final class AppSettings {
         let storedSchemeRaw = UserDefaults.standard.string(forKey: AppSettingsKeys.preferredColorScheme) ?? Defaults.preferredColorScheme
         self.preferredColorScheme = AppColorScheme(rawValue: storedSchemeRaw) ?? .system
         self.hapticsEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.hapticsEnabled)
+        self.brandColorHex = UserDefaults.standard.string(forKey: AppSettingsKeys.brandColorHex) ?? Defaults.brandColorHex
+        self.defaultLaunchTab = UserDefaults.standard.string(forKey: AppSettingsKeys.defaultLaunchTab) ?? Defaults.defaultLaunchTab
 
         // Migrate any existing plaintext PIN out of UserDefaults into the
         // Keychain, then erase the UserDefaults copy. Future reads come from
@@ -244,6 +271,10 @@ final class AppSettings {
         if KeychainStorage.string(forKey: AppSettingsKeys.appPINKeychainAccount) == nil {
             KeychainStorage.set(self.appPIN, forKey: AppSettingsKeys.appPINKeychainAccount)
         }
+
+        // Apply saved accent color to ThemeManager so views using
+        // DS.ColorToken.primary render with it from the first frame.
+        ThemeManager.shared.updateBrandColor(hex: brandColorHex)
     }
 
     // MARK: - PIN Management

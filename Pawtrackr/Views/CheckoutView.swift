@@ -39,6 +39,11 @@ struct CheckoutView: View {
         VStack(spacing: 0) {
             stepIndicator
 
+            if let notice = viewModel.draftRecoveryNotice {
+                draftRecoveryBanner(notice)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             stepContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
@@ -553,6 +558,51 @@ struct CheckoutView: View {
             }
         }
         .padding(.horizontal)
+    }
+
+    private func draftRecoveryBanner(_ notice: CheckoutViewModel.DraftRecoveryNotice) -> some View {
+        Card(
+            cornerRadius: 18,
+            accent: .top(.color(notice.hasMissingPhotos ? .orange : .blue), thickness: 4)
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: notice.hasMissingPhotos ? "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90" : "arrow.clockwise.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(notice.hasMissingPhotos ? .orange : .blue)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Recovered Saved Checkout")
+                            .font(.headline)
+                        Text(notice.detailText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                HStack(spacing: 12) {
+                    Button("Continue") {
+                        viewModel.dismissDraftRecoveryNotice()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("checkout.recovery.continue")
+
+                    Button("Discard Draft", role: .destructive) {
+                        focusedField = nil
+                        Task {
+                            await viewModel.discardRecoveredDraft()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("checkout.recovery.discard")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal)
+        .padding(.top, 12)
+        .accessibilityIdentifier("checkout.draftRecoveryBanner")
     }
 
     private var bottomBar: some View {

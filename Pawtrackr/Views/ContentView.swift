@@ -39,6 +39,9 @@ struct ContentView: View {
     /// at app launch / cold-start time.
     @State private var lastNavigationDedupeKey: String?
     @State private var lastNavigationDedupeAt: Date = .distantPast
+    /// `defaultLaunchTab` only applies once per cold launch; flipping a tab
+    /// later must not snap the user back to their pinned default.
+    @State private var hasAppliedDefaultLaunchTab = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Namespace private var sharedNamespace
 
@@ -104,6 +107,12 @@ struct ContentView: View {
                 .interactiveDismissDisabled(true)
             }
             .onAppear {
+                if !hasAppliedDefaultLaunchTab && !AppRuntime.isUITesting,
+                   let tab = NavigationItem(rawValue: appSettings.defaultLaunchTab) {
+                    sidebarSelection = tab
+                    tabSelection = tab
+                }
+                hasAppliedDefaultLaunchTab = true
                 router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
                 applyUITestLaunchOverrides()
                 consumePendingNewClientRequest()

@@ -38,6 +38,9 @@
 - [x] Confirmed checkout persistence uses `CheckoutTransactionActor` with idempotency keys and audit transaction status.
 - [x] Confirmed CloudKit observability already exists through `CloudKitMonitor`, diagnostics UI, status popovers, remote-push handling, and CKError-aware messages.
 - [x] Added recall scheduling coverage through `RecallSchedulingActorTests`.
+- [x] Surfaced restored checkout drafts in the UI with an explicit recovery banner instead of silent-only state hydration.
+- [x] Added lightweight photo-presence metadata to checkout drafts so recovery can warn when before/after photos must be re-picked after an interruption.
+- [x] Fixed checkout bootstrap autosave so opening the wizard no longer overwrites an existing draft before restoration completes.
 
 ## Phase 4: Motion & Visual System
 

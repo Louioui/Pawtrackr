@@ -62,6 +62,28 @@ final class CheckoutViewModelTests: XCTestCase {
         return vm
     }
 
+    private func makeVM(root: URL, visit: Visit? = nil) -> CheckoutViewModel {
+        let logURL = root.appendingPathComponent("trace.log")
+        let vm = CheckoutViewModel(
+            pet: pet,
+            visit: visit,
+            draftStore: CheckoutDraftStore(directoryURL: root),
+            eventRecorder: CheckoutEventRecorder(logURL: logURL)
+        )
+        return vm
+    }
+
+    private func waitForServicesToLoad(_ vm: CheckoutViewModel, timeout: TimeInterval = 2.0) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        try? await Task.sleep(for: .milliseconds(20))
+        while Date() < deadline {
+            if !vm.isLoadingServices, !vm.allServices.isEmpty {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     // MARK: - Service Selection
 
     func testToggleService_SelectsService() {
@@ -288,6 +310,97 @@ final class CheckoutViewModelTests: XCTestCase {
         vm.flushDraft()
         // If we reach here without crashing or hanging, the lightweight draft path works.
         XCTAssertNotNil(vm.beforePhotoData) // VM still holds the photo
+    }
+
+    func testLoadServices_RestoresDraftAndSurfacesRecoveryNotice() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = CheckoutDraftStore(directoryURL: root)
+        let visit = Visit(pet: pet)
+        context.insert(visit)
+        try context.save()
+
+        let draft = CheckoutDraft(
+            visitID: visit.uuid,
+            petID: pet.uuid,
+            updatedAt: Date(timeIntervalSince1970: 1_715_000_000),
+            currentStepRawValue: CheckoutViewModel.CheckoutFlowStep.payment.rawValue,
+            sessionNotes: "Recovered notes",
+            amountString: "$40.00",
+            tipAmountString: "$5.00",
+            selectedTipPercentage: nil,
+            selectedServiceUUIDs: [bath.uuid],
+            selectedAddOnUUIDs: [nailTrim.uuid],
+            selectedPaymentMethodRawValue: Payment.Method.cash.rawValue,
+            beforePhotoData: nil,
+            afterPhotoData: nil,
+            hadBeforePhoto: true,
+            hadAfterPhoto: true,
+            externalReference: "",
+            tags: ["Friendly"]
+        )
+        try await store.saveDraft(draft)
+
+        let vm = makeVM(root: root, visit: visit)
+        vm.loadServices(modelContext: context)
+        await waitForServicesToLoad(vm)
+
+        XCTAssertEqual(vm.currentStep, .payment)
+        XCTAssertEqual(vm.sessionNotes, "Recovered notes")
+        XCTAssertEqual(vm.amountString, "$40.00")
+        XCTAssertEqual(vm.tipAmountString, "$5.00")
+        XCTAssertTrue(vm.isServiceSelected(bath))
+        XCTAssertTrue(vm.isAddOnSelected(nailTrim))
+        XCTAssertEqual(vm.tags, Set(["Friendly"]))
+        XCTAssertEqual(vm.draftRecoveryNotice?.missingBeforePhoto, true)
+        XCTAssertEqual(vm.draftRecoveryNotice?.missingAfterPhoto, true)
+    }
+
+    func testDiscardRecoveredDraft_ResetsVisitStateAndDeletesDraft() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = CheckoutDraftStore(directoryURL: root)
+        let visit = Visit(pet: pet)
+        context.insert(visit)
+        try context.save()
+
+        let draft = CheckoutDraft(
+            visitID: visit.uuid,
+            petID: pet.uuid,
+            updatedAt: .now,
+            currentStepRawValue: CheckoutViewModel.CheckoutFlowStep.review.rawValue,
+            sessionNotes: "Recovered notes",
+            amountString: "$88.00",
+            tipAmountString: "",
+            selectedTipPercentage: nil,
+            selectedServiceUUIDs: [bath.uuid, haircut.uuid],
+            selectedAddOnUUIDs: [],
+            selectedPaymentMethodRawValue: Payment.Method.cash.rawValue,
+            beforePhotoData: nil,
+            afterPhotoData: nil,
+            hadBeforePhoto: false,
+            hadAfterPhoto: false,
+            externalReference: "",
+            tags: ["Needs Breaks"]
+        )
+        try await store.saveDraft(draft)
+
+        let vm = makeVM(root: root, visit: visit)
+        vm.loadServices(modelContext: context)
+        await waitForServicesToLoad(vm)
+        XCTAssertNotNil(vm.draftRecoveryNotice)
+
+        await vm.discardRecoveredDraft()
+
+        XCTAssertNil(vm.draftRecoveryNotice)
+        XCTAssertEqual(vm.currentStep, .services)
+        XCTAssertEqual(vm.sessionNotes, "")
+        XCTAssertEqual(vm.amountString, "$0.00")
+        XCTAssertFalse(vm.isServiceSelected(bath))
+        XCTAssertFalse(vm.isServiceSelected(haircut))
+        XCTAssertTrue(vm.tags.isEmpty)
+        let deleted = await store.loadDraft(for: visit.uuid)
+        XCTAssertNil(deleted)
     }
 
     // MARK: - Summary Strings

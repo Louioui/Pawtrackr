@@ -23,6 +23,8 @@ final class CheckoutDraftStoreTests: XCTestCase {
             selectedPaymentMethodRawValue: Payment.Method.cash.rawValue,
             beforePhotoData: Data([0x01, 0x02]),
             afterPhotoData: Data([0x03, 0x04]),
+            hadBeforePhoto: true,
+            hadAfterPhoto: true,
             externalReference: "1234",
             tags: ["Friendly"]
         )
@@ -41,6 +43,8 @@ final class CheckoutDraftStoreTests: XCTestCase {
         XCTAssertEqual(loaded?.selectedPaymentMethodRawValue, draft.selectedPaymentMethodRawValue)
         XCTAssertEqual(loaded?.beforePhotoData, draft.beforePhotoData)
         XCTAssertEqual(loaded?.afterPhotoData, draft.afterPhotoData)
+        XCTAssertEqual(loaded?.hadBeforePhoto, draft.hadBeforePhoto)
+        XCTAssertEqual(loaded?.hadAfterPhoto, draft.hadAfterPhoto)
         XCTAssertEqual(loaded?.externalReference, draft.externalReference)
         XCTAssertEqual(loaded?.tags, draft.tags)
 
@@ -76,5 +80,37 @@ final class CheckoutDraftStoreTests: XCTestCase {
         XCTAssertEqual(draft.visitID, visitID)
         XCTAssertEqual(draft.tipAmountString, "")
         XCTAssertNil(draft.selectedTipPercentage)
+        XCTAssertFalse(draft.hadBeforePhoto)
+        XCTAssertFalse(draft.hadAfterPhoto)
+    }
+
+    func testLegacyDraftInfersPhotoFlagsFromEmbeddedData() throws {
+        let visitID = UUID()
+        let petID = UUID()
+        let json = """
+        {
+          "visitID" : "\(visitID.uuidString)",
+          "petID" : "\(petID.uuidString)",
+          "updatedAt" : "2026-05-11T16:00:00Z",
+          "currentStepRawValue" : 1,
+          "sessionNotes" : "Legacy draft with photos",
+          "amountString" : "$42.00",
+          "tipAmountString" : "",
+          "selectedServiceUUIDs" : [],
+          "selectedAddOnUUIDs" : [],
+          "selectedPaymentMethodRawValue" : "\(Payment.Method.cash.rawValue)",
+          "beforePhotoData" : "AQI=",
+          "afterPhotoData" : "AwQ=",
+          "externalReference" : "",
+          "tags" : []
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let draft = try decoder.decode(CheckoutDraft.self, from: Data(json.utf8))
+
+        XCTAssertTrue(draft.hadBeforePhoto)
+        XCTAssertTrue(draft.hadAfterPhoto)
     }
 }

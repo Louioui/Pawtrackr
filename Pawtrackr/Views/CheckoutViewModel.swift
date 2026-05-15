@@ -47,6 +47,30 @@ final class CheckoutViewModel {
         case failed(AppError)
     }
 
+    struct DraftRecoveryNotice: Equatable {
+        let restoredAt: Date
+        let missingBeforePhoto: Bool
+        let missingAfterPhoto: Bool
+
+        var hasMissingPhotos: Bool {
+            missingBeforePhoto || missingAfterPhoto
+        }
+
+        var detailText: String {
+            let restoredTimestamp = restoredAt.formatted(date: .abbreviated, time: .shortened)
+            if missingBeforePhoto && missingAfterPhoto {
+                return "Recovered your saved checkout from \(restoredTimestamp). Re-add the before and after photos to finish cleanly."
+            }
+            if missingBeforePhoto {
+                return "Recovered your saved checkout from \(restoredTimestamp). Re-add the before photo to finish cleanly."
+            }
+            if missingAfterPhoto {
+                return "Recovered your saved checkout from \(restoredTimestamp). Re-add the after photo to finish cleanly."
+            }
+            return "Recovered your saved checkout from \(restoredTimestamp)."
+        }
+    }
+
     // MARK: Dependencies
     private var visitRepository: VisitRepositoryProtocol?
     private var serviceRepository: ServiceRepositoryProtocol?
@@ -83,6 +107,7 @@ final class CheckoutViewModel {
     // MARK: State
     private(set) var isSaving: Bool = false
     private(set) var isLoadingServices: Bool = false
+    private(set) var draftRecoveryNotice: DraftRecoveryNotice?
     var appError: AppError? = nil
     var state: CheckoutState = .selectingServices
 
@@ -93,6 +118,7 @@ final class CheckoutViewModel {
     private var autosaveTask: Task<Void, Never>?
     private var servicesLoadTask: Task<Void, Never>?
     private var suppressDraftAutosave = false
+    private var isBootstrappingCheckout = false
     private var lastSavedDraftFingerprint: String?
     private var lastAcceptedConfirmAt: Date?
     private let confirmDebounceWindow: TimeInterval = 1.0
@@ -170,7 +196,6 @@ final class CheckoutViewModel {
         self.draftStore = draftStore
         self.eventRecorder = eventRecorder
         self.eventBus = eventBus
-        self.selectedTipPercentage = nil
 
         // Bind to the real ModelContainer the pet/visit already lives in. Never construct
         // a fallback container — that path would route the entire checkout to an orphan
@@ -218,11 +243,14 @@ final class CheckoutViewModel {
                 }
 
                 self.addOnServices = all.filter { $0.category == .addOn }
+                self.isBootstrappingCheckout = true
                 self.hydrateStateFromVisit()
                 await self.restoreDraftIfAvailable()
+                self.isBootstrappingCheckout = false
                 self.isLoadingServices = false
                 Logger.checkout.info("CheckoutViewModel: Hydration complete")
             } catch {
+                self.isBootstrappingCheckout = false
                 self.isLoadingServices = false
                 Logger.checkout.error("CheckoutViewModel: Load failed - \(error.localizedDescription)")
                 self.appError = .database("Failed to load services: \(error.localizedDescription)")
@@ -452,6 +480,30 @@ final class CheckoutViewModel {
         scheduleCriticalDraftSave(reason: "step_advanced")
     }
 
+    func dismissDraftRecoveryNotice() {
+        guard draftRecoveryNotice != nil else { return }
+        draftRecoveryNotice = nil
+        trace("draft_notice_dismissed")
+    }
+
+    func discardRecoveredDraft() async {
+        guard draftRecoveryNotice != nil else { return }
+
+        autosaveTask?.cancel()
+        draftRecoveryNotice = nil
+        currentStep = .services
+        hydrateStateFromVisit()
+        lastSavedDraftFingerprint = currentFingerprint()
+
+        do {
+            try await draftStore.deleteDraft(for: visit.uuid)
+        } catch {
+            Logger.checkout.error("CheckoutViewModel: Draft discard cleanup failed - \(error.localizedDescription)")
+        }
+
+        trace("draft_discarded")
+    }
+
     @MainActor
     func processPayment() async {
         guard !isSaving, state != .confirmed else { return }
@@ -539,6 +591,7 @@ final class CheckoutViewModel {
 
             state = .confirmed
             isSaving = false
+            draftRecoveryNotice = nil
 
             // Clear photo data to free memory
             self.beforePhotoData = nil
@@ -645,6 +698,11 @@ final class CheckoutViewModel {
         }
         recalculateCachedStrings()
         lastSavedDraftFingerprint = currentFingerprint()
+        draftRecoveryNotice = DraftRecoveryNotice(
+            restoredAt: draft.updatedAt,
+            missingBeforePhoto: draft.hadBeforePhoto && beforePhotoData == nil,
+            missingAfterPhoto: draft.hadAfterPhoto && afterPhotoData == nil
+        )
         suppressDraftAutosave = false
         trace("draft_restored")
     }
@@ -683,7 +741,7 @@ final class CheckoutViewModel {
     }
 
     private func scheduleDraftSave(reason: String, immediate: Bool = false) {
-        guard !suppressDraftAutosave, state != .confirmed, !visit.isCompleted else { return }
+        guard !suppressDraftAutosave, !isBootstrappingCheckout, state != .confirmed, !visit.isCompleted else { return }
 
         let fingerprint = currentFingerprint()
         if fingerprint == lastSavedDraftFingerprint { return }
@@ -723,12 +781,9 @@ final class CheckoutViewModel {
     }
 
     private func makeDraft() -> CheckoutDraft {
-        // FIXME: photos are intentionally NOT persisted here, which means a
-        // crash mid-checkout silently loses the user's before/after pictures.
-        // Either persist them (size-capped, in the draft directory next to
-        // the JSON) or surface a banner on restore so the user knows to
-        // re-pick them. Leaving as-is for now to avoid bloating draft files
-        // without a product decision on the cap.
+        // Keep the autosave payload small and atomic. We only persist whether
+        // photos existed so restore can warn the groomer to re-pick them after
+        // an interruption without inflating the draft file with image blobs.
         CheckoutDraft(
             visitID: visit.uuid,
             petID: pet.uuid,
@@ -743,6 +798,8 @@ final class CheckoutViewModel {
             selectedPaymentMethodRawValue: selectedPaymentMethod.rawValue,
             beforePhotoData: nil,
             afterPhotoData: nil,
+            hadBeforePhoto: beforePhotoData != nil,
+            hadAfterPhoto: afterPhotoData != nil,
             externalReference: externalReference,
             tags: Array(tags.sorted())
         )
