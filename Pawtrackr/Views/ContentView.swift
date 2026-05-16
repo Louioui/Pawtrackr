@@ -9,6 +9,9 @@
 import SwiftUI
 import SwiftData
 import OSLog
+#if os(iOS)
+import UIKit
+#endif
 
 struct ContentView: View {
     private enum SheetDestination: Identifiable {
@@ -42,6 +45,7 @@ struct ContentView: View {
     /// `defaultLaunchTab` only applies once per cold launch; flipping a tab
     /// later must not snap the user back to their pinned default.
     @State private var hasAppliedDefaultLaunchTab = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .doubleColumn
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Namespace private var sharedNamespace
 
@@ -310,8 +314,10 @@ struct ContentView: View {
 
     private var splitView: some View {
         #if os(macOS)
-        NavigationSplitView {
-            SidebarView(selection: $sidebarSelection)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(selection: $sidebarSelection) { item in
+                selectSurface(item)
+            }
                 .navigationSplitViewColumnWidth(min: 220, ideal: 245, max: 300)
         } detail: {
             splitViewDetail
@@ -322,8 +328,11 @@ struct ContentView: View {
         }
         .frame(minWidth: 980, minHeight: 650)
         #else
-        NavigationSplitView {
-            SidebarView(selection: $sidebarSelection)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(selection: $sidebarSelection) { item in
+                selectSurface(item)
+                collapseSplitSidebarAfterSelectionIfNeeded()
+            }
         } detail: {
             splitViewDetail
         }
@@ -401,4 +410,16 @@ struct ContentView: View {
 
 private extension Logger {
     static let contentNav = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ContentNavigation")
+}
+
+private extension ContentView {
+    func collapseSplitSidebarAfterSelectionIfNeeded() {
+        #if os(iOS)
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+        guard columnVisibility != .doubleColumn else { return }
+        withAnimation(MotionSystem.snappy) {
+            columnVisibility = .detailOnly
+        }
+        #endif
+    }
 }

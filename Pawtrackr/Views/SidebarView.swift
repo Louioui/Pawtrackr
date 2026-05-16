@@ -33,44 +33,41 @@ enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
 
 struct SidebarView: View {
     @Binding var selection: NavigationItem?
+    var onSelect: (NavigationItem) -> Void = { _ in }
 
-    // iPad-specific bug: `NavigationLink(value:)` inside a sidebar
-    // `List(selection:)` of a `NavigationSplitView` does not update the
-    // selection binding on iPad — SwiftUI looks for a `NavigationStack`
-    // to push the value onto, and the sidebar isn't inside one, so taps
-    // fire but the binding never moves and the detail never changes.
-    // macOS bridges this automatically; iPad does not.
-    //
-    // Plain `Label(...).tag(item)` rows make the row directly selectable
-    // by the `List`'s selection binding, which is what drives
-    // `splitViewDetail` to switch in the parent. Do NOT wrap the tag
-    // value in `Optional(...)` — the bare value form is what works on
-    // both iPad and macOS; wrapping in Optional broke macOS in a
-    // previous attempt.
     var body: some View {
-        List(selection: $selection) {
+        List {
             Section(NSLocalizedString("sidebar.section.business", value: "Business", comment: "")) {
-                Label(NavigationItem.dashboard.label, systemImage: NavigationItem.dashboard.icon)
-                    .tag(NavigationItem.dashboard)
-                    .accessibilityIdentifier("sidebar.row.dashboard")
-                Label(NavigationItem.clients.label, systemImage: NavigationItem.clients.icon)
-                    .tag(NavigationItem.clients)
-                    .accessibilityIdentifier("sidebar.row.clients")
+                sidebarButton(.dashboard)
+                sidebarButton(.clients)
             }
 
             Section(NSLocalizedString("sidebar.section.analysis", value: "Analysis", comment: "")) {
-                Label(NavigationItem.insights.label, systemImage: NavigationItem.insights.icon)
-                    .tag(NavigationItem.insights)
-                    .accessibilityIdentifier("sidebar.row.insights")
+                sidebarButton(.insights)
             }
 
             Section(NSLocalizedString("sidebar.section.system", value: "System", comment: "")) {
-                Label(NavigationItem.settings.label, systemImage: NavigationItem.settings.icon)
-                    .tag(NavigationItem.settings)
-                    .accessibilityIdentifier("sidebar.row.settings")
+                sidebarButton(.settings)
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("Pawtrackr")
+    }
+
+    private func sidebarButton(_ item: NavigationItem) -> some View {
+        Button {
+            selection = item
+            onSelect(item)
+        } label: {
+            Label(item.label, systemImage: item.icon)
+                .font(.body.weight(selection == item ? .semibold : .regular))
+                .foregroundStyle(selection == item ? Color.accentColor : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(selection == item ? Color.accentColor.opacity(0.14) : Color.clear)
+        .accessibilityIdentifier("sidebar.row.\(item.rawValue)")
+        .accessibilityAddTraits(selection == item ? .isSelected : [])
     }
 }

@@ -11,10 +11,16 @@
 
 import SwiftUI
 import SwiftData
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct VisitDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     let visit: Visit
     private let heroNamespace: Namespace.ID?
@@ -26,6 +32,22 @@ struct VisitDetailView: View {
     init(visit: Visit, heroNamespace: Namespace.ID? = nil) {
         self.visit = visit
         self.heroNamespace = heroNamespace
+    }
+
+    private var usesTabletLayout: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    private var contentHorizontalPadding: CGFloat {
+        usesTabletLayout ? 24 : 16
+    }
+
+    private var contentSpacing: CGFloat {
+        usesTabletLayout ? 16 : 12
     }
 
     var body: some View {
@@ -43,18 +65,65 @@ struct VisitDetailView: View {
     }
 
     private var visitContent: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 12) {
-                    header
-                    metaCards
+        ScrollView {
+            VStack(alignment: .leading, spacing: contentSpacing) {
+                header
+
+                if usesTabletLayout {
+                    tabletDetailLayout
+                } else {
+                    compactDetailLayout
+                }
+            }
+            .frame(maxWidth: usesTabletLayout ? 1040 : nil)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, contentHorizontalPadding)
+            .padding(.top, usesTabletLayout ? 18 : 8)
+            .padding(.bottom, usesTabletLayout ? 28 : 16)
+        }
+        .background(detailBackground.ignoresSafeArea())
+    }
+
+    private var detailBackground: Color {
+        #if os(iOS)
+        Color(.systemGroupedBackground)
+        #elseif os(macOS)
+        Color(nsColor: .windowBackgroundColor)
+        #else
+        Color.clear
+        #endif
+    }
+
+    private var compactDetailLayout: some View {
+        VStack(spacing: contentSpacing) {
+            timelineCard
+            paymentCard
+            servicesCard
+            photosCard
+            notesCard
+            behaviorTagsCard
+        }
+    }
+
+    private var tabletDetailLayout: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(spacing: 16) {
+                    timelineCard
                     servicesCard
-                    photosCard
                     notesCard
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+
+                VStack(spacing: 16) {
+                    paymentCard
+                    photosCard
                     behaviorTagsCard
                 }
-                .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
+
+            compactDetailLayout
         }
     }
 
@@ -81,8 +150,10 @@ struct VisitDetailView: View {
     @ToolbarContentBuilder
     private var checkoutToolbarItem: some ToolbarContent {
         #if os(iOS)
-        ToolbarItem(placement: .bottomBar) {
-            checkoutButton
+        if !usesTabletLayout {
+            ToolbarItem(placement: .bottomBar) {
+                checkoutButton
+            }
         }
         #else
         ToolbarItem(placement: .secondaryAction) {
@@ -166,8 +237,8 @@ struct VisitDetailView: View {
                         .accessibilityLabel(String(format: NSLocalizedString("visit.total_a11y_fmt", value: "Total %@", comment: ""), total))
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal)
     }
     
     private func petSubtitle(_ pet: Pet?) -> String {
@@ -204,32 +275,108 @@ struct VisitDetailView: View {
         visit.total > 0 ? visit.totalCurrencyString : nil
     }
     
-    // MARK: - Meta: payment (timer removed by design)
-    private var metaCards: some View {
-        VStack(spacing: 12) {
-            if let payment = visit.payment {
-                Card {
-                    HStack(alignment: .firstTextBaseline) {
-                        Label(NSLocalizedString("visit.payment", comment: ""), systemImage: payment.method.systemImage)
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(payment.method.displayName)
-                                .font(.subheadline)
-                            Text(payment.amountCurrencyString)
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            if let ref = payment.externalReference, !ref.isEmpty {
-                                Text(String(format: NSLocalizedString("visit.ref_fmt", comment: ""), ref))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+    // MARK: - Timing & Payment
+
+    private var timelineCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(NSLocalizedString("visit.when", comment: ""), systemImage: "calendar")
+                    .font(.subheadline.weight(.semibold))
+
+                Divider().opacity(0.08)
+
+                detailRow(
+                    icon: "arrow.down.circle.fill",
+                    title: NSLocalizedString("visit.check_in_time", comment: ""),
+                    value: visit.startedAt.formatted(date: .abbreviated, time: .shortened)
+                )
+
+                detailRow(
+                    icon: "arrow.up.circle.fill",
+                    title: NSLocalizedString("visit.check_out_time", comment: ""),
+                    value: visit.endedAt?.formatted(date: .abbreviated, time: .shortened) ?? NSLocalizedString("visit.in_progress", comment: "")
+                )
+
+                detailRow(
+                    icon: "clock.fill",
+                    title: NSLocalizedString("visit.duration", comment: ""),
+                    value: visit.durationString
+                )
+            }
+        }
+    }
+
+    private var paymentCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(NSLocalizedString("visit.payment", comment: ""), systemImage: visit.payment?.method.systemImage ?? "creditcard")
+                    .font(.subheadline.weight(.semibold))
+
+                Divider().opacity(0.08)
+
+                if let payment = visit.payment {
+                    detailRow(
+                        icon: payment.method.systemImage,
+                        title: payment.method.displayName,
+                        value: payment.amountCurrencyString
+                    )
+
+                    if let ref = payment.externalReference, !ref.isEmpty {
+                        Text(String(format: NSLocalizedString("visit.ref_fmt", comment: ""), ref))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
                     }
+                } else {
+                    Label(NSLocalizedString("visit.payment_pending", comment: ""), systemImage: "exclamationmark.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let total = amountText {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(NSLocalizedString("visit.total", comment: ""))
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 12)
+                        Text(total)
+                            .font(.title3.weight(.bold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    .padding(.top, 2)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(String(format: NSLocalizedString("visit.total_amount_a11y_fmt", value: "Total amount %@", comment: ""), total))
+                }
+
+                if visit.payment == nil && usesTabletLayout {
+                    checkoutButton
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
-        .padding(.horizontal)
+    }
+
+    private func detailRow(icon: String, title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+        }
     }
     
     // MARK: - Services
@@ -252,7 +399,6 @@ struct VisitDetailView: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(NSLocalizedString("visit.no_services_a11y", value: "No services recorded for this visit", comment: ""))
         }
-        .padding(.horizontal)
     }
     
     private var servicesContentCard: some View {
@@ -284,7 +430,6 @@ struct VisitDetailView: View {
             }
         }
         .accessibilityHint(NSLocalizedString("visit.services_hint", value: "Services performed and prices.", comment: ""))
-        .padding(.horizontal)
     }
     
     private var servicesChips: some View {
@@ -348,15 +493,21 @@ struct VisitDetailView: View {
                             }
                         }
                         
-                        HStack(spacing: 12) {
-                            photoBox(title: NSLocalizedString("photobox.before", comment: ""), data: visit.beforePhotoData)
-                            photoBox(title: NSLocalizedString("photobox.after", comment: ""), data: visit.afterPhotoData)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 12) {
+                                photoBox(title: NSLocalizedString("photobox.before", comment: ""), data: visit.beforePhotoData)
+                                photoBox(title: NSLocalizedString("photobox.after", comment: ""), data: visit.afterPhotoData)
+                            }
+
+                            VStack(spacing: 12) {
+                                photoBox(title: NSLocalizedString("photobox.before", comment: ""), data: visit.beforePhotoData)
+                                photoBox(title: NSLocalizedString("photobox.after", comment: ""), data: visit.afterPhotoData)
+                            }
                         }
                     }
                 }
             }
         }
-        .padding(.horizontal)
         .sheet(isPresented: $showTransformation) {
             TransformationView(beforeData: visit.beforePhotoData, afterData: visit.afterPhotoData, petName: visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
         }
@@ -453,7 +604,6 @@ struct VisitDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal)
         }
         
         @ViewBuilder
@@ -470,7 +620,6 @@ struct VisitDetailView: View {
                         }
                     }
                 }
-                .padding(.horizontal)
             }
         }
         

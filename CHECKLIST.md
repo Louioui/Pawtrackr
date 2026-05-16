@@ -85,3 +85,12 @@
 - [x] Localized the new macOS command and menu bar labels in `en`, `es`, and `es-419`.
 - [x] Verified all localization tables with `plutil -lint`.
 - [x] Verified macOS and generic iOS Simulator builds after the adaptive shell pass.
+
+## Phase 8: iPad Interaction & Visit Detail Polish
+
+- [x] Added an explicit `NavigationSplitViewVisibility` binding for iPad/macOS split-view state.
+- [x] Replaced passive iPad sidebar selection rows with explicit full-row buttons so swiped-open sidebar items remain tappable.
+- [x] Collapsed the iPad sidebar back to detail when selecting from an overlay-style sidebar state.
+- [x] Reworked `VisitDetailView` with an iPad-specific centered canvas and organized two-column detail layout.
+- [x] Moved iPad checkout action into the payment card instead of a cluttered bottom bar on wide iPad layouts.
+- [x] Verified generic iOS Simulator and macOS builds after the iPad fixes.
