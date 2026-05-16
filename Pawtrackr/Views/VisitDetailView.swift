@@ -72,7 +72,7 @@ struct VisitDetailView: View {
             item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Visit.csv"),
             preview: SharePreview("Pawtrackr_Visit.csv", icon: Image(systemName: "doc.text.fill"))
         ) {
-            Label("common.export", systemImage: "square.and.arrow.up")
+            Label(NSLocalizedString("common.export", comment: ""), systemImage: "square.and.arrow.up")
         }
         .disabled(csv.isEmpty)
         .accessibilityHint(csv.isEmpty ? NSLocalizedString("sharelink.accessibility.hint.no_data_to_export", comment: "") : NSLocalizedString("sharelink.accessibility.hint.export_visit", comment: ""))
@@ -105,7 +105,7 @@ struct VisitDetailView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.green)
-            .accessibilityLabel("Open checkout to complete payment")
+            .accessibilityLabel(NSLocalizedString("visit.checkout_a11y", value: "Open checkout to complete payment", comment: ""))
         }
     }
 
@@ -131,7 +131,7 @@ struct VisitDetailView: View {
             HStack(spacing: 12) {
                 heroAvatar
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(visit.pet?.name ?? "Unknown")
+                    Text(visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
                         .font(.title3.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -163,7 +163,7 @@ struct VisitDetailView: View {
                 }
                 if let total = amountText {
                     Chip(total, style: .tinted, size: .sm, tint: Color.accentColor)
-                        .accessibilityLabel("Total \(total)")
+                        .accessibilityLabel(String(format: NSLocalizedString("visit.total_a11y_fmt", value: "Total %@", comment: ""), total))
                 }
             }
         }
@@ -182,7 +182,7 @@ struct VisitDetailView: View {
             .pet(
                 species: visit.pet?.species,
                 gender: visit.pet?.gender,
-                name: visit.pet?.name ?? "Unknown",
+                name: visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""),
                 imageData: visit.pet?.photoData,
                 thumbnailData: visit.pet?.thumbnailData
             ),
@@ -250,7 +250,7 @@ struct VisitDetailView: View {
                 Spacer()
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("No services recorded for this visit")
+            .accessibilityLabel(NSLocalizedString("visit.no_services_a11y", value: "No services recorded for this visit", comment: ""))
         }
         .padding(.horizontal)
     }
@@ -280,10 +280,10 @@ struct VisitDetailView: View {
                         .monospacedDigit()
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Total amount \(visit.totalCurrencyString)")
+                .accessibilityLabel(String(format: NSLocalizedString("visit.total_amount_a11y_fmt", value: "Total amount %@", comment: ""), visit.totalCurrencyString))
             }
         }
-        .accessibilityHint("Services performed and prices.")
+        .accessibilityHint(NSLocalizedString("visit.services_hint", value: "Services performed and prices.", comment: ""))
         .padding(.horizontal)
     }
     
@@ -292,7 +292,7 @@ struct VisitDetailView: View {
         return FlowLayout(spacing: 8, rowSpacing: 8) {
             ForEach(items, id: \.uuid) { (item: VisitItem) in
                 Chip(item.displayName, style: .tinted, size: .sm, tint: .blue)
-                    .accessibilityLabel("Service \(item.displayName)")
+                    .accessibilityLabel(String(format: NSLocalizedString("visit.service_a11y_fmt", value: "Service %@", comment: ""), item.displayName))
                     .allowsHitTesting(false)
             }
         }
@@ -339,7 +339,7 @@ struct VisitDetailView: View {
                                 Button {
                                     showTransformation = true
                                 } label: {
-                                    Label("Transformation", systemImage: "sparkles.tv")
+                                    Label(NSLocalizedString("transformation.title_short", value: "Transformation", comment: ""), systemImage: "sparkles.tv")
                                         .font(.caption.bold())
                                 }
                                 .buttonStyle(.bordered)
@@ -358,7 +358,7 @@ struct VisitDetailView: View {
         }
         .padding(.horizontal)
         .sheet(isPresented: $showTransformation) {
-            TransformationView(beforeData: visit.beforePhotoData, afterData: visit.afterPhotoData, petName: visit.pet?.name ?? "Pet")
+            TransformationView(beforeData: visit.beforePhotoData, afterData: visit.afterPhotoData, petName: visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
         }
     }
     
@@ -448,7 +448,7 @@ struct VisitDetailView: View {
                                 .font(.body)
                                 .textSelection(.enabled)
                                 .lineSpacing(2)
-                                .accessibilityLabel("Notes, \(trimmed)")
+                                .accessibilityLabel(String(format: NSLocalizedString("visit.notes_a11y_fmt", value: "Notes, %@", comment: ""), trimmed))
                         }
                     }
                 }
@@ -477,7 +477,7 @@ struct VisitDetailView: View {
         // MARK: - Export (CSV)
         
         private func exportCSVForVisit() -> String {
-            let header = "startedAt,endedAt,pet,owner,services,amount,payment,notes"
+            let header = NSLocalizedString("visit.csv.header", value: "startedAt,endedAt,pet,owner,services,amount,payment,notes", comment: "")
 
             func escape(_ text: String) -> String {
                 let escaped = text.replacingOccurrences(of: "\"", with: "\"\"")
@@ -486,7 +486,7 @@ struct VisitDetailView: View {
 
             let started = visit.startedAt.ISO8601Format()
             let ended = visit.endedAt?.ISO8601Format() ?? ""
-            let petName = visit.pet?.name ?? "Unknown"
+            let petName = visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: "")
             let ownerName = visit.pet?.owner.map { "\($0.firstName) \($0.lastName)" } ?? ""
             let services = (visit.items ?? []).map { $0.displayName }.joined(separator: "; ")
             let amount = visit.totalCurrencyString

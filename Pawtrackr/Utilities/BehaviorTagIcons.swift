@@ -13,14 +13,22 @@ enum BehaviorTagIcons {
     static func display(for raw: String) -> (emoji: String?, label: String) {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch key {
-        case "calm": return ("🧘", "Calm")
-        case "cooperative": return ("🤝", "Cooperative")
-        case "anxious": return ("😟", "Anxious")
-        case "nervous": return ("😬", "Nervous")
-        case "aggressive": return ("🛑", "Aggressive")
-        case "senior": return ("🧓", "Senior")
-        case "puppy", "puppy / young", "young": return ("🐶", "Puppy / Young")
-        case "specialneeds", "special needs": return ("❤️‍🩹", "Special Needs")
+        case "calm":
+            return ("🧘", NSLocalizedString("pet.behavior.calm", value: "Calm", comment: ""))
+        case "cooperative":
+            return ("🤝", NSLocalizedString("pet.behavior.cooperative", value: "Cooperative", comment: ""))
+        case "anxious":
+            return ("😟", NSLocalizedString("pet.behavior.anxious", value: "Anxious", comment: ""))
+        case "nervous":
+            return ("😬", NSLocalizedString("pet.behavior.nervous", value: "Nervous", comment: ""))
+        case "aggressive":
+            return ("🛑", NSLocalizedString("pet.behavior.aggressive", value: "Aggressive", comment: ""))
+        case "senior":
+            return ("🧓", NSLocalizedString("pet.behavior.senior", value: "Senior", comment: ""))
+        case "puppy", "puppy / young", "young":
+            return ("🐶", NSLocalizedString("pet.behavior.puppy_young", value: "Puppy / Young", comment: ""))
+        case "specialneeds", "special needs":
+            return ("❤️‍🩹", NSLocalizedString("pet.behavior.special_needs", value: "Special Needs", comment: ""))
         default:
             // Title-case fallback label
             let label = key.split(separator: " ").map { $0.capitalized }.joined(separator: " ")
@@ -28,4 +36,3 @@ enum BehaviorTagIcons {
         }
     }
 }
-

@@ -11,17 +11,17 @@ struct MainTabView: View {
         TabView {
             ClientsView(namespace: sharedNamespace)
                 .tabItem {
-                    Label("Clients", systemImage: "person.3.fill")
+                    Label(NSLocalizedString("clients.tab", value: "Clients", comment: ""), systemImage: "person.3.fill")
                 }
 
             InsightsView()
                 .tabItem {
-                    Label("Insights", systemImage: "chart.bar.fill")
+                    Label(NSLocalizedString("insights.tab", value: "Insights", comment: ""), systemImage: "chart.bar.fill")
                 }
 
             SettingsView()
                 .tabItem {
-                    Label("Settings", systemImage: "gear")
+                    Label(NSLocalizedString("settings.tab", value: "Settings", comment: ""), systemImage: "gear")
                 }
         }
     }

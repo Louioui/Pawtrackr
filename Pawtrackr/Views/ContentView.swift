@@ -274,7 +274,7 @@ struct ContentView: View {
                         destinationView(for: destination)
                     }
             }
-            .tabItem { Label("Dashboard", systemImage: "square.grid.2x2.fill") }
+            .tabItem { Label(NSLocalizedString("dashboard.title", value: "Dashboard", comment: ""), systemImage: "square.grid.2x2.fill") }
             .tag(NavigationItem.dashboard)
 
             NavigationStack(path: $router.clientsPath) {
@@ -283,7 +283,7 @@ struct ContentView: View {
                         destinationView(for: destination)
                     }
             }
-            .tabItem { Label("Clients", systemImage: "person.3.fill") }
+            .tabItem { Label(NSLocalizedString("clients.tab", value: "Clients", comment: ""), systemImage: "person.3.fill") }
             .tag(NavigationItem.clients)
 
             NavigationStack(path: $router.insightsPath) {
@@ -293,7 +293,7 @@ struct ContentView: View {
                     }
             }
             .accessibilityIdentifier("tab.content.insights")
-            .tabItem { Label("Insights", systemImage: "chart.bar.fill") }
+            .tabItem { Label(NSLocalizedString("insights.tab", value: "Insights", comment: ""), systemImage: "chart.bar.fill") }
             .tag(NavigationItem.insights)
 
             NavigationStack(path: $router.settingsPath) {
@@ -302,20 +302,31 @@ struct ContentView: View {
                         destinationView(for: destination)
                     }
             }
-            .tabItem { Label("Settings", systemImage: "gear") }
+            .tabItem { Label(NSLocalizedString("settings.tab", value: "Settings", comment: ""), systemImage: "gear") }
             .tag(NavigationItem.settings)
         }
         .accessibilityIdentifier("content.tabView")
     }
 
     private var splitView: some View {
+        #if os(macOS)
+        NavigationSplitView {
+            SidebarView(selection: $sidebarSelection)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 245, max: 300)
+        } detail: {
+            splitViewDetail
+        }
+        .background {
+            MacTranslucentBackground()
+                .ignoresSafeArea()
+        }
+        .frame(minWidth: 980, minHeight: 650)
+        #else
         NavigationSplitView {
             SidebarView(selection: $sidebarSelection)
         } detail: {
             splitViewDetail
         }
-        #if os(macOS)
-        .frame(minWidth: 1000, minHeight: 700)
         #endif
     }
 
@@ -351,7 +362,7 @@ struct ContentView: View {
                     }
             }
         case .none:
-            Text("Select an item")
+            Text(NSLocalizedString("content.select_item", value: "Select an item", comment: ""))
         }
     }
 

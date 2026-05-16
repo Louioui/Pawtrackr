@@ -257,35 +257,103 @@ class InsightsViewModel {
         let dateString = dateFormatter.string(from: Date())
 
         var rows: [[String]] = [
-            ["Section", "Metric", "Value", "Detail"],
-            ["Revenue", "\(revenuePeriodDays)-day total", totalRevenue.moneyString, "\(totalVisitsInPeriod) visits"],
-            ["Revenue", "Average visit", averageVisitValue.moneyString, "\(revenuePeriodDays)-day window"],
-            ["Retention", "Recurring clients", "\(Int(retentionRate * 100))%", "\(churnRiskCount) churn-risk clients"]
+            [
+                NSLocalizedString("insights.csv.header.section", value: "Section", comment: ""),
+                NSLocalizedString("insights.csv.header.metric", value: "Metric", comment: ""),
+                NSLocalizedString("insights.csv.header.value", value: "Value", comment: ""),
+                NSLocalizedString("insights.csv.header.detail", value: "Detail", comment: "")
+            ],
+            [
+                NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
+                String(format: NSLocalizedString("insights.csv.metric.revenue_total_fmt", value: "%d-day total", comment: ""), revenuePeriodDays),
+                totalRevenue.moneyString,
+                String(format: NSLocalizedString("insights.csv.detail.visits_fmt", value: "%d visits", comment: ""), totalVisitsInPeriod)
+            ],
+            [
+                NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
+                NSLocalizedString("insights.csv.metric.average_visit", value: "Average visit", comment: ""),
+                averageVisitValue.moneyString,
+                String(format: NSLocalizedString("insights.csv.detail.window_fmt", value: "%d-day window", comment: ""), revenuePeriodDays)
+            ],
+            [
+                NSLocalizedString("insights.csv.section.retention", value: "Retention", comment: ""),
+                NSLocalizedString("insights.csv.metric.recurring_clients", value: "Recurring clients", comment: ""),
+                "\(Int(retentionRate * 100))%",
+                String(format: NSLocalizedString("insights.csv.detail.churn_risk_fmt", value: "%d churn-risk clients", comment: ""), churnRiskCount)
+            ]
         ]
 
         if let forecast {
-            rows.append(["Forecast", "Next 30 days", forecast.projectedRevenue.moneyString, "\(forecast.projectedVisits) projected visits"])
-            rows.append(["Forecast", "Confidence", forecast.confidenceLabel, forecast.basis])
+            rows.append([
+                NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
+                NSLocalizedString("insights.csv.metric.next_30_days", value: "Next 30 days", comment: ""),
+                forecast.projectedRevenue.moneyString,
+                String(format: NSLocalizedString("insights.csv.detail.projected_visits_fmt", value: "%d projected visits", comment: ""), forecast.projectedVisits)
+            ])
+            rows.append([
+                NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
+                NSLocalizedString("insights.csv.metric.confidence", value: "Confidence", comment: ""),
+                forecast.confidenceLabel,
+                forecast.basis
+            ])
         }
 
         rows += comparisons.map {
-            ["Comparison", $0.label, $0.currentRevenue.moneyString, "Previous: \($0.previousRevenue.moneyString), change: \(Self.percentString($0.percentChange))"]
+            [
+                NSLocalizedString("insights.csv.section.comparison", value: "Comparison", comment: ""),
+                $0.label,
+                $0.currentRevenue.moneyString,
+                String(
+                    format: NSLocalizedString("insights.csv.detail.previous_change_fmt", value: "Previous: %@, change: %@", comment: ""),
+                    $0.previousRevenue.moneyString,
+                    Self.percentString($0.percentChange)
+                )
+            ]
         }
 
         rows += serviceProfitability.map {
-            ["Service", $0.name, $0.revenue.moneyString, "\($0.count) sales, avg \($0.averageTicket.moneyString), trend \(Self.percentString($0.trendPercent))"]
+            [
+                NSLocalizedString("insights.csv.section.service", value: "Service", comment: ""),
+                $0.name,
+                $0.revenue.moneyString,
+                String(
+                    format: NSLocalizedString("insights.csv.detail.service_profitability_fmt", value: "%d sales, avg %@, trend %@", comment: ""),
+                    $0.count,
+                    $0.averageTicket.moneyString,
+                    Self.percentString($0.trendPercent)
+                )
+            ]
         }
 
         rows += paymentMethodDistribution.map {
-            ["Payment", $0.method.displayName, $0.amount.moneyString, "\($0.count) payments"]
+            [
+                NSLocalizedString("insights.csv.section.payment", value: "Payment", comment: ""),
+                $0.method.displayName,
+                $0.amount.moneyString,
+                String(format: NSLocalizedString("insights.csv.detail.payments_fmt", value: "%d payments", comment: ""), $0.count)
+            ]
         }
 
         rows += lapsedClients.map {
-            ["Lapsed Client", $0.name, $0.totalSpent.moneyString, "\($0.daysSinceLastVisit) days since last visit; pets: \($0.petNames)"]
+            [
+                NSLocalizedString("insights.csv.section.lapsed_client", value: "Lapsed Client", comment: ""),
+                $0.name,
+                $0.totalSpent.moneyString,
+                String(
+                    format: NSLocalizedString("insights.csv.detail.lapsed_client_fmt", value: "%d days since last visit; pets: %@", comment: ""),
+                    $0.daysSinceLastVisit,
+                    $0.petNames
+                )
+            ]
         }
 
         rows += dataQualityIssues.map {
-            ["Data Quality", $0.title, "\($0.count)", $0.detail]
+            [
+                NSLocalizedString("insights.csv.section.data_quality", value: "Data Quality", comment: ""),
+                $0.title,
+                "\($0.count)",
+                $0.detail
+            ]
         }
 
         let csv = rows.map { row in

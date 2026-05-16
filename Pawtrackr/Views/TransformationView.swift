@@ -20,18 +20,22 @@ struct TransformationView: View {
                 if let beforeData, let afterData {
                     comparisonLayout(before: beforeData, after: afterData)
                 } else {
-                    ContentUnavailableView("Missing Photos", systemImage: "photo.on.rectangle", description: Text("Both Before and After photos are required for a transformation view."))
+                    ContentUnavailableView(
+                        NSLocalizedString("transformation.missing_photos.title", value: "Missing Photos", comment: ""),
+                        systemImage: "photo.on.rectangle",
+                        description: Text(NSLocalizedString("transformation.missing_photos.message", value: "Both Before and After photos are required for a transformation view.", comment: ""))
+                    )
                 }
             }
             .padding()
-            .navigationTitle("\(petName)'s Transformation")
+            .navigationTitle(String(format: NSLocalizedString("transformation.navigation_title_fmt", value: "%@'s Transformation", comment: ""), petName))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button(NSLocalizedString("common.close", comment: "")) { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    ShareLink(item: "Check out \(petName)'s grooming transformation at Pawtrackr!") {
-                        Label("Share", systemImage: "square.and.arrow.up")
+                    ShareLink(item: String(format: NSLocalizedString("transformation.share_message_fmt", value: "Check out %@'s grooming transformation at Pawtrackr!", comment: ""), petName)) {
+                        Label(NSLocalizedString("common.share", value: "Share", comment: ""), systemImage: "square.and.arrow.up")
                     }
                 }
             }
@@ -42,7 +46,7 @@ struct TransformationView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottomLeading) {
                 photoFrame(data: before)
-                Text("BEFORE")
+                Text(NSLocalizedString("transformation.before", value: "BEFORE", comment: ""))
                     .font(.caption.bold())
                     .padding(6)
                     .background(.black.opacity(0.6))
@@ -55,7 +59,7 @@ struct TransformationView: View {
             
             ZStack(alignment: .bottomLeading) {
                 photoFrame(data: after)
-                Text("AFTER")
+                Text(NSLocalizedString("transformation.after", value: "AFTER", comment: ""))
                     .font(.caption.bold())
                     .padding(6)
                     .background(.blue)

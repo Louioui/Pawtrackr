@@ -60,14 +60,14 @@ struct CheckoutView: View {
         #endif
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
+                Button(NSLocalizedString("common.cancel", comment: "")) { dismiss() }
             }
         }
         #if os(iOS)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") {
+                Button(NSLocalizedString("common.done", comment: "")) {
                     if focusedField == .amount {
                         commitAmountInput()
                     }
@@ -77,7 +77,11 @@ struct CheckoutView: View {
         }
         #endif
         .alert(item: $viewModel.appError) { error in
-            Alert(title: Text("Error"), message: Text(error.localizedDescription), dismissButton: .default(Text("OK")))
+            Alert(
+                title: Text(NSLocalizedString("common.error", comment: "")),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+            )
         }
         .onAppear {
             guard !didLoadViewModel else { return }
@@ -216,19 +220,19 @@ struct CheckoutView: View {
             VStack(spacing: 20) {
                 headerCard
                 stepHero(
-                    eyebrow: "Step 1",
-                    title: "Pick the services",
-                    message: "Choose the main service and any add-ons before you move to notes and photos."
+                    eyebrow: stepLabel(1),
+                    title: localized("checkout.hero.services_title", value: "Pick the services"),
+                    message: localized("checkout.hero.services_message", value: "Choose the main service and any add-ons before you move to notes and photos.")
                 )
 
                 if viewModel.isLoadingServices {
                     servicesLoadingSkeleton
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Main Services").font(.headline).padding(.horizontal)
+                        Text(localized("checkout.main_services", value: "Main Services")).font(.headline).padding(.horizontal)
                         Card {
                             if viewModel.allServices.isEmpty {
-                                Text("No services found. Add services in Settings.")
+                                Text(NSLocalizedString("checkout.no_services_hint", comment: ""))
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .center)
@@ -245,7 +249,7 @@ struct CheckoutView: View {
 
                     if !viewModel.addOnServices.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Add-ons").font(.headline).padding(.horizontal)
+                            Text(NSLocalizedString("checkout.add_ons", comment: "")).font(.headline).padding(.horizontal)
                             VStack(spacing: 10) {
                                 ForEach(viewModel.addOnServices) { service in
                                     addOnRow(service)
@@ -264,13 +268,13 @@ struct CheckoutView: View {
         ScrollView {
             VStack(spacing: 24) {
                 stepHero(
-                    eyebrow: "Step 2",
-                    title: "Add notes and photos",
-                    message: "Capture behavior, grooming notes, and before/after photos without leaving checkout."
+                    eyebrow: stepLabel(2),
+                    title: localized("checkout.hero.details_title", value: "Add notes and photos"),
+                    message: localized("checkout.hero.details_message", value: "Capture behavior, grooming notes, and before/after photos without leaving checkout.")
                 )
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Behavior & Notes").font(.headline).padding(.horizontal)
+                    Text(NSLocalizedString("checkout.notes_and_tags", comment: "")).font(.headline).padding(.horizontal)
                     Card {
                         VStack(alignment: .leading, spacing: 16) {
                             FlowLayout(spacing: 10, rowSpacing: 10) {
@@ -305,7 +309,7 @@ struct CheckoutView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Photos").font(.headline).padding(.horizontal)
+                    Text(NSLocalizedString("checkout.before_after_photos", comment: "")).font(.headline).padding(.horizontal)
                     Card {
                         photoLayout
                     }
@@ -322,13 +326,13 @@ struct CheckoutView: View {
     private var photoLayout: some View {
         #if os(iOS)
         VStack(spacing: 16) {
-            PhotoWell(imageData: $viewModel.beforePhotoData, title: "Before")
-            PhotoWell(imageData: $viewModel.afterPhotoData, title: "After")
+            PhotoWell(imageData: $viewModel.beforePhotoData, title: localized("checkout.photo.before", value: "Before"))
+            PhotoWell(imageData: $viewModel.afterPhotoData, title: localized("checkout.photo.after", value: "After"))
         }
         #else
         HStack(spacing: 20) {
-            PhotoWell(imageData: $viewModel.beforePhotoData, title: "Before")
-            PhotoWell(imageData: $viewModel.afterPhotoData, title: "After")
+            PhotoWell(imageData: $viewModel.beforePhotoData, title: localized("checkout.photo.before", value: "Before"))
+            PhotoWell(imageData: $viewModel.afterPhotoData, title: localized("checkout.photo.after", value: "After"))
         }
         #endif
     }
@@ -338,13 +342,13 @@ struct CheckoutView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     stepHero(
-                        eyebrow: "Step 3",
-                        title: "Confirm payment",
-                        message: "Set the total and payment method before the final review."
+                        eyebrow: stepLabel(3),
+                        title: localized("checkout.hero.payment_title", value: "Confirm payment"),
+                        message: localized("checkout.hero.payment_message", value: "Set the total and payment method before the final review.")
                     )
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Payment Method").font(.headline).padding(.horizontal)
+                        Text(NSLocalizedString("checkout.payment_method", comment: "")).font(.headline).padding(.horizontal)
                         LazyVGrid(columns: paymentGridColumns, spacing: 12) {
                             ForEach(Self.paymentOptions) { option in
                                 paymentCard(for: option)
@@ -354,7 +358,7 @@ struct CheckoutView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Final Amount").font(.headline).padding(.horizontal)
+                        Text(NSLocalizedString("checkout.total_amount", comment: "")).font(.headline).padding(.horizontal)
                         Card {
                             TextField("$0.00", text: amountBinding)
                                 #if os(iOS)
@@ -373,7 +377,7 @@ struct CheckoutView: View {
                                     #endif
                                 }
 
-                            Text("Auto-filled from selected services.")
+                            Text(localized("checkout.auto_filled_from_services", value: "Auto-filled from selected services."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .center)
@@ -381,7 +385,7 @@ struct CheckoutView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Add Tip").font(.headline).padding(.horizontal)
+                        Text(NSLocalizedString("checkout.tip_amount", comment: "")).font(.headline).padding(.horizontal)
                         Card {
                             VStack(spacing: 16) {
                                 HStack(spacing: 10) {
@@ -407,7 +411,7 @@ struct CheckoutView: View {
                                 }
                                 
                                 HStack {
-                                    Text("Manual Tip").font(.subheadline).foregroundStyle(.secondary)
+                                    Text(NSLocalizedString("checkout.custom_tip", comment: "")).font(.subheadline).foregroundStyle(.secondary)
                                     Spacer()
                                     HStack(spacing: 4) {
                                         Text("$").font(.subheadline.bold())
@@ -460,14 +464,14 @@ struct CheckoutView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Summary").font(.headline).padding(.horizontal)
+                        Text(localized("checkout.summary", value: "Summary")).font(.headline).padding(.horizontal)
                         Card {
                             VStack(spacing: 10) {
-                                summaryRow(title: "Pet", value: viewModel.pet.name)
-                                summaryRow(title: "Duration", value: viewModel.sessionDurationString)
-                                summaryRow(title: "Services", value: selectedServicesSummary)
+                                summaryRow(title: localized("checkout.pet", value: "Pet"), value: viewModel.pet.name)
+                                summaryRow(title: localized("checkout.duration", value: "Duration"), value: viewModel.sessionDurationString)
+                                summaryRow(title: localized("checkout.services", value: "Services"), value: selectedServicesSummary)
                                 Divider()
-                                summaryRow(title: "Total", value: viewModel.finalTotalString, isTotal: true)
+                                summaryRow(title: NSLocalizedString("checkout.total", comment: ""), value: viewModel.finalTotalString, isTotal: true)
                             }
                         }
                     }
@@ -498,40 +502,38 @@ struct CheckoutView: View {
         ScrollView {
             VStack(spacing: 24) {
                 stepHero(
-                    eyebrow: "Step 4",
-                    title: "Review everything",
-                    message: "Confirm exactly what will be saved to history and insights."
+                    eyebrow: stepLabel(4),
+                    title: localized("checkout.hero.review_title", value: "Review everything"),
+                    message: localized("checkout.hero.review_message", value: "Confirm exactly what will be saved to history and insights.")
                 )
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Visit Summary").font(.headline).padding(.horizontal)
+                    Text(localized("checkout.visit_summary", value: "Visit Summary")).font(.headline).padding(.horizontal)
                     Card {
                         VStack(spacing: 10) {
-                            summaryRow(title: "Pet", value: viewModel.pet.name)
-                            summaryRow(title: "Duration", value: viewModel.sessionDurationString)
-                            summaryRow(title: "Services", value: selectedServicesSummary)
-                            summaryRow(title: "Behavior Tags", value: viewModel.behaviorTagsSummary)
-                            summaryRow(title: "Notes", value: viewModel.notesPreview)
-                            summaryRow(title: "Photos", value: "\(viewModel.totalPhotoCount)")
+                            summaryRow(title: localized("checkout.pet", value: "Pet"), value: viewModel.pet.name)
+                            summaryRow(title: localized("checkout.duration", value: "Duration"), value: viewModel.sessionDurationString)
+                            summaryRow(title: localized("checkout.services", value: "Services"), value: selectedServicesSummary)
+                            summaryRow(title: NSLocalizedString("checkout.behavior_tags", comment: ""), value: viewModel.behaviorTagsSummary)
+                            summaryRow(title: localized("checkout.notes", value: "Notes"), value: viewModel.notesPreview)
+                            summaryRow(title: localized("checkout.photos", value: "Photos"), value: "\(viewModel.totalPhotoCount)")
                             Divider()
-                            summaryRow(title: "Total", value: viewModel.finalTotalString, isTotal: true)
+                            summaryRow(title: NSLocalizedString("checkout.total", comment: ""), value: viewModel.finalTotalString, isTotal: true)
                         }
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Payment Review").font(.headline).padding(.horizontal)
+                    Text(localized("checkout.payment_review", value: "Payment Review")).font(.headline).padding(.horizontal)
                     Card {
                         VStack(spacing: 10) {
-                            summaryRow(title: "Method", value: viewModel.paymentMethodLabel)
-                            summaryRow(title: "Reference", value: viewModel.paymentReferenceSummary)
+                            summaryRow(title: localized("checkout.method", value: "Method"), value: viewModel.paymentMethodLabel)
+                            summaryRow(title: localized("checkout.reference_label", value: "Reference"), value: viewModel.paymentReferenceSummary)
                             summaryRow(
-                                title: "History Save",
-                                value: viewModel.totalPhotoCount > 0
-                                    ? "Visit, \(viewModel.totalPhotoCount) photo\(viewModel.totalPhotoCount == 1 ? "" : "s"), services, notes, payment"
-                                    : "Visit, services, notes, payment"
+                                title: localized("checkout.history_save", value: "History Save"),
+                                value: historySaveSummary
                             )
-                            summaryRow(title: "Insights Save", value: "\(viewModel.finalTotalString) tracked as revenue")
+                            summaryRow(title: localized("checkout.insights_save", value: "Insights Save"), value: insightsSaveSummary)
                         }
                     }
                 }
@@ -548,11 +550,11 @@ struct CheckoutView: View {
                 AvatarView(.pet(species: viewModel.pet.species, gender: viewModel.pet.gender, name: viewModel.pet.name, imageData: viewModel.pet.photoData), size: .md)
                 VStack(alignment: .leading) {
                     Text(viewModel.pet.name).font(.headline)
-                    Text(viewModel.pet.owner?.fullName ?? "Unknown Owner").font(.subheadline).foregroundStyle(.secondary)
+                    Text(viewModel.pet.owner?.fullName ?? NSLocalizedString("common.unknown_owner", value: "Unknown Owner", comment: "")).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
                 VStack(alignment: .trailing) {
-                    Text("Started").font(.caption).foregroundStyle(.secondary)
+                    Text(localized("checkout.started", value: "Started")).font(.caption).foregroundStyle(.secondary)
                     Text(viewModel.visit.startedAt, style: .time).font(Font.subheadline.weight(.medium))
                 }
             }
@@ -572,7 +574,7 @@ struct CheckoutView: View {
                         .foregroundStyle(notice.hasMissingPhotos ? .orange : .blue)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Recovered Saved Checkout")
+                        Text(localized("checkout.recovery.title", value: "Recovered Saved Checkout"))
                             .font(.headline)
                         Text(notice.detailText)
                             .font(.subheadline)
@@ -582,13 +584,13 @@ struct CheckoutView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button("Continue") {
+                    Button(NSLocalizedString("common.continue", comment: "")) {
                         viewModel.dismissDraftRecoveryNotice()
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("checkout.recovery.continue")
 
-                    Button("Discard Draft", role: .destructive) {
+                    Button(localized("checkout.recovery.discard", value: "Discard Draft"), role: .destructive) {
                         focusedField = nil
                         Task {
                             await viewModel.discardRecoveredDraft()
@@ -802,7 +804,7 @@ struct CheckoutView: View {
                         pdfData: pdfData,
                         filename: "Receipt_\(viewModel.pet.name).pdf"
                     ),
-                    preview: SharePreview("Receipt", image: Image(systemName: "doc.pdf"))
+                    preview: SharePreview(localized("receipt.title", value: "Receipt"), image: Image(systemName: "doc.pdf"))
                 ) {
                     HStack {
                         Image(systemName: "square.and.arrow.up")
@@ -816,7 +818,7 @@ struct CheckoutView: View {
                 }
                 .transition(.scale.combined(with: .opacity))
             } else if receiptFailed {
-                Label("Receipt unavailable", systemImage: "exclamationmark.triangle")
+                Label(localized("checkout.receipt_unavailable", value: "Receipt unavailable"), systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
@@ -845,9 +847,9 @@ struct CheckoutView: View {
     private var processingContent: some View {
         ProgressView()
             .scaleEffect(1.5)
-        Text("Processing payment…")
+        Text(NSLocalizedString("checkout.processing", value: "Processing Payment", comment: ""))
             .font(.headline)
-        Text("Please keep the app open.")
+        Text(NSLocalizedString("checkout.processing_desc", value: "Please wait while we complete your transaction...", comment: ""))
             .font(.subheadline)
             .foregroundStyle(.secondary)
     }
@@ -909,7 +911,7 @@ struct CheckoutView: View {
     private var servicesLoadingSkeleton: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Main Services")
+                Text(localized("checkout.main_services", value: "Main Services"))
                     .font(.headline)
                     .padding(.horizontal)
                 Card {
@@ -925,7 +927,7 @@ struct CheckoutView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("Add-ons")
+                Text(NSLocalizedString("checkout.add_ons", comment: ""))
                     .font(.headline)
                     .padding(.horizontal)
                 VStack(spacing: 10) {
@@ -998,9 +1000,44 @@ struct CheckoutView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(option.label)
         .accessibilityIdentifier("checkout.payment.\(option.method.rawValue)")
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityValue(isSelected
+            ? NSLocalizedString("common.selected", value: "Selected", comment: "")
+            : NSLocalizedString("common.not_selected", value: "Not selected", comment: "")
+        )
         .accessibilityAddTraits(.isButton)
         .animation(Animations.responsiveSpring, value: isSelected)
+    }
+
+    private func localized(_ key: String, value: String) -> String {
+        NSLocalizedString(key, value: value, comment: "")
+    }
+
+    private func stepLabel(_ number: Int) -> String {
+        String.localizedStringWithFormat(
+            NSLocalizedString("checkout.step_number_fmt", value: "Step %d", comment: ""),
+            number
+        )
+    }
+
+    private var historySaveSummary: String {
+        switch viewModel.totalPhotoCount {
+        case 0:
+            return localized("checkout.history_save_without_photos", value: "Visit, services, notes, payment")
+        case 1:
+            return localized("checkout.history_save_with_one_photo", value: "Visit, 1 photo, services, notes, payment")
+        default:
+            return String.localizedStringWithFormat(
+                NSLocalizedString("checkout.history_save_with_photos_fmt", value: "Visit, %d photos, services, notes, payment", comment: ""),
+                viewModel.totalPhotoCount
+            )
+        }
+    }
+
+    private var insightsSaveSummary: String {
+        String.localizedStringWithFormat(
+            NSLocalizedString("checkout.insights_save_fmt", value: "%@ tracked as revenue", comment: ""),
+            viewModel.finalTotalString
+        )
     }
 
     func summaryRow(title: String, value: String, isTotal: Bool = false) -> some View {

@@ -99,6 +99,8 @@ public struct Card<Content: View>: View {
             .cardElevation(isHoveredIfEnabled ? .raised : elevation)
             .overlay(borderAndAccentOverlay(for: shape))
             #if os(macOS)
+            .scaleEffect(isHoveredIfEnabled ? 1.012 : 1.0)
+            .animation(MotionSystem.snappy, value: isHoveredIfEnabled)
             .onHover { hovering in
                 if hoverRaises { isHovered = hovering }
             }

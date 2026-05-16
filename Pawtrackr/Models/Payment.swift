@@ -72,11 +72,16 @@ extension Payment {
         var id: String { rawValue }
         var displayName: String {
             switch self {
-            case .cash: return "Cash"
-            case .debitCard: return "Debit"
-            case .creditCard: return "Credit"
-            case .zelle: return "Zelle"
-            case .other: return "Other"
+            case .cash:
+                return NSLocalizedString("payment.method.cash", value: "Cash", comment: "")
+            case .debitCard:
+                return NSLocalizedString("payment.method.debit_card", value: "Debit", comment: "")
+            case .creditCard:
+                return NSLocalizedString("payment.method.credit_card", value: "Credit", comment: "")
+            case .zelle:
+                return NSLocalizedString("payment.method.zelle", value: "Zelle", comment: "")
+            case .other:
+                return NSLocalizedString("payment.method.other", value: "Other", comment: "")
             }
         }
 
@@ -107,32 +112,38 @@ extension Payment {
 
         var referenceFieldTitle: String {
             switch self {
-            case .cash: return "Reference"
-            case .debitCard, .creditCard: return "Last 4 Digits"
-            case .zelle: return "Transaction ID"
-            case .other: return "Reference"
+            case .cash, .other:
+                return NSLocalizedString("payment.reference.title", value: "Reference", comment: "")
+            case .debitCard, .creditCard:
+                return NSLocalizedString("payment.reference.last4", value: "Last 4 Digits", comment: "")
+            case .zelle:
+                return NSLocalizedString("payment.reference.transaction_id", value: "Transaction ID", comment: "")
             }
         }
 
         var referencePlaceholder: String {
             switch self {
-            case .cash: return "Optional note"
-            case .debitCard, .creditCard: return "1234"
-            case .zelle: return "ZELLE-48291"
-            case .other: return "Reference"
+            case .cash:
+                return NSLocalizedString("payment.reference.placeholder_optional_note", value: "Optional note", comment: "")
+            case .debitCard, .creditCard:
+                return NSLocalizedString("payment.reference.placeholder_last4", value: "1234", comment: "")
+            case .zelle:
+                return NSLocalizedString("payment.reference.placeholder_transaction_id", value: "ZELLE-48291", comment: "")
+            case .other:
+                return NSLocalizedString("payment.reference.placeholder_reference", value: "Reference", comment: "")
             }
         }
 
         var referenceHelperText: String {
             switch self {
             case .cash:
-                return "You can leave this blank for cash payments."
+                return NSLocalizedString("payment.reference.helper_cash", value: "You can leave this blank for cash payments.", comment: "")
             case .debitCard, .creditCard:
-                return "Use the last 4 digits from the card or terminal slip."
+                return NSLocalizedString("payment.reference.helper_card", value: "Use the last 4 digits from the card or terminal slip.", comment: "")
             case .zelle:
-                return "Use the confirmation or transfer ID from the payment."
+                return NSLocalizedString("payment.reference.helper_zelle", value: "Use the confirmation or transfer ID from the payment.", comment: "")
             case .other:
-                return "Add any note that will help you reconcile the payment later."
+                return NSLocalizedString("payment.reference.helper_other", value: "Add any note that will help you reconcile the payment later.", comment: "")
             }
         }
 
@@ -168,12 +179,12 @@ extension Payment {
 
             let normalized = normalizeReference(value)
             guard !normalized.isEmpty else {
-                return "Enter \(referenceFieldTitle.lowercased()) to continue."
+                return String(format: NSLocalizedString("payment.reference.validation.required_fmt", value: "Enter %@ to continue.", comment: ""), referenceFieldTitle.lowercased())
             }
 
             switch referenceFormat {
             case .cardLast4 where normalized.count < 4:
-                return "Enter all 4 digits before continuing."
+                return NSLocalizedString("payment.reference.validation.last4", value: "Enter all 4 digits before continuing.", comment: "")
             default:
                 return nil
             }

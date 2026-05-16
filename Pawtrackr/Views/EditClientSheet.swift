@@ -33,20 +33,20 @@ struct EditClientSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Owner Information") {
-                    TextField("First Name", text: $firstName)
+                Section(NSLocalizedString("new_client.owner_section", comment: "")) {
+                    TextField(NSLocalizedString("new_client.first_name", comment: ""), text: $firstName)
                         .accessibilityIdentifier("editClient.firstName")
                     #if os(iOS)
                     .textContentType(.givenName)
                     .textInputAutocapitalization(.words)
                     #endif
-                    TextField("Last Name", text: $lastName)
+                    TextField(NSLocalizedString("new_client.last_name", comment: ""), text: $lastName)
                         .accessibilityIdentifier("editClient.lastName")
                     #if os(iOS)
                     .textContentType(.familyName)
                     .textInputAutocapitalization(.words)
                     #endif
-                    TextField("Phone", text: $phone)
+                    TextField(NSLocalizedString("new_client.phone", comment: ""), text: $phone)
                         .accessibilityIdentifier("editClient.phone")
                         .autocorrectionDisabled()
                         .onChange(of: phone) { _, newValue in
@@ -56,7 +56,7 @@ struct EditClientSheet: View {
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
                     #endif
-                    TextField("Email", text: $email)
+                    TextField(NSLocalizedString("new_client.email", comment: ""), text: $email)
                         .accessibilityIdentifier("editClient.email")
                     #if os(iOS)
                     .keyboardType(.emailAddress)
@@ -64,7 +64,7 @@ struct EditClientSheet: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                     #endif
-                    TextField("Address", text: $address)
+                    TextField(NSLocalizedString("new_client.address", comment: ""), text: $address)
                         .accessibilityIdentifier("editClient.address")
                     #if os(iOS)
                     .textContentType(.fullStreetAddress)
@@ -73,14 +73,14 @@ struct EditClientSheet: View {
 
                 // Notes intentionally omitted from client edit per requirements.
             }
-            .navigationTitle("Edit Client")
+            .navigationTitle(NSLocalizedString("client_details.edit", comment: ""))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) { dismiss() }
+                    Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { dismiss() }
                         .accessibilityIdentifier("editClient.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(NSLocalizedString("common.save", comment: "")) {
                         attemptedSubmit = true
                         save()
                     }
@@ -125,7 +125,7 @@ struct EditClientSheet: View {
             e164 = valid
         }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
-            appError = .validation(.custom(message: "Email address looks invalid."))
+            appError = .validation(.custom(message: NSLocalizedString("new_client.error.email_invalid_long", comment: "")))
             return
         }
 
@@ -141,7 +141,7 @@ struct EditClientSheet: View {
             try ctx.save()
             dismiss()
         } catch {
-            appError = .database("Save failed. Please try again.\n\n\(error.localizedDescription)")
+            appError = .database(String(format: NSLocalizedString("common.save_failed", comment: ""), error.localizedDescription))
         }
     }
 

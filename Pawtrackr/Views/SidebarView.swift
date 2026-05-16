@@ -10,10 +10,14 @@ enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
 
     var label: String {
         switch self {
-        case .dashboard: return "Dashboard"
-        case .clients: return "Clients"
-        case .insights: return "Insights"
-        case .settings: return "Settings"
+        case .dashboard:
+            return NSLocalizedString("dashboard.title", value: "Dashboard", comment: "")
+        case .clients:
+            return NSLocalizedString("clients.tab", value: "Clients", comment: "")
+        case .insights:
+            return NSLocalizedString("insights.tab", value: "Insights", comment: "")
+        case .settings:
+            return NSLocalizedString("settings.tab", value: "Settings", comment: "")
         }
     }
 
@@ -30,35 +34,40 @@ enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
 struct SidebarView: View {
     @Binding var selection: NavigationItem?
 
+    // iPad-specific bug: `NavigationLink(value:)` inside a sidebar
+    // `List(selection:)` of a `NavigationSplitView` does not update the
+    // selection binding on iPad — SwiftUI looks for a `NavigationStack`
+    // to push the value onto, and the sidebar isn't inside one, so taps
+    // fire but the binding never moves and the detail never changes.
+    // macOS bridges this automatically; iPad does not.
+    //
+    // Plain `Label(...).tag(item)` rows make the row directly selectable
+    // by the `List`'s selection binding, which is what drives
+    // `splitViewDetail` to switch in the parent. Do NOT wrap the tag
+    // value in `Optional(...)` — the bare value form is what works on
+    // both iPad and macOS; wrapping in Optional broke macOS in a
+    // previous attempt.
     var body: some View {
         List(selection: $selection) {
-            Section("Business") {
-                NavigationLink(value: NavigationItem.dashboard) {
-                    Label(NavigationItem.dashboard.label, systemImage: NavigationItem.dashboard.icon)
-                        .contentShape(Rectangle())
-                }
-                .contentShape(Rectangle())
-                NavigationLink(value: NavigationItem.clients) {
-                    Label(NavigationItem.clients.label, systemImage: NavigationItem.clients.icon)
-                        .contentShape(Rectangle())
-                }
-                .contentShape(Rectangle())
+            Section(NSLocalizedString("sidebar.section.business", value: "Business", comment: "")) {
+                Label(NavigationItem.dashboard.label, systemImage: NavigationItem.dashboard.icon)
+                    .tag(NavigationItem.dashboard)
+                    .accessibilityIdentifier("sidebar.row.dashboard")
+                Label(NavigationItem.clients.label, systemImage: NavigationItem.clients.icon)
+                    .tag(NavigationItem.clients)
+                    .accessibilityIdentifier("sidebar.row.clients")
             }
 
-            Section("Analysis") {
-                NavigationLink(value: NavigationItem.insights) {
-                    Label(NavigationItem.insights.label, systemImage: NavigationItem.insights.icon)
-                        .contentShape(Rectangle())
-                }
-                .contentShape(Rectangle())
+            Section(NSLocalizedString("sidebar.section.analysis", value: "Analysis", comment: "")) {
+                Label(NavigationItem.insights.label, systemImage: NavigationItem.insights.icon)
+                    .tag(NavigationItem.insights)
+                    .accessibilityIdentifier("sidebar.row.insights")
             }
 
-            Section("System") {
-                NavigationLink(value: NavigationItem.settings) {
-                    Label(NavigationItem.settings.label, systemImage: NavigationItem.settings.icon)
-                        .contentShape(Rectangle())
-                }
-                .contentShape(Rectangle())
+            Section(NSLocalizedString("sidebar.section.system", value: "System", comment: "")) {
+                Label(NavigationItem.settings.label, systemImage: NavigationItem.settings.icon)
+                    .tag(NavigationItem.settings)
+                    .accessibilityIdentifier("sidebar.row.settings")
             }
         }
         .listStyle(.sidebar)

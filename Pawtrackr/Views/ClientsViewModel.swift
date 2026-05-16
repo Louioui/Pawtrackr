@@ -18,12 +18,36 @@ final class ClientsViewModel {
         case active = "Active"
         case overdue = "Overdue"
         case missingInfo = "Missing Info"
+
+        var displayName: String {
+            switch self {
+            case .all:
+                return NSLocalizedString("clients.filter.all", value: "All", comment: "")
+            case .active:
+                return NSLocalizedString("clients.filter.active", value: "Active", comment: "")
+            case .overdue:
+                return NSLocalizedString("clients.filter.overdue", value: "Overdue", comment: "")
+            case .missingInfo:
+                return NSLocalizedString("clients.filter.missing_info", value: "Missing Info", comment: "")
+            }
+        }
     }
 
     enum SortOption: String, CaseIterable {
         case name = "Name"
         case lastVisit = "Last Visit"
         case newest = "Newest"
+
+        var displayName: String {
+            switch self {
+            case .name:
+                return NSLocalizedString("clients.sort.name", value: "Name", comment: "")
+            case .lastVisit:
+                return NSLocalizedString("clients.sort.last_visit", value: "Last Visit", comment: "")
+            case .newest:
+                return NSLocalizedString("clients.sort.newest", value: "Newest", comment: "")
+            }
+        }
     }
 
     // MARK: - Published Properties

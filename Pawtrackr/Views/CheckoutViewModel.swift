@@ -21,19 +21,27 @@ final class CheckoutViewModel {
 
         var title: String {
             switch self {
-            case .services: return "Services"
-            case .details: return "Notes & Photos"
-            case .payment: return "Payment"
-            case .review: return "Review"
+            case .services:
+                return NSLocalizedString("checkout.step.services", value: "Services", comment: "")
+            case .details:
+                return NSLocalizedString("checkout.step.details", value: "Notes & Photos", comment: "")
+            case .payment:
+                return NSLocalizedString("checkout.step.payment", value: "Payment", comment: "")
+            case .review:
+                return NSLocalizedString("checkout.step.review", value: "Review", comment: "")
             }
         }
 
         var primaryButtonTitle: String {
             switch self {
-            case .services: return "Continue to Notes"
-            case .details: return "Continue to Payment"
-            case .payment: return "Review Checkout"
-            case .review: return "Confirm & Pay"
+            case .services:
+                return NSLocalizedString("checkout.action.continue_notes", value: "Continue to Notes", comment: "")
+            case .details:
+                return NSLocalizedString("checkout.action.continue_payment", value: "Continue to Payment", comment: "")
+            case .payment:
+                return NSLocalizedString("checkout.action.review_checkout", value: "Review Checkout", comment: "")
+            case .review:
+                return NSLocalizedString("checkout.action.confirm_pay", value: "Confirm & Pay", comment: "")
             }
         }
     }
@@ -59,15 +67,27 @@ final class CheckoutViewModel {
         var detailText: String {
             let restoredTimestamp = restoredAt.formatted(date: .abbreviated, time: .shortened)
             if missingBeforePhoto && missingAfterPhoto {
-                return "Recovered your saved checkout from \(restoredTimestamp). Re-add the before and after photos to finish cleanly."
+                return String.localizedStringWithFormat(
+                    NSLocalizedString("checkout.recovery.detail_both_fmt", value: "Recovered your saved checkout from %@. Re-add the before and after photos to finish cleanly.", comment: ""),
+                    restoredTimestamp
+                )
             }
             if missingBeforePhoto {
-                return "Recovered your saved checkout from \(restoredTimestamp). Re-add the before photo to finish cleanly."
+                return String.localizedStringWithFormat(
+                    NSLocalizedString("checkout.recovery.detail_missing_before_fmt", value: "Recovered your saved checkout from %@. Re-add the before photo to finish cleanly.", comment: ""),
+                    restoredTimestamp
+                )
             }
             if missingAfterPhoto {
-                return "Recovered your saved checkout from \(restoredTimestamp). Re-add the after photo to finish cleanly."
+                return String.localizedStringWithFormat(
+                    NSLocalizedString("checkout.recovery.detail_missing_after_fmt", value: "Recovered your saved checkout from %@. Re-add the after photo to finish cleanly.", comment: ""),
+                    restoredTimestamp
+                )
             }
-            return "Recovered your saved checkout from \(restoredTimestamp)."
+            return String.localizedStringWithFormat(
+                NSLocalizedString("checkout.recovery.detail_fmt", value: "Recovered your saved checkout from %@.", comment: ""),
+                restoredTimestamp
+            )
         }
     }
 
@@ -166,19 +186,19 @@ final class CheckoutViewModel {
     var paymentMethodLabel: String { selectedPaymentMethod.displayName }
     var paymentReferenceSummary: String {
         let reference = externalReference.trimmed
-        return reference.isEmpty ? "None" : reference
+        return reference.isEmpty ? NSLocalizedString("common.none", value: "None", comment: "") : reference
     }
     var notesPreview: String {
         let trimmed = sessionNotes.trimmed
-        return trimmed.isEmpty ? "No notes added" : trimmed
+        return trimmed.isEmpty ? NSLocalizedString("checkout.no_notes_added", value: "No notes added", comment: "") : trimmed
     }
     var behaviorTagsSummary: String {
         let values = tags.sorted()
-        return values.isEmpty ? "None" : values.joined(separator: ", ")
+        return values.isEmpty ? NSLocalizedString("common.none", value: "None", comment: "") : values.joined(separator: ", ")
     }
 
     // MARK: - Cached Computed Properties
-    private(set) var selectedServicesSummary: String = "None"
+    private(set) var selectedServicesSummary: String = NSLocalizedString("common.none", value: "None", comment: "")
     private(set) var finalTotalString: String = "$0.00"
 
     private let eventBus: GlobalEventBus
@@ -253,7 +273,9 @@ final class CheckoutViewModel {
                 self.isBootstrappingCheckout = false
                 self.isLoadingServices = false
                 Logger.checkout.error("CheckoutViewModel: Load failed - \(error.localizedDescription)")
-                self.appError = .database("Failed to load services: \(error.localizedDescription)")
+                self.appError = .database(
+                    String(format: NSLocalizedString("checkout.load_services_failed_fmt", value: "Failed to load services: %@", comment: ""), error.localizedDescription)
+                )
             }
         }
     }
@@ -449,7 +471,9 @@ final class CheckoutViewModel {
             .map(\.name)
             .sorted()
 
-        selectedServicesSummary = sortedNames.isEmpty ? "None" : sortedNames.joined(separator: ", ")
+        selectedServicesSummary = sortedNames.isEmpty
+            ? NSLocalizedString("common.none", value: "None", comment: "")
+            : sortedNames.joined(separator: ", ")
     }
 
     var isAdvanceEnabled: Bool {

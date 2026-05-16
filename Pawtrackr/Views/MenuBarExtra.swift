@@ -33,7 +33,10 @@ struct PawtrackrMenuBarExtra: View {
                     .font(.headline)
                 Spacer()
                 if activeVisits.count > 0 {
-                    Text("\(activeVisits.count) Active")
+                    Text(String.localizedStringWithFormat(
+                        NSLocalizedString("menu_bar.active_count_fmt", value: "%d Active", comment: ""),
+                        activeVisits.count
+                    ))
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -47,14 +50,14 @@ struct PawtrackrMenuBarExtra: View {
             Divider()
 
             if activeVisits.isEmpty {
-                Text("No active visits")
+                Text(NSLocalizedString("menu_bar.no_active_visits", value: "No active visits", comment: ""))
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             } else {
                 ForEach(Array(activeVisits.prefix(5)), id: \.uuid) { visit in
                     HStack {
                         VStack(alignment: .leading) {
-                            Text(visit.pet?.name ?? "Unknown Pet")
+                            Text(visit.pet?.name ?? NSLocalizedString("common.unknown_pet", value: "Unknown Pet", comment: ""))
                                 .font(.subheadline.weight(.medium))
                             Text(visit.startedAt.formatted(date: .omitted, time: .shortened))
                                 .font(.caption2)
@@ -67,7 +70,7 @@ struct PawtrackrMenuBarExtra: View {
 
             Divider()
 
-            Button("New Client...") {
+            Button(NSLocalizedString("menu_bar.new_client", value: "New Client…", comment: "")) {
                 UserDefaults.standard.set(UUID().uuidString, forKey: AppMenuCommand.pendingNewClientRequestKey)
                 openMainWindow()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -75,13 +78,13 @@ struct PawtrackrMenuBarExtra: View {
                 }
             }
 
-            Button("Open Main Window") {
+            Button(NSLocalizedString("menu_bar.open_main_window", value: "Open Main Window", comment: "")) {
                 openMainWindow()
             }
 
             Divider()
 
-            Button("Quit Pawtrackr") {
+            Button(NSLocalizedString("menu_bar.quit", value: "Quit Pawtrackr", comment: "")) {
                 NSApp.terminate(nil)
             }
         }

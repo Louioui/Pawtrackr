@@ -47,6 +47,7 @@ struct ClientDetailView: View {
         case checkIn(Pet)
         case deleteClient
         case deleteError(String)
+        case deleteContact(EmergencyContact)
 
         var id: String {
             switch self {
@@ -56,6 +57,15 @@ struct ClientDetailView: View {
                 return "deleteClient"
             case .deleteError:
                 return "deleteError"
+            case .deleteContact:
+                // Singleton id — only one contact-delete alert can be in
+                // flight at a time. Folding contact deletion into this enum
+                // lets a single `.alert(item:)` host every confirmation,
+                // which avoids SwiftUI's stacked-deprecated-Alert
+                // presentation bug where the second `.alert(item:)`
+                // silently never fires (the original cause of the trash
+                // button looking broken).
+                return "deleteContact"
             }
         }
     }
@@ -66,7 +76,6 @@ struct ClientDetailView: View {
     @State private var newContactName: String = ""
     @State private var newContactRelation: String = ""
     @State private var newContactPhone: String = ""
-    @State private var contactPendingDelete: EmergencyContact? = nil
     @State private var validationError: String? = nil
     @FocusState private var contactNameFocused: Bool
 
@@ -138,7 +147,6 @@ struct ClientDetailView: View {
             .sheet(isPresented: $showContactEditor) {
                 contactEditorSheet
             }
-            .alert(item: $contactPendingDelete, content: contactDeleteAlert)
             .modifier(CheckoutPresentationModifier(checkoutPet: $checkoutPet, vm: vm))
             .alert(item: $alertDestination) { destination in
                 destinationAlert(destination, vm: vm)
@@ -222,15 +230,6 @@ struct ClientDetailView: View {
         }
     }
 
-    private func contactDeleteAlert(_ contact: EmergencyContact) -> Alert {
-        Alert(
-            title: Text(NSLocalizedString("client_detail.delete_contact_title", comment: "")),
-            message: Text(NSLocalizedString("client_detail.delete_contact_message", comment: "")),
-            primaryButton: .destructive(Text(NSLocalizedString("common.delete", comment: ""))) { confirmDeleteContact(contact) },
-            secondaryButton: .cancel()
-        )
-    }
-
     private func destinationAlert(_ destination: AlertDestination, vm: ClientDetailViewModel) -> Alert {
         switch destination {
         case .checkIn(let pet):
@@ -256,6 +255,15 @@ struct ClientDetailView: View {
                 title: Text(NSLocalizedString("clients.delete_failed", comment: "")),
                 message: Text(message),
                 dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
+            )
+        case .deleteContact(let contact):
+            return Alert(
+                title: Text(NSLocalizedString("client_detail.delete_contact_title", comment: "")),
+                message: Text(NSLocalizedString("client_detail.delete_contact_message", comment: "")),
+                primaryButton: .destructive(Text(NSLocalizedString("common.delete", comment: ""))) {
+                    confirmDeleteContact(contact)
+                },
+                secondaryButton: .cancel()
             )
         }
     }
@@ -432,7 +440,7 @@ struct ClientDetailView: View {
                         }
                         .swipeActions(edge: .trailing) {
                             Button { beginEditContact(c) } label: { Label("Edit", systemImage: "pencil") }
-                            Button(role: .destructive) { contactPendingDelete = c } label: { Label("Delete", systemImage: "trash") }
+                            Button(role: .destructive) { alertDestination = .deleteContact(c) } label: { Label("Delete", systemImage: "trash") }
                         }
                     }
                 }

@@ -46,7 +46,11 @@ struct InsightsView: View {
                     mainContent(vm)
                         .transition(.opacity)
                 case .error(let message):
-                    ContentUnavailableView("Error", systemImage: "exclamationmark.triangle", description: Text(message))
+                    ContentUnavailableView(
+                        NSLocalizedString("common.error", comment: ""),
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(message)
+                    )
                 }
             } else {
                 Color.clear
@@ -62,15 +66,15 @@ struct InsightsView: View {
             InsightsMeshBackground()
                 .allowsHitTesting(false)
         }
-        .navigationTitle("Insights")
+        .navigationTitle(NSLocalizedString("insights.title", value: "Insights", comment: ""))
         .refreshable {
             await viewModel?.refresh()
         }
         .sheet(item: $selectedDrilldown) { drilldown in
             drilldownSheet(drilldown)
         }
-        .alert("Appointment Scheduled", isPresented: $showingScheduleConfirmation) {
-            Button("OK", role: .cancel) { }
+        .alert(localized("insights.recall.alert_title", value: "Appointment Scheduled"), isPresented: $showingScheduleConfirmation) {
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
         } message: {
             Text(scheduleConfirmation)
         }
@@ -112,7 +116,7 @@ struct InsightsView: View {
     private func kpiSummaryRow(_ vm: InsightsViewModel) -> some View {
         HStack(spacing: DS.Spacing.sm) {
             kpiTile(
-                title: "Revenue",
+                title: NSLocalizedString("insights.revenue", comment: ""),
                 value: vm.totalRevenue.moneyString,
                 icon: "dollarsign.circle.fill",
                 color: DS.ColorToken.primary,
@@ -121,7 +125,7 @@ struct InsightsView: View {
                 showRevenueDrilldown(vm)
             }
             kpiTile(
-                title: "Avg Visit",
+                title: localized("insights.avg_visit", value: "Avg Visit"),
                 value: vm.averageVisitValue > 0 ? vm.averageVisitValue.moneyString : "—",
                 icon: "chart.line.uptrend.xyaxis",
                 color: DS.ColorToken.success,
@@ -130,7 +134,7 @@ struct InsightsView: View {
                 showAverageVisitDrilldown(vm)
             }
             kpiTile(
-                title: "Retention",
+                title: NSLocalizedString("insights.retention", comment: ""),
                 value: "\(Int(vm.retentionRate * 100))%",
                 icon: "person.2.fill",
                 color: DS.ColorToken.warning,
@@ -179,7 +183,7 @@ struct InsightsView: View {
     private func dataQualityCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                Label("Data Quality", systemImage: "checklist.checked")
+                Label(localized("insights.data_quality.title", value: "Data Quality"), systemImage: "checklist.checked")
                     .font(.headline)
 
                 ForEach(vm.dataQualityIssues.prefix(4)) { issue in
@@ -217,13 +221,13 @@ struct InsightsView: View {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Revenue")
+                        Text(NSLocalizedString("insights.revenue", comment: ""))
                             .font(.headline)
-                        Text("\(vm.revenuePeriodDays)-day window")
+                        Text(String(format: localized("insights.window_days_fmt", value: "%d-day window"), vm.revenuePeriodDays))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("insights.revenue.window")
-                            .accessibilityValue("\(vm.revenuePeriodDays)-day window")
+                            .accessibilityValue(String(format: localized("insights.window_days_fmt", value: "%d-day window"), vm.revenuePeriodDays))
                     }
                     Spacer()
                     revenuePeriodSelector(vm)
@@ -239,8 +243,8 @@ struct InsightsView: View {
                 } else {
                     Chart(vm.revenueSeries) { data in
                         BarMark(
-                            x: .value("Day", data.date, unit: .day),
-                            y: .value("Revenue", (data.amount as NSDecimalNumber).doubleValue)
+                            x: .value(localized("insights.chart.day", value: "Day"), data.date, unit: .day),
+                            y: .value(NSLocalizedString("insights.revenue", comment: ""), (data.amount as NSDecimalNumber).doubleValue)
                         )
                         .foregroundStyle(DS.ColorToken.primary.gradient)
                         .cornerRadius(3)
@@ -282,11 +286,14 @@ struct InsightsView: View {
                     .animation(.spring(), value: vm.revenueSeries.count)
 
                     HStack {
-                        Label("\(vm.totalVisitsInPeriod) visits", systemImage: "scissors")
+                        Label(String(format: localized("insights.visits_count_fmt", value: "%d visits"), vm.totalVisitsInPeriod), systemImage: "scissors")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Label("Avg \(vm.averageVisitValue.moneyString)", systemImage: "chart.line.uptrend.xyaxis")
+                        Label(
+                            String(format: localized("insights.avg_money_fmt", value: "Avg %@"), vm.averageVisitValue.moneyString),
+                            systemImage: "chart.line.uptrend.xyaxis"
+                        )
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -294,7 +301,7 @@ struct InsightsView: View {
                     Button {
                         showRevenueDrilldown(vm)
                     } label: {
-                        Label("View visits behind this number", systemImage: "list.bullet.rectangle")
+                        Label(localized("insights.action.view_visits", value: "View visits behind this number"), systemImage: "list.bullet.rectangle")
                             .font(.caption.weight(.semibold))
                             .contentShape(Rectangle())
                     }
@@ -345,26 +352,26 @@ struct InsightsView: View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 HStack {
-                    Label("30-Day Forecast", systemImage: "wand.and.stars")
+                    Label(localized("insights.forecast.title", value: "30-Day Forecast"), systemImage: "wand.and.stars")
                         .font(.headline)
                     Spacer()
-                    Text(vm.forecast?.confidenceLabel ?? "No baseline")
+                    Text(vm.forecast?.confidenceLabel ?? localized("insights.forecast.no_baseline", value: "No baseline"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
 
                 if let forecast = vm.forecast {
                     HStack(spacing: 12) {
-                        metricPill(title: "Projected", value: forecast.projectedRevenue.moneyString, tint: DS.ColorToken.primary)
-                        metricPill(title: "Visits", value: "\(forecast.projectedVisits)", tint: DS.ColorToken.success)
+                        metricPill(title: localized("insights.forecast.projected", value: "Projected"), value: forecast.projectedRevenue.moneyString, tint: DS.ColorToken.primary)
+                        metricPill(title: NSLocalizedString("insights.visits", value: "Visits", comment: ""), value: "\(forecast.projectedVisits)", tint: DS.ColorToken.success)
                     }
 
-                    Text("\(forecast.dailyAverageRevenue.moneyString) average daily revenue. \(forecast.basis).")
+                    Text(String(format: localized("insights.forecast.daily_average_fmt", value: "%@ average daily revenue. %@."), forecast.dailyAverageRevenue.moneyString, forecast.basis))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    emptyState(icon: "chart.line.uptrend.xyaxis", message: "Complete a few visits to unlock forecasting")
+                    emptyState(icon: "chart.line.uptrend.xyaxis", message: localized("insights.forecast.empty", value: "Complete a few visits to unlock forecasting"))
                 }
             }
         }
@@ -374,17 +381,17 @@ struct InsightsView: View {
     private func comparisonCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                Text("Comparison Windows").font(.headline)
+                Text(localized("insights.comparison_windows", value: "Comparison Windows")).font(.headline)
 
                 if vm.comparisons.isEmpty {
-                    emptyState(icon: "arrow.left.arrow.right", message: "No comparison data yet")
+                    emptyState(icon: "arrow.left.arrow.right", message: localized("insights.comparison.empty", value: "No comparison data yet"))
                 } else {
                     ForEach(vm.comparisons) { item in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.label)
                                     .font(.subheadline.weight(.semibold))
-                                Text("\(item.currentVisits) vs \(item.previousVisits) visits")
+                                Text(String(format: localized("insights.comparison.visits_fmt", value: "%d vs %d visits"), item.currentVisits, item.previousVisits))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -413,10 +420,10 @@ struct InsightsView: View {
     private func monthlyPerformanceCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                Text("Monthly Performance").font(.headline)
+                Text(localized("insights.monthly_performance", value: "Monthly Performance")).font(.headline)
 
                 if vm.monthlyGrowth.isEmpty {
-                    emptyState(icon: "chart.line.uptrend.xyaxis", message: "No monthly data yet")
+                    emptyState(icon: "chart.line.uptrend.xyaxis", message: localized("insights.monthly.empty", value: "No monthly data yet"))
                 } else {
                     Chart(vm.monthlyGrowth) { data in
                         LineMark(
@@ -442,7 +449,7 @@ struct InsightsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(data.month).font(.caption2).foregroundStyle(.secondary)
                                 Text(data.revenue.moneyString).font(.subheadline.weight(.bold))
-                                Text("\(data.visitCount) visits").font(.caption2).foregroundStyle(.secondary)
+                                Text(String(format: localized("insights.visits_count_fmt", value: "%d visits"), data.visitCount)).font(.caption2).foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -457,11 +464,11 @@ struct InsightsView: View {
     private func serviceRevenueCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.topServices", label: "Top Services")
-                Text("Service Profitability").font(.headline)
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.topServices", label: NSLocalizedString("insights.top_services", comment: ""))
+                Text(localized("insights.service_profitability", value: "Service Profitability")).font(.headline)
 
                 if vm.serviceProfitability.isEmpty && vm.serviceDistribution.isEmpty {
-                    emptyState(icon: "scissors", message: "No service data yet")
+                    emptyState(icon: "scissors", message: localized("insights.service_profitability.empty", value: "No service data yet"))
                 } else {
                     let top5 = Array((vm.serviceProfitability.isEmpty ? vm.serviceDistribution : vm.serviceProfitability.map {
                         InsightsViewModel.DistributionData(name: $0.name, count: $0.count, revenue: $0.revenue)
@@ -486,7 +493,7 @@ struct InsightsView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(service.name)
                                             .font(.subheadline.weight(.semibold))
-                                        Text("\(service.category) • \(service.count) sold • avg \(service.averageTicket.moneyString)")
+                                        Text(String(format: localized("insights.service_profitability.detail_fmt", value: "%@ • %d sold • avg %@"), service.category, service.count, service.averageTicket.moneyString))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -516,11 +523,11 @@ struct InsightsView: View {
     private func paymentMixCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.paymentMix", label: "Payment Mix")
-                Text("Payment Mix").font(.headline)
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.paymentMix", label: localized("insights.payment_mix", value: "Payment Mix"))
+                Text(localized("insights.payment_mix", value: "Payment Mix")).font(.headline)
 
                 if vm.paymentMethodDistribution.isEmpty {
-                    emptyState(icon: "creditcard", message: "No payments recorded yet")
+                    emptyState(icon: "creditcard", message: localized("insights.payment_mix.empty", value: "No payments recorded yet"))
                 } else {
                     ForEach(vm.paymentMethodDistribution) { item in
                         HStack(spacing: 12) {
@@ -541,27 +548,27 @@ struct InsightsView: View {
     private func categoryCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.category", label: "Visits by Category")
-                Text("Visits by Category").font(.headline)
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.category", label: localized("insights.visits_by_category", value: "Visits by Category"))
+                Text(localized("insights.visits_by_category", value: "Visits by Category")).font(.headline)
 
                 if vm.categoryDistribution.isEmpty {
-                    emptyState(icon: "square.grid.2x2", message: "No category data yet")
+                    emptyState(icon: "square.grid.2x2", message: localized("insights.category.empty", value: "No category data yet"))
                 } else {
                     Chart(vm.categoryDistribution) { data in
                         SectorMark(
-                            angle: .value("Count", data.count),
+                            angle: .value(localized("insights.chart.count", value: "Count"), data.count),
                             innerRadius: .ratio(0.6),
                             angularInset: 2
                         )
                         .cornerRadius(4)
-                        .foregroundStyle(by: .value("Category", data.name))
+                        .foregroundStyle(by: .value(localized("insights.chart.category", value: "Category"), data.name))
                     }
                     .frame(height: 155)
                     .chartLegend(.hidden)
                     .overlay {
                         VStack {
                             Text("\(vm.categoryDistribution.reduce(0, { $0 + $1.count }))").font(.headline)
-                            Text("visits").font(.caption2).foregroundStyle(.secondary)
+                            Text(localized("insights.visits_lowercase", value: "visits")).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -574,16 +581,16 @@ struct InsightsView: View {
     private func retentionCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.retention", label: "Client Retention")
-                Text("Client Retention").font(.headline)
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.retention", label: NSLocalizedString("insights.retention", comment: ""))
+                Text(NSLocalizedString("insights.retention", comment: "")).font(.headline)
 
                 if vm.retentionSeries.isEmpty {
-                    emptyState(icon: "person.2", message: "Not enough client data yet")
+                    emptyState(icon: "person.2", message: localized("insights.retention.empty", value: "Not enough client data yet"))
                 } else {
                     HStack(spacing: 30) {
                         Chart(vm.retentionSeries) { data in
                             SectorMark(angle: .value("Value", data.value), innerRadius: .ratio(0.7))
-                                .foregroundStyle(data.label == "Recurring" ? DS.ColorToken.primary : Color.gray.opacity(0.2))
+                                .foregroundStyle(data.label == localized("insights.retention.recurring", value: "Recurring") ? DS.ColorToken.primary : Color.gray.opacity(0.2))
                         }
                         .frame(width: 100, height: 100)
                         .chartLegend(.hidden)
@@ -592,8 +599,8 @@ struct InsightsView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 10) {
-                            metricLabel(title: "Retention Rate", value: "\(Int(vm.retentionRate * 100))%", color: DS.ColorToken.primary)
-                            metricLabel(title: "Churn Risk", value: "\(vm.churnRiskCount) clients", color: DS.ColorToken.warning)
+                            metricLabel(title: NSLocalizedString("insights.retention_rate", comment: ""), value: "\(Int(vm.retentionRate * 100))%", color: DS.ColorToken.primary)
+                            metricLabel(title: NSLocalizedString("insights.churn_risk", comment: ""), value: String(format: localized("insights.clients_count_fmt", value: "%d clients"), vm.churnRiskCount), color: DS.ColorToken.warning)
                         }
                     }
                 }
@@ -606,9 +613,9 @@ struct InsightsView: View {
     private func lapsedClientsCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.lapsedClients", label: "Lapsed Clients")
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.lapsedClients", label: localized("insights.lapsed_clients.title", value: "Lapsed Clients"))
                 HStack {
-                    Text("Lapsed Clients").font(.headline)
+                    Text(localized("insights.lapsed_clients.title", value: "Lapsed Clients")).font(.headline)
                     Spacer()
                     Text("\(vm.lapsedClients.count)")
                         .font(.caption.weight(.bold))
@@ -616,7 +623,7 @@ struct InsightsView: View {
                 }
 
                 if vm.lapsedClients.isEmpty {
-                    emptyState(icon: "person.crop.circle.badge.checkmark", message: "No 90-day lapsed clients")
+                    emptyState(icon: "person.crop.circle.badge.checkmark", message: localized("insights.lapsed_clients.empty", value: "No 90-day lapsed clients"))
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.lapsedClients.enumerated()), id: \.element.id) { index, client in
@@ -625,7 +632,7 @@ struct InsightsView: View {
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(client.name)
                                             .font(.subheadline.weight(.semibold))
-                                        Text("\(client.petNames) • \(client.daysSinceLastVisit) days since last visit")
+                                        Text(String(format: localized("insights.lapsed_clients.detail_fmt", value: "%@ • %d days since last visit"), client.petNames, client.daysSinceLastVisit))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                             .fixedSize(horizontal: false, vertical: true)
@@ -641,7 +648,7 @@ struct InsightsView: View {
                                     Button {
                                         messageLapsedClient(client)
                                     } label: {
-                                        Label("Message", systemImage: "message.fill")
+                                        Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
                                     }
                                     .disabled(client.phone == nil)
                                     .buttonStyle(.bordered)
@@ -650,7 +657,7 @@ struct InsightsView: View {
                                     Button {
                                         scheduleLapsedClient(client)
                                     } label: {
-                                        Label("Schedule", systemImage: "calendar.badge.plus")
+                                        Label(localized("insights.action.schedule", value: "Schedule"), systemImage: "calendar.badge.plus")
                                     }
                                     .disabled(client.primaryPetUUID == nil || isSchedulingRecall)
                                     .buttonStyle(.borderedProminent)
@@ -673,11 +680,11 @@ struct InsightsView: View {
     private func topClientsCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.topClients", label: "Top Clients")
-                Text("Top Clients").font(.headline)
+                lowerSectionAccessibilityAnchor(identifier: "insights.section.topClients", label: localized("insights.top_clients", value: "Top Clients"))
+                Text(localized("insights.top_clients", value: "Top Clients")).font(.headline)
 
                 if vm.topClients.isEmpty {
-                    emptyState(icon: "person.crop.circle", message: "No client data yet")
+                    emptyState(icon: "person.crop.circle", message: localized("insights.top_clients.empty", value: "No client data yet"))
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.topClients.enumerated()), id: \.element.id) { index, client in
@@ -733,16 +740,16 @@ struct InsightsView: View {
             if let pdfData = reportPDFData, let csvDoc = reportCSVDocument {
                 Menu {
                     let pdfDoc = ReportDocument(pdfData: pdfData, filename: "Report.pdf")
-                    ShareLink(item: pdfDoc, preview: SharePreview("PDF Report", image: Image(systemName: "doc.pdf"))) {
-                        Label("PDF Report", systemImage: "doc.richtext")
+                    ShareLink(item: pdfDoc, preview: SharePreview(localized("insights.export.pdf_report", value: "PDF Report"), image: Image(systemName: "doc.pdf"))) {
+                        Label(localized("insights.export.pdf_report", value: "PDF Report"), systemImage: "doc.richtext")
                     }
-                    ShareLink(item: csvDoc, preview: SharePreview("Insights CSV", image: Image(systemName: "tablecells"))) {
-                        Label("CSV Data", systemImage: "tablecells")
+                    ShareLink(item: csvDoc, preview: SharePreview(localized("insights.export.csv", value: "Insights CSV"), image: Image(systemName: "tablecells"))) {
+                        Label(localized("insights.export.csv_data", value: "CSV Data"), systemImage: "tablecells")
                     }
                 } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
+                    Label(NSLocalizedString("common.export", comment: ""), systemImage: "square.and.arrow.up")
                 }
-                .accessibilityLabel("Share Report")
+                .accessibilityLabel(localized("insights.export.share_report", value: "Share Report"))
                 .accessibilityIdentifier("insights.shareReport")
             } else {
                 Button {
@@ -758,10 +765,10 @@ struct InsightsView: View {
                         isPreparingReport = false
                     }
                 } label: {
-                    if isPreparingReport { ProgressView() } else { Label("Export", systemImage: "doc.badge.arrow.up") }
+                    if isPreparingReport { ProgressView() } else { Label(NSLocalizedString("common.export", comment: ""), systemImage: "doc.badge.arrow.up") }
                 }
                 .disabled(isPreparingReport)
-                .accessibilityLabel("Export Report")
+                .accessibilityLabel(localized("insights.export.export_report", value: "Export Report"))
                 .accessibilityIdentifier("insights.exportReport")
             }
         }
@@ -772,7 +779,11 @@ struct InsightsView: View {
             List {
                 Section {
                     if drilldown.rows.isEmpty {
-                        ContentUnavailableView("No Rows", systemImage: "list.bullet.rectangle", description: Text("There is no supporting data for this selection yet."))
+                        ContentUnavailableView(
+                            localized("insights.drilldown.no_rows_title", value: "No Rows"),
+                            systemImage: "list.bullet.rectangle",
+                            description: Text(localized("insights.drilldown.no_rows_message", value: "There is no supporting data for this selection yet."))
+                        )
                     } else {
                         ForEach(drilldown.rows) { row in
                             HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -797,7 +808,7 @@ struct InsightsView: View {
             .navigationTitle(drilldown.title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { selectedDrilldown = nil }
+                    Button(NSLocalizedString("common.done", comment: "")) { selectedDrilldown = nil }
                 }
             }
         }
@@ -814,8 +825,8 @@ struct InsightsView: View {
 
     private func showRevenueDrilldown(_ vm: InsightsViewModel) {
         selectedDrilldown = InsightsDrilldown(
-            title: "Revenue Detail",
-            subtitle: "\(vm.revenuePeriodDays)-day window",
+            title: localized("insights.drilldown.revenue_title", value: "Revenue Detail"),
+            subtitle: String(format: localized("insights.window_days_fmt", value: "%d-day window"), vm.revenuePeriodDays),
             rows: visitDrilldownRows(vm.revenueDrilldown)
         )
     }
@@ -824,15 +835,17 @@ struct InsightsView: View {
         let rows = vm.revenueDrilldown.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
         selectedDrilldown = InsightsDrilldown(
             title: date.formatted(date: .abbreviated, time: .omitted),
-            subtitle: rows.isEmpty ? "No visits recorded for this day" : "Visits behind this chart bar",
+            subtitle: rows.isEmpty
+                ? localized("insights.drilldown.no_visits_for_day", value: "No visits recorded for this day")
+                : localized("insights.drilldown.chart_bar_visits", value: "Visits behind this chart bar"),
             rows: visitDrilldownRows(rows.isEmpty ? vm.revenueDrilldown : rows)
         )
     }
 
     private func showAverageVisitDrilldown(_ vm: InsightsViewModel) {
         selectedDrilldown = InsightsDrilldown(
-            title: "Average Visit Detail",
-            subtitle: "Highest-value visits in the selected revenue window",
+            title: localized("insights.drilldown.average_visit_title", value: "Average Visit Detail"),
+            subtitle: localized("insights.drilldown.average_visit_subtitle", value: "Highest-value visits in the selected revenue window"),
             rows: visitDrilldownRows(vm.revenueDrilldown.sorted { $0.total > $1.total })
         )
     }
@@ -857,8 +870,10 @@ struct InsightsView: View {
             : lapsedRows
 
         selectedDrilldown = InsightsDrilldown(
-            title: "Retention Detail",
-            subtitle: lapsedRows.isEmpty ? "Top recurring clients" : "Clients ready for recall",
+            title: localized("insights.drilldown.retention_title", value: "Retention Detail"),
+            subtitle: lapsedRows.isEmpty
+                ? localized("insights.drilldown.top_recurring_clients", value: "Top recurring clients")
+                : localized("insights.drilldown.clients_ready_for_recall", value: "Clients ready for recall"),
             rows: rows
         )
     }
@@ -895,13 +910,20 @@ struct InsightsView: View {
                 }.value
                 let recall = try await scheduler.scheduleRecall(forPetID: petUUID, date: date)
                 await MainActor.run {
-                    scheduleConfirmation = "\(recall.petName) is scheduled for \(recall.date.formatted(date: .abbreviated, time: .shortened))."
+                    scheduleConfirmation = String(
+                        format: localized("insights.recall.scheduled_fmt", value: "%@ is scheduled for %@."),
+                        recall.petName,
+                        recall.date.formatted(date: .abbreviated, time: .shortened)
+                    )
                     showingScheduleConfirmation = true
                     isSchedulingRecall = false
                 }
             } catch {
                 await MainActor.run {
-                    scheduleConfirmation = "Could not schedule this appointment: \(error.localizedDescription)"
+                    scheduleConfirmation = String(
+                        format: localized("insights.recall.error_fmt", value: "Could not schedule this appointment: %@"),
+                        error.localizedDescription
+                    )
                     showingScheduleConfirmation = true
                     isSchedulingRecall = false
                 }
@@ -923,6 +945,10 @@ struct InsightsView: View {
         guard value.isFinite else { return "0%" }
         let sign = value > 0 ? "+" : ""
         return "\(sign)\(Int((value * 100).rounded()))%"
+    }
+
+    private func localized(_ key: String, value: String) -> String {
+        NSLocalizedString(key, value: value, comment: "")
     }
 
     private func dataQualityIcon(for severity: InsightsViewModel.DataQualityIssue.Severity) -> String {

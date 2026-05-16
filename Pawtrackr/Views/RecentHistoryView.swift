@@ -27,7 +27,7 @@ struct RecentHistoryView: View {
 
     var body: some View {
         recentHistoryContent
-            .navigationTitle("Recent History")
+            .navigationTitle(NSLocalizedString("history.title", value: "Recent History", comment: ""))
             .toolbar { if let viewModel { toolbarContent(viewModel) } }
             .refreshable { viewModel?.fetchVisits() }
             .task {
@@ -65,9 +65,9 @@ struct RecentHistoryView: View {
             set: { viewModel.appError = $0 }
         )) { error in
             Alert(
-                title: Text("History Error"),
+                title: Text(NSLocalizedString("history.error_title", value: "History Error", comment: "")),
                 message: Text(error.localizedDescription),
-                dismissButton: .default(Text("OK"))
+                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
             )
         }
     }
@@ -156,7 +156,7 @@ struct RecentHistoryView: View {
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         deleteVisit(visit)
-                                    } label: { Label("Delete", systemImage: "trash") }
+                                    } label: { Label(NSLocalizedString("common.delete", comment: ""), systemImage: "trash") }
                                 }
                             }
                         }
@@ -176,9 +176,9 @@ struct RecentHistoryView: View {
             let csv = viewModel.exportCSV()
             ShareLink(
                 item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_History.csv"),
-                preview: SharePreview("Recent History", icon: Image(systemName: "doc.text.fill"))
+                preview: SharePreview(NSLocalizedString("history.title", value: "Recent History", comment: ""), icon: Image(systemName: "doc.text.fill"))
             ) {
-                Label("common.export", systemImage: "square.and.arrow.up")
+                Label(NSLocalizedString("common.export", comment: ""), systemImage: "square.and.arrow.up")
             }
             .disabled(csv.isEmpty)
         }

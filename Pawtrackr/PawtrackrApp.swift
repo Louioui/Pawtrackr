@@ -165,7 +165,28 @@ struct PawtrackrApp: App {
         WindowGroup("Pawtrackr", id: "main") {
             mainWindowContent
         }
-        .defaultSize(width: 1200, height: 800)
+        .defaultSize(width: 1220, height: 820)
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified(showsTitle: false))
+        .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button(NSLocalizedString("menu_bar.new_client", value: "New Client…", comment: "")) {
+                    requestNewClientFromCommand()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
+                Button(NSLocalizedString("mac.command.show_insights", value: "Show Insights", comment: "")) {
+                    requestNavigationFromCommand(.insights)
+                }
+                .keyboardShortcut("i", modifiers: .command)
+
+                Button(NSLocalizedString("mac.command.show_clients", value: "Show Clients", comment: "")) {
+                    requestNavigationFromCommand(.clients)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
+        }
         #else
         WindowGroup {
             mainWindowContent
@@ -184,18 +205,18 @@ struct PawtrackrApp: App {
                     .modelContainer(container)
                     .frame(width: 450, height: 500)
             } else {
-                Text("Database unavailable")
+                Text(NSLocalizedString("common.database_unavailable", value: "Database unavailable", comment: ""))
                     .frame(width: 450, height: 500)
             }
         }
 
-        MenuBarExtra("Pawtrackr", systemImage: "pawprint.fill") {
+        MenuBarExtra(NSLocalizedString("menu_bar.title", value: "Pawtrackr Pulse", comment: ""), systemImage: "pawprint.circle.fill") {
             if let container = container {
                 PawtrackrMenuBarExtra()
                     .environment(dataStore)
                     .modelContainer(container)
             } else {
-                Text("Database unavailable")
+                Text(NSLocalizedString("common.database_unavailable", value: "Database unavailable", comment: ""))
             }
         }
         .menuBarExtraStyle(.window)
@@ -265,6 +286,22 @@ struct PawtrackrApp: App {
         let name: Notification.Name = kind == .pet ? .navigateToPet : .navigateToClient
         NotificationCenter.default.post(name: name, object: nil, userInfo: ["uuid": uuid])
     }
+
+    #if os(macOS)
+    private func requestNewClientFromCommand() {
+        UserDefaults.standard.set(UUID().uuidString, forKey: AppMenuCommand.pendingNewClientRequestKey)
+        NotificationCenter.default.post(name: .showNewClientSheet, object: nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func requestNavigationFromCommand(_ item: NavigationItem) {
+        NotificationCenter.default.post(name: .selectNavigationItem, object: nil, userInfo: [
+            NavigationSelectionKey.item.rawValue: item.rawValue,
+            NavigationSelectionKey.resetPath.rawValue: true
+        ])
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    #endif
 }
 
 extension Notification.Name {

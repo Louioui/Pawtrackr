@@ -403,11 +403,16 @@ extension Pet {
         
         var displayName: String {
             switch self {
-            case .weekly: "Weekly"
-            case .biWeekly: "Every 2 Weeks"
-            case .monthly: "Monthly"
-            case .quarterly: "Every 3 Months"
-            case .asNeeded: "As Needed"
+            case .weekly:
+                return NSLocalizedString("pet.grooming_frequency.weekly", value: "Weekly", comment: "")
+            case .biWeekly:
+                return NSLocalizedString("pet.grooming_frequency.bi_weekly", value: "Every 2 Weeks", comment: "")
+            case .monthly:
+                return NSLocalizedString("pet.grooming_frequency.monthly", value: "Monthly", comment: "")
+            case .quarterly:
+                return NSLocalizedString("pet.grooming_frequency.quarterly", value: "Every 3 Months", comment: "")
+            case .asNeeded:
+                return NSLocalizedString("pet.grooming_frequency.as_needed", value: "As Needed", comment: "")
             }
         }
     }
@@ -419,12 +424,18 @@ extension Pet {
         
         var displayName: String {
             switch self {
-            case .calm: "Calm"
-            case .cooperative: "Cooperative"
-            case .anxious: "Anxious"
-            case .nervous: "Nervous"
-            case .aggressive: "Aggressive"
-            case .specialNeeds: "Special Needs"
+            case .calm:
+                return NSLocalizedString("pet.behavior.calm", value: "Calm", comment: "")
+            case .cooperative:
+                return NSLocalizedString("pet.behavior.cooperative", value: "Cooperative", comment: "")
+            case .anxious:
+                return NSLocalizedString("pet.behavior.anxious", value: "Anxious", comment: "")
+            case .nervous:
+                return NSLocalizedString("pet.behavior.nervous", value: "Nervous", comment: "")
+            case .aggressive:
+                return NSLocalizedString("pet.behavior.aggressive", value: "Aggressive", comment: "")
+            case .specialNeeds:
+                return NSLocalizedString("pet.behavior.special_needs", value: "Special Needs", comment: "")
             }
         }
     }

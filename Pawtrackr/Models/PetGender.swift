@@ -17,7 +17,14 @@ public enum PetGender: String, CaseIterable, Codable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
-    public var displayName: String { self == .male ? "Male" : "Female" }
+    public var displayName: String {
+        switch self {
+        case .male:
+            return NSLocalizedString("gender.male", value: "Male", comment: "")
+        case .female:
+            return NSLocalizedString("gender.female", value: "Female", comment: "")
+        }
+    }
 
     /// Optional SF Symbol for small badges (actual color chosen by the View layer)
     public var symbolName: String { self == .male ? "m.circle.fill" : "f.circle.fill" }

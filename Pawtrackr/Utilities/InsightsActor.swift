@@ -160,8 +160,14 @@ final actor InsightsActor {
                 }
             
             let series = [
-                InsightsViewModel.RetentionData(label: "Recurring", value: Double(recurring)),
-                InsightsViewModel.RetentionData(label: "One-time", value: Double(oneTime))
+                InsightsViewModel.RetentionData(
+                    label: NSLocalizedString("insights.retention.recurring", value: "Recurring", comment: ""),
+                    value: Double(recurring)
+                ),
+                InsightsViewModel.RetentionData(
+                    label: NSLocalizedString("insights.retention.one_time", value: "One-time", comment: ""),
+                    value: Double(oneTime)
+                )
             ]
             
             return ClientInsightsResult(
@@ -296,8 +302,14 @@ final actor InsightsActor {
         let rows = Array(clientRows.sorted { $0.totalSpent > $1.totalSpent }.prefix(10))
         let oneTime = clients.count - recurring
         let series = [
-            InsightsViewModel.RetentionData(label: "Recurring", value: Double(recurring)),
-            InsightsViewModel.RetentionData(label: "One-time",  value: Double(oneTime))
+            InsightsViewModel.RetentionData(
+                label: NSLocalizedString("insights.retention.recurring", value: "Recurring", comment: ""),
+                value: Double(recurring)
+            ),
+            InsightsViewModel.RetentionData(
+                label: NSLocalizedString("insights.retention.one_time", value: "One-time", comment: ""),
+                value: Double(oneTime)
+            )
         ]
         
         return ClientInsightsResult(
@@ -374,13 +386,26 @@ final actor InsightsActor {
             let pets = client.pets ?? []
             let petNames = pets.map(\.name).filter { !$0.isEmpty }.joined(separator: ", ")
             let primaryPetUUID = pets.first?.uuid
-            let firstPetName = pets.first?.name ?? "your pet"
-            let message = "Hi \(client.firstName.isEmpty ? client.fullName : client.firstName), it has been a while since \(firstPetName)'s last visit. Would you like to schedule a grooming appointment?"
+            let firstPetName = pets.first?.name ?? NSLocalizedString("insights.lapsed.your_pet", value: "your pet", comment: "")
+            let clientName = client.firstName.isEmpty ? client.fullName : client.firstName
+            let message = String(
+                format: NSLocalizedString(
+                    "insights.lapsed.suggested_message_fmt",
+                    value: "Hi %@, it has been a while since %@'s last visit. Would you like to schedule a grooming appointment?",
+                    comment: ""
+                ),
+                clientName,
+                firstPetName
+            )
 
             return InsightsViewModel.LapsedClientData(
                 id: client.uuid,
-                name: client.fullName.isEmpty ? (fallbackName.isEmpty ? "Unnamed client" : fallbackName) : client.fullName,
-                petNames: petNames.isEmpty ? "No pets listed" : petNames,
+                name: client.fullName.isEmpty
+                    ? (fallbackName.isEmpty
+                        ? NSLocalizedString("insights.lapsed.unnamed_client", value: "Unnamed client", comment: "")
+                        : fallbackName)
+                    : client.fullName,
+                petNames: petNames.isEmpty ? NSLocalizedString("insights.lapsed.no_pets_listed", value: "No pets listed", comment: "") : petNames,
                 daysSinceLastVisit: daysSince,
                 totalSpent: totalSpent,
                 phone: client.phone,
@@ -439,19 +464,44 @@ final actor InsightsActor {
 
         var issues: [InsightsViewModel.DataQualityIssue] = []
         if staleActiveCount > 0 {
-            issues.append(.init(title: "Stale active visits", detail: "Visits checked in for more than 24 hours can distort active workload.", count: staleActiveCount, severity: .critical))
+            issues.append(.init(
+                title: NSLocalizedString("insights.data_quality.stale_active_title", value: "Stale active visits", comment: ""),
+                detail: NSLocalizedString("insights.data_quality.stale_active_detail", value: "Visits checked in for more than 24 hours can distort active workload.", comment: ""),
+                count: staleActiveCount,
+                severity: .critical
+            ))
         }
         if missingPayment > 0 {
-            issues.append(.init(title: "Completed visits without payment", detail: "These visits are finished but do not have a payment record.", count: missingPayment, severity: .warning))
+            issues.append(.init(
+                title: NSLocalizedString("insights.data_quality.missing_payment_title", value: "Completed visits without payment", comment: ""),
+                detail: NSLocalizedString("insights.data_quality.missing_payment_detail", value: "These visits are finished but do not have a payment record.", comment: ""),
+                count: missingPayment,
+                severity: .warning
+            ))
         }
         if zeroRevenue > 0 {
-            issues.append(.init(title: "Zero-dollar completed visits", detail: "Review comped or incomplete checkouts before relying on revenue totals.", count: zeroRevenue, severity: .warning))
+            issues.append(.init(
+                title: NSLocalizedString("insights.data_quality.zero_revenue_title", value: "Zero-dollar completed visits", comment: ""),
+                detail: NSLocalizedString("insights.data_quality.zero_revenue_detail", value: "Review comped or incomplete checkouts before relying on revenue totals.", comment: ""),
+                count: zeroRevenue,
+                severity: .warning
+            ))
         }
         if missingReference > 0 {
-            issues.append(.init(title: "Card/Zelle references missing", detail: "Payment references help reconcile deposits and charge disputes.", count: missingReference, severity: .info))
+            issues.append(.init(
+                title: NSLocalizedString("insights.data_quality.missing_reference_title", value: "Card/Zelle references missing", comment: ""),
+                detail: NSLocalizedString("insights.data_quality.missing_reference_detail", value: "Payment references help reconcile deposits and charge disputes.", comment: ""),
+                count: missingReference,
+                severity: .info
+            ))
         }
         if missingContact > 0 {
-            issues.append(.init(title: "Clients missing contact info", detail: "Add phone or email so recall campaigns can reach every client.", count: missingContact, severity: .info))
+            issues.append(.init(
+                title: NSLocalizedString("insights.data_quality.missing_contact_title", value: "Clients missing contact info", comment: ""),
+                detail: NSLocalizedString("insights.data_quality.missing_contact_detail", value: "Add phone or email so recall campaigns can reach every client.", comment: ""),
+                count: missingContact,
+                severity: .info
+            ))
         }
 
         return issues
@@ -529,11 +579,11 @@ final actor InsightsActor {
         let confidence: String
         switch visits {
         case 50...:
-            confidence = "High confidence"
+            confidence = NSLocalizedString("insights.forecast.confidence.high", value: "High confidence", comment: "")
         case 15..<50:
-            confidence = "Medium confidence"
+            confidence = NSLocalizedString("insights.forecast.confidence.medium", value: "Medium confidence", comment: "")
         default:
-            confidence = "Low confidence"
+            confidence = NSLocalizedString("insights.forecast.confidence.low", value: "Low confidence", comment: "")
         }
 
         return InsightsViewModel.ForecastData(
@@ -541,7 +591,11 @@ final actor InsightsActor {
             projectedVisits: max(1, projectedVisits),
             dailyAverageRevenue: dailyAverage,
             confidenceLabel: confidence,
-            basis: "Based on \(visits) visits across the last \(dayCount) days"
+            basis: String(
+                format: NSLocalizedString("insights.forecast.basis_fmt", value: "Based on %d visits across the last %d days", comment: ""),
+                visits,
+                dayCount
+            )
         )
     }
 
@@ -577,8 +631,20 @@ final actor InsightsActor {
         let priorMonthStart = cal.date(byAdding: .day, value: -30, to: currentMonthStart) ?? currentMonthStart
 
         var result: [InsightsViewModel.ComparisonData] = [
-            comparison(label: "7 days vs prior 7", currentStart: currentWeekStart, currentEnd: end, priorStart: priorWeekStart, priorEnd: currentWeekStart),
-            comparison(label: "30 days vs prior 30", currentStart: currentMonthStart, currentEnd: end, priorStart: priorMonthStart, priorEnd: currentMonthStart)
+            comparison(
+                label: NSLocalizedString("insights.comparison.7d_prior", value: "7 days vs prior 7", comment: ""),
+                currentStart: currentWeekStart,
+                currentEnd: end,
+                priorStart: priorWeekStart,
+                priorEnd: currentWeekStart
+            ),
+            comparison(
+                label: NSLocalizedString("insights.comparison.30d_prior", value: "30 days vs prior 30", comment: ""),
+                currentStart: currentMonthStart,
+                currentEnd: end,
+                priorStart: priorMonthStart,
+                priorEnd: currentMonthStart
+            )
         ]
 
         if let lastYearStart = cal.date(byAdding: .year, value: -1, to: currentMonthStart),
@@ -588,7 +654,7 @@ final actor InsightsActor {
                 let current = totals(start: currentMonthStart, end: end)
                 result.append(
                     InsightsViewModel.ComparisonData(
-                        label: "30 days vs last year",
+                        label: NSLocalizedString("insights.comparison.30d_last_year", value: "30 days vs last year", comment: ""),
                         currentRevenue: current.revenue,
                         previousRevenue: prior.revenue,
                         currentVisits: current.visits,

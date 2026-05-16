@@ -58,3 +58,30 @@
 - [x] Janitor now rebuilds summaries and prunes old/downsampled photos in a detached background context.
 - [x] Verified Info.plist syntax with `plutil`.
 - [x] Verified app build after background task integration.
+
+## Phase 6: Bilingual Coverage
+
+- [x] Audited the localization baseline and confirmed `en`, `es`, and `es-419` string tables already exist.
+- [x] Identified the main bilingual gaps as hardcoded English in shared shell views, Clients, Checkout, and model-backed display labels.
+- [x] Localized shared macOS-visible shell surfaces: tabs, sidebar sections, split-view placeholder, menu bar extra, edit-client sheet, and recent-history chrome.
+- [x] Localized Clients flow copy: delete confirmation, notifications, filter/sort labels, empty states, context menus, and refresh affordances.
+- [x] Localized Checkout flow copy across both `CheckoutView` and `CheckoutViewModel`, including recovery banner, step titles, payment review, summaries, and receipt states.
+- [x] Localized model-backed labels for payment methods, species, pet gender, grooming frequency, and behavior tags so English does not leak through derived UI.
+- [x] Localized Insights dashboard sections, CSV export headings, recall scheduling messages, forecast labels, data-quality findings, and drilldown sheets.
+- [x] Localized onboarding steps, validation, biometric messaging, business profile setup, regional setup, PIN setup, and demo-data/fresh-start choices.
+- [x] Localized remaining Dashboard, Visit Detail, and Transformation copy, including accessibility labels and share/export surfaces.
+- [x] Added the new bilingual keys to `en`, `es`, and `es-419` string tables and verified all three files with `plutil -lint`.
+- [x] Verified a clean macOS build after the bilingual pass.
+
+## Phase 7: macOS Adaptive Workspace
+
+- [x] Confirmed the existing root shell already preserves iPhone `TabView` navigation and iPad split-view behavior.
+- [x] Revised macOS back to a calmer two-column `NavigationSplitView` after the three-column workspace felt crowded.
+- [x] Added a macOS-only `NSVisualEffectView` bridge using `.behindWindow` and `.underWindowBackground` for native translucent desktop material.
+- [x] Removed the secondary workspace column so the selected feature owns the main canvas without duplicated controls.
+- [x] Kept extended Mac card hover behavior with subtle spring scale.
+- [x] Set the Mac main window to hidden title bar, unified toolbar, content-based minimum sizing, and a larger default size.
+- [x] Added global Mac keyboard commands for New Client (`Command-N`), Insights (`Command-I`), and Clients (`Command-F`).
+- [x] Localized the new macOS command and menu bar labels in `en`, `es`, and `es-419`.
+- [x] Verified all localization tables with `plutil -lint`.
+- [x] Verified macOS and generic iOS Simulator builds after the adaptive shell pass.

@@ -72,7 +72,7 @@ struct DashboardView: View {
             Button {
                 showNewClient = true
             } label: {
-                Label("New Client", systemImage: "person.badge.plus")
+                Label(NSLocalizedString("dashboard.new_client", comment: ""), systemImage: "person.badge.plus")
             }
             .keyboardShortcut("n", modifiers: .command)
         }
@@ -86,7 +86,7 @@ struct DashboardView: View {
             Button {
                 Task { await vm?.refresh() }
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label(NSLocalizedString("common.refresh", comment: ""), systemImage: "arrow.clockwise")
             }
             .keyboardShortcut("r", modifiers: .command)
         }
@@ -196,7 +196,7 @@ struct DashboardView: View {
     private func smartSuggestionsSection(_ vm: DashboardViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("Smart Suggestions", systemImage: "sparkles")
+                Label(NSLocalizedString("dashboard.smart_suggestions", value: "Smart Suggestions", comment: ""), systemImage: "sparkles")
                     .font(.headline)
                     .foregroundStyle(.purple)
                 Spacer()
@@ -238,7 +238,7 @@ struct DashboardView: View {
                         openClient(client)
                     }
                 } label: {
-                    Text("Re-engage")
+                    Text(NSLocalizedString("dashboard.reengage", value: "Re-engage", comment: ""))
                         .font(.caption.bold())
                         .frame(maxWidth: .infinity)
                 }
@@ -255,9 +255,9 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Getting Started")
+                        Text(NSLocalizedString("dashboard.getting_started", value: "Getting Started", comment: ""))
                             .font(.headline)
-                        Text("\(vm.checklist.filter({ $0.isCompleted }).count) of \(vm.checklist.count) steps completed")
+                        Text(String(format: NSLocalizedString("dashboard.steps_completed_fmt", value: "%d of %d steps completed", comment: ""), vm.checklist.filter({ $0.isCompleted }).count, vm.checklist.count))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -304,10 +304,10 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             if !vm.overduePets.isEmpty {
                 HStack {
-                    Text("Re-engagement Suggestions")
+                    Text(NSLocalizedString("dashboard.reengagement_suggestions", value: "Re-engagement Suggestions", comment: ""))
                         .font(.headline)
                     Spacer()
-                    Chip("\(vm.overduePets.count) Actionable", style: .tinted, size: .sm, tint: .orange)
+                    Chip(String(format: NSLocalizedString("dashboard.actionable_count_fmt", value: "%d Actionable", comment: ""), vm.overduePets.count), style: .tinted, size: .sm, tint: .orange)
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -332,7 +332,7 @@ struct DashboardView: View {
                     }
                 }
 
-                Text(pet.isOverdue ? "Overdue for visit" : "Due soon")
+                Text(pet.isOverdue ? NSLocalizedString("dashboard.overdue_for_visit", value: "Overdue for visit", comment: "") : NSLocalizedString("dashboard.due_soon", value: "Due soon", comment: ""))
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -343,7 +343,7 @@ struct DashboardView: View {
                 HStack {
                     if let sms = pet.owner?.smsURL {
                         Link(destination: sms) {
-                            Label("Message", systemImage: "message.fill")
+                            Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
                                 .font(.caption.weight(.bold))
                         }
                         .buttonStyle(.borderedProminent)
@@ -352,7 +352,7 @@ struct DashboardView: View {
                         Button {
                             openClient(owner)
                         } label: {
-                            Label("View Owner", systemImage: "person.fill")
+                            Label(NSLocalizedString("dashboard.view_owner", value: "View Owner", comment: ""), systemImage: "person.fill")
                                 .font(.caption.weight(.bold))
                         }
                         .buttonStyle(.bordered)
@@ -367,7 +367,7 @@ struct DashboardView: View {
 
     private func smartSummary(_ vm: DashboardViewModel) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(Calendar.current.component(.hour, from: .now) < 12 ? "Good Morning" : "Good Afternoon")
+            Text(Calendar.current.component(.hour, from: .now) < 12 ? NSLocalizedString("dashboard.greeting.morning", value: "Good Morning", comment: "") : NSLocalizedString("dashboard.greeting.afternoon", value: "Good Afternoon", comment: ""))
                 .font(.title2.weight(.bold))
 
             let summary = generateSummaryText(vm)
@@ -384,19 +384,19 @@ struct DashboardView: View {
         var parts: [String] = []
 
         if vm.kpi.appointmentsToday > 0 {
-            parts.append("\(vm.kpi.appointmentsToday) appointments scheduled for today")
+            parts.append(String(format: NSLocalizedString("dashboard.summary.appointments_today_fmt", value: "%d appointments scheduled for today", comment: ""), vm.kpi.appointmentsToday))
         } else {
-            parts.append("No appointments scheduled for today")
+            parts.append(NSLocalizedString("dashboard.summary.no_appointments_today", value: "No appointments scheduled for today", comment: ""))
         }
 
         if vm.kpi.inProgressCount > 0 {
-            parts.append("\(vm.kpi.inProgressCount) active sessions in progress")
+            parts.append(String(format: NSLocalizedString("dashboard.summary.active_sessions_fmt", value: "%d active sessions in progress", comment: ""), vm.kpi.inProgressCount))
         }
 
         if let trend = vm.kpi.revenueTrend {
-            let direction = trend >= 0 ? "up" : "down"
+            let direction = trend >= 0 ? NSLocalizedString("dashboard.trend.up", value: "up", comment: "") : NSLocalizedString("dashboard.trend.down", value: "down", comment: "")
             let pct = Formatters.percentString(abs(trend), showSign: false) ?? ""
-            parts.append("revenue is \(direction) \(pct) from yesterday")
+            parts.append(String(format: NSLocalizedString("dashboard.summary.revenue_trend_fmt", value: "revenue is %@ %@ from yesterday", comment: ""), direction, pct))
         }
 
         return parts.joined(separator: ", ") + "."
@@ -426,7 +426,7 @@ struct DashboardView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Text(NSLocalizedString("dashboard.revenue", comment: "")))
                     .accessibilityValue(Text(vm.kpi.revenueTodayString))
-                    .accessibilityHint(Text("Opens Insights"))
+                    .accessibilityHint(Text(NSLocalizedString("dashboard.opens_insights", value: "Opens Insights", comment: "")))
                     .accessibilityIdentifier("dashboard.kpi.revenueInsights")
                     .accessibilityAddTraits(.isButton)
                     recentHistoryLink(scope: .today) {
@@ -512,7 +512,7 @@ struct DashboardView: View {
                 }
             }
             Spacer()
-            Button("Check In") {
+            Button(NSLocalizedString("dashboard.check_in", comment: "")) {
                 Task { await vm.checkInFromAppointment(appt) }
             }
             .buttonStyle(.borderedProminent)
@@ -616,15 +616,15 @@ struct DashboardView: View {
                     Chart {
                         ForEach(vm.revenueSeries) { point in
                             BarMark(
-                                x: .value("Day", point.date, unit: .day),
-                                y: .value("Revenue", point.amountDouble)
+                                x: .value(NSLocalizedString("insights.chart.day", value: "Day", comment: ""), point.date, unit: .day),
+                                y: .value(NSLocalizedString("insights.revenue", comment: ""), point.amountDouble)
                             )
                             .foregroundStyle(DS.ColorToken.primary.gradient)
                             .opacity(selectedPoint == nil || selectedPoint?.id == point.id ? 1 : 0.4)
                         }
 
                         if let selected = selectedPoint {
-                            RuleMark(x: .value("Selected", selected.date, unit: .day))
+                            RuleMark(x: .value(NSLocalizedString("common.selected", comment: ""), selected.date, unit: .day))
                                 .foregroundStyle(.gray.opacity(0.3))
                                 .offset(y: -10)
                                 .zIndex(-1)
@@ -706,7 +706,7 @@ struct DashboardView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
         .accessibilityValue(value)
-        .accessibilityHint(trend != nil ? "Trend: \(trend! >= 0 ? "Up" : "Down") \(Formatters.percentString(abs(trend!), showSign: false) ?? "")" : "")
+        .accessibilityHint(trend != nil ? String(format: NSLocalizedString("dashboard.trend.accessibility_fmt", value: "Trend: %@ %@", comment: ""), trend! >= 0 ? NSLocalizedString("dashboard.trend.up_label", value: "Up", comment: "") : NSLocalizedString("dashboard.trend.down_label", value: "Down", comment: ""), Formatters.percentString(abs(trend!), showSign: false) ?? "") : "")
     }
 
     private func actionCard(title: String, symbol: String, accessibilityIdentifier: String, action: @escaping () -> Void) -> some View {
@@ -738,7 +738,7 @@ struct DashboardView: View {
         .buttonStyle(.plain)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(accessibilityLabel ?? "Recent History"))
+        .accessibilityLabel(Text(accessibilityLabel ?? NSLocalizedString("history.title", value: "Recent History", comment: "")))
         .applyAccessibilityIdentifier(accessibilityIdentifier)
         .accessibilityAddTraits(.isButton)
     }

@@ -65,16 +65,18 @@ struct ClientsView: View {
                 dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
             )
         }
-        .alert(item: $clientToDelete) { client in
-            Alert(
-                title: Text("Delete Client"),
-                message: Text("Are you sure you want to delete \(client.fullName)? This will also delete all their pets and visit history."),
-                primaryButton: .destructive(Text("Delete")) {
-                    viewModel?.deleteClient(client)
-                },
-                secondaryButton: .cancel()
-            )
-        }
+        // Modern alert API — stacking two deprecated `Alert`-returning
+        // `.alert(item:)` modifiers on the same view makes SwiftUI
+        // silently drop one (the trash-button confirmation never shows).
+        // The error alert above keeps the deprecated API since only ONE
+        // deprecated alert in the chain is safe.
+        .alert(
+            clientToDeleteTitle,
+            isPresented: clientToDeletePresented,
+            presenting: clientToDelete,
+            actions: clientDeleteActions,
+            message: clientDeleteMessage
+        )
         .fabOverlay {
             #if os(iOS)
             FAB(systemImage: "person.fill.badge.plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
@@ -121,7 +123,12 @@ struct ClientsView: View {
                         }
                 }
                 .accessibilityIdentifier("clients.toolbar.notifications")
-                .accessibilityLabel("Notifications, \(notificationsCount) unread")
+                .accessibilityLabel(
+                    String.localizedStringWithFormat(
+                        NSLocalizedString("clients.notifications_unread_fmt", value: "Notifications, %d unread", comment: ""),
+                        notificationsCount
+                    )
+                )
             }
         }
         .refreshable {
@@ -130,7 +137,7 @@ struct ClientsView: View {
             await MainActor.run { viewModel?.fetchClients() }
             await CloudKitMonitor.shared.forceSync()
         }
-        .navigationTitle("Clients")
+        .navigationTitle(NSLocalizedString("clients.title", value: "Client Center", comment: ""))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -140,7 +147,7 @@ struct ClientsView: View {
                 Button {
                     viewModel?.fetchClients()
                 } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Label(NSLocalizedString("common.refresh", value: "Refresh", comment: ""), systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: .command)
             }
@@ -159,11 +166,27 @@ struct ClientsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
             if let id = note.createdClientID, note.clientCreatePhase == .created {
-                storedNotifications.insert(NotificationItem(title: "Client Created", message: "A new client was added.", date: Date(), relatedID: id), at: 0)
+                storedNotifications.insert(
+                    NotificationItem(
+                        title: NSLocalizedString("clients.notification.client_created_title", value: "Client Created", comment: ""),
+                        message: NSLocalizedString("clients.notification.client_created_message", value: "A new client was added.", comment: ""),
+                        date: Date(),
+                        relatedID: id
+                    ),
+                    at: 0
+                )
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .visitDidComplete)) { note in
-            storedNotifications.insert(NotificationItem(title: "Visit Completed", message: "A visit was checked out.", date: Date(), relatedID: note.visitID), at: 0)
+            storedNotifications.insert(
+                NotificationItem(
+                    title: NSLocalizedString("clients.notification.visit_completed_title", value: "Visit Completed", comment: ""),
+                    message: NSLocalizedString("clients.notification.visit_completed_message", value: "A visit was checked out.", comment: ""),
+                    date: Date(),
+                    relatedID: note.visitID
+                ),
+                at: 0
+            )
         }
     }
 
@@ -185,7 +208,7 @@ struct ClientsView: View {
                             viewModel.selectedFilter = filter
                         }
                     } label: {
-                        Text(filter.rawValue)
+                        Text(filter.displayName)
                             .font(.subheadline.weight(.medium))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
@@ -204,9 +227,9 @@ struct ClientsView: View {
 
     private var sortingMenu: some View {
         Menu {
-            Picker("Sort By", selection: sortOptionBinding) {
+            Picker(NSLocalizedString("clients.sort_by", value: "Sort By", comment: ""), selection: sortOptionBinding) {
                 ForEach(ClientsViewModel.SortOption.allCases, id: \.self) { option in
-                    Label(option.rawValue, systemImage: sortIcon(for: option))
+                    Label(option.displayName, systemImage: sortIcon(for: option))
                         .tag(option)
                 }
             }
@@ -239,7 +262,7 @@ struct ClientsView: View {
         }
         
         if !viewModel.needsAttentionClients.isEmpty && viewModel.selectedFilter == .all {
-            sectionHeader("Needs Attention", count: viewModel.needsAttentionClients.count, topPadding: 16)
+            sectionHeader(NSLocalizedString("clients.needs_attention", value: "Needs Attention", comment: ""), count: viewModel.needsAttentionClients.count, topPadding: 16)
             clientList(for: viewModel.needsAttentionClients)
         }
 
@@ -277,7 +300,7 @@ struct ClientsView: View {
                     Button {
                         router.navigateToClient(client)
                     } label: {
-                        Label("View Details", systemImage: "person.crop.circle")
+                        Label(NSLocalizedString("clients.action.view_details", value: "View Details", comment: ""), systemImage: "person.crop.circle")
                     }
 
                     #if canImport(UIKit)
@@ -286,7 +309,7 @@ struct ClientsView: View {
                             UIApplication.shared.open(url)
                             HapticManager.selectionChanged()
                         } label: {
-                            Label("Call", systemImage: "phone")
+                            Label(NSLocalizedString("clients.action.call", value: "Call", comment: ""), systemImage: "phone")
                         }
                     }
                     
@@ -295,7 +318,7 @@ struct ClientsView: View {
                             UIApplication.shared.open(url)
                             HapticManager.selectionChanged()
                         } label: {
-                            Label("Message", systemImage: "message")
+                            Label(NSLocalizedString("clients.action.message", value: "Message", comment: ""), systemImage: "message")
                         }
                     }
 
@@ -304,7 +327,7 @@ struct ClientsView: View {
                             UIApplication.shared.open(url)
                             HapticManager.selectionChanged()
                         } label: {
-                            Label("Email", systemImage: "envelope")
+                            Label(NSLocalizedString("clients.action.email", value: "Email", comment: ""), systemImage: "envelope")
                         }
                     }
                     #endif
@@ -314,7 +337,7 @@ struct ClientsView: View {
                     Button(role: .destructive) {
                         clientToDelete = client
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        Label(NSLocalizedString("common.delete", comment: ""), systemImage: "trash")
                     }
                 }
                 .onAppear {
@@ -332,23 +355,27 @@ struct ClientsView: View {
 
     private func emptyState(_ viewModel: ClientsViewModel) -> some View {
         let isSearching = !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        var title = isSearching ? "No Results Found" : "No Clients Yet"
-        var description = isSearching ? "No clients match \"\(viewModel.searchText)\"." : "Tap the + button to add your first client."
+        var title = isSearching
+            ? NSLocalizedString("clients.no_results_title", comment: "")
+            : NSLocalizedString("clients.empty_title", comment: "")
+        var description = isSearching
+            ? String(format: NSLocalizedString("clients.no_results_desc_fmt", comment: ""), viewModel.searchText)
+            : NSLocalizedString("clients.empty_desc", comment: "")
         var icon = isSearching ? "magnifyingglass" : "person.3.sequence.fill"
 
         if !isSearching {
             switch viewModel.selectedFilter {
             case .active:
-                title = "No Active Sessions"
-                description = "There are no pets currently checked in."
+                title = NSLocalizedString("clients.empty.active_title", value: "No Active Sessions", comment: "")
+                description = NSLocalizedString("clients.empty.active_desc", value: "There are no pets currently checked in.", comment: "")
                 icon = "hourglass.badge.plus"
             case .overdue:
-                title = "All Caught Up!"
-                description = "No clients have pets that are overdue for a visit."
+                title = NSLocalizedString("clients.empty.overdue_title", value: "All Caught Up!", comment: "")
+                description = NSLocalizedString("clients.empty.overdue_desc", value: "No clients have pets that are overdue for a visit.", comment: "")
                 icon = "checkmark.seal.fill"
             case .missingInfo:
-                title = "Data looks great!"
-                description = "All your clients have phone numbers and emails on file."
+                title = NSLocalizedString("clients.empty.missing_info_title", value: "Data looks great!", comment: "")
+                description = NSLocalizedString("clients.empty.missing_info_desc", value: "All your clients have phone numbers and emails on file.", comment: "")
                 icon = "vial.viewfinder"
             default:
                 break
@@ -398,6 +425,36 @@ struct ClientsView: View {
         )
     }
 
+    // MARK: - Delete-client alert helpers
+    //
+    // Extracted out of the body so SourceKit doesn't time out on the
+    // long modifier chain. The alert is wired via these four computed
+    // pieces instead of inline closures.
+
+    private var clientToDeleteTitle: String {
+        guard let client = clientToDelete else { return "" }
+        return String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), client.fullName)
+    }
+
+    private var clientToDeletePresented: Binding<Bool> {
+        Binding(
+            get: { clientToDelete != nil },
+            set: { if !$0 { clientToDelete = nil } }
+        )
+    }
+
+    @ViewBuilder
+    private func clientDeleteActions(_ client: Client) -> some View {
+        Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) {
+            viewModel?.deleteClient(client)
+        }
+        Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { }
+    }
+
+    private func clientDeleteMessage(_ client: Client) -> Text {
+        Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
+    }
+
     private var clientsSkeleton: some View {
         VStack(spacing: 10) {
             ForEach(0..<3, id: \.self) { _ in
@@ -433,7 +490,10 @@ struct ClientsView: View {
             NavigationStack {
                 List {
                     if notifications.isEmpty {
-                        ContentUnavailableView("No notifications", systemImage: "bell.slash")
+                        ContentUnavailableView(
+                            NSLocalizedString("clients.notifications.empty_title", value: "No Notifications", comment: ""),
+                            systemImage: "bell.slash"
+                        )
                     } else {
                         ForEach(notifications) { n in
                             HStack(alignment: .top, spacing: 12) {
@@ -450,10 +510,16 @@ struct ClientsView: View {
                         .onDelete { idx in notifications.remove(atOffsets: idx) }
                     }
                 }
-                .navigationTitle("Notifications")
+                .navigationTitle(NSLocalizedString("clients.notifications.title", value: "Notifications", comment: ""))
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
-                    ToolbarItem(placement: .primaryAction) { if !notifications.isEmpty { Button("Clear All") { notifications.removeAll() } } }
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(NSLocalizedString("common.close", value: "Close", comment: "")) { dismiss() }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        if !notifications.isEmpty {
+                            Button(NSLocalizedString("common.clear_all", value: "Clear All", comment: "")) { notifications.removeAll() }
+                        }
+                    }
                 }
             }
         }
