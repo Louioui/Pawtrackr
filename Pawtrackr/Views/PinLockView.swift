@@ -85,7 +85,20 @@ public struct PinLockGate<Content: View>: View {
     }
 
     private var activityResetGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
+        // IMPORTANT: do NOT use `minimumDistance: 0` here. A zero-distance
+        // simultaneous DragGesture registers every touch as a drag from
+        // the first frame, which on iPad NavigationSplitView silently
+        // breaks the system sidebar toggle tap AND the sidebar `List`
+        // row-selection taps — the drag fires first, SwiftUI's tap
+        // recognizers never see a clean tap end, and the user has to
+        // swipe / use arrow keys instead. A small but non-zero distance
+        // lets real touches resolve as taps and only treats sustained
+        // movement as activity. Pure motionless taps won't reset the
+        // inactivity timer; that's acceptable because the buttons users
+        // actually tap have their own action paths that can reset the
+        // timer, and any realistic finger interaction includes >5pt of
+        // motion.
+        DragGesture(minimumDistance: 8)
             .onChanged { _ in resetInactivityLock() }
             .onEnded { _ in resetInactivityLock() }
     }
