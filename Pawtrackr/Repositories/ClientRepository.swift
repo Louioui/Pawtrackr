@@ -211,7 +211,8 @@ final actor ClientRepository: ClientRepositoryProtocol {
             let pet = Pet(name: pd.name, species: pd.species, gender: pd.gender)
             pet.breed = pd.breed
             pet.color = pd.color
-            pet.photoData = pd.photoData
+            pet.setPhotoData(pd.photoData)
+            pet.updateThumbnail()
             pet.notes = pd.health
             pet.behaviorTags = pd.behaviorTags
             pet.birthdate = pd.birthdate
@@ -226,6 +227,9 @@ final actor ClientRepository: ClientRepositoryProtocol {
         }
         
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Created client")
+        }
         return client.persistentModelID
     }
 
@@ -236,6 +240,9 @@ final actor ClientRepository: ClientRepositoryProtocol {
         client.phone = phone
         client.email = email
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Saved client")
+        }
     }
 
     func deleteClient(id: PersistentIdentifier) async throws {
@@ -248,6 +255,9 @@ final actor ClientRepository: ClientRepositoryProtocol {
 
         modelContext.delete(client)
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Deleted client")
+        }
 
         let cal = Calendar.current
         var affectedDays: Set<Date> = []

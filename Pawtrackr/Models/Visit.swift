@@ -48,121 +48,132 @@ final class Visit {
 
     @Relationship(deleteRule: .cascade, inverse: \Payment.visit)
     var payment: Payment?
-    
-    @Relationship(deleteRule: .nullify, inverse: \Appointment.visit)
-    var appointment: Appointment?
-    
+
     var user: User?
 
+    /// Back-reference to the originating appointment when this visit was
+    /// created via `checkIn(from:)`. Untagged to mirror `Appointment.visit`
+    /// (no @Relationship inverse on either side — SwiftData treats them as
+    /// independent optionals, which is CloudKit-safe).
+    var appointment: Appointment?
+
     // MARK: - Init
-    init(pet: Pet, startedAt: Date = .now) {
+    init(pet: Pet, startedAt: Date = .now, user: User? = nil) {
         self.uuid = UUID()
         self.createdAt = .now
         self.updatedAt = .now
         self.startedAt = startedAt
-        self.endedAt = nil
-        self.lastModifiedBy = DeviceIdentity.currentID
-        self.lastModifiedAt = .now
-        self.note = nil
-        self.beforePhotoData = nil
-        self.afterPhotoData = nil
-        self.total = .zero
         self.pet = pet
-    }
-
-    /// Convenience initializer when pet may not be available yet
-    init(startedAt: Date = .now) {
-        self.uuid = UUID()
-        self.createdAt = .now
-        self.updatedAt = .now
-        self.startedAt = startedAt
-        self.endedAt = nil
+        self.user = user
         self.lastModifiedBy = DeviceIdentity.currentID
         self.lastModifiedAt = .now
-        self.note = nil
-        self.beforePhotoData = nil
-        self.afterPhotoData = nil
-        self.total = .zero
-        self.pet = nil
     }
 
-    // MARK: - Derived State
-    var isActive: Bool { endedAt == nil }
+    // MARK: - Derived Properties
     var isCompleted: Bool { endedAt != nil }
+    var isActive: Bool { endedAt == nil }
     var isPaid: Bool { payment != nil }
 
+    var duration: TimeInterval? {
+        guard let endedAt = endedAt else { return nil }
+        return endedAt.timeIntervalSince(startedAt)
+    }
+
+    /// Formatted duration. Uses `endedAt` when completed, otherwise time-since-start.
+    @MainActor
+    var durationString: String {
+        Formatters.durationString(from: startedAt, to: endedAt ?? Date())
+    }
+
+    @MainActor
+    var totalCurrencyString: String {
+        Formatters.currencyString(total)
+    }
+
+    /// Falls back to a freshly computed total if `total` was never stamped
+    /// (e.g. in-progress visits surfaced in revenue rollups).
+    var effectiveTotal: Decimal {
+        total > 0 ? total : calculatedTotal
+    }
+
+    /// Primary date used for sorting and reports.
     var sortKeyDate: Date { endedAt ?? startedAt }
 
-    /// Defensive duration (seconds)
-    var duration: TimeInterval {
-        let end = endedAt ?? .now
-        return max(0, end.timeIntervalSince(startedAt))
+    /// Sum of line totals without mutating the stored `total`.
+    var calculatedTotal: Decimal {
+        (items ?? []).reduce(Decimal.zero) { $0 + $1.lineTotal }
+    }
+
+    /// Finalize a visit: stamp the total and close-out time. Mirrors the
+    /// CheckoutTransactionActor exit path used by every checkout flow.
+    func markCheckedOut(total: Decimal, now: Date) {
+        self.total = total
+        self.endedAt = now
+        didUpdate()
+    }
+
+    // MARK: - Mutating API
+    func setStartedAt(_ date: Date) {
+        startedAt = date
+        didUpdate()
     }
     
-    /// Human-readable duration like "1h 23m" or "45m"
-    @MainActor var durationString: String {
-        Formatters.durationString(from: startedAt, to: endedAt ?? .now)
+    func setEndedAt(_ date: Date?) {
+        endedAt = date
+        didUpdate()
     }
 
-    @MainActor var dateRangeString: String {
-        Formatters.dateRangeString(from: startedAt, to: endedAt)
+    func setNote(_ value: String?) {
+        note = value
+        didUpdate()
     }
 
-    /// Sum of line items (snapshot math). Coalesces optional unitPrice to 0.
-    var servicesSubtotal: Decimal {
-        (items ?? []).reduce(Decimal.zero) { acc, line in
-            acc + (line.unitPrice * Decimal(line.quantity))
+    func setBehaviorTags(_ tags: [String]) {
+        behaviorTags = tags.map { $0.trimmed }.filter { !$0.isEmpty }
+        didUpdate()
+    }
+
+    func addBehaviorTag(_ tag: String) {
+        let t = tag.trimmed
+        guard !t.isEmpty else { return }
+        var tags = behaviorTags
+        if !tags.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) {
+            tags.append(t)
+            behaviorTags = tags
+            didUpdate()
         }
     }
 
-    /// Calculates the total from line items.
-    var calculatedTotal: Decimal {
-        servicesSubtotal.roundedMoney()
-    }
-
-    /// While active use the calculated total; once completed use persisted total
-    var effectiveTotal: Decimal { isCompleted ? total : calculatedTotal }
-
-    // MARK: - Formatting helpers (assumes you have Decimal.moneyString)
-    @MainActor var totalCurrencyString: String { effectiveTotal.moneyString }
-
-    // MARK: - Operations
-    
-    func recalcTotal() {
-        total = calculatedTotal
+    func setBeforePhoto(_ data: Data?) {
+        if let data = data {
+            beforePhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: "visit before photo")
+            beforeThumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
+        } else {
+            beforePhotoData = nil
+            beforeThumbnailData = nil
+        }
         didUpdate()
     }
 
-    func markCheckedIn(now: Date = .now) {
-        if startedAt > now { startedAt = now }
-        endedAt = nil
+    func setAfterPhoto(_ data: Data?) {
+        if let data = data {
+            afterPhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: "visit after photo")
+            afterThumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
+        } else {
+            afterPhotoData = nil
+            afterThumbnailData = nil
+        }
         didUpdate()
     }
 
-    func markCheckedOut(total customTotal: Decimal? = nil, now: Date = .now) {
-        if let custom = customTotal { total = custom.roundedMoney() } else { recalcTotal() }
-        if endedAt == nil { endedAt = now }
-        didUpdate()
-    }
-
-    /// Store pre-processed photo data. Callers must downsample off the main thread before calling.
-    func applyPhotos(before: Data?, beforeThumb: Data?, after: Data?, afterThumb: Data?) {
-        self.beforePhotoData = before
-        self.beforeThumbnailData = beforeThumb
-        self.afterPhotoData = after
-        self.afterThumbnailData = afterThumb
-        didUpdate()
-    }
-
-    func addItem(title: String, unitPrice: Decimal?, quantity: Int = 1, service: Service? = nil) {
-        let qty = max(1, quantity)
-        let price = unitPrice ?? 0
-        let item = VisitItem(name: title, unitPrice: price, quantity: qty, visit: self)
-        item.service = service
+    func addItem(_ item: VisitItem) {
         var currentItems = items ?? []
-        currentItems.append(item)
-        items = currentItems
-        recalcTotal()
+        if !currentItems.contains(where: { $0 === item }) {
+            currentItems.append(item)
+            items = currentItems
+            recalculateTotal()
+            didUpdate()
+        }
     }
 
     func removeItem(_ item: VisitItem) {
@@ -170,8 +181,38 @@ final class Visit {
         if let idx = currentItems.firstIndex(where: { $0 === item }) {
             currentItems.remove(at: idx)
             items = currentItems
-            recalcTotal()
+            recalculateTotal()
+            didUpdate()
         }
+    }
+
+    func recalculateTotal() {
+        total = (items ?? []).reduce(Decimal.zero) { $0 + $1.lineTotal }
+    }
+
+    /// Short-name alias used by checkout flows.
+    func recalcTotal() { recalculateTotal() }
+
+    /// Assigns pre-optimized photo blobs directly. Callers must already have
+    /// run the data through `CloudMediaPolicy` (the checkout pipeline does).
+    func applyPhotos(before: Data?, beforeThumb: Data?, after: Data?, afterThumb: Data?) {
+        beforePhotoData = before
+        beforeThumbnailData = beforeThumb
+        afterPhotoData = after
+        afterThumbnailData = afterThumb
+        didUpdate()
+    }
+
+    /// Convenience that constructs a `VisitItem` and appends it. Use this
+    /// when you have raw fields (a service may be linked for catalog lookup).
+    func addItem(title: String, unitPrice: Decimal, quantity: Int = 1, service: Service? = nil) {
+        let item: VisitItem
+        if let service {
+            item = VisitItem.from(service: service, visit: self, quantity: quantity, priceOverride: unitPrice)
+        } else {
+            item = VisitItem(name: title, unitPrice: unitPrice, quantity: quantity, visit: self)
+        }
+        addItem(item)
     }
 
     func attachPayment(_ payment: Payment) {
@@ -180,13 +221,13 @@ final class Visit {
         didUpdate()
     }
 
+    // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
+        lastModifiedAt = .now
         lastModifiedBy = DeviceIdentity.currentID
-        lastModifiedAt = updatedAt
+        
         // Only attempt to update the client's last visit date if we can safely reach it.
-        // In background contexts, we avoid forcing a load of the entire owner hierarchy.
-        // Use max() so editing an older visit can't regress a more-recent lastVisitDate.
         if let owner = pet?.owner {
             let candidate = sortKeyDate
             if let existing = owner.lastVisitDate {
@@ -199,14 +240,7 @@ final class Visit {
 
     private static func decodeBehaviorTags(from raw: String) -> [String] {
         guard !raw.isEmpty, let data = raw.data(using: .utf8) else { return [] }
-        do {
-            return try JSONDecoder().decode([String].self, from: data)
-        } catch {
-            // Don't return [] — that would silently destroy the original on next save.
-            // Treat the raw string as a single legacy tag so it can be repaired later.
-            Logger.dataIntegrity.error("Visit.behaviorTags JSON decode failed; preserving raw as single tag. error=\(error.localizedDescription, privacy: .public)")
-            return [raw]
-        }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
     private static func encodeBehaviorTags(_ tags: [String]) -> String {

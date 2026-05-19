@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
     case dashboard
@@ -33,28 +34,63 @@ enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
 
 struct SidebarView: View {
     @Binding var selection: NavigationItem?
+    @Query(sort: \DeviceMetadata.lastSyncAt, order: .reverse) private var devices: [DeviceMetadata]
     var onSelect: (NavigationItem) -> Void = { _ in }
 
     var body: some View {
         List {
             Section(NSLocalizedString("sidebar.section.business", value: "Business", comment: "")) {
-                sidebarButton(.dashboard)
-                sidebarButton(.clients)
+                SidebarRow(item: .dashboard, selection: $selection, onSelect: onSelect)
+                SidebarRow(item: .clients, selection: $selection, onSelect: onSelect)
             }
 
             Section(NSLocalizedString("sidebar.section.analysis", value: "Analysis", comment: "")) {
-                sidebarButton(.insights)
+                SidebarRow(item: .insights, selection: $selection, onSelect: onSelect)
             }
 
+            #if os(macOS)
+            if !devices.isEmpty {
+                Section("Worker Devices") {
+                    ForEach(devices.prefix(5)) { device in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(device.name)
+                                    .font(.caption.weight(.medium))
+                                Text(device.lastSyncAt.formatted(.relative(presentation: .numeric)))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Circle()
+                                .fill(isOnline(device) ? .green : .secondary)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                }
+            }
+            #endif
+
             Section(NSLocalizedString("sidebar.section.system", value: "System", comment: "")) {
-                sidebarButton(.settings)
+                SidebarRow(item: .settings, selection: $selection, onSelect: onSelect)
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("Pawtrackr")
     }
+    
+    private func isOnline(_ device: DeviceMetadata) -> Bool {
+        // Consider a device "online" if it synced in the last 10 minutes
+        Date().timeIntervalSince(device.lastSyncAt) < 600
+    }
+}
 
-    private func sidebarButton(_ item: NavigationItem) -> some View {
+private struct SidebarRow: View {
+    let item: NavigationItem
+    @Binding var selection: NavigationItem?
+    let onSelect: (NavigationItem) -> Void
+    @State private var isHovering = false
+
+    var body: some View {
         Button {
             selection = item
             onSelect(item)
@@ -62,12 +98,22 @@ struct SidebarView: View {
             Label(item.label, systemImage: item.icon)
                 .font(.body.weight(selection == item ? .semibold : .regular))
                 .foregroundStyle(selection == item ? Color.accentColor : .primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                #if os(macOS)
+                .scaleEffect(isHovering ? 1.02 : 1.0)
+                .shadow(color: isHovering ? .black.opacity(0.08) : .clear, radius: 4, y: 2)
+                .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isHovering)
+                #endif
         }
         .buttonStyle(.plain)
         .listRowBackground(selection == item ? Color.accentColor.opacity(0.14) : Color.clear)
         .accessibilityIdentifier("sidebar.row.\(item.rawValue)")
         .accessibilityAddTraits(selection == item ? .isSelected : [])
+        #if os(macOS)
+        .onHover { hovering in isHovering = hovering }
+        #endif
     }
 }

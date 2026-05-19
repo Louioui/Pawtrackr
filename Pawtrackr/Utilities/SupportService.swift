@@ -29,13 +29,44 @@ final class SupportService {
         report += "STORE STATISTICS:\n"
         report += "- Clients: \(describeCount(try context.fetchCount(FetchDescriptor<Client>())))\n"
         report += "- Pets: \(describeCount(try context.fetchCount(FetchDescriptor<Pet>())))\n"
-        report += "- Visits: \(describeCount(try context.fetchCount(FetchDescriptor<Visit>())))\n\n"
+        report += "- Visits: \(describeCount(try context.fetchCount(FetchDescriptor<Visit>())))\n"
+        report += "- Payments: \(describeCount(try context.fetchCount(FetchDescriptor<Payment>())))\n"
+        report += "- Checkout Transactions: \(describeCount(try context.fetchCount(FetchDescriptor<CheckoutTransaction>())))\n"
+        report += "- Day Summaries: \(describeCount(try context.fetchCount(FetchDescriptor<DaySummary>())))\n\n"
         
         // 2. iCloud Status
         report += "ICLOUD STATUS:\n"
-        let status = CloudKitMonitor.shared.accountState
-        report += "- State: \(String(describing: status))\n"
-        report += "- Sync Completed: \(CloudKitMonitor.shared.firstSyncCompleted)\n\n"
+        let monitor = CloudKitMonitor.shared
+        report += "- Account: \(monitor.accountState.displayLabel)\n"
+        report += "- Network: \(monitor.networkState.displayLabel)\n"
+        report += "- Health: \(monitor.healthHeadline)\n"
+        report += "- Detail: \(monitor.healthDetail)\n"
+        report += "- First Sync Completed: \(monitor.firstSyncCompleted)\n"
+        report += "- Pending Changes: \(monitor.pendingChangesSummary ?? "none")\n"
+        report += "- Last Sync: \(monitor.lastSyncDate?.formatted() ?? "never")\n"
+        report += "- Last Import: \(monitor.lastImportDate?.formatted() ?? "never")\n"
+        report += "- Last Export: \(monitor.lastExportDate?.formatted() ?? "never")\n"
+        report += "- Quota Exceeded: \(monitor.quotaExceeded)\n"
+        report += "- App Access Warning: \(monitor.iCloudAppAccessMayBeDisabled)\n"
+        report += "- Last Error: \(monitor.lastErrorMessage ?? "none")\n"
+        report += "- Health Issues:\n"
+        if monitor.healthIssues.isEmpty {
+            report += "  - none\n"
+        } else {
+            for issue in monitor.healthIssues {
+                report += "  - \(issue.title): \(issue.detail)\n"
+            }
+        }
+        report += "- Recent Sync Events:\n"
+        if monitor.syncEvents.isEmpty {
+            report += "  - none\n"
+        } else {
+            for event in monitor.syncEvents {
+                let code = event.errorCode.map { " [\($0)]" } ?? ""
+                report += "  - \(event.startedAt.formatted()) \(event.kind.displayLabel) \(event.status.displayLabel): \(event.message)\(code)\n"
+            }
+        }
+        report += "\n"
         
         // 3. System Environment
         report += "ENVIRONMENT:\n"

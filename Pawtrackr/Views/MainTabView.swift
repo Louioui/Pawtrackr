@@ -24,5 +24,6 @@ struct MainTabView: View {
                     Label(NSLocalizedString("settings.tab", value: "Settings", comment: ""), systemImage: "gear")
                 }
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 }

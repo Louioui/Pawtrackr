@@ -16,4 +16,5 @@ extension Logger {
     static let security = Logger(subsystem: subsystem, category: "Security")
     static let performance = Logger(subsystem: subsystem, category: "Performance")
     static let dataIntegrity = Logger(subsystem: subsystem, category: "DataIntegrity")
+    static let cloudKit = Logger(subsystem: subsystem, category: "CloudKit")
 }

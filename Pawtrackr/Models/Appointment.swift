@@ -15,6 +15,8 @@ final class Appointment {
     // is now `Pet?`. Callers must use optional chaining (`appointment.pet?.name`).
     var uuid: UUID = UUID()
     var date: Date = Date()
+    var updatedAt: Date = Date()
+    var lastModifiedBy: UUID = DeviceIdentity.currentID
     var pet: Pet?
     var status: Status = Appointment.Status.scheduled
     var user: User?
@@ -23,6 +25,8 @@ final class Appointment {
     init(date: Date, pet: Pet, user: User?, status: Status = .scheduled) {
         self.uuid = UUID()
         self.date = date
+        self.updatedAt = .now
+        self.lastModifiedBy = DeviceIdentity.currentID
         self.pet = pet
         self.user = user
         self.status = status

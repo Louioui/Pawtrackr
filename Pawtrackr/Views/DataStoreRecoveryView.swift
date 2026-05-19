@@ -128,22 +128,26 @@ struct DataStoreRecoveryView: View {
     }
 
     private func repairStore() {
-        StoreHealthCheck.repairStore()
+        StoreHealthCheck.clearAuxiliaryCaches()
         resetDetail = NSLocalizedString("recovery.repair_done", value: "Repair complete. Please try relaunching the app.", comment: "")
         hasReset = true
     }
 
     private func resetStore() {
         do {
-            let movedFiles = try Self.archiveExistingStore()
+            let archive = try Self.archiveExistingStore()
             hasReset = true
             resetError = nil
-            resetDetail = movedFiles.isEmpty
+            resetDetail = archive.movedFiles.isEmpty
                 ? NSLocalizedString("recovery.no_files_found", value: "No store files were present.", comment: "")
-                : String(format: NSLocalizedString("recovery.archived_n", value: "Archived %d file(s)", comment: ""), movedFiles.count)
+                : String(
+                    format: NSLocalizedString("recovery.archived_n", value: "Archived %d file(s)", comment: ""),
+                    archive.movedFiles.count
+                ) + "\n" + archive.backupDirectory.path
             UserDefaults.standard.removeObject(forKey: PawtrackrApp.lastInitErrorKey)
             CloudKitMonitor.resetPersistedSyncStateForLocalStoreReset()
-            log.info("Store reset complete; archived \(movedFiles.count) files.")
+            CloudKitMonitor.recordLocalStoreResetArchivedFiles(archive.movedFiles.count)
+            log.info("Store reset complete; archived \(archive.movedFiles.count) files.")
         } catch {
             resetError = String(format: NSLocalizedString("recovery.reset_failed", value: "Couldn't reset: %@", comment: ""), error.localizedDescription)
             log.error("Store reset failed: \(error.localizedDescription, privacy: .public)")
@@ -153,7 +157,7 @@ struct DataStoreRecoveryView: View {
     /// Moves SwiftData store files (.store, .store-shm, .store-wal) into a
     /// timestamped backup folder. Returns the list of file URLs moved.
     /// Crucially, this does NOT delete the data — the backup folder remains.
-    private static func archiveExistingStore() throws -> [URL] {
+    private static func archiveExistingStore() throws -> StoreArchive {
         let fm = FileManager.default
         let appSupport = try fm.url(for: .applicationSupportDirectory,
                                     in: .userDomainMask,
@@ -169,11 +173,9 @@ struct DataStoreRecoveryView: View {
         let targets: [URL] = allContents.filter { url in
             let name = url.lastPathComponent
             return candidates.contains(where: { base in
-                name == base || name.hasPrefix(base + "-")
+                name == base || name.hasPrefix(base + "-") || name.hasPrefix(base + "_")
             })
         }
-
-        guard !targets.isEmpty else { return [] }
 
         let stamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
@@ -186,6 +188,25 @@ struct DataStoreRecoveryView: View {
             try fm.moveItem(at: url, to: dest)
             moved.append(dest)
         }
-        return moved
+
+        let manifest = [
+            "Pawtrackr local store recovery archive",
+            "Created: \(Date().formatted(date: .complete, time: .standard))",
+            "Last init error: \(UserDefaults.standard.string(forKey: PawtrackrApp.lastInitErrorKey) ?? "none")",
+            "Archived files:",
+            moved.isEmpty ? "- none" : moved.map { "- \($0.lastPathComponent)" }.joined(separator: "\n")
+        ].joined(separator: "\n")
+        try manifest.write(
+            to: backupDir.appendingPathComponent("README.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        return StoreArchive(backupDirectory: backupDir, movedFiles: moved)
+    }
+
+    private struct StoreArchive {
+        let backupDirectory: URL
+        let movedFiles: [URL]
     }
 }

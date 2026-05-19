@@ -17,6 +17,7 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
+    @State private var showActivityFeed = false
     @State private var selectedRevenueDate: Date?
     var namespace: Namespace.ID
 
@@ -25,6 +26,9 @@ struct DashboardView: View {
             .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
             .sheet(isPresented: $showNewClient) {
                 NewClientSheet(modelContext: modelContext)
+            }
+            .sheet(isPresented: $showActivityFeed) {
+                ActivityFeedView()
             }
             .alert(item: appErrorBinding) { error in
                 Alert(
@@ -68,6 +72,14 @@ struct DashboardView: View {
 
     @ToolbarContentBuilder
     private var insightsToolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showActivityFeed = true
+            } label: {
+                Label("Salon Activity", systemImage: "clock.arrow.2.circlepath")
+            }
+        }
+
         ToolbarItem(placement: .primaryAction) {
             Button {
                 showNewClient = true

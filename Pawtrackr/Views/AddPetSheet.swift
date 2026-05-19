@@ -272,7 +272,8 @@ struct AddPetSheet: View {
         if let trimmedHealth { newPet.health = trimmedHealth }
         if hasBirthdate { newPet.setBirthdate(birthdate) }
 
-        newPet.photoData = avatarImageData
+        newPet.setPhotoData(avatarImageData)
+        newPet.updateThumbnail()
         newPet.owner = client
 
         client.pets = (client.pets ?? []) + [newPet]
@@ -280,6 +281,7 @@ struct AddPetSheet: View {
 
         do {
             try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Added pet")
             HapticManager.notify(.success)
             dismiss()
         } catch {

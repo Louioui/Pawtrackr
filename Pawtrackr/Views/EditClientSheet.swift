@@ -139,6 +139,7 @@ struct EditClientSheet: View {
 
         do {
             try ctx.save()
+            CloudKitMonitor.shared.recordLocalChange("Saved client")
             dismiss()
         } catch {
             appError = .database(String(format: NSLocalizedString("common.save_failed", comment: ""), error.localizedDescription))

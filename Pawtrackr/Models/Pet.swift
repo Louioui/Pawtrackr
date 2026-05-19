@@ -21,6 +21,7 @@ final class Pet {
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    var lastModifiedBy: UUID = DeviceIdentity.currentID
 
     // MARK: - Core Attributes
     var name: String = ""
@@ -340,9 +341,11 @@ final class Pet {
 
     func setPhotoData(_ data: Data?) {
         if let data = data {
-            photoData = ImageCache.shared.downsampleToData(data: data, maxDimension: 1024)
+            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: "pet profile photo")
+            updateThumbnail()
         } else {
             photoData = nil
+            thumbnailData = nil
         }
         didUpdate()
     }
@@ -350,6 +353,7 @@ final class Pet {
     // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
+        lastModifiedBy = DeviceIdentity.currentID
         // Spotlight indexing is now nonisolated and self-dispatches to a utility queue,
         // so we no longer need a Task hop here. Snapshot the values first to avoid
         // capturing self in the call.
@@ -365,9 +369,9 @@ final class Pet {
             thumbnailData = nil
             return
         }
-        // Downsample to a small 200px thumbnail for high-performance list rendering
+        // Downsample to a small thumbnail for high-performance list rendering.
         #if canImport(UIKit) || canImport(AppKit)
-        thumbnailData = ImageCache.shared.downsampleToData(data: data, maxDimension: 200)
+        thumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
         #endif
     }
 

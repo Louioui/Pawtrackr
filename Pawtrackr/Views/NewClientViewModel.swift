@@ -98,6 +98,7 @@ final class NewClientViewModel {
                 client.address = address.trimmed
                 modelContext.insert(client)
                 try modelContext.save()
+                CloudKitMonitor.shared.recordLocalChange("Created client")
                 clientID = client.persistentModelID
             } else {
                 clientID = try await repository.createClient(
@@ -109,6 +110,7 @@ final class NewClientViewModel {
                     pets: newPets,
                     contacts: newContacts
                 )
+                CloudKitMonitor.shared.recordLocalChange("Created client with related records")
             }
 
             NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [

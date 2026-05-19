@@ -22,4 +22,3 @@ final class DaySummary {
         self.visitCount = visitCount
     }
 }
-

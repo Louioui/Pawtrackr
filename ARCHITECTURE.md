@@ -8,6 +8,8 @@ Pawtrackr is a high-performance business management platform for pet professiona
 ### 1. Data Persistence (SwiftData + CloudKit)
 - **Local First:** All data is stored locally in a private SwiftData container.
 - **Sync:** CloudKit synchronization is enabled for multi-device support.
+- **Real-time Refresh:** `CloudKitMonitor` observes remote import events and broadcasts `.refreshRequired` via the `GlobalEventBus` to ensure the UI updates immediately across all devices.
+- **Smart Deduplication:** `CloudSyncReconciler` performs post-sync cleanup, including merging duplicate visits created by concurrent check-ins on multiple devices.
 - **Models:** Use the `@Model` macro. Non-sendable model objects must never cross actor boundaries.
 
 ### 2. The Repository Pattern (MVVM-R)

@@ -19,6 +19,7 @@ final class Client {
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    var lastModifiedBy: UUID = DeviceIdentity.currentID
 
     // MARK: - Contact Information
     var firstName: String = ""
@@ -131,10 +132,22 @@ final class Client {
             didUpdate()
         }
     }
+
+    func setPhotoData(_ data: Data?) {
+        if let data = data {
+            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: "client profile photo")
+            updateThumbnail()
+        } else {
+            photoData = nil
+            thumbnailData = nil
+        }
+        didUpdate()
+    }
     
     // MARK: - Private Helpers
     private func didUpdate() {
         updatedAt = .now
+        lastModifiedBy = DeviceIdentity.currentID
         // Spotlight indexing is nonisolated; it self-dispatches to a utility queue
         // and debounces per-id so a multi-field edit (name + phone + email) only
         // produces one re-index.
@@ -152,7 +165,7 @@ final class Client {
             return
         }
         #if canImport(UIKit) || canImport(AppKit)
-        thumbnailData = ImageCache.shared.downsampleToData(data: data, maxDimension: 200)
+        thumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
         #endif
     }
 

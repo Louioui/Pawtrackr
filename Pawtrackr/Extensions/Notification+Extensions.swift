@@ -25,6 +25,10 @@ extension Notification.Name {
     static let selectNavigationItem = Notification.Name("selectNavigationItem")
     /// Posted by CloudKitMonitor when sync state changes (idle/syncing/error/account).
     static let cloudKitStateDidChange = Notification.Name("cloudKitStateDidChange")
+    /// Posted when the user changes the human-readable name of the current device.
+    static let deviceNameDidChange = Notification.Name("deviceNameDidChange")
+    /// Posted when a remote device's presence record is updated.
+    static let presenceDidChange = Notification.Name("presenceDidChange")
 }
 
 // Strongly-typed keys for .visitDidComplete userInfo payloads.

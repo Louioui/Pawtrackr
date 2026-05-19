@@ -20,6 +20,7 @@ final class Service {
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    var lastModifiedBy: UUID = DeviceIdentity.currentID
 
     /// The display name for the service (e.g., "Full Groom").
     var name: String = ""
@@ -63,6 +64,7 @@ final class Service {
         self.uuid = UUID()
         self.createdAt = .now
         self.updatedAt = .now
+        self.lastModifiedBy = DeviceIdentity.currentID
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.category = category
         self.systemIcon = systemIcon?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -112,6 +114,7 @@ final class Service {
     
     private func didUpdate() {
         updatedAt = .now
+        lastModifiedBy = DeviceIdentity.currentID
     }
 }
 

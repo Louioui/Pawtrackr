@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var cloudKitMonitor = CloudKitMonitor.shared
     @State private var versionTapCount = 0
     @State private var showDiagnostics = false
+    @State private var showStorage = false
     @State private var clientsDoc: ExportDocument? = nil
     @State private var visitsDoc: ExportDocument? = nil
     @State private var isExportingClients = false
@@ -201,7 +202,22 @@ struct SettingsView: View {
             // MARK: iCloud
             Section {
                 iCloudStatusRow
+                
+                TextField("Device Name", text: $appSettings.deviceName)
+                    .accessibilityIdentifier("settings.deviceName")
+                
+                Toggle(isOn: $appSettings.optimizeMediaForICloud) {
+                    Label(NSLocalizedString("cloudkit.media.optimize", value: "Optimize Photos for iCloud", comment: ""),
+                          systemImage: "photo.badge.checkmark")
+                }
+                .accessibilityIdentifier("settings.optimizeMediaForICloud")
                 if cloudKitMonitor.accountState.isAvailable {
+                    Button {
+                        showStorage = true
+                    } label: {
+                        Label("iCloud Storage", systemImage: "photo.on.rectangle")
+                    }
+                    
                     Button {
                         Task { await cloudKitMonitor.forceSync() }
                     } label: {
@@ -228,7 +244,7 @@ struct SettingsView: View {
                 if let err = cloudKitMonitor.lastErrorMessage, case .error = cloudKitMonitor.syncState {
                     Text(err).foregroundStyle(.red)
                 } else {
-                    Text(cloudKitMonitor.lastSyncSummary).font(.caption)
+                    Text(cloudKitMonitor.healthDetail).font(.caption)
                 }
             }
 
@@ -287,6 +303,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showChangePIN) {
             ChangePINSheet(isPresented: $showChangePIN, errorMessage: $pinChangeError)
                 .environment(appSettings)
+        }
+        .sheet(isPresented: $showStorage) {
+            ICloudStorageView()
         }
         .sheet(item: $clientsDoc) { doc in
             exportShareSheet(
@@ -395,9 +414,9 @@ struct SettingsView: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(cloudKitTintColor)
             VStack(alignment: .leading, spacing: 2) {
-                Text(cloudKitMonitor.accountState.displayLabel)
+                Text(cloudKitMonitor.healthHeadline)
                     .font(.subheadline.weight(.medium))
-                Text(syncStateLabel)
+                Text(iCloudSecondaryStatus)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -449,6 +468,13 @@ struct SettingsView: View {
         case .error:   return NSLocalizedString("cloudkit.status.error",   value: "Sync error", comment: "")
         case .idle:    return NSLocalizedString("cloudkit.status.idle",    value: "Idle",      comment: "")
         }
+    }
+
+    private var iCloudSecondaryStatus: String {
+        if let pending = cloudKitMonitor.pendingChangesSummary {
+            return pending
+        }
+        return "\(cloudKitMonitor.accountState.displayLabel) • \(syncStateLabel)"
     }
 
     private var appVersionString: String {

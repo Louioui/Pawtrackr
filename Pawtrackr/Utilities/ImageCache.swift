@@ -91,7 +91,7 @@ final class ImageCache: @unchecked Sendable {
 
     /// Decodes and downsamples image data to a smaller Data representation for storage.
     /// This method is safe to call from background threads and does not access MainActor properties.
-    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
+    func downsampleToData(data: Data, maxDimension: CGFloat = 1024, compressionQuality: CGFloat = 0.7) -> Data? {
         let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
         guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
 
@@ -102,7 +102,7 @@ final class ImageCache: @unchecked Sendable {
         ]
         
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
-        return UIImage(cgImage: cg).jpegData(compressionQuality: 0.7)
+        return UIImage(cgImage: cg).jpegData(compressionQuality: compressionQuality)
     }
 
     /// Efficient downsampling using CGImageSource for display purposes.
@@ -184,7 +184,7 @@ final class ImageCache: @unchecked Sendable {
         return "\(count)-\(quickHash)-\(Int(maxDimension.rounded()))"
     }
 
-    func downsampleToData(data: Data, maxDimension: CGFloat = 1024) -> Data? {
+    func downsampleToData(data: Data, maxDimension: CGFloat = 1024, compressionQuality: CGFloat = 0.7) -> Data? {
         let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
         guard let src = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
 
@@ -196,7 +196,7 @@ final class ImageCache: @unchecked Sendable {
         
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, downsampleOptions as CFDictionary) else { return nil }
         let bitmap = NSBitmapImageRep(cgImage: cg)
-        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7])
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionQuality])
     }
 
     private func downsampleForDisplay(data: Data, maxDimension: CGFloat) -> NSImage? {

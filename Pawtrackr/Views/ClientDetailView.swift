@@ -88,6 +88,7 @@ struct ClientDetailView: View {
     @State private var showCommunication = false
 
     @Environment(NavigationRouter.self) private var router
+    @Query private var devices: [DeviceMetadata]
     private var namespace: Namespace.ID
 
     // MARK: - Init
@@ -276,9 +277,25 @@ struct ClientDetailView: View {
                 notesCard(client: vm.client)
                 petsSection(vm: vm)
                 recentHistorySection(vm: vm)
+                syncMetadataFooter(client: vm.client)
             }
             .padding(.vertical, 8)
         }
+    }
+
+    private func syncMetadataFooter(client: Client) -> some View {
+        HStack {
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                let name = devices.first { $0.deviceID == client.lastModifiedBy }?.name ?? "Unknown Device"
+                Text(String(format: NSLocalizedString("client.metadata.last_modified_by_fmt", value: "Last modified by %@", comment: ""), name))
+                Text(String(format: NSLocalizedString("client.metadata.at_fmt", value: "at %@", comment: ""), client.updatedAt.formatted(date: .abbreviated, time: .shortened)))
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
     }
 
     // MARK: - Subviews
@@ -453,6 +470,7 @@ struct ClientDetailView: View {
         modelContext.delete(contact)
         do {
             try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Deleted emergency contact")
         } catch {
             Logger.clientDetailView.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting emergency contact")
@@ -488,6 +506,7 @@ struct ClientDetailView: View {
         }
         do {
             try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Saved emergency contact")
             showContactEditor = false
             newContactName = ""; newContactRelation = ""; newContactPhone = ""
         } catch {
@@ -688,6 +707,7 @@ struct ClientDetailView: View {
 
         do {
             try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Deleted client")
 
             // Rebuild summaries for affected days
             let cal = Calendar.current
@@ -736,6 +756,7 @@ struct ClientDetailView: View {
         client.setEmail(editEmail.trimmed.isEmpty ? nil : editEmail)
         do {
             try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Saved client changes")
         } catch {
             Logger.clientDetailView.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving client changes")

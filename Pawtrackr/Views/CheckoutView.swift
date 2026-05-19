@@ -20,6 +20,7 @@ struct CheckoutView: View {
     @State private var referenceEditorText: String = ""
     @State private var notesSyncTask: Task<Void, Never>?
     @State private var amountSyncTask: Task<Void, Never>?
+    @State private var confirmationBouncePhase: Bool = false
     @State private var didLoadViewModel = false
     @FocusState private var focusedField: FocusField?
 
@@ -782,13 +783,25 @@ struct CheckoutView: View {
                 Circle()
                     .fill(Color.green.opacity(0.1))
                     .frame(width: 100, height: 100)
-                    .scaleEffect(viewModel.state == .confirmed ? 1.0 : 0.5)
-                
+
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 60))
                     .foregroundStyle(.green)
                     .symbolEffect(.bounce, value: viewModel.state == .confirmed)
             }
+            .keyframeAnimator(
+                initialValue: 1.0,
+                trigger: confirmationBouncePhase
+            ) { content, scale in
+                content.scaleEffect(scale)
+            } keyframes: { _ in
+                KeyframeTrack {
+                    LinearKeyframe(0.35, duration: 0.0)
+                    SpringKeyframe(1.18, duration: 0.34, spring: .bouncy(duration: 0.42, extraBounce: 0.28))
+                    SpringKeyframe(1.0, duration: 0.20, spring: .smooth)
+                }
+            }
+            .onAppear { confirmationBouncePhase.toggle() }
             
             VStack(spacing: 8) {
                 Text(NSLocalizedString("checkout.complete_title", comment: ""))

@@ -76,6 +76,7 @@ struct RecentHistoryView: View {
         do {
             dataStore.container.mainContext.delete(visit)
             try dataStore.container.mainContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Deleted visit history")
             HapticManager.notify(.success)
             viewModel?.fetchVisits()
         } catch {

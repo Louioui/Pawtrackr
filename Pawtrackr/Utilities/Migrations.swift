@@ -51,7 +51,9 @@ import OSLog
 // Until that's done, the patch-version bump below is the only thing telling
 // SwiftData anything changed at all.
 enum PawtrackrSchemaV1: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 0, 1)
+    // Keep the patch version at 1.0.2 for existing stores. SwiftData #Index
+    // declarations are not used because they require iOS 18 / macOS 15.
+    static var versionIdentifier: Schema.Version = .init(1, 0, 2)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -77,7 +79,9 @@ enum PawtrackrSchemaV1: VersionedSchema {
             BusinessConfig.self,
             MessageTemplate.self,
             InventoryItem.self,
-            InventoryTransaction.self
+            InventoryTransaction.self,
+            DeviceMetadata.self,
+            PresenceRecord.self
         ]
     }
 }

@@ -29,7 +29,7 @@ struct DeviceConfig {
         #endif
     }
 
-    static var imageMaxDimension: CGFloat? {
+    static var rawImageMaxDimension: CGFloat? {
         switch deviceClass {
         case .smallPhone: return 1200
         case .phone:      return 1600
@@ -39,7 +39,7 @@ struct DeviceConfig {
         }
     }
 
-    static var jpegQuality: CGFloat {
+    static var rawJPEGQuality: CGFloat {
         switch deviceClass {
         case .smallPhone: return 0.80
         case .phone:      return 0.85
@@ -48,5 +48,12 @@ struct DeviceConfig {
         case .other:      return 0.85
         }
     }
-}
 
+    static var imageMaxDimension: CGFloat? {
+        CloudMediaPolicy.fullImageMaxDimension
+    }
+
+    static var jpegQuality: CGFloat {
+        CloudMediaPolicy.jpegQuality
+    }
+}

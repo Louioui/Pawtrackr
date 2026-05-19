@@ -45,6 +45,9 @@ final class VisitRepository: VisitRepositoryProtocol {
             modelContext.insert(visit)
         }
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Saved visit")
+        }
     }
     
     func deleteVisit(_ visit: Visit) async throws {
@@ -52,6 +55,9 @@ final class VisitRepository: VisitRepositoryProtocol {
         let ended = visit.endedAt
         modelContext.delete(visit)
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Deleted visit")
+        }
         
         let cal = Calendar.current
         SummaryUpdater.rebuildDay(for: started, in: modelContext)
@@ -66,6 +72,9 @@ final class VisitRepository: VisitRepositoryProtocol {
         let visit = Visit(pet: pet, startedAt: date)
         modelContext.insert(visit)
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Checked in pet")
+        }
         eventBus.publish(.refreshRequired)
         NotificationCenter.default.post(name: .visitDidStart, object: visit)
         return visit
@@ -83,6 +92,9 @@ final class VisitRepository: VisitRepositoryProtocol {
         appointment.visit = visit
         modelContext.insert(visit)
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Checked in appointment")
+        }
         eventBus.publish(.refreshRequired)
         NotificationCenter.default.post(name: .visitDidStart, object: visit)
         return visit
@@ -90,10 +102,13 @@ final class VisitRepository: VisitRepositoryProtocol {
     
     func checkOut(visit: Visit, total: Decimal?, now: Date) async throws {
         Logger.visits.info("VisitRepository: Checking out visit \(visit.uuid)")
-        visit.markCheckedOut(total: total, now: now)
+        visit.markCheckedOut(total: total ?? visit.effectiveTotal, now: now)
         
         // Save the visit and its payment
         try modelContext.save()
+        await MainActor.run {
+            CloudKitMonitor.shared.recordLocalChange("Checked out visit")
+        }
 
         SummaryUpdater.rebuildDay(for: now, in: modelContext)
         let completion = CheckoutCompletionContext(

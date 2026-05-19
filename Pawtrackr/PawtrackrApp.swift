@@ -120,8 +120,9 @@ struct PawtrackrApp: App {
 
                 // Start the CloudKit monitor on launch so the UI gets the
                 // earliest possible signal about account/sync state.
+                let busForStart = eventBus
                 Task { @MainActor in
-                    CloudKitMonitor.shared.start(modelContainer: localContainer)
+                    CloudKitMonitor.shared.start(modelContainer: localContainer, eventBus: busForStart)
                 }
 
                 // Register for silent CloudKit pushes.

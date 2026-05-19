@@ -50,7 +50,7 @@ final class PetDetailViewModel {
     
     var averageDurationString: String {
         guard !completedVisits.isEmpty else { return "–" }
-        let totalSeconds = completedVisits.map { Int($0.duration) }.reduce(0, +)
+        let totalSeconds = completedVisits.map { Int($0.duration ?? 0) }.reduce(0, +)
         let avg = max(0, totalSeconds / completedVisits.count)
         return VisitTimer.format(seconds: avg)
     }

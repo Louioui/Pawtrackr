@@ -84,6 +84,7 @@ struct AppointmentsView: View {
         modelContext.insert(newAppointment)
         do {
             try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Saved appointment")
         } catch {
             // Roll back the insert before surfacing the error so the
             // user retrying doesn't end up with a duplicate object in the
@@ -110,6 +111,7 @@ struct AppointmentsView: View {
             }
             do {
                 try modelContext.save()
+                CloudKitMonitor.shared.recordLocalChange("Deleted appointment")
             } catch {
                 Logger.appointments.error("deleteAppointment save failed: \(String(describing: error))")
                 CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting appointment")

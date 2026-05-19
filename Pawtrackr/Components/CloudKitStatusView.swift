@@ -83,13 +83,23 @@ private struct CloudKitStatusPopover: View {
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(tint)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(headline).font(.headline)
-                    Text(monitor.lastSyncSummary)
+                    Text(monitor.healthHeadline).font(.headline)
+                    Text(monitor.healthDetail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
+
+            HStack(spacing: 8) {
+                Label(monitor.networkState.displayLabel, systemImage: monitor.networkState.isOnline ? "wifi" : "wifi.slash")
+                Spacer(minLength: 8)
+                if let pending = monitor.pendingChangesSummary {
+                    Label(pending, systemImage: "arrow.up.icloud")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
 
             if let message = monitor.lastErrorMessage, case .error = monitor.syncState {
                 Text(message)
@@ -99,6 +109,24 @@ private struct CloudKitStatusPopover: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.red.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            if !monitor.healthIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(monitor.healthIssues.prefix(3)) { issue in
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: iconName(for: issue.severity))
+                                .foregroundStyle(tint(for: issue.severity))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(issue.title).font(.caption.weight(.semibold))
+                                Text(issue.detail).font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .padding(8)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
             Button {
@@ -127,17 +155,19 @@ private struct CloudKitStatusPopover: View {
         }
     }
 
-    private var headline: String {
-        if !monitor.accountState.isAvailable {
-            return monitor.accountState.displayLabel
+    private func iconName(for severity: CloudKitMonitor.SyncHealthIssue.Severity) -> String {
+        switch severity {
+        case .info: return "info.circle"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .danger: return "xmark.octagon.fill"
         }
-        if monitor.quotaExceeded {
-            return NSLocalizedString("cloudkit.status.quota_exceeded", value: "iCloud Storage Full", comment: "")
-        }
-        switch monitor.syncState {
-        case .idle: return NSLocalizedString("cloudkit.status.up_to_date", value: "Up to date", comment: "")
-        case .syncing: return NSLocalizedString("cloudkit.status.syncing", value: "Syncing…", comment: "")
-        case .error: return NSLocalizedString("cloudkit.status.error", value: "Sync error", comment: "")
+    }
+
+    private func tint(for severity: CloudKitMonitor.SyncHealthIssue.Severity) -> Color {
+        switch severity {
+        case .info: return .blue
+        case .warning: return .orange
+        case .danger: return .red
         }
     }
 }

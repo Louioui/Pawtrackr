@@ -19,6 +19,7 @@ final class Payment {
 
     var method: Method = Payment.Method.cash
     var paidAt: Date = Date()
+    var updatedAt: Date = Date()
     var note: String?
     var externalReference: String?
     var lastModifiedBy: UUID = DeviceIdentity.currentID
@@ -37,6 +38,7 @@ final class Payment {
         self.amount = max(0, amount).roundedMoney()
         self.method = method
         self.paidAt = paidAt
+        self.updatedAt = .now
         self.note = note
         self.externalReference = externalReference
         self.lastModifiedBy = DeviceIdentity.currentID
@@ -52,6 +54,7 @@ final class Payment {
     func markModified() {
         lastModifiedBy = DeviceIdentity.currentID
         lastModifiedAt = .now
+        updatedAt = .now
     }
     
 }

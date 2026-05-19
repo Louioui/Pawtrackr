@@ -33,6 +33,8 @@ enum AppSettingsKeys {
     static let hapticsEnabled = "hapticsEnabled"
     static let brandColorHex = "brandColorHex"
     static let defaultLaunchTab = "defaultLaunchTab"
+    static let optimizeMediaForICloud = CloudMediaPolicy.optimizedMediaDefaultsKey
+    static let deviceName = "deviceName"
 }
 
 /// User-selectable color scheme preference. `system` defers to the OS.
@@ -79,6 +81,7 @@ final class AppSettings {
         static let hapticsEnabled = true
         static let brandColorHex = "#6366F1"
         static let defaultLaunchTab = "dashboard"
+        static let optimizeMediaForICloud = true
     }
 
     // MARK: - Properties
@@ -196,6 +199,20 @@ final class AppSettings {
         }
     }
 
+    var optimizeMediaForICloud: Bool {
+        didSet {
+            UserDefaults.standard.set(optimizeMediaForICloud, forKey: AppSettingsKeys.optimizeMediaForICloud)
+        }
+    }
+
+    var deviceName: String {
+        didSet {
+            UserDefaults.standard.set(deviceName, forKey: AppSettingsKeys.deviceName)
+            // Notify CloudKitMonitor to push the new name immediately
+            NotificationCenter.default.post(name: .deviceNameDidChange, object: nil)
+        }
+    }
+
     /// Fixed idle threshold (minutes) for auto-lock.
     let idleLockMinutes: Int = Defaults.idleLockMinutes
 
@@ -228,7 +245,8 @@ final class AppSettings {
             AppSettingsKeys.preferredColorScheme: Defaults.preferredColorScheme,
             AppSettingsKeys.hapticsEnabled: Defaults.hapticsEnabled,
             AppSettingsKeys.brandColorHex: Defaults.brandColorHex,
-            AppSettingsKeys.defaultLaunchTab: Defaults.defaultLaunchTab
+            AppSettingsKeys.defaultLaunchTab: Defaults.defaultLaunchTab,
+            AppSettingsKeys.optimizeMediaForICloud: Defaults.optimizeMediaForICloud
         ])
 
         // Read values
@@ -251,6 +269,16 @@ final class AppSettings {
         self.hapticsEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.hapticsEnabled)
         self.brandColorHex = UserDefaults.standard.string(forKey: AppSettingsKeys.brandColorHex) ?? Defaults.brandColorHex
         self.defaultLaunchTab = UserDefaults.standard.string(forKey: AppSettingsKeys.defaultLaunchTab) ?? Defaults.defaultLaunchTab
+        self.optimizeMediaForICloud = UserDefaults.standard.bool(forKey: AppSettingsKeys.optimizeMediaForICloud)
+        
+        #if os(iOS)
+        let defaultDeviceName = UIDevice.current.model
+        #elseif os(macOS)
+        let defaultDeviceName = "Mac"
+        #else
+        let defaultDeviceName = "Device"
+        #endif
+        self.deviceName = UserDefaults.standard.string(forKey: AppSettingsKeys.deviceName) ?? defaultDeviceName
 
         // Migrate any existing plaintext PIN out of UserDefaults into the
         // Keychain, then erase the UserDefaults copy. Future reads come from

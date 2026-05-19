@@ -20,6 +20,7 @@ final class VisitItem {
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+    var lastModifiedBy: UUID = DeviceIdentity.currentID
 
     /// The name of the service, captured at the time the item was created.
     var name: String = ""
@@ -54,6 +55,7 @@ final class VisitItem {
         self.uuid = UUID()
         self.createdAt = .now
         self.updatedAt = .now
+        self.lastModifiedBy = DeviceIdentity.currentID
         self.service = service
         self.visit = visit
         self.name = service.name.trimmed
@@ -68,6 +70,7 @@ final class VisitItem {
         self.uuid = UUID()
         self.createdAt = .now
         self.updatedAt = .now
+        self.lastModifiedBy = DeviceIdentity.currentID
         self.service = nil
         self.visit = visit
         self.name = name.trimmed
@@ -138,5 +141,6 @@ final class VisitItem {
 
     private func didUpdate() {
         updatedAt = .now
+        lastModifiedBy = DeviceIdentity.currentID
     }
 }

@@ -95,6 +95,9 @@ final actor CheckoutTransactionActor {
             // 8. Commit
             transaction.markSucceeded(completedAt: endedAt)
             try context.save()
+            await MainActor.run {
+                CloudKitMonitor.shared.recordLocalChange("Completed checkout")
+            }
             
             // 9. Rebuild Summaries (Off-actor utility)
             SummaryUpdater.rebuildDay(for: endedAt, in: context)
@@ -174,10 +177,10 @@ final actor CheckoutTransactionActor {
     
     private func processImages(before: Data?, after: Data?) async -> (Data?, Data?, Data?, Data?) {
         await Task.detached(priority: .userInitiated) {
-            let b = before.flatMap { ImageCache.shared.downsampleToData(data: $0, maxDimension: 1024) }
-            let bt = before.flatMap { ImageCache.shared.downsampleToData(data: $0, maxDimension: 200) }
-            let a = after.flatMap  { ImageCache.shared.downsampleToData(data: $0, maxDimension: 1024) }
-            let at = after.flatMap  { ImageCache.shared.downsampleToData(data: $0, maxDimension: 200) }
+            let b = before.flatMap { CloudMediaPolicy.optimizedFullImageData($0, context: "before visit photo") }
+            let bt = before.flatMap { CloudMediaPolicy.optimizedThumbnailData($0) }
+            let a = after.flatMap  { CloudMediaPolicy.optimizedFullImageData($0, context: "after visit photo") }
+            let at = after.flatMap  { CloudMediaPolicy.optimizedThumbnailData($0) }
             return (b, bt, a, at)
         }.value
     }

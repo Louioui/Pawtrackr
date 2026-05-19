@@ -94,6 +94,20 @@ struct VisitRow: View {
                 Label("Photos", systemImage: "photo.on.rectangle")
             }
             Spacer()
+            
+            // Sync Status Indicator
+            if visit.updatedAt > (CloudKitMonitor.shared.lastSyncDate ?? .distantPast) {
+                Image(systemName: "icloud.and.arrow.up")
+                    .font(.caption2)
+                    .foregroundStyle(.blue)
+                    .accessibilityLabel("Syncing to iCloud")
+            } else {
+                Image(systemName: "checkmark.icloud.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+                    .accessibilityLabel("Synced to iCloud")
+            }
+            
             if let paymentMethod = visit.payment?.method {
                 Label(paymentMethod.displayName, systemImage: paymentMethod.systemImage)
             }

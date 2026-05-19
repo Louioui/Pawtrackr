@@ -98,6 +98,7 @@ struct RootView: View {
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
+        .toastOverlay()
     }
 
     private var mainShell: some View {
