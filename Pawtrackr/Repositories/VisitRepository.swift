@@ -44,19 +44,31 @@ final class VisitRepository: VisitRepositoryProtocol {
         if visit.modelContext == nil {
             modelContext.insert(visit)
         }
+        visit.ensureSessionToken()
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Saved visit")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Saved visit",
+                entityName: "Visit",
+                recordUUID: visit.uuid,
+                changedKeys: ["note", "behaviorTagsRaw", "items", "updatedAt", "lastModifiedAt", "lastModifiedBy"]
+            )
         }
     }
     
     func deleteVisit(_ visit: Visit) async throws {
+        let visitUUID = visit.uuid
         let started = visit.startedAt
         let ended = visit.endedAt
         modelContext.delete(visit)
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Deleted visit")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Deleted visit",
+                entityName: "Visit",
+                recordUUID: visitUUID,
+                changedKeys: ["deleted"]
+            )
         }
         
         let cal = Calendar.current
@@ -69,11 +81,21 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
+        if let existing = try activeVisit(for: pet) {
+            existing.ensureSessionToken()
+            return existing
+        }
+
         let visit = Visit(pet: pet, startedAt: date)
         modelContext.insert(visit)
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Checked in pet")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Checked in pet",
+                entityName: "Visit",
+                recordUUID: visit.uuid,
+                changedKeys: ["uuid", "sessionToken", "pet", "startedAt", "createdAt", "updatedAt", "lastModifiedBy"]
+            )
         }
         eventBus.publish(.refreshRequired)
         NotificationCenter.default.post(name: .visitDidStart, object: visit)
@@ -86,6 +108,25 @@ final class VisitRepository: VisitRepositoryProtocol {
         guard let pet = appointment.pet else {
             throw AppError.database("Appointment is missing its pet reference and cannot be checked in.")
         }
+        if let existing = try activeVisit(for: pet) {
+            existing.appointment = appointment
+            appointment.status = .checkedIn
+            appointment.visit = existing
+            existing.ensureSessionToken()
+            try modelContext.save()
+            await MainActor.run {
+                CloudKitMonitor.shared.recordLocalChange(
+                    "Linked appointment to active visit",
+                    entityName: "Visit",
+                    recordUUID: existing.uuid,
+                    changedKeys: ["appointment", "updatedAt", "lastModifiedAt", "lastModifiedBy"]
+                )
+            }
+            eventBus.publish(.refreshRequired)
+            NotificationCenter.default.post(name: .visitDidStart, object: existing)
+            return existing
+        }
+
         let visit = Visit(pet: pet, startedAt: .now)
         visit.appointment = appointment
         appointment.status = .checkedIn
@@ -93,7 +134,12 @@ final class VisitRepository: VisitRepositoryProtocol {
         modelContext.insert(visit)
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Checked in appointment")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Checked in appointment",
+                entityName: "Visit",
+                recordUUID: visit.uuid,
+                changedKeys: ["uuid", "sessionToken", "pet", "appointment", "startedAt", "createdAt", "updatedAt", "lastModifiedBy"]
+            )
         }
         eventBus.publish(.refreshRequired)
         NotificationCenter.default.post(name: .visitDidStart, object: visit)
@@ -107,7 +153,12 @@ final class VisitRepository: VisitRepositoryProtocol {
         // Save the visit and its payment
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Checked out visit")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Checked out visit",
+                entityName: "Visit",
+                recordUUID: visit.uuid,
+                changedKeys: ["endedAt", "total", "payment", "updatedAt", "lastModifiedAt", "lastModifiedBy"]
+            )
         }
 
         SummaryUpdater.rebuildDay(for: now, in: modelContext)
@@ -132,6 +183,14 @@ final class VisitRepository: VisitRepositoryProtocol {
         }
         NotificationCenter.default.post(name: .visitDidComplete, object: visit, userInfo: userInfo)
         Logger.visits.info("VisitRepository: Checkout complete, event published")
+    }
+
+    private func activeVisit(for pet: Pet) throws -> Visit? {
+        let activeDescriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate { $0.endedAt == nil },
+            sortBy: [SortDescriptor(\.startedAt, order: .forward)]
+        )
+        return try modelContext.fetch(activeDescriptor).first { $0.pet?.uuid == pet.uuid }
     }
 }
 

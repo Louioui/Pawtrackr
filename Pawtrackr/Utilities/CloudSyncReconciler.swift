@@ -98,11 +98,18 @@ enum CloudSyncReconciler {
         descriptor.relationshipKeyPathsForPrefetching = [\Visit.pet]
         let activeVisits = try context.fetch(descriptor)
         
-        // Group by Pet to find concurrent check-ins
-        let groups = Dictionary(grouping: activeVisits) { $0.pet?.uuid }
+        // Group by deterministic visit session token first, then pet UUID, to
+        // collapse simultaneous shop check-ins without relying on CloudKit
+        // unique constraints.
+        let groups = Dictionary(grouping: activeVisits) { visit -> String in
+            let token = visit.sessionToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !token.isEmpty { return token }
+            if let petUUID = visit.pet?.uuid { return "pet:\(petUUID.uuidString)" }
+            return "visit:\(visit.uuid.uuidString)"
+        }
         var removed = 0
         
-        for (petID, visits) in groups where petID != nil && visits.count > 1 {
+        for (_, visits) in groups where visits.count > 1 {
             // Sort by creation or update time to find the 'canonical' one
             let sorted = visits.sorted { $0.createdAt < $1.createdAt }
             let canonical = sorted.first!
@@ -112,22 +119,11 @@ enum CloudSyncReconciler {
                 // If they started within 5 minutes of each other, they are likely duplicates
                 let diff = abs(dupe.startedAt.timeIntervalSince(canonical.startedAt))
                 if diff < 300 { // 5 minutes
-                    // Merge any notes or items if they exist
-                    if let dupeItems = dupe.items, !dupeItems.isEmpty {
-                        for item in dupeItems {
-                            item.visit = canonical
-                        }
-                    }
-                    if let note = dupe.note, !note.isEmpty {
-                        let existing = canonical.note ?? ""
-                        if !existing.contains(note) {
-                            canonical.note = existing.isEmpty ? note : existing + "\n" + note
-                        }
-                    }
+                    mergeVisit(dupe, into: canonical)
                     context.delete(dupe)
                     removed += 1
 
-                    if let pet = petID {
+                    if let pet = canonical.pet?.uuid {
                         Task { @MainActor in
                             CloudKitMonitor.shared.warmMediaCache(for: pet)
                         }
@@ -158,6 +154,59 @@ enum CloudSyncReconciler {
         }
 
         return removed
+    }
+
+    private static func mergeVisit(_ source: Visit, into target: Visit) {
+        target.ensureSessionToken()
+        if target.startedAt > source.startedAt {
+            target.startedAt = source.startedAt
+        }
+        if target.endedAt == nil {
+            target.endedAt = source.endedAt
+        }
+        if target.total == .zero, source.total > .zero {
+            target.total = source.total
+        }
+        if target.payment == nil, let payment = source.payment {
+            target.attachPayment(payment)
+        }
+
+        target.note = mergedText(target.note, source.note)
+        target.behaviorTags = mergedTags(target.behaviorTags, source.behaviorTags)
+
+        if target.beforePhotoData == nil { target.beforePhotoData = source.beforePhotoData }
+        if target.beforeThumbnailData == nil { target.beforeThumbnailData = source.beforeThumbnailData }
+        if target.afterPhotoData == nil { target.afterPhotoData = source.afterPhotoData }
+        if target.afterThumbnailData == nil { target.afterThumbnailData = source.afterThumbnailData }
+
+        if let sourceItems = source.items, !sourceItems.isEmpty {
+            let existingKeys = Set((target.items ?? []).map { lineItemKey($0) })
+            for item in sourceItems where !existingKeys.contains(lineItemKey(item)) {
+                item.visit = target
+            }
+        }
+        target.lastModifiedAt = max(target.lastModifiedAt, source.lastModifiedAt)
+        target.updatedAt = max(target.updatedAt, source.updatedAt)
+    }
+
+    private static func mergedText(_ lhs: String?, _ rhs: String?) -> String? {
+        let left = lhs?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let right = rhs?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let right, !right.isEmpty else { return left?.isEmpty == false ? left : nil }
+        guard let left, !left.isEmpty else { return right }
+        if left == right || left.contains(right) { return left }
+        if right.contains(left) { return right }
+        return "\(left)\n---\n\(right)"
+    }
+
+    private static func mergedTags(_ lhs: [String], _ rhs: [String]) -> [String] {
+        Array(Set((lhs + rhs).map { $0.trimmed }.filter { !$0.isEmpty }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private static func lineItemKey(_ item: VisitItem) -> String {
+        let serviceKey = item.service?.uuid.uuidString ?? item.name.lowercased()
+        return "\(serviceKey)|\(item.quantity)|\(item.unitPrice)"
     }
 
     private static func countOrphanVisitItems(in context: ModelContext) throws -> Int {

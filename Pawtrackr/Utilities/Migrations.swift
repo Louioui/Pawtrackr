@@ -51,9 +51,9 @@ import OSLog
 // Until that's done, the patch-version bump below is the only thing telling
 // SwiftData anything changed at all.
 enum PawtrackrSchemaV1: VersionedSchema {
-    // Keep the patch version at 1.0.2 for existing stores. SwiftData #Index
+    // Keep the patch version at 1.0.3 for existing stores. SwiftData #Index
     // declarations are not used because they require iOS 18 / macOS 15.
-    static var versionIdentifier: Schema.Version = .init(1, 0, 2)
+    static var versionIdentifier: Schema.Version = .init(1, 0, 3)
 
     static var models: [any PersistentModel.Type] {
         [
@@ -117,6 +117,25 @@ enum PawtrackrMigrationPlan: SchemaMigrationPlan {
 // MARK: - Data Seeding & Coercion
 
 enum DataMigrations {
+    static func backfillVisitSessionTokens(in context: ModelContext) {
+        do {
+            let visits = try context.fetch(FetchDescriptor<Visit>())
+            var updates = 0
+            for visit in visits where visit.sessionToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                visit.ensureSessionToken()
+                updates += 1
+            }
+            if context.hasChanges {
+                try context.save()
+            }
+            if updates > 0 {
+                Logger.migrations.info("Backfilled \(updates) visit session token(s).")
+            }
+        } catch {
+            Logger.migrations.error("Visit session token backfill failed: \(String(describing: error))")
+        }
+    }
+
     static func coercePets(in context: ModelContext) {
         do {
             let sortDescriptors = [SortDescriptor(\Pet.createdAt, order: .forward)]

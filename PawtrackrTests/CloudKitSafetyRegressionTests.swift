@@ -17,6 +17,7 @@ final class CloudKitSafetyRegressionTests: XCTestCase {
     override func tearDownWithError() throws {
         UserDefaults.standard.removeObject(forKey: "lastSummarySyncDate")
         UserDefaults.standard.removeObject(forKey: "lastSummaryRebuildDate")
+        OfflineMutationBuffer.clear()
         container = nil
         context = nil
     }
@@ -119,6 +120,50 @@ final class CloudKitSafetyRegressionTests: XCTestCase {
         XCTAssertEqual(payment.lastModifiedBy, DeviceIdentity.currentID)
         XCTAssertFalse(visit.lastModifiedAt > Date())
         XCTAssertFalse(payment.lastModifiedAt > Date())
+    }
+
+    func testCloudImportReconcilerMergesDuplicateActiveVisitSession() throws {
+        let pet = Pet(name: "Scout", species: .dog)
+        let started = Date()
+        let first = Visit(pet: pet, startedAt: started)
+        first.setNote("Checked in at front desk")
+        first.behaviorTags = ["Matting"]
+
+        let duplicate = Visit(pet: pet, startedAt: started.addingTimeInterval(30))
+        duplicate.sessionToken = first.sessionToken
+        duplicate.setNote("Groomer added oatmeal shampoo note")
+        duplicate.behaviorTags = ["Sensitive"]
+
+        context.insert(pet)
+        context.insert(first)
+        context.insert(duplicate)
+        try context.save()
+
+        _ = CloudSyncReconciler.reconcileImportedData(in: context)
+
+        let active = try context.fetch(FetchDescriptor<Visit>(predicate: #Predicate { $0.endedAt == nil }))
+            .filter { $0.pet?.uuid == pet.uuid }
+        XCTAssertEqual(active.count, 1)
+        let merged = try XCTUnwrap(active.first)
+        XCTAssertTrue(merged.note?.contains("front desk") == true)
+        XCTAssertTrue(merged.note?.contains("oatmeal shampoo") == true)
+        XCTAssertEqual(Set(merged.behaviorTags), Set(["Matting", "Sensitive"]))
+    }
+
+    func testOfflineMutationBufferCapsFlushBatchAtFortyRecords() throws {
+        OfflineMutationBuffer.clear()
+        for index in 0..<45 {
+            OfflineMutationBuffer.append(
+                operation: "offline edit \(index)",
+                entityName: "Visit",
+                changedKeys: ["note", "note", "updatedAt"]
+            )
+        }
+
+        let batch = OfflineMutationBuffer.peekBatch()
+        XCTAssertEqual(batch.count, 40)
+        XCTAssertEqual(batch.first?.changedKeys, ["note", "updatedAt"])
+        XCTAssertEqual(OfflineMutationBuffer.count, 45)
     }
 
     func testPetHistoryUsesCheckoutCompletionDateForMonthScope() async throws {

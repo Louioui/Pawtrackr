@@ -268,6 +268,19 @@ struct ContentView: View {
             #endif
         }
         .preferredColorScheme(appSettings.preferredColorScheme.swiftUIScheme)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            ecosystemStatusInset
+        }
+    }
+
+    private var ecosystemStatusInset: some View {
+        HStack {
+            Spacer(minLength: 0)
+            EcosystemStatusBar()
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
     }
 
     private var tabView: some View {

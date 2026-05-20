@@ -34,7 +34,7 @@ extension Client: ConflictResolvable {
         if other.phone != phone { phone = other.phone }
         if other.email != email { email = other.email }
         if other.address != address { address = other.address }
-        if other.notes != notes { notes = other.notes }
+        notes = CloudConflictResolver.mergedText(notes, other.notes)
         if other.photoData != nil { photoData = other.photoData }
         if other.thumbnailData != nil { thumbnailData = other.thumbnailData }
         updatedAt = other.updatedAt
@@ -49,11 +49,30 @@ extension Pet: ConflictResolvable {
         if other.gender != gender { gender = other.gender }
         if other.breed != breed { breed = other.breed }
         if other.color != color { color = other.color }
-        if other.notes != notes { notes = other.notes }
-        if other.behaviorTagsRaw != behaviorTagsRaw { behaviorTagsRaw = other.behaviorTagsRaw }
+        notes = CloudConflictResolver.mergedText(notes, other.notes)
+        health = CloudConflictResolver.mergedText(health, other.health)
+        specialInstructions = CloudConflictResolver.mergedText(specialInstructions, other.specialInstructions)
+        behaviorTags = CloudConflictResolver.mergedTags(behaviorTags, other.behaviorTags)
         if other.photoData != nil { photoData = other.photoData }
         if other.thumbnailData != nil { thumbnailData = other.thumbnailData }
         updatedAt = other.updatedAt
         lastModifiedBy = other.lastModifiedBy
+    }
+}
+
+private extension CloudConflictResolver {
+    static func mergedText(_ lhs: String?, _ rhs: String?) -> String? {
+        let left = lhs?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let right = rhs?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let right, !right.isEmpty else { return left?.isEmpty == false ? left : nil }
+        guard let left, !left.isEmpty else { return right }
+        if left == right || left.contains(right) { return left }
+        if right.contains(left) { return right }
+        return "\(left)\n---\n\(right)"
+    }
+
+    static func mergedTags(_ lhs: [String], _ rhs: [String]) -> [String] {
+        Array(Set((lhs + rhs).map { $0.trimmed }.filter { !$0.isEmpty }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 }

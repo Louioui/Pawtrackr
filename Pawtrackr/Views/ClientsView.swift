@@ -15,6 +15,7 @@ import UIKit
 
 struct ClientsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(GlobalEventBus.self) private var eventBus
     @Environment(NavigationRouter.self) private var router
     var namespace: Namespace.ID
 
@@ -161,7 +162,9 @@ struct ClientsView: View {
             NotificationsSheet(notifications: $storedNotifications)
         }
         .onAppear {
-            if viewModel == nil { viewModel = ClientsViewModel(modelContext: modelContext) }
+            if viewModel == nil {
+                viewModel = ClientsViewModel(modelContext: modelContext, eventBus: eventBus)
+            }
             viewModel?.fetchClients()
         }
         .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in

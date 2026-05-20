@@ -75,18 +75,21 @@ final class ClientsViewModel {
     // MARK: - Private Properties
     private let modelContext: ModelContext
     private let repository: ClientRepositoryProtocol
+    private let eventBus: GlobalEventBus?
     private var searchTask: Task<Void, Never>? = nil
     private var refreshTask: Task<Void, Never>? = nil
     private var loadMoreTask: Task<Void, Never>? = nil
     private var deleteTask: Task<Void, Never>? = nil
+    private var eventTask: Task<Void, Never>? = nil
     private var cancellables: Set<AnyCancellable> = []
     private var pageSize: Int = 100
     private var fetchOffset: Int = 0
     
     // MARK: - Lifecycle
-    init(modelContext: ModelContext, repository: ClientRepositoryProtocol? = nil) {
+    init(modelContext: ModelContext, eventBus: GlobalEventBus? = nil, repository: ClientRepositoryProtocol? = nil) {
         self.modelContext = modelContext
         self.repository = repository ?? ClientRepository(modelContainer: modelContext.container)
+        self.eventBus = eventBus
         fetchClients() // Initial fetch
 
         // Listen for specific events that change the client list rather than
@@ -101,6 +104,18 @@ final class ClientsViewModel {
                 .receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.fetchClients() }
                 .store(in: &cancellables)
+        }
+
+        if let eventBus {
+            let stream = eventBus.stream
+            eventTask = Task { [weak self] in
+                for await event in stream {
+                    guard let self else { return }
+                    if event == .refreshRequired {
+                        self.fetchClients()
+                    }
+                }
+            }
         }
     }
     

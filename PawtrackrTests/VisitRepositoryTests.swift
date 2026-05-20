@@ -60,6 +60,23 @@ final class VisitRepositoryTests: XCTestCase {
         XCTAssertEqual(try context.fetch(descriptor).count, 1)
     }
 
+    func testCheckIn_ReusesExistingActiveVisitForPet() async throws {
+        let first = try await repository.checkIn(pet: pet, date: .now)
+        let second = try await repository.checkIn(pet: pet, date: .now.addingTimeInterval(60))
+
+        XCTAssertEqual(first.uuid, second.uuid)
+        let activeVisits = try context.fetch(FetchDescriptor<Visit>(predicate: #Predicate { $0.endedAt == nil }))
+            .filter { $0.pet?.uuid == pet.uuid }
+        XCTAssertEqual(activeVisits.count, 1)
+    }
+
+    func testCheckIn_AssignsDeterministicSessionToken() async throws {
+        let started = Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 19, hour: 10))!
+        let visit = try await repository.checkIn(pet: pet, date: started)
+
+        XCTAssertEqual(visit.sessionToken, Visit.makeSessionToken(petUUID: pet.uuid, startedAt: started))
+    }
+
     func testCheckIn_PostsVisitDidStartNotification() async throws {
         let exp = expectation(forNotification: .visitDidStart, object: nil, handler: nil)
         _ = try await repository.checkIn(pet: pet, date: .now)
@@ -132,9 +149,12 @@ final class VisitRepositoryTests: XCTestCase {
     }
 
     func testFetchVisits_RespectsPredicateAndLimit() async throws {
-        for _ in 0..<5 {
-            _ = try await repository.checkIn(pet: pet, date: .now)
+        for offset in 0..<5 {
+            let visit = Visit(pet: pet, startedAt: .now.addingTimeInterval(Double(offset) * 60))
+            context.insert(visit)
         }
+        try context.save()
+
         let petUUID = pet.uuid
         let predicate = #Predicate<Visit> { $0.pet?.uuid == petUUID }
         let result = try await repository.fetchVisits(predicate: predicate, sortBy: [], limit: 3)

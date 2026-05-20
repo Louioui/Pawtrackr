@@ -188,6 +188,7 @@ final class CloudKitMonitor {
     private(set) var pendingLocalChangeCount: Int = 0
     private(set) var pendingLocalChangeDate: Date?
     private(set) var pendingLocalChangeDescription: String?
+    private(set) var offlineBufferedMutationCount: Int = 0
 
     /// Container identifier from the entitlements file. Surfaced for the
     /// diagnostics screen so users can read it back to support.
@@ -210,6 +211,8 @@ final class CloudKitMonitor {
     /// new forceSync call so rapid pull-to-refresh doesn't stack watchdogs that
     /// later all race to flip syncState back to .idle.
     private var forceSyncWatchdog: Task<Void, Never>?
+    private var remoteStoreRefreshTask: Task<Void, Never>?
+    private var offlineFlushTask: Task<Void, Never>?
 
     private enum DefaultsKey {
         static let lastSyncDate = "cloudkit.lastSyncDate"
@@ -236,6 +239,7 @@ final class CloudKitMonitor {
         self.pendingLocalChangeCount = UserDefaults.standard.integer(forKey: DefaultsKey.pendingLocalChangeCount)
         self.pendingLocalChangeDate = UserDefaults.standard.object(forKey: DefaultsKey.pendingLocalChangeDate) as? Date
         self.pendingLocalChangeDescription = UserDefaults.standard.string(forKey: DefaultsKey.pendingLocalChangeDescription)
+        self.offlineBufferedMutationCount = OfflineMutationBuffer.count
     }
 
     // MARK: - Lifecycle
@@ -253,6 +257,7 @@ final class CloudKitMonitor {
 
         observeAccountChanges()
         observeCloudKitEvents()
+        observePersistentStoreRemoteChanges()
         observeNetworkState()
         observeDeviceNameChanges()
         runSafeModeDiagnostics()
@@ -268,7 +273,9 @@ final class CloudKitMonitor {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.updateDeviceMetadata()
+            Task { @MainActor [weak self] in
+                self?.updateDeviceMetadata()
+            }
         }
         observers.append(token)
     }
@@ -320,6 +327,9 @@ final class CloudKitMonitor {
                 message: mapped.displayLabel,
                 errorCode: mapped == .available ? nil : String(describing: status)
             )
+            if mapped == .available, networkState.isOnline {
+                flushOfflineMutationBuffer(reason: "iCloud account available")
+            }
             postChange()
         }
     }
@@ -370,6 +380,7 @@ final class CloudKitMonitor {
                 } else if self.accountState.isAvailable {
                     // Heartbeat our device info when we come online
                     self.updateDeviceMetadata()
+                    self.flushOfflineMutationBuffer(reason: "Network restored")
                     self.runSafeModeDiagnostics()
                 }
                 self.postChange()
@@ -384,6 +395,18 @@ final class CloudKitMonitor {
     /// This allows the business owner to see which worker devices are active.
     func updateDeviceMetadata() {
         guard let modelContainer, accountState.isAvailable, networkState.isOnline else { return }
+
+        #if os(iOS)
+        let deviceModel = UIDevice.current.model
+        let osVersion = "iOS " + UIDevice.current.systemVersion
+        #elseif os(macOS)
+        let deviceModel = "Mac"
+        let osVersion = "macOS " + ProcessInfo.processInfo.operatingSystemVersionString
+        #else
+        let deviceModel = "Unknown"
+        let osVersion = "Unknown"
+        #endif
+        let deviceName = UserDefaults.standard.string(forKey: "deviceName") ?? deviceModel
         
         Task.detached(priority: .utility) {
             let context = ModelContext(modelContainer)
@@ -394,20 +417,6 @@ final class CloudKitMonitor {
             
             do {
                 let existing = try context.fetch(descriptor).first
-                
-                #if os(iOS)
-                let deviceModel = UIDevice.current.model
-                let osVersion = "iOS " + UIDevice.current.systemVersion
-                #elseif os(macOS)
-                let deviceModel = "Mac"
-                let osVersion = "macOS " + ProcessInfo.processInfo.operatingSystemVersionString
-                #else
-                let deviceModel = "Unknown"
-                let osVersion = "Unknown"
-                #endif
-                
-                // Use a default name if not set
-                let deviceName = UserDefaults.standard.string(forKey: "deviceName") ?? deviceModel
                 
                 if let meta = existing {
                     meta.name = deviceName
@@ -546,6 +555,43 @@ final class CloudKitMonitor {
             }
         }
         observers.append(eventToken)
+    }
+
+    private func observePersistentStoreRemoteChanges() {
+        let token = NotificationCenter.default.addObserver(
+            forName: .NSPersistentStoreRemoteChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handlePersistentStoreRemoteChange()
+            }
+        }
+        observers.append(token)
+    }
+
+    private func handlePersistentStoreRemoteChange() {
+        recordSyncAttempt()
+        syncState = .syncing
+        appendEvent(
+            kind: .importFromCloud,
+            status: .started,
+            message: "Remote store change received",
+            errorCode: nil
+        )
+        eventBus?.publish(.refreshRequired)
+        postChange()
+
+        remoteStoreRefreshTask?.cancel()
+        remoteStoreRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, !Task.isCancelled else { return }
+            self.rebuildAndReconcileAfterImport()
+            if case .syncing = self.syncState {
+                self.syncState = .idle
+                self.postChange()
+            }
+        }
     }
 
     private func handleCloudKitEvent(notification: Notification) {
@@ -747,18 +793,36 @@ final class CloudKitMonitor {
         postChange()
     }
 
-    func recordLocalChange(_ operation: String) {
-        guard accountState.isAvailable else { return }
+    func recordLocalChange(
+        _ operation: String,
+        entityName: String? = nil,
+        recordUUID: UUID? = nil,
+        changedKeys: [String] = []
+    ) {
+        guard !AppRuntime.isRunningTests else { return }
         pendingLocalChangeCount += 1
         pendingLocalChangeDate = Date()
         pendingLocalChangeDescription = operation
         persistPendingLocalChanges()
+
+        if !accountState.isAvailable || !networkState.isOnline {
+            offlineBufferedMutationCount = OfflineMutationBuffer.append(
+                operation: operation,
+                entityName: entityName,
+                recordUUID: recordUUID,
+                changedKeys: changedKeys
+            )
+        }
+
         appendEvent(
             kind: .localChange,
             status: .waiting,
-            message: operation,
+            message: offlineBufferedMutationCount > 0 ? "\(operation) queued for iCloud" : operation,
             errorCode: nil
         )
+        if accountState.isAvailable, networkState.isOnline {
+            flushOfflineMutationBuffer(reason: "Local change recorded while online")
+        }
         postChange()
     }
 
@@ -840,7 +904,8 @@ final class CloudKitMonitor {
     }
 
     var pendingChangesSummary: String? {
-        guard pendingLocalChangeCount > 0 else { return nil }
+        let waitingCount = max(pendingLocalChangeCount, offlineBufferedMutationCount)
+        guard waitingCount > 0 else { return nil }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         let relative = pendingLocalChangeDate.map { formatter.localizedString(for: $0, relativeTo: Date()) }
@@ -850,7 +915,7 @@ final class CloudKitMonitor {
                 value: "%d local change(s) waiting for iCloud",
                 comment: ""
             ),
-            pendingLocalChangeCount
+            waitingCount
         )
         guard let relative else { return base }
         return "\(base), \(relative)"
@@ -1095,6 +1160,59 @@ final class CloudKitMonitor {
             message: reason,
             errorCode: nil
         )
+    }
+
+    private func flushOfflineMutationBuffer(reason: String) {
+        guard accountState.isAvailable, networkState.isOnline else { return }
+        offlineBufferedMutationCount = OfflineMutationBuffer.count
+        guard offlineBufferedMutationCount > 0 else { return }
+
+        offlineFlushTask?.cancel()
+        offlineFlushTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while self.accountState.isAvailable, self.networkState.isOnline {
+                let batch = OfflineMutationBuffer.peekBatch()
+                guard !batch.isEmpty else { break }
+
+                self.syncState = .syncing
+                self.appendEvent(
+                    kind: .localChange,
+                    status: .started,
+                    message: "\(reason): releasing \(batch.count) buffered change(s)",
+                    errorCode: nil
+                )
+                self.eventBus?.publish(.refreshRequired)
+                self.postChange()
+
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+
+                self.offlineBufferedMutationCount = OfflineMutationBuffer.remove(ids: batch.map(\.id))
+                self.pendingLocalChangeCount = max(self.pendingLocalChangeCount, self.offlineBufferedMutationCount)
+                self.persistPendingLocalChanges()
+                self.appendEvent(
+                    kind: .localChange,
+                    status: .noted,
+                    message: "Buffered change batch released (\(batch.count) max per pass: \(OfflineMutationBuffer.batchLimit))",
+                    errorCode: nil
+                )
+
+                if batch.count < OfflineMutationBuffer.batchLimit {
+                    break
+                }
+            }
+
+            if self.offlineBufferedMutationCount == 0, self.pendingLocalChangeCount > 0 {
+                self.pendingLocalChangeCount = 0
+                self.pendingLocalChangeDate = nil
+                self.pendingLocalChangeDescription = nil
+                self.persistPendingLocalChanges()
+            }
+            if case .syncing = self.syncState {
+                self.syncState = .idle
+            }
+            self.postChange()
+        }
     }
 
     private func resumeRemoteWakeWaiters(success: Bool) {

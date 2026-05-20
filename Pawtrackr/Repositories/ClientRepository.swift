@@ -227,8 +227,14 @@ final actor ClientRepository: ClientRepositoryProtocol {
         }
         
         try modelContext.save()
+        let clientUUID = client.uuid
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Created client")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Created client",
+                entityName: "Client",
+                recordUUID: clientUUID,
+                changedKeys: ["uuid", "firstName", "lastName", "phone", "email", "address", "pets", "emergencyContacts", "createdAt", "updatedAt"]
+            )
         }
         return client.persistentModelID
     }
@@ -240,13 +246,20 @@ final actor ClientRepository: ClientRepositoryProtocol {
         client.phone = phone
         client.email = email
         try modelContext.save()
+        let clientUUID = client.uuid
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Saved client")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Saved client",
+                entityName: "Client",
+                recordUUID: clientUUID,
+                changedKeys: ["firstName", "lastName", "phone", "email", "updatedAt", "lastModifiedBy"]
+            )
         }
     }
 
     func deleteClient(id: PersistentIdentifier) async throws {
         guard let client = modelContext.model(for: id) as? Client else { return }
+        let clientUUID = client.uuid
         
         let pets = Array(client.pets ?? [])
         let visits = pets.flatMap { pet in Array(pet.visits ?? []) }
@@ -256,7 +269,12 @@ final actor ClientRepository: ClientRepositoryProtocol {
         modelContext.delete(client)
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Deleted client")
+            CloudKitMonitor.shared.recordLocalChange(
+                "Deleted client",
+                entityName: "Client",
+                recordUUID: clientUUID,
+                changedKeys: ["deleted"]
+            )
         }
 
         let cal = Calendar.current

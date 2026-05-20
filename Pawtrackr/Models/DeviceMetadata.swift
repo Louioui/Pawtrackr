@@ -11,21 +11,25 @@ import SwiftData
 
 @Model
 final class DeviceMetadata {
+    // Non-optional properties have defaults — required by CloudKit-backed
+    // SwiftData. Uniqueness is NOT enforced across CloudKit replicas, so the
+    // upsert path in CloudKitMonitor dedupes by deviceID instead.
+
     /// Matches DeviceIdentity.currentID
-    @Attribute(.unique) var deviceID: UUID
-    
+    var deviceID: UUID = UUID()
+
     /// User-defined name (e.g. "Reception iPad")
-    var name: String
-    
+    var name: String = ""
+
     /// Auto-detected model name
-    var model: String
-    
+    var model: String = ""
+
     /// OS version
-    var osVersion: String
-    
+    var osVersion: String = ""
+
     /// Last time this specific device pushed an update to iCloud
-    var lastSyncAt: Date
-    
+    var lastSyncAt: Date = Date()
+
     init(deviceID: UUID, name: String, model: String, osVersion: String) {
         self.deviceID = deviceID
         self.name = name

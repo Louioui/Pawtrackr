@@ -64,6 +64,7 @@ final actor CheckoutTransactionActor {
             // 2. Fetch or Insert Visit
             let visit = try fetchOrCreateVisit(uuid: request.visitUUID, petUUID: request.petUUID)
             let pet = try fetchPet(uuid: request.petUUID)
+            visit.ensureSessionToken()
             
             // 3. Process Images (Parallelized background work)
             let (pBefore, pBeforeThumb, pAfter, pAfterThumb) = await processImages(
@@ -95,8 +96,23 @@ final actor CheckoutTransactionActor {
             // 8. Commit
             transaction.markSucceeded(completedAt: endedAt)
             try context.save()
+            let transactionUUID = transaction.uuid
             await MainActor.run {
-                CloudKitMonitor.shared.recordLocalChange("Completed checkout")
+                CloudKitMonitor.shared.recordLocalChange(
+                    "Completed checkout",
+                    entityName: "CheckoutTransaction",
+                    recordUUID: transactionUUID,
+                    changedKeys: [
+                        "idempotencyKey",
+                        "visitUUID",
+                        "petUUID",
+                        "amount",
+                        "methodRaw",
+                        "statusRaw",
+                        "completedAt",
+                        "updatedAt"
+                    ]
+                )
             }
             
             // 9. Rebuild Summaries (Off-actor utility)
@@ -160,6 +176,7 @@ final actor CheckoutTransactionActor {
         let pet = try fetchPet(uuid: petUUID)
         let visit = Visit(pet: pet)
         visit.uuid = uuid
+        visit.ensureSessionToken()
         modelContext.insert(visit)
         return visit
     }

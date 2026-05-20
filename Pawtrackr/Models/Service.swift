@@ -118,6 +118,10 @@ final class Service {
     }
 }
 
+extension Service: Identifiable {
+    var id: UUID { uuid }
+}
+
 // MARK: - Nested Category Enum
 extension Service {
     enum Category: String, Codable, CaseIterable, Identifiable {

@@ -14,6 +14,7 @@ final class Visit {
     // MARK: - Identity & Timestamps
     // NOTE: Non-optional properties have defaults for CloudKit compatibility.
     var uuid: UUID = UUID()
+    var sessionToken: String = ""
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var startedAt: Date = Date()
@@ -60,6 +61,7 @@ final class Visit {
     // MARK: - Init
     init(pet: Pet, startedAt: Date = .now, user: User? = nil) {
         self.uuid = UUID()
+        self.sessionToken = Self.makeSessionToken(petUUID: pet.uuid, startedAt: startedAt)
         self.createdAt = .now
         self.updatedAt = .now
         self.startedAt = startedAt
@@ -104,17 +106,26 @@ final class Visit {
         (items ?? []).reduce(Decimal.zero) { $0 + $1.lineTotal }
     }
 
+    var servicesSubtotal: Decimal {
+        calculatedTotal
+    }
+
     /// Finalize a visit: stamp the total and close-out time. Mirrors the
     /// CheckoutTransactionActor exit path used by every checkout flow.
-    func markCheckedOut(total: Decimal, now: Date) {
+    func markCheckedOut(total: Decimal, now: Date = .now) {
         self.total = total
         self.endedAt = now
         didUpdate()
     }
 
+    func markCheckedOut(now: Date = .now) {
+        markCheckedOut(total: effectiveTotal, now: now)
+    }
+
     // MARK: - Mutating API
     func setStartedAt(_ date: Date) {
         startedAt = date
+        refreshSessionToken()
         didUpdate()
     }
     
@@ -221,8 +232,29 @@ final class Visit {
         didUpdate()
     }
 
+    static func makeSessionToken(petUUID: UUID, startedAt: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: startedAt)
+        let year = components.year ?? 1970
+        let month = components.month ?? 1
+        let day = components.day ?? 1
+        return String(format: "%04d-%02d-%02d_%@", year, month, day, petUUID.uuidString)
+    }
+
+    func ensureSessionToken() {
+        if sessionToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            refreshSessionToken()
+        }
+    }
+
     // MARK: - Private Helpers
+    private func refreshSessionToken() {
+        if let pet {
+            sessionToken = Self.makeSessionToken(petUUID: pet.uuid, startedAt: startedAt)
+        }
+    }
+
     private func didUpdate() {
+        ensureSessionToken()
         updatedAt = .now
         lastModifiedAt = .now
         lastModifiedBy = DeviceIdentity.currentID

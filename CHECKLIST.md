@@ -94,3 +94,19 @@
 - [x] Reworked `VisitDetailView` with an iPad-specific centered canvas and organized two-column detail layout.
 - [x] Moved iPad checkout action into the payment card instead of a cluttered bottom bar on wide iPad layouts.
 - [x] Verified generic iOS Simulator and macOS builds after the iPad fixes.
+
+## Phase 9: Multi-Device Shop Sync Hardening
+
+- [x] Added deterministic `Visit.sessionToken` values in `YYYY-MM-DD_<petUUID>` format and backfilled existing visits through migration version `1.0.3`.
+- [x] Hardened active visit check-in into an app-level upsert so simultaneous devices reuse the same active visit instead of creating duplicate shop sessions.
+- [x] Extended CloudKit local-change tracking with entity names, record UUIDs, and changed-key metadata for compact sync diagnostics.
+- [x] Added a persistent offline mutation buffer capped at 40 records per flush batch for weak Wi-Fi and offline shop edits.
+- [x] Added remote persistent-store change observation to publish refresh events, reconcile imports, and clear stale UI screens after CloudKit deltas arrive.
+- [x] Added `EcosystemStatusBar` to the shared shell for live `SHOP_SYNC_LIVE`, `SHOP_SYNC_UPDATING`, `SHOP_SYNC_OFFLINE`, and attention states across iPhone, iPad, and macOS.
+- [x] Updated Clients refresh flow to react to global CloudKit refresh events instead of waiting for manual navigation or pull-to-refresh.
+- [x] Strengthened CloudKit import reconciliation to merge duplicate active visits by `sessionToken`, preserving notes, behavior tags, photos, checkout data, and visit items.
+- [x] Strengthened client and pet conflict resolution so notes and tag sets merge instead of blindly overwriting property groups.
+- [x] Confirmed no localization string-table update was required for this pass; the status bar uses fixed operator sync state codes.
+- [x] Added regression coverage for deterministic session tokens, active-visit upsert behavior, duplicate visit reconciliation, and 40-record offline buffer batching.
+- [x] Verified focused sync and repository tests: 22 selected tests passed.
+- [x] Verified final generic iOS Simulator and macOS builds after the shop sync hardening pass.

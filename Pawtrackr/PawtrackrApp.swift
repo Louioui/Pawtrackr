@@ -19,6 +19,13 @@ import AppKit
 @main
 struct PawtrackrApp: App {
     static let lastInitErrorKey = "pawtrackr.lastInitError"
+    /// Set by DataStoreRecoveryView when the user picks "Run Without iCloud".
+    /// Honored on the next launch: skips `cloudKitDatabase: .automatic` so a
+    /// broken CloudKit schema can't keep the container from initializing.
+    static let cloudKitDisabledByRecoveryKey = "pawtrackr.cloudKitDisabledByRecovery"
+    /// True when this launch fell back to local-only because CloudKit init
+    /// threw. The UI shows a banner so the user knows sync is off.
+    static let cloudKitFallbackActiveKey = "pawtrackr.cloudKitFallbackActive"
 
     let container: ModelContainer?
     private var scheduledTasks: ScheduledTasks?
@@ -62,38 +69,77 @@ struct PawtrackrApp: App {
             return
         }
 
+        // Honor the recovery flag: if a previous launch hit a CloudKit-schema
+        // boot loop and the user picked "Run Without iCloud", skip CloudKit
+        // on this launch so they can actually open the app.
+        let cloudKitDisabledByRecovery = UserDefaults.standard.bool(forKey: PawtrackrApp.cloudKitDisabledByRecoveryKey)
+        let wantsCloudKit = !inMemory && !cloudKitDisabledByRecovery
+
+        let schema = Schema(PawtrackrSchema.models)
+        let containerName = inMemory ? "PawtrackrTests" : "Pawtrackr"
+
+        // Try CloudKit first (the normal path). If init throws, retry with
+        // .none so the user lands in a working local-only app instead of the
+        // recovery screen. A banner elsewhere informs them sync is off.
+        var loaded: ModelContainer?
+        var fellBackToLocalOnly = false
+        var firstError: Error?
+
         do {
-            let schema = Schema(PawtrackrSchema.models)
-            let config = ModelConfiguration(
-                inMemory ? "PawtrackrTests" : "Pawtrackr",
+            let primaryConfig = ModelConfiguration(
+                containerName,
                 schema: schema,
                 isStoredInMemoryOnly: inMemory,
-                cloudKitDatabase: inMemory ? .none : .automatic
+                cloudKitDatabase: wantsCloudKit ? .automatic : .none
             )
-            let localContainer = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self, configurations: [config])
+            loaded = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self, configurations: [primaryConfig])
+        } catch {
+            firstError = error
+            logger.critical("ModelContainer init failed (cloudkit=\(wantsCloudKit)): \(error.localizedDescription, privacy: .public)")
 
+            if wantsCloudKit {
+                logger.warning("Falling back to local-only ModelContainer so the user can still open the app.")
+                do {
+                    let fallbackConfig = ModelConfiguration(
+                        containerName,
+                        schema: schema,
+                        isStoredInMemoryOnly: false,
+                        cloudKitDatabase: .none
+                    )
+                    loaded = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self, configurations: [fallbackConfig])
+                    fellBackToLocalOnly = true
+                } catch {
+                    logger.critical("Local-only fallback also failed: \(error.localizedDescription, privacy: .public)")
+                    UserDefaults.standard.set("CloudKit init failed: \(firstError?.localizedDescription ?? "unknown"). Local-only fallback also failed: \(error.localizedDescription)", forKey: PawtrackrApp.lastInitErrorKey)
+                }
+            } else {
+                UserDefaults.standard.set(error.localizedDescription, forKey: PawtrackrApp.lastInitErrorKey)
+            }
+        }
+
+        if let localContainer = loaded {
             if isUITesting {
-                try UITestDataSeeder.seedIfNeeded(in: localContainer.mainContext)
+                try? UITestDataSeeder.seedIfNeeded(in: localContainer.mainContext)
             }
 
             initialContainer = localContainer
             initialTasks = inMemory ? nil : ScheduledTasks(modelContainer: localContainer)
             initialAuthVM = AuthenticationViewModel(modelContext: localContainer.mainContext)
-            
+
             // Validate store health
             if !StoreHealthCheck.isStoreHealthy(container: localContainer) {
                 logger.critical("ModelContainer health check failed.")
                 UserDefaults.standard.set("Database integrity check failed.", forKey: PawtrackrApp.lastInitErrorKey)
                 initialContainer = nil
+            } else if fellBackToLocalOnly {
+                // Record a non-fatal banner-state for the UI to surface.
+                UserDefaults.standard.set(true, forKey: PawtrackrApp.cloudKitFallbackActiveKey)
+                UserDefaults.standard.set("CloudKit unavailable: \(firstError?.localizedDescription ?? "unknown error"). Running in local-only mode.", forKey: PawtrackrApp.lastInitErrorKey)
+            } else if !cloudKitDisabledByRecovery {
+                // Successful CloudKit launch — clear stale fallback markers.
+                UserDefaults.standard.removeObject(forKey: PawtrackrApp.cloudKitFallbackActiveKey)
             }
-        } catch {
-            // Most common cause: schema changed since the last run and the
-            // existing on-disk store doesn't match. We expose this state to
-            // the recovery UI (mainWindowContent) which offers the user a
-            // "Reset Local Data" button. AuthenticationViewModel now accepts
-            // a nil context, so we don't need a dummy container here.
-            logger.critical("Failed to create ModelContainer: \(error.localizedDescription, privacy: .public)")
-            UserDefaults.standard.set(error.localizedDescription, forKey: PawtrackrApp.lastInitErrorKey)
+        } else {
             initialContainer = nil
             initialTasks = nil
             initialAuthVM = AuthenticationViewModel(modelContext: nil)
@@ -110,6 +156,7 @@ struct PawtrackrApp: App {
         }
 
         // 3. Start side effects AFTER full initialization
+        let cloudKitActive = !inMemory && !cloudKitDisabledByRecovery && !fellBackToLocalOnly
         if let localContainer = initialContainer {
             if inMemory {
                 Task { @MainActor in
@@ -118,23 +165,31 @@ struct PawtrackrApp: App {
             } else {
                 initialTasks?.start()
 
-                // Start the CloudKit monitor on launch so the UI gets the
-                // earliest possible signal about account/sync state.
-                let busForStart = eventBus
-                Task { @MainActor in
-                    CloudKitMonitor.shared.start(modelContainer: localContainer, eventBus: busForStart)
-                }
+                if cloudKitActive {
+                    // Start the CloudKit monitor on launch so the UI gets the
+                    // earliest possible signal about account/sync state.
+                    let busForStart = eventBus
+                    Task { @MainActor in
+                        CloudKitMonitor.shared.start(modelContainer: localContainer, eventBus: busForStart)
+                    }
 
-                // Register for silent CloudKit pushes.
-                #if canImport(UIKit) && !targetEnvironment(macCatalyst)
-                DispatchQueue.main.async {
-                    UIApplication.shared.registerForRemoteNotifications()
+                    // Register for silent CloudKit pushes.
+                    #if canImport(UIKit) && !targetEnvironment(macCatalyst)
+                    DispatchQueue.main.async {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
+                    #elseif canImport(AppKit)
+                    DispatchQueue.main.async {
+                        NSApplication.shared.registerForRemoteNotifications()
+                    }
+                    #endif
+                } else {
+                    // Local-only mode: tell CloudKitMonitor it's idle so any UI
+                    // observing it doesn't show a permanent "syncing…" state.
+                    Task { @MainActor in
+                        CloudKitMonitor.shared.markFirstSyncCompleted()
+                    }
                 }
-                #elseif canImport(AppKit)
-                DispatchQueue.main.async {
-                    NSApplication.shared.registerForRemoteNotifications()
-                }
-                #endif
 
                 // Fetch remote configuration
                 Task {

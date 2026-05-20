@@ -160,6 +160,7 @@ struct RootView: View {
         Task.detached(priority: .utility) {
             let backgroundContext = ModelContext(container)
             DataMigrations.coercePets(in: backgroundContext)
+            DataMigrations.backfillVisitSessionTokens(in: backgroundContext)
             DataMigrations.ensureServiceCatalog(in: backgroundContext)
             DataMigrations.ensureMessageTemplates(in: backgroundContext)
             SummaryUpdater.rebuildAllSummaries(in: backgroundContext)
