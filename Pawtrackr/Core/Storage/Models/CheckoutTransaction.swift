@@ -10,6 +10,8 @@ import SwiftData
 
 @Model
 final class CheckoutTransaction {
+    #Index<CheckoutTransaction>([\.createdAt], [\.visitUUID], [\.idempotencyKey])
+
     var uuid: UUID = UUID()
     var idempotencyKey: String = ""
     var visitUUID: UUID = UUID()

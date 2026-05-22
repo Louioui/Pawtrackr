@@ -11,6 +11,8 @@ import SwiftData
 
 @Model
 final class Visit {
+    #Index<Visit>([\.startedAt], [\.endedAt], [\.createdAt])
+
     // MARK: - Identity & Timestamps
     // NOTE: Non-optional properties have defaults for CloudKit compatibility.
     var uuid: UUID = UUID()

@@ -14,6 +14,8 @@ import SwiftData
 
 @Model
 final class Pet {
+    #Index<Pet>([\.createdAt], [\.name])
+
     // MARK: - Identity & Timestamps
     // NOTE: All non-optional properties have defaults so CloudKit can rehydrate
     // partial records. Defaults must be fully qualified (the @Model macro

@@ -37,7 +37,7 @@ import OSLog
 typealias PawtrackrSchema = PawtrackrSchemaV1
 
 enum PawtrackrSchemaV1: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 0, 3)
+    static var versionIdentifier: Schema.Version = .init(1, 0, 4)
 
     static var models: [any PersistentModel.Type] {
         [

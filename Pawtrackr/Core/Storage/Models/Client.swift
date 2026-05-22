@@ -13,6 +13,8 @@ import SwiftData
 
 @Model
 final class Client {
+    #Index<Client>([\.lastName, \.firstName], [\.lastVisitDate])
+
     // MARK: - Identity & Timestamps
     // NOTE: Non-optional properties have defaults so CloudKit can rehydrate
     // partial records. App init paths always overwrite these.

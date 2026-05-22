@@ -61,13 +61,12 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
                                                 photo+thumbnail, Visit before/after photo+thumbnail,
                                                 BusinessConfig logo. CheckoutDraft is JSON-persisted,
                                                 not a SwiftData model, so externalStorage is N/A.)
-- P20 #Index compound indexes ................. BLOCKED — #Index macro requires iOS 18; project
-                                                deploys to iOS 17. Raising the min OS drops iOS 17
-                                                devices: a product decision for the owner. Drafted
-                                                indexes (revert-on-file): Visit[startedAt|endedAt|
-                                                createdAt], Client[lastName+firstName|lastVisitDate],
-                                                Pet[createdAt|name], DaySummary[day],
-                                                CheckoutTransaction[createdAt|visitUUID|idempotencyKey].
+- P20 #Index compound indexes ................. DONE — deployment target raised to iOS 18 /
+                                                macOS 15 (owner-approved); #Index added to Visit,
+                                                Client, Pet, DaySummary, CheckoutTransaction; schema
+                                                bumped to 1.0.4 (additive/lightweight). NEEDS-DEVICE:
+                                                confirm the index migration runs cleanly against a
+                                                live CloudKit-backed store.
 
 ## Cannot be done from this environment
 
