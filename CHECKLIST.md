@@ -25,8 +25,10 @@ because their names lied about their behavior:
   it never called `processPendingChanges()`. Deleted.
 
 Remaining as SCAFFOLD (unwired, kept as honest starting points):
-`RevenueActor`, `BackgroundAnalyticsJanitor`, `TransactionQueueService`,
-`PendingTransaction`, `UnifiedNavigationStack`, `NavigationPlaceholders`.
+`TransactionQueueService`, `PendingTransaction` (P16), `UnifiedNavigationStack`,
+`NavigationPlaceholders` (P5). `RevenueActor` and `BackgroundAnalyticsJanitor`
+were deleted during P4 — redundant duplicates of the existing `InsightsActor`
+and `DataPruner`/`SummaryUpdater`.
 
 Also removed during P20: `GroomingWorkflow` — a dead `@Model` not in
 `PawtrackrSchema.models`, carrying `@Attribute(.unique)` which CloudKit-backed
@@ -36,10 +38,20 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
 
 - P2  Feature-driven directory layout ......... DONE (App/ Core/ Features/ UI/; 173 files relocated)
 - P3  Move blocking work off main thread ...... PENDING (audit needed; "X-Ray" tool is fictional)
-- P4  Background @ModelActors ................. SCAFFOLD (2 of 3 exist, unwired)
+- P4  Background @ModelActors ................. DONE (already satisfied — InsightsActor is a
+                                                @ModelActor doing revenue/analytics off-main;
+                                                CheckoutTransactionActor, SyncConflictActor,
+                                                DataStoreService.fetchAsync round it out. The
+                                                prior session's RevenueActor/BackgroundAnalyticsJanitor
+                                                were unused duplicates and were deleted.)
 - P5  Adaptive iPhone/iPad/Mac layout ......... SCAFFOLD (UnifiedNavigationStack unused)
 - P6  macOS glassmorphic window styling ....... PENDING
-- P7  Keyboard shortcuts (Cmd-N/I/F) .......... PENDING
+- P7  Keyboard shortcuts (Cmd-N/I/F) .......... DONE (already implemented — PawtrackrApp.swift
+                                                macOS .commands: Cmd-N new-client sheet, Cmd-I
+                                                insights, Cmd-F clients list. Cmd-F navigates to the
+                                                search-equipped Clients view; SwiftUI .searchable
+                                                cannot be given text-cursor focus programmatically
+                                                without a fragile hack, so that nuance is left as-is.)
 - P8  Localizable.xcstrings en/es ............. PENDING (large)
 - P9  Decimal-only money ...................... DONE (audited: all model money fields are Decimal;
                                                 no Double/Float currency math; Decimal+Money.swift
