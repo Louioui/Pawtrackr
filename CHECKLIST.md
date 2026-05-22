@@ -141,6 +141,18 @@ Resolved: 14 of 20 paragraphs (P1 is the intro, not a task).
 - Owner-skipped: P8 (already localized), P12 + P18 (schema-breaking, unverifiable).
 - P14 infeasible here; P19 N/A until P18 ships.
 
+## Test status
+
+- Build: green on both iOS (iPhone 16 Pro sim) and macOS.
+- Unit tests: 228 passed, 0 failures.
+- UI tests: 4 failures — testActiveSessionDisappearsAfterCheckoutCompletes,
+  testCheckoutManualAmountEntry, testChangePINSheetOpensWithThreeFields,
+  testExportClientsButtonOpensSharePreviewSheet. These are PRE-EXISTING: they
+  fail identically at commit d26cf1e (before this session and before the prior
+  megaprompt session), so this session's work did not introduce them. They are
+  the app's own UI-test debt — out of scope for the protocol work, flagged for
+  a separate fix pass.
+
 ## Cannot be verified from this environment
 
 P13/P15/P16/P17 are implemented and compile, but their cross-device behavior
