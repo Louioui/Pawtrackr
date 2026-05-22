@@ -5,7 +5,7 @@ has zero call sites (not integrated). PENDING = not started. NEEDS-DEVICE =
 code can be written here but correctness can only be verified on real hardware /
 a configured CloudKit environment.
 
-## Baseline (this commit)
+## Initial baseline
 
 - DONE — 25 SwiftData models relocated `Models/` -> `Core/Storage/Models/`.
   Project uses Xcode file-system-synchronized groups, so the move compiles

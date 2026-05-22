@@ -16,6 +16,9 @@ xcuserdata
 *.xcuserstate
 *.xcscmblueprint
 
+# Build / session logs
+*.log
+
 # Swift
 .swiftpm
 
