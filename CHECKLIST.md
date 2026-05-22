@@ -30,7 +30,7 @@ Remaining as SCAFFOLD (unwired, kept as honest starting points):
 
 ## 20-paragraph triage
 
-- P2  Feature-driven directory layout ......... PARTIAL (models moved; rest in old dirs)
+- P2  Feature-driven directory layout ......... DONE (App/ Core/ Features/ UI/; 173 files relocated)
 - P3  Move blocking work off main thread ...... PENDING (audit needed; "X-Ray" tool is fictional)
 - P4  Background @ModelActors ................. SCAFFOLD (2 of 3 exist, unwired)
 - P5  Adaptive iPhone/iPad/Mac layout ......... SCAFFOLD (UnifiedNavigationStack unused)
