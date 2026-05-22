@@ -63,7 +63,13 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
 - P14 CloudKit shared zones / CKShare ......... INFEASIBLE here (needs Apple Developer portal,
                                                 entitlements, multi-device; also conflicts with
                                                 the single-shared-Apple-ID premise in P1)
-- P15 NSUbiquitousKeyValueStore settings ...... PENDING
+- P15 NSUbiquitousKeyValueStore settings ...... DONE — UbiquitousSettingsStore mirrors shop-wide
+                                                identity (business name, currency symbol, brand
+                                                color) through iCloud KVS; observes
+                                                didChangeExternallyNotification; per-device prefs
+                                                (appearance, haptics, lock) deliberately excluded.
+                                                KVS entitlement already present. NEEDS-DEVICE:
+                                                cross-device propagation needs 2 devices / 1 iCloud.
 - P16 Offline transaction buffer .............. SCAFFOLD (queue exists; push step is a TODO comment)
 - P17 Batched sync dispatch (40/batch) ........ PENDING / NEEDS-DEVICE to verify
 - P18 CloudKit field encryption ............... PENDING (real approach: @Attribute(.encrypt) /

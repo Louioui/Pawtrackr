@@ -13,6 +13,7 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthenticationViewModel.self) private var authViewModel
+    @Environment(AppSettings.self) private var appSettings
     @Query private var businessConfigs: [BusinessConfig]
     @State private var cloudKitMonitor = CloudKitMonitor.shared
     @State private var showOnboarding = false
@@ -58,6 +59,7 @@ struct RootView: View {
             .interactiveDismissDisabled(true)
         }
         .task {
+            UbiquitousSettingsStore.shared.start(appSettings: appSettings)
             evaluateWhatIsNew()
             // Show the first-sync gate exactly once: when iCloud is signed in
             // and the user has never seen a successful import yet. It auto-times

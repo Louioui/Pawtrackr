@@ -111,12 +111,14 @@ final class AppSettings {
     var businessName: String {
         didSet {
             UserDefaults.standard.set(businessName, forKey: AppSettingsKeys.businessName)
+            UbiquitousSettingsStore.shared.push(businessName, forKey: AppSettingsKeys.businessName)
         }
     }
 
     var currencySymbol: String {
         didSet {
             UserDefaults.standard.set(currencySymbol, forKey: AppSettingsKeys.currencySymbol)
+            UbiquitousSettingsStore.shared.push(currencySymbol, forKey: AppSettingsKeys.currencySymbol)
         }
     }
 
@@ -187,6 +189,7 @@ final class AppSettings {
         didSet {
             UserDefaults.standard.set(brandColorHex, forKey: AppSettingsKeys.brandColorHex)
             ThemeManager.shared.updateBrandColor(hex: brandColorHex)
+            UbiquitousSettingsStore.shared.push(brandColorHex, forKey: AppSettingsKeys.brandColorHex)
         }
     }
 
