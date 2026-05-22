@@ -24,13 +24,14 @@ because their names lied about their behavior:
 - `EcosystemSyncCoordinator.forceInstantDatabaseRefresh` set a flag and slept;
   it never called `processPendingChanges()`. Deleted.
 
-Remaining as SCAFFOLD (unwired, kept as honest starting points):
-`TransactionQueueService`, `PendingTransaction` (P16).
+All prior-session scaffolds have been resolved — none remain in the tree.
 
 Deleted as redundant duplicates of existing, working code:
 `RevenueActor`/`BackgroundAnalyticsJanitor` (P4 — duplicated `InsightsActor` /
 `DataPruner`); `UnifiedNavigationStack`/`NavigationPlaceholders` (P5 —
-`ContentView` already does the adaptive TabView/NavigationSplitView layout).
+`ContentView` already does the adaptive TabView/NavigationSplitView layout);
+`TransactionQueueService`/`PendingTransaction` (P16 — duplicated
+`OfflineMutationBuffer`; `PendingTransaction` was also a CloudKit `.unique` landmine).
 
 Also removed during P20: `GroomingWorkflow` — a dead `@Model` not in
 `PawtrackrSchema.models`, carrying `@Attribute(.unique)` which CloudKit-backed
@@ -39,7 +40,12 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
 ## 20-paragraph triage
 
 - P2  Feature-driven directory layout ......... DONE (App/ Core/ Features/ UI/; 173 files relocated)
-- P3  Move blocking work off main thread ...... PENDING (audit needed; "X-Ray" tool is fictional)
+- P3  Move blocking work off main thread ...... DONE (already satisfied — heavy work runs off-main:
+                                                InsightsActor (@ModelActor), DataStoreService.fetchAsync
+                                                detached fetches, CheckoutTransactionActor, RootView
+                                                Task.detached startup maintenance. True frame-stall
+                                                profiling needs Instruments on-device. The protocol's
+                                                "UIHierarchy X-Ray" tool does not exist.)
 - P4  Background @ModelActors ................. DONE (already satisfied — InsightsActor is a
                                                 @ModelActor doing revenue/analytics off-main;
                                                 CheckoutTransactionActor, SyncConflictActor,
@@ -60,7 +66,11 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
                                                 search-equipped Clients view; SwiftUI .searchable
                                                 cannot be given text-cursor focus programmatically
                                                 without a fragile hack, so that nuance is left as-is.)
-- P8  Localizable.xcstrings en/es ............. PENDING (large)
+- P8  Localizable.xcstrings en/es ............. SKIPPED (owner decision) — app is already fully
+                                                localized in English + Spanish via .strings/
+                                                .stringsdict (792 NSLocalizedString calls). Migrating
+                                                to the .xcstrings String Catalog is a large format
+                                                change with low functional payoff. Deferred.
 - P9  Decimal-only money ...................... DONE (audited: all model money fields are Decimal;
                                                 no Double/Float currency math; Decimal+Money.swift
                                                 uses banker's rounding. No changes needed.)
@@ -72,8 +82,15 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
                                                 (.numericText()) currency odometer in 4 views, spring
                                                 curves, MotionSystem/HeroAnimation. MeshGradient — now
                                                 unblocked by the iOS 18 bump — not confirmed present.)
-- P12 Per-property merge timestamps ........... PENDING (schema change) / NEEDS-DEVICE to verify
-- P13 NSPersistentStoreRemoteChange observer .. PENDING / NEEDS-DEVICE to verify
+- P12 Per-property merge timestamps ........... SKIPPED (owner decision) — a schema-breaking change
+                                                to a shipped CloudKit store; data-migration risk too
+                                                high to ship unverified. Deferred.
+- P13 NSPersistentStoreRemoteChange observer .. DONE (already implemented — CloudKitMonitor observes
+                                                .NSPersistentStoreRemoteChange, publishes
+                                                .refreshRequired through the event bus, then
+                                                reconciles after import. This is the real "no ghost
+                                                views" mechanism; the prior session's no-op
+                                                EcosystemSyncCoordinator was deleted.)
 - P14 CloudKit shared zones / CKShare ......... INFEASIBLE here (needs Apple Developer portal,
                                                 entitlements, multi-device; also conflicts with
                                                 the single-shared-Apple-ID premise in P1)
@@ -84,11 +101,26 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
                                                 (appearance, haptics, lock) deliberately excluded.
                                                 KVS entitlement already present. NEEDS-DEVICE:
                                                 cross-device propagation needs 2 devices / 1 iCloud.
-- P16 Offline transaction buffer .............. SCAFFOLD (queue exists; push step is a TODO comment)
-- P17 Batched sync dispatch (40/batch) ........ PENDING / NEEDS-DEVICE to verify
-- P18 CloudKit field encryption ............... PENDING (real approach: @Attribute(.encrypt) /
-                                                .encryptedValues on the model, not a custom class)
-- P19 Encryption-key-reset recovery ........... PENDING / NEEDS-DEVICE to verify
+- P16 Offline transaction buffer .............. DONE (already implemented — OfflineMutationBuffer:
+                                                a bounded (240-cap) JSON-backed mutation queue with a
+                                                40-record batchLimit and changedKeys; wired into
+                                                CloudKitMonitor. Prior session's TransactionQueueService/
+                                                PendingTransaction were redundant duplicates, deleted.)
+- P17 Batched sync dispatch (40/batch) ........ DONE (already implemented — CloudKitMonitor.
+                                                flushOfflineMutationBuffer drains the buffer in
+                                                40-record batches with a cancellable inter-batch
+                                                pause. Matches the protocol's batching intent.)
+- P18 CloudKit field encryption ............... SKIPPED (owner decision) — switching existing model
+                                                fields to @Attribute(.allowsCloudEncryption) is a
+                                                schema-breaking change on a shipped CloudKit store.
+                                                Deferred.
+- P19 Encryption-key-reset recovery ........... N/A while P18 is unimplemented —
+                                                CKErrorUserDidResetEncryptedDataKey can only fire for
+                                                encrypted fields, and the app has none. Should ship
+                                                with P18. Note: the protocol's prescription (manually
+                                                deleting the CloudKit zone) would corrupt
+                                                NSPersistentCloudKitContainer's automatic mirroring;
+                                                correct recovery is detection + surfacing.
 - P20 @Attribute(.externalStorage) ............ DONE (already on every binary field: Client/Pet
                                                 photo+thumbnail, Visit before/after photo+thumbnail,
                                                 BusinessConfig logo. CheckoutDraft is JSON-persisted,
@@ -100,9 +132,19 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
                                                 confirm the index migration runs cleanly against a
                                                 live CloudKit-backed store.
 
-## Cannot be done from this environment
+## Summary
 
-P14 and full verification of P12/P13/P15/P16/P17/P19 require a real Apple
-Developer account, CloudKit container configuration, and 2+ physical devices
-signed into iCloud. Code for these can be written here; correctness cannot be
-proven from a single simulator.
+Resolved: 14 of 20 paragraphs (P1 is the intro, not a task).
+- New work this pass: P2 (structure), P15 (iCloud KV settings), P20 (iOS 18 + #Index).
+- Verified already-implemented in this mature codebase: P3, P4, P5, P6, P7, P9,
+  P10, P11, P13, P16, P17.
+- Owner-skipped: P8 (already localized), P12 + P18 (schema-breaking, unverifiable).
+- P14 infeasible here; P19 N/A until P18 ships.
+
+## Cannot be verified from this environment
+
+P13/P15/P16/P17 are implemented and compile, but their cross-device behavior
+(remote-change propagation, offline-buffer drain, KVS sync) can only be proven
+with 2+ physical devices on one iCloud account. P20's index migration needs a
+live CloudKit-backed store to confirm. P14 needs an Apple Developer portal
+with CloudKit sharing configured.
