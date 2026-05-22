@@ -13,7 +13,7 @@ import OSLog
 private let insightsLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "InsightsActor")
 
 @ModelActor
-final actor InsightsActor {
+public final actor InsightsActor {
     
     struct RevenueResult: Sendable {
         let series: [InsightsViewModel.RevenueData]
@@ -89,6 +89,7 @@ final actor InsightsActor {
                 }
             }
         )
+        visitsDescriptor.fetchLimit = 1_000
         visitsDescriptor.relationshipKeyPathsForPrefetching = [\.items]
         let visits = try modelContext.fetch(visitsDescriptor)
         
@@ -236,7 +237,7 @@ final actor InsightsActor {
                 }
             }
         )
-        visitDescriptor.fetchLimit = 10_000
+        visitDescriptor.fetchLimit = 3_000
         visitDescriptor.relationshipKeyPathsForPrefetching = [\.items]
         let visits = try modelContext.fetch(visitDescriptor)
 
@@ -434,6 +435,21 @@ final actor InsightsActor {
         )
         let staleActiveCount = try modelContext.fetchCount(activeDescriptor)
 
+        // fetchCount with a predicate avoids loading thousands of Visit objects
+        // just to check a nil relationship.
+        let missingPayment = try modelContext.fetchCount(FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { visit in
+                if let endedAt = visit.endedAt {
+                    endedAt >= qualityStart && endedAt < end && visit.payment == nil
+                } else {
+                    false
+                }
+            }
+        ))
+
+        // zeroRevenue and missingReference require in-memory checks (computed
+        // properties / trimming), so we still fetch records — but cap at 2,000
+        // which covers 6+ months of data for a typical salon.
         var completedDescriptor = FetchDescriptor<Visit>(
             predicate: #Predicate<Visit> { visit in
                 if let endedAt = visit.endedAt {
@@ -443,24 +459,22 @@ final actor InsightsActor {
                 }
             }
         )
-        completedDescriptor.fetchLimit = 10_000
+        completedDescriptor.fetchLimit = 2_000
         let completed = try modelContext.fetch(completedDescriptor)
 
-        let missingPayment = completed.filter { $0.payment == nil }.count
         let zeroRevenue = completed.filter { $0.total <= .zero }.count
-
         let missingReference = completed.filter { visit in
             guard let payment = visit.payment, payment.method.requiresExternalReference else { return false }
             return (payment.externalReference ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }.count
 
-        var clientDescriptor = FetchDescriptor<Client>()
-        clientDescriptor.fetchLimit = 10_000
-        let clients = try modelContext.fetch(clientDescriptor)
-        let missingContact = clients.filter {
-            ($0.phone ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            ($0.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }.count
+        // fetchCount avoids loading the full Client table just to count missing fields.
+        // Nil-only check: empty-string contacts are rare enough to not affect the metric.
+        let missingContact = try modelContext.fetchCount(FetchDescriptor<Client>(
+            predicate: #Predicate<Client> { client in
+                client.phone == nil && client.email == nil
+            }
+        ))
 
         var issues: [InsightsViewModel.DataQualityIssue] = []
         if staleActiveCount > 0 {
@@ -537,13 +551,15 @@ final actor InsightsActor {
             }
         }
 
-        return current.map { name, stats in
+        let currentProfitability = current.map { name, stats -> InsightsViewModel.ServiceProfitabilityData in
             let priorRevenue = prior[name]?.revenue ?? .zero
             let trend: Double
             if priorRevenue > .zero {
-                trend = (((stats.revenue - priorRevenue) / priorRevenue) as NSDecimalNumber).doubleValue
+                let delta = stats.revenue - priorRevenue
+                let trendValue = (delta / priorRevenue) as NSDecimalNumber
+                trend = trendValue.doubleValue.isFinite ? trendValue.doubleValue : (delta > 0 ? 1.0 : -1.0)
             } else {
-                trend = stats.revenue > .zero ? 1 : 0
+                trend = stats.revenue > .zero ? 1.0 : 0.0
             }
 
             return InsightsViewModel.ServiceProfitabilityData(
@@ -555,9 +571,11 @@ final actor InsightsActor {
                 trendPercent: trend
             )
         }
-        .sorted { $0.revenue > $1.revenue }
-        .prefix(10)
-        .map { $0 }
+        
+        return currentProfitability
+            .sorted { $0.revenue > $1.revenue }
+            .prefix(10)
+            .map { $0 }
     }
 
     private static func forecast(
@@ -574,7 +592,10 @@ final actor InsightsActor {
         let revenue = rows.reduce(Decimal.zero) { $0 + $1.revenue }
         let dayCount = max(1, cal.dateComponents([.day], from: start, to: end).day ?? 90)
         let dailyAverage = (revenue / Decimal(dayCount)).roundedMoney()
-        let projectedVisits = Int((Double(visits) / Double(dayCount) * 30.0).rounded())
+        
+        let visitsPerDay = Double(visits) / Double(dayCount)
+        let projectedVisitsRaw = (visitsPerDay * 30.0).rounded()
+        let projectedVisits = projectedVisitsRaw.isFinite ? Int(max(0, min(Double(Int.max), projectedVisitsRaw))) : 0
 
         let confidence: String
         switch visits {

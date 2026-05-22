@@ -20,6 +20,7 @@ final class Appointment {
     var pet: Pet?
     var status: Status = Appointment.Status.scheduled
     var user: User?
+    @Relationship(inverse: \Visit.appointment)
     var visit: Visit?
 
     init(date: Date, pet: Pet, user: User?, status: Status = .scheduled) {

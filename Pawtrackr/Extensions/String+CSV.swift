@@ -7,7 +7,7 @@
 
 import Foundation
 
-extension String {
+public extension String {
     /// Escape a string for CSV cells:
     /// - doubles any embedded quotes,
     /// - wraps in quotes if it contains comma, quote, newline, or leading/trailing space.

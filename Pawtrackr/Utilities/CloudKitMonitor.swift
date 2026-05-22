@@ -213,6 +213,7 @@ final class CloudKitMonitor {
     private var forceSyncWatchdog: Task<Void, Never>?
     private var remoteStoreRefreshTask: Task<Void, Never>?
     private var offlineFlushTask: Task<Void, Never>?
+    private var reconcileDebounceTask: Task<Void, Never>?
 
     private enum DefaultsKey {
         static let lastSyncDate = "cloudkit.lastSyncDate"
@@ -1225,21 +1226,29 @@ final class CloudKitMonitor {
 
     private func rebuildAndReconcileAfterImport() {
         guard let modelContainer else { return }
-        Task.detached(priority: .utility) {
-            let context = ModelContext(modelContainer)
-            let report = CloudSyncReconciler.reconcileImportedData(in: context)
-            SummaryUpdater.rebuildAllSummaries(in: context)
-            await MainActor.run {
-                CloudKitMonitor.shared.appendEvent(
-                    kind: .importFromCloud,
-                    status: .noted,
-                    message: report.summary,
-                    errorCode: nil
-                )
-                // Notify the rest of the app that new remote data has arrived,
-                // ensuring all devices see updates (like check-ins) in real-time.
-                CloudKitMonitor.shared.eventBus?.publish(.refreshRequired)
-                CloudKitMonitor.shared.postChange()
+        // Coalesce rapid bursts of import events (e.g. initial sync, multi-device
+        // flushes) so the reconciler runs once after the burst settles rather than
+        // once per event.
+        reconcileDebounceTask?.cancel()
+        reconcileDebounceTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            Task.detached(priority: .utility) {
+                let context = ModelContext(modelContainer)
+                let report = CloudSyncReconciler.reconcileImportedData(in: context)
+                SummaryUpdater.rebuildAllSummaries(in: context)
+                await MainActor.run {
+                    CloudKitMonitor.shared.appendEvent(
+                        kind: .importFromCloud,
+                        status: .noted,
+                        message: report.summary,
+                        errorCode: nil
+                    )
+                    // Notify the rest of the app that new remote data has arrived,
+                    // ensuring all devices see updates (like check-ins) in real-time.
+                    CloudKitMonitor.shared.eventBus?.publish(.refreshRequired)
+                    CloudKitMonitor.shared.postChange()
+                }
             }
         }
     }

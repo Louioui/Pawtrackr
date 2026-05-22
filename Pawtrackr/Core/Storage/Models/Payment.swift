@@ -48,13 +48,20 @@ final class Payment {
     // MARK: - Mutating API
     func setAmount(_ newAmount: Decimal) {
         amount = max(0, newAmount).roundedMoney()
-        markModified()
+        didUpdate()
     }
+
 
     func markModified() {
         lastModifiedBy = DeviceIdentity.currentID
         lastModifiedAt = .now
         updatedAt = .now
+    }
+
+    private func didUpdate() {
+        updatedAt = .now
+        lastModifiedBy = DeviceIdentity.currentID
+        lastModifiedAt = .now
     }
     
 }

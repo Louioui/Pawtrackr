@@ -8,39 +8,38 @@
 import SwiftUI
 import Observation
 
+@MainActor
 @Observable
 final class ToastService {
     static let shared = ToastService()
-    
+
     struct Toast: Identifiable {
         let id = UUID()
         let message: String
         let icon: String
         let tint: Color
     }
-    
+
     private(set) var currentToast: Toast?
     private var timer: Timer?
-    
+
     private init() {}
-    
+
     func show(message: String, icon: String = "info.circle", tint: Color = .blue) {
-        Task { @MainActor in
-            // Clear existing
-            timer?.invalidate()
-            currentToast = nil
-            
-            // Show new
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                currentToast = Toast(message: message, icon: icon, tint: tint)
-            }
-            
-            // Auto-hide
-            timer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: false) { _ in
-                Task { @MainActor in
-                    withAnimation(.easeIn(duration: 0.25)) {
-                        self.currentToast = nil
-                    }
+        // Clear existing
+        timer?.invalidate()
+        currentToast = nil
+
+        // Show new
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            currentToast = Toast(message: message, icon: icon, tint: tint)
+        }
+
+        // Auto-hide
+        timer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                withAnimation(.easeIn(duration: 0.25)) {
+                    self?.currentToast = nil
                 }
             }
         }

@@ -567,7 +567,7 @@ struct InsightsView: View {
                     .chartLegend(.hidden)
                     .overlay {
                         VStack {
-                            Text("\(vm.categoryDistribution.reduce(0, { $0 + $1.count }))").font(.headline)
+                            Text("\(vm.totalCategoryVisits)").font(.headline)
                             Text(localized("insights.visits_lowercase", value: "visits")).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
@@ -758,13 +758,14 @@ struct InsightsView: View {
                         if let vm = viewModel {
                             let summary = await vm.generateReportSummary()
                             async let pdfData = BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
-                            let csvDoc = vm.generateInsightsCSVDocument()
+                            let csvDoc = await vm.generateInsightsCSVDocument()
                             reportPDFData = await pdfData
                             reportCSVDocument = csvDoc
                         }
                         isPreparingReport = false
                     }
-                } label: {
+                }
+ label: {
                     if isPreparingReport { ProgressView() } else { Label(NSLocalizedString("common.export", comment: ""), systemImage: "doc.badge.arrow.up") }
                 }
                 .disabled(isPreparingReport)
@@ -905,9 +906,7 @@ struct InsightsView: View {
 
         Task {
             do {
-                let scheduler = await Task.detached(priority: .utility) {
-                    RecallSchedulingActor(modelContainer: container)
-                }.value
+                let scheduler = RecallSchedulingActor(modelContainer: container)
                 let recall = try await scheduler.scheduleRecall(forPetID: petUUID, date: date)
                 await MainActor.run {
                     scheduleConfirmation = String(
@@ -1001,14 +1000,18 @@ enum SkeletonChartType { case bar, line, pie }
 
 struct SkeletonChart: View {
     let type: SkeletonChartType
-    
+
+    // Fixed heights so the skeleton is stable across re-renders.
+    // CGFloat.random in a view body causes layout thrashing on every redraw.
+    private static let barHeights: [CGFloat] = [85, 55, 110, 70, 95, 45, 120, 65, 80, 50]
+
     var body: some View {
         Card {
             HStack(alignment: .bottom, spacing: 8) {
                 if type == .bar {
-                    ForEach(0..<10) { i in
+                    ForEach(Array(Self.barHeights.enumerated()), id: \.offset) { _, height in
                         SkeletonRect()
-                            .frame(height: CGFloat.random(in: 40...120))
+                            .frame(height: height)
                     }
                 } else if type == .line {
                     ZStack {

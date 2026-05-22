@@ -13,7 +13,7 @@ import OSLog
 
 @Observable
 @MainActor
-final class DataStoreService {
+public final class DataStoreService {
     let container: ModelContainer
     private let mainContext: ModelContext
 

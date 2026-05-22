@@ -79,9 +79,10 @@ final class OnboardingViewModelTests: XCTestCase {
         viewModel.confirmPin = "4826"
 
         var completed = false
-        await viewModel.finish(seedSampleData: false) {
+        let task = await viewModel.finish(seedSampleData: false) {
             completed = true
         }
+        _ = await task?.result
 
         XCTAssertTrue(completed)
         XCTAssertNil(viewModel.saveError)
@@ -108,7 +109,8 @@ final class OnboardingViewModelTests: XCTestCase {
         viewModel.pin = "4826"
         viewModel.confirmPin = "4826"
 
-        await viewModel.finish(seedSampleData: true) { }
+        let task = await viewModel.finish(seedSampleData: true) { }
+        _ = await task?.result
 
         XCTAssertNil(viewModel.saveError)
         XCTAssertTrue(settings.hasConfiguredPrices)
@@ -244,8 +246,8 @@ final class OnboardingViewModelTests: XCTestCase {
 
         // Two concurrent finishes — the second should be a no-op while the first
         // is still in flight.
-        async let first: Void = viewModel.finish(seedSampleData: false) { }
-        async let second: Void = viewModel.finish(seedSampleData: false) { }
+        async let first = viewModel.finish(seedSampleData: false) { }
+        async let second = viewModel.finish(seedSampleData: false) { }
         _ = await (first, second)
 
         let configs = try? context.fetch(FetchDescriptor<BusinessConfig>())

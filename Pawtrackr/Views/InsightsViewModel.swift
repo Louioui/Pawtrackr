@@ -8,6 +8,7 @@ import SwiftData
 import Observation
 import OSLog
 import SwiftUI
+import CoreData
 
 @Observable
 @MainActor
@@ -156,24 +157,39 @@ class InsightsViewModel {
     /// should not reappear.
     private(set) var hasLoadedOnce = false
 
+    var totalCategoryVisits: Int {
+        categoryDistribution.reduce(0) { $0 + $1.count }
+    }
+
     private let dataStore: DataStoreService
     private let eventBus: GlobalEventBus
     private let actor: InsightsActor
     private var observationTask: Task<Void, Never>?
     private var revenueFetchTask: Task<Void, Never>?
     private var actionableInsightsTask: Task<Void, Never>?
+    private var refreshDebounceTask: Task<Void, Never>?
 
     init(dataStore: DataStoreService, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.dataStore = dataStore
         self.eventBus = eventBus
         self.actor = InsightsActor(modelContainer: dataStore.container)
-        
+
         self.observationTask = Task { [weak self] in
             for await event in eventBus.stream {
                 guard let self else { return }
                 switch event {
-                case .checkoutCompleted(_), .refreshRequired:
+                case .checkoutCompleted(_):
+                    // Checkout completion: refresh immediately so the user sees updated totals.
                     await self.refresh()
+                case .refreshRequired:
+                    // CloudKit syncs can fire dozens of these in rapid succession.
+                    // Coalesce them into one refresh once the burst settles.
+                    self.refreshDebounceTask?.cancel()
+                    self.refreshDebounceTask = Task { [weak self] in
+                        try? await Task.sleep(for: .milliseconds(800))
+                        guard let self, !Task.isCancelled else { return }
+                        await self.refresh()
+                    }
                 default:
                     break
                 }
@@ -192,13 +208,21 @@ class InsightsViewModel {
         isRefreshing = true
         defer { isRefreshing = false }
 
-        await PerformanceMonitor.measureAsyncNoThrow(label: "Insights.refresh") {
+        _ = await PerformanceMonitor.measureAsyncNoThrow(label: "Insights.refresh") {
+            try? await Task.sleep(for: .milliseconds(500)) // Yield to allow UI to render 'loading' state
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await self.fetchRevenue() }
                 group.addTask { await self.fetchMonthlyGrowth() }
                 group.addTask { await self.fetchDistributions() }
                 group.addTask { await self.fetchClientInsights() }
             }
+        }
+
+        if !hasLoadedOnce && revenueSeries.isEmpty && serviceDistribution.isEmpty {
+            // If we have no data and nothing was loaded, it might be an error or just empty.
+            // We check if an error occurred during the refresh.
+            // For now, we'll just ensure the state is 'loaded' so the empty states show,
+            // unless a specific fetch error was logged.
         }
 
         hasLoadedOnce = true
@@ -251,116 +275,155 @@ class InsightsViewModel {
         )
     }
 
-    func generateInsightsCSVDocument() -> ExportDocument {
+    struct ExportSnapshot: Sendable {
+        let dateString: String
+        let totalRevenue: String
+        let totalVisits: Int
+        let revenuePeriodDays: Int
+        let averageVisitValue: String
+        let retentionRate: Int
+        let churnRiskCount: Int
+        let forecast: (projectedRevenue: String, projectedVisits: Int, confidence: String, basis: String)?
+        let comparisons: [(label: String, currentRev: String, prevRev: String, percent: String)]
+        let serviceProfitability: [(name: String, revenue: String, count: Int, avg: String, trend: String)]
+        let paymentMix: [(method: String, amount: String, count: Int)]
+        let lapsedClients: [(name: String, spent: String, days: Int, pets: String)]
+        let qualityIssues: [(title: String, count: Int, detail: String)]
+    }
+
+    @MainActor
+    private func makeExportSnapshot() -> ExportSnapshot {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        let dateString = dateFormatter.string(from: Date())
+        
+        return ExportSnapshot(
+            dateString: dateFormatter.string(from: Date()),
+            totalRevenue: totalRevenue.moneyString,
+            totalVisits: totalVisitsInPeriod,
+            revenuePeriodDays: revenuePeriodDays,
+            averageVisitValue: averageVisitValue.moneyString,
+            retentionRate: Int((retentionRate * 100).clampedToValueRange()),
+            churnRiskCount: churnRiskCount,
+            forecast: forecast.map { ($0.projectedRevenue.moneyString, $0.projectedVisits, $0.confidenceLabel, $0.basis) },
+            comparisons: comparisons.map { ($0.label, $0.currentRevenue.moneyString, $0.previousRevenue.moneyString, Self.percentString($0.percentChange)) },
+            serviceProfitability: serviceProfitability.map { ($0.name, $0.revenue.moneyString, $0.count, $0.averageTicket.moneyString, Self.percentString($0.trendPercent)) },
+            paymentMix: paymentMethodDistribution.map { ($0.method.displayName, $0.amount.moneyString, $0.count) },
+            lapsedClients: lapsedClients.map { ($0.name, $0.totalSpent.moneyString, $0.daysSinceLastVisit, $0.petNames) },
+            qualityIssues: dataQualityIssues.map { ($0.title, $0.count, $0.detail) }
+        )
+    }
 
-        var rows: [[String]] = [
-            [
-                NSLocalizedString("insights.csv.header.section", value: "Section", comment: ""),
-                NSLocalizedString("insights.csv.header.metric", value: "Metric", comment: ""),
-                NSLocalizedString("insights.csv.header.value", value: "Value", comment: ""),
-                NSLocalizedString("insights.csv.header.detail", value: "Detail", comment: "")
-            ],
-            [
-                NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
-                String(format: NSLocalizedString("insights.csv.metric.revenue_total_fmt", value: "%d-day total", comment: ""), revenuePeriodDays),
-                totalRevenue.moneyString,
-                String(format: NSLocalizedString("insights.csv.detail.visits_fmt", value: "%d visits", comment: ""), totalVisitsInPeriod)
-            ],
-            [
-                NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
-                NSLocalizedString("insights.csv.metric.average_visit", value: "Average visit", comment: ""),
-                averageVisitValue.moneyString,
-                String(format: NSLocalizedString("insights.csv.detail.window_fmt", value: "%d-day window", comment: ""), revenuePeriodDays)
-            ],
-            [
-                NSLocalizedString("insights.csv.section.retention", value: "Retention", comment: ""),
-                NSLocalizedString("insights.csv.metric.recurring_clients", value: "Recurring clients", comment: ""),
-                "\(Int(retentionRate * 100))%",
-                String(format: NSLocalizedString("insights.csv.detail.churn_risk_fmt", value: "%d churn-risk clients", comment: ""), churnRiskCount)
+    @MainActor
+    func generateInsightsCSVDocument() async -> ExportDocument {
+        let snapshot = makeExportSnapshot()
+        
+        return await Task.detached(priority: .userInitiated) {
+            var rows: [[String]] = [
+                [
+                    NSLocalizedString("insights.csv.header.section", value: "Section", comment: ""),
+                    NSLocalizedString("insights.csv.header.metric", value: "Metric", comment: ""),
+                    NSLocalizedString("insights.csv.header.value", value: "Value", comment: ""),
+                    NSLocalizedString("insights.csv.header.detail", value: "Detail", comment: "")
+                ],
+                [
+                    NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
+                    String(format: NSLocalizedString("insights.csv.metric.revenue_total_fmt", value: "%d-day total", comment: ""), snapshot.revenuePeriodDays),
+                    snapshot.totalRevenue,
+                    String(format: NSLocalizedString("insights.csv.detail.visits_fmt", value: "%d visits", comment: ""), snapshot.totalVisits)
+                ],
+                [
+                    NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
+                    NSLocalizedString("insights.csv.metric.average_visit", value: "Average visit", comment: ""),
+                    snapshot.averageVisitValue,
+                    String(format: NSLocalizedString("insights.csv.detail.window_fmt", value: "%d-day window", comment: ""), snapshot.revenuePeriodDays)
+                ],
+                [
+                    NSLocalizedString("insights.csv.section.retention", value: "Retention", comment: ""),
+                    NSLocalizedString("insights.csv.metric.recurring_clients", value: "Recurring clients", comment: ""),
+                    "\(snapshot.retentionRate)%",
+                    String(format: NSLocalizedString("insights.csv.detail.churn_risk_fmt", value: "%d churn-risk clients", comment: ""), snapshot.churnRiskCount)
+                ]
             ]
-        ]
 
-        if let forecast {
-            rows.append([
-                NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
-                NSLocalizedString("insights.csv.metric.next_30_days", value: "Next 30 days", comment: ""),
-                forecast.projectedRevenue.moneyString,
-                String(format: NSLocalizedString("insights.csv.detail.projected_visits_fmt", value: "%d projected visits", comment: ""), forecast.projectedVisits)
-            ])
-            rows.append([
-                NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
-                NSLocalizedString("insights.csv.metric.confidence", value: "Confidence", comment: ""),
-                forecast.confidenceLabel,
-                forecast.basis
-            ])
-        }
+            if let forecast = snapshot.forecast {
+                rows.append([
+                    NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
+                    NSLocalizedString("insights.csv.metric.next_30_days", value: "Next 30 days", comment: ""),
+                    forecast.projectedRevenue,
+                    String(format: NSLocalizedString("insights.csv.detail.projected_visits_fmt", value: "%d projected visits", comment: ""), forecast.projectedVisits)
+                ])
+                rows.append([
+                    NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
+                    NSLocalizedString("insights.csv.metric.confidence", value: "Confidence", comment: ""),
+                    forecast.confidence,
+                    forecast.basis
+                ])
+            }
 
-        rows += comparisons.map {
-            [
-                NSLocalizedString("insights.csv.section.comparison", value: "Comparison", comment: ""),
-                $0.label,
-                $0.currentRevenue.moneyString,
-                String(
-                    format: NSLocalizedString("insights.csv.detail.previous_change_fmt", value: "Previous: %@, change: %@", comment: ""),
-                    $0.previousRevenue.moneyString,
-                    Self.percentString($0.percentChange)
-                )
-            ]
-        }
+            rows += snapshot.comparisons.map {
+                [
+                    NSLocalizedString("insights.csv.section.comparison", value: "Comparison", comment: ""),
+                    $0.label,
+                    $0.currentRev,
+                    String(
+                        format: NSLocalizedString("insights.csv.detail.previous_change_fmt", value: "Previous: %@, change: %@", comment: ""),
+                        $0.prevRev,
+                        $0.percent
+                    )
+                ]
+            }
 
-        rows += serviceProfitability.map {
-            [
-                NSLocalizedString("insights.csv.section.service", value: "Service", comment: ""),
-                $0.name,
-                $0.revenue.moneyString,
-                String(
-                    format: NSLocalizedString("insights.csv.detail.service_profitability_fmt", value: "%d sales, avg %@, trend %@", comment: ""),
-                    $0.count,
-                    $0.averageTicket.moneyString,
-                    Self.percentString($0.trendPercent)
-                )
-            ]
-        }
+            rows += snapshot.serviceProfitability.map {
+                [
+                    NSLocalizedString("insights.csv.section.service", value: "Service", comment: ""),
+                    $0.name,
+                    $0.revenue,
+                    String(
+                        format: NSLocalizedString("insights.csv.detail.service_profitability_fmt", value: "%d sales, avg %@, trend %@", comment: ""),
+                        $0.count,
+                        $0.avg,
+                        $0.trend
+                    )
+                ]
+            }
 
-        rows += paymentMethodDistribution.map {
-            [
-                NSLocalizedString("insights.csv.section.payment", value: "Payment", comment: ""),
-                $0.method.displayName,
-                $0.amount.moneyString,
-                String(format: NSLocalizedString("insights.csv.detail.payments_fmt", value: "%d payments", comment: ""), $0.count)
-            ]
-        }
+            rows += snapshot.paymentMix.map {
+                [
+                    NSLocalizedString("insights.csv.section.payment", value: "Payment", comment: ""),
+                    $0.method,
+                    $0.amount,
+                    String(format: NSLocalizedString("insights.csv.detail.payments_fmt", value: "%d payments", comment: ""), $0.count)
+                ]
+            }
 
-        rows += lapsedClients.map {
-            [
-                NSLocalizedString("insights.csv.section.lapsed_client", value: "Lapsed Client", comment: ""),
-                $0.name,
-                $0.totalSpent.moneyString,
-                String(
-                    format: NSLocalizedString("insights.csv.detail.lapsed_client_fmt", value: "%d days since last visit; pets: %@", comment: ""),
-                    $0.daysSinceLastVisit,
-                    $0.petNames
-                )
-            ]
-        }
+            rows += snapshot.lapsedClients.map {
+                [
+                    NSLocalizedString("insights.csv.section.lapsed_client", value: "Lapsed Client", comment: ""),
+                    $0.name,
+                    $0.spent,
+                    String(
+                        format: NSLocalizedString("insights.csv.detail.lapsed_client_fmt", value: "%d days since last visit; pets: %@", comment: ""),
+                        $0.days,
+                        $0.pets
+                    )
+                ]
+            }
 
-        rows += dataQualityIssues.map {
-            [
-                NSLocalizedString("insights.csv.section.data_quality", value: "Data Quality", comment: ""),
-                $0.title,
-                "\($0.count)",
-                $0.detail
-            ]
-        }
+            rows += snapshot.qualityIssues.map {
+                [
+                    NSLocalizedString("insights.csv.section.data_quality", value: "Data Quality", comment: ""),
+                    $0.title,
+                    "\($0.count)",
+                    $0.detail
+                ]
+            }
 
-        let csv = rows.map { row in
-            row.map(\.csvEscaped).joined(separator: ",")
-        }.joined(separator: "\n")
+            let csv = rows.map { row in
+                row.map(\.csvEscaped).joined(separator: ",")
+            }.joined(separator: "\n")
 
-        return ExportDocument(csvData: csv + "\n", filename: "Pawtrackr_Insights_\(dateString).csv")
+            return ExportDocument(csvData: csv + "\n", filename: "Pawtrackr_Insights_\(snapshot.dateString).csv")
+        }.value
     }
 
     // MARK: - Actor Delegations
@@ -438,7 +501,15 @@ class InsightsViewModel {
     private static func percentString(_ value: Double) -> String {
         guard value.isFinite else { return "0%" }
         let sign = value > 0 ? "+" : ""
-        return "\(sign)\(Int((value * 100).rounded()))%"
+        let clampedValue = max(Double(Int.min) / 100.0, min(Double(Int.max) / 100.0, value))
+        return "\(sign)\(Int((clampedValue * 100).rounded()))%"
+    }
+}
+
+private extension Double {
+    func clampedToValueRange() -> Double {
+        guard self.isFinite else { return 0 }
+        return max(Double(Int.min), min(Double(Int.max), self))
     }
 }
 

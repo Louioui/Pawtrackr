@@ -3,13 +3,13 @@ import SwiftData
 import UniformTypeIdentifiers
 import CoreTransferable
 
-struct ExportDocument: Transferable, Identifiable {
+public struct ExportDocument: Transferable, Identifiable {
     let csvData: String
     let filename: String
 
-    var id: String { filename }
+    public var id: String { filename }
 
-    static var transferRepresentation: some TransferRepresentation {
+    public static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(exportedContentType: .commaSeparatedText) { doc in
             doc.csvData.data(using: .utf8) ?? Data()
         }

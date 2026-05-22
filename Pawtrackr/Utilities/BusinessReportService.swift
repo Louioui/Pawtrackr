@@ -34,7 +34,7 @@ private extension PlatformColor {
     }
 }
 
-final class BusinessReportService {
+public final class BusinessReportService {
     static let shared = BusinessReportService()
 
     struct MonthlySummary {

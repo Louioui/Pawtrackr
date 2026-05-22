@@ -52,10 +52,6 @@ final class Visit {
 
     var user: User?
 
-    /// Back-reference to the originating appointment when this visit was
-    /// created via `checkIn(from:)`. Untagged to mirror `Appointment.visit`
-    /// (no @Relationship inverse on either side — SwiftData treats them as
-    /// independent optionals, which is CloudKit-safe).
     var appointment: Appointment?
 
     // MARK: - Init

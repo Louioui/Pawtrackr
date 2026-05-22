@@ -273,28 +273,29 @@ final class OnboardingViewModel {
     // MARK: - Actions
 
     @MainActor
-    func finish(seedSampleData: Bool, onComplete: @escaping () -> Void) async {
-        guard !isSaving else { return }
+    @discardableResult
+    func finish(seedSampleData: Bool, onComplete: @escaping () -> Void) async -> Task<Void, Never>? {
+        guard !isSaving else { return nil }
         isSaving = true
+        // Safety net: isSaving is always cleared regardless of which path exits.
+        defer { isSaving = false }
         saveError = nil
         await Task.yield()
-        
+
         logger.info("Starting onboarding finish (seed: \(seedSampleData))")
-        
+
         guard let context = modelContext else {
             logger.error("Finish failed: modelContext is nil")
             saveError = NSLocalizedString("onboarding.error.internal_context", value: "Internal Error: Database context not found.", comment: "")
-            isSaving = false
-            return
+            return nil
         }
-        
+
         guard let settings = appSettings else {
             logger.error("Finish failed: appSettings is nil")
             saveError = NSLocalizedString("onboarding.error.internal_settings", value: "Internal Error: App settings not found.", comment: "")
-            isSaving = false
-            return
+            return nil
         }
-        
+
         let businessName = name.trimmed
         let businessEmail = email.trimmed.nilIfEmpty
         let businessPhone = phone.trimmed.nilIfEmpty
@@ -305,18 +306,15 @@ final class OnboardingViewModel {
 
         guard businessNameValidationMessage == nil else {
             saveError = businessNameValidationMessage
-            isSaving = false
-            return
+            return nil
         }
         guard regionalValidationMessage == nil else {
             saveError = regionalValidationMessage
-            isSaving = false
-            return
+            return nil
         }
         guard AppSettings.isValidPIN(currentPIN), currentPIN == confirmPin.filter(\.isNumber) else {
             saveError = NSLocalizedString("onboarding.validation.pin_incomplete", value: "Your PIN is incomplete. Enter the same 4 digits in both fields.", comment: "")
-            isSaving = false
-            return
+            return nil
         }
 
         do {
@@ -335,42 +333,12 @@ final class OnboardingViewModel {
                 context.insert(config)
             }
 
-            // Persist BusinessConfig immediately on main so the @Query in RootView
-            // re-evaluates and can dismiss onboarding. Heavier work (catalog seed,
-            // demo data, summary rebuilds) runs off-main to avoid stalling the UI.
+            // Persist BusinessConfig so @Query in RootView re-evaluates and
+            // can dismiss onboarding. This save is small and fast.
             try context.save()
 
-            let container = context.container
-            // Propagate save errors so the user sees "couldn't finish setup"
-            // instead of being dropped into an empty dashboard with no idea
-            // why their service catalog / templates / demo data didn't appear.
-            try await Task.detached(priority: .userInitiated) {
-                let bg = ModelContext(container)
-                DataMigrations.ensureServiceCatalog(in: bg)
-                DataMigrations.ensureMessageTemplates(in: bg)
-                if seedSampleData {
-                    do {
-                        try DemoDataSeeder.seedIfNeeded(in: bg)
-                    } catch {
-                        // Demo data is optional — log and continue.
-                        Logger.database.error("Demo data seed failed during onboarding: \(error.localizedDescription, privacy: .public)")
-                    }
-                }
-                if !seedSampleData {
-                    let defaultService = Service(
-                        name: NSLocalizedString("onboarding.default_service.basic_groom", value: "Basic Groom", comment: ""),
-                        category: .groom,
-                        systemIcon: "scissors",
-                        basePrice: Decimal(50),
-                        defaultDurationMinutes: 60
-                    )
-                    bg.insert(defaultService)
-                }
-
-                if bg.hasChanges {
-                    try bg.save()
-                }
-                }.value
+            // Apply settings and PIN before kicking off background work so
+            // the user is never left in the app without a PIN set.
             settings.isLockEnabled = true
             settings.isBiometricLockEnabled = useBiometrics
             settings.autoLockOnBackground = lockOnBackgroundEnabled
@@ -381,12 +349,45 @@ final class OnboardingViewModel {
             settings.hasConfiguredPrices = seedSampleData
             settings.hasAddedFirstClient = seedSampleData
             settings.hasCompletedFirstVisit = seedSampleData
-            // Arm the post-onboarding feature tour for fresh installs.
-            // (Default registered value is `true`, so existing users skip it.)
             settings.hasSeenAppTour = false
 
             guard settings.changePIN(to: currentPIN) else {
                 throw ValidationError.custom(message: NSLocalizedString("onboarding.error.pin_save_failed", value: "The selected PIN could not be saved.", comment: ""))
+            }
+
+            // Catalog seed, demo data, and summary rebuilds are optional and
+            // can be slow (multiple DB saves + potential SQLite write contention
+            // with CloudKit sync). Fire-and-forget so the spinner clears
+            // immediately and the user enters the app while seeding finishes
+            // in the background.
+            let container = context.container
+            let backgroundTask = Task.detached(priority: .userInitiated) {
+                let bg = ModelContext(container)
+                DataMigrations.ensureServiceCatalog(in: bg)
+                DataMigrations.ensureMessageTemplates(in: bg)
+                if seedSampleData {
+                    do {
+                        try DemoDataSeeder.seedIfNeeded(in: bg)
+                    } catch {
+                        Logger.database.error("Demo data seed failed during onboarding: \(error.localizedDescription, privacy: .public)")
+                    }
+                } else {
+                    let defaultService = Service(
+                        name: NSLocalizedString("onboarding.default_service.basic_groom", value: "Basic Groom", comment: ""),
+                        category: .groom,
+                        systemIcon: "scissors",
+                        basePrice: Decimal(50),
+                        defaultDurationMinutes: 60
+                    )
+                    bg.insert(defaultService)
+                }
+                if bg.hasChanges {
+                    try? bg.save()
+                }
+                
+                await MainActor.run {
+                    onComplete()
+                }
             }
 
             TelemetryService.shared.track(event: "onboarding_finished", parameters: ["seedSampleData": String(seedSampleData)])
@@ -394,12 +395,12 @@ final class OnboardingViewModel {
             clearDraft()
             Formatters.updateCurrencySymbol(currentCurrency)
             HapticManager.notify(.success)
-            isSaving = false
-            onComplete()
+            
+            return backgroundTask
         } catch {
             logger.error("Failed to complete onboarding: \(error.localizedDescription, privacy: .public)")
             saveError = NSLocalizedString("onboarding.error.save_failed", value: "Setup could not be saved. Please try again.", comment: "")
-            isSaving = false
+            return nil
         }
     }
 }
