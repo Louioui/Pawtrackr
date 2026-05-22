@@ -25,10 +25,12 @@ because their names lied about their behavior:
   it never called `processPendingChanges()`. Deleted.
 
 Remaining as SCAFFOLD (unwired, kept as honest starting points):
-`TransactionQueueService`, `PendingTransaction` (P16), `UnifiedNavigationStack`,
-`NavigationPlaceholders` (P5). `RevenueActor` and `BackgroundAnalyticsJanitor`
-were deleted during P4 — redundant duplicates of the existing `InsightsActor`
-and `DataPruner`/`SummaryUpdater`.
+`TransactionQueueService`, `PendingTransaction` (P16).
+
+Deleted as redundant duplicates of existing, working code:
+`RevenueActor`/`BackgroundAnalyticsJanitor` (P4 — duplicated `InsightsActor` /
+`DataPruner`); `UnifiedNavigationStack`/`NavigationPlaceholders` (P5 —
+`ContentView` already does the adaptive TabView/NavigationSplitView layout).
 
 Also removed during P20: `GroomingWorkflow` — a dead `@Model` not in
 `PawtrackrSchema.models`, carrying `@Attribute(.unique)` which CloudKit-backed
@@ -44,8 +46,14 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
                                                 DataStoreService.fetchAsync round it out. The
                                                 prior session's RevenueActor/BackgroundAnalyticsJanitor
                                                 were unused duplicates and were deleted.)
-- P5  Adaptive iPhone/iPad/Mac layout ......... SCAFFOLD (UnifiedNavigationStack unused)
-- P6  macOS glassmorphic window styling ....... PENDING
+- P5  Adaptive iPhone/iPad/Mac layout ......... DONE (already implemented — ContentView branches on
+                                                horizontalSizeClass: TabView for compact iPhone,
+                                                NavigationSplitView for iPad/macOS. Prior session's
+                                                UnifiedNavigationStack scaffold was redundant.)
+- P6  macOS glassmorphic window styling ....... DONE (already implemented — PawtrackrApp uses
+                                                .windowStyle(.hiddenTitleBar) + .windowToolbarStyle
+                                                (.unified); MacTranslucentBackground wraps
+                                                NSVisualEffectView; .onHover effects present.)
 - P7  Keyboard shortcuts (Cmd-N/I/F) .......... DONE (already implemented — PawtrackrApp.swift
                                                 macOS .commands: Cmd-N new-client sheet, Cmd-I
                                                 insights, Cmd-F clients list. Cmd-F navigates to the
@@ -56,8 +64,14 @@ SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-regis
 - P9  Decimal-only money ...................... DONE (audited: all model money fields are Decimal;
                                                 no Double/Float currency math; Decimal+Money.swift
                                                 uses banker's rounding. No changes needed.)
-- P10 Timer Date() anchor + local ticking ..... PENDING
-- P11 Micro-animations / numericText .......... PENDING
+- P10 Timer Date() anchor + local ticking ..... DONE (already implemented — Visit.startedAt is the
+                                                synced absolute Date anchor; VisitTimer derives
+                                                elapsed from absolute dates and ticks locally,
+                                                surviving background/foreground. Matches the spec.)
+- P11 Micro-animations / numericText .......... LARGELY DONE (already implemented — .contentTransition
+                                                (.numericText()) currency odometer in 4 views, spring
+                                                curves, MotionSystem/HeroAnimation. MeshGradient — now
+                                                unblocked by the iOS 18 bump — not confirmed present.)
 - P12 Per-property merge timestamps ........... PENDING (schema change) / NEEDS-DEVICE to verify
 - P13 NSPersistentStoreRemoteChange observer .. PENDING / NEEDS-DEVICE to verify
 - P14 CloudKit shared zones / CKShare ......... INFEASIBLE here (needs Apple Developer portal,
