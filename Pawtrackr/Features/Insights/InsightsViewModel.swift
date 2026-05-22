@@ -47,13 +47,6 @@ class InsightsViewModel {
         let visitCount: Int
     }
 
-    struct TopClientData: Identifiable, Sendable {
-        let id = UUID()
-        let name: String
-        let totalSpent: Decimal
-        let visitCount: Int
-    }
-
     struct RetentionData: Identifiable, Sendable {
         let id = UUID()
         let label: String
@@ -80,40 +73,6 @@ class InsightsViewModel {
         let trendPercent: Double
     }
 
-    struct LapsedClientData: Identifiable, Sendable {
-        let id: UUID
-        let name: String
-        let petNames: String
-        let daysSinceLastVisit: Int
-        let totalSpent: Decimal
-        let phone: String?
-        let primaryPetUUID: UUID?
-        let suggestedMessage: String
-    }
-
-    struct ForecastData: Sendable {
-        let projectedRevenue: Decimal
-        let projectedVisits: Int
-        let dailyAverageRevenue: Decimal
-        let confidenceLabel: String
-        let basis: String
-    }
-
-    struct ComparisonData: Identifiable, Sendable {
-        let id = UUID()
-        let label: String
-        let currentRevenue: Decimal
-        let previousRevenue: Decimal
-        let currentVisits: Int
-        let previousVisits: Int
-
-        var revenueDelta: Decimal { currentRevenue - previousRevenue }
-        var percentChange: Double {
-            guard previousRevenue > .zero else { return currentRevenue > .zero ? 1 : 0 }
-            return ((revenueDelta / previousRevenue) as NSDecimalNumber).doubleValue
-        }
-    }
-
     struct DataQualityIssue: Identifiable, Sendable {
         enum Severity: String, Sendable {
             case info
@@ -134,7 +93,6 @@ class InsightsViewModel {
     var serviceDistribution:    [DistributionData]  = []
     var categoryDistribution:   [DistributionData]  = []
     var paymentMethodDistribution: [PaymentMethodData] = []
-    var topClients:             [TopClientData]     = []
     var monthlyGrowth:          [MonthlyGrowthData] = []
     var retentionRate:          Double  = 0
     var churnRiskCount:         Int     = 0
@@ -145,9 +103,6 @@ class InsightsViewModel {
     var revenuePeriodDays:      Int     = 30
     var revenueDrilldown:       [RevenueVisitData] = []
     var serviceProfitability:   [ServiceProfitabilityData] = []
-    var lapsedClients:          [LapsedClientData] = []
-    var forecast:               ForecastData?
-    var comparisons:            [ComparisonData] = []
     var dataQualityIssues:      [DataQualityIssue] = []
     private(set) var isRefreshing  = false
     private(set) var isLoadingActionableInsights = false
@@ -283,11 +238,8 @@ class InsightsViewModel {
         let averageVisitValue: String
         let retentionRate: Int
         let churnRiskCount: Int
-        let forecast: (projectedRevenue: String, projectedVisits: Int, confidence: String, basis: String)?
-        let comparisons: [(label: String, currentRev: String, prevRev: String, percent: String)]
         let serviceProfitability: [(name: String, revenue: String, count: Int, avg: String, trend: String)]
         let paymentMix: [(method: String, amount: String, count: Int)]
-        let lapsedClients: [(name: String, spent: String, days: Int, pets: String)]
         let qualityIssues: [(title: String, count: Int, detail: String)]
     }
 
@@ -304,11 +256,8 @@ class InsightsViewModel {
             averageVisitValue: averageVisitValue.moneyString,
             retentionRate: Int((retentionRate * 100).clampedToValueRange()),
             churnRiskCount: churnRiskCount,
-            forecast: forecast.map { ($0.projectedRevenue.moneyString, $0.projectedVisits, $0.confidenceLabel, $0.basis) },
-            comparisons: comparisons.map { ($0.label, $0.currentRevenue.moneyString, $0.previousRevenue.moneyString, Self.percentString($0.percentChange)) },
             serviceProfitability: serviceProfitability.map { ($0.name, $0.revenue.moneyString, $0.count, $0.averageTicket.moneyString, Self.percentString($0.trendPercent)) },
             paymentMix: paymentMethodDistribution.map { ($0.method.displayName, $0.amount.moneyString, $0.count) },
-            lapsedClients: lapsedClients.map { ($0.name, $0.totalSpent.moneyString, $0.daysSinceLastVisit, $0.petNames) },
             qualityIssues: dataQualityIssues.map { ($0.title, $0.count, $0.detail) }
         )
     }
@@ -345,34 +294,6 @@ class InsightsViewModel {
                 ]
             ]
 
-            if let forecast = snapshot.forecast {
-                rows.append([
-                    NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
-                    NSLocalizedString("insights.csv.metric.next_30_days", value: "Next 30 days", comment: ""),
-                    forecast.projectedRevenue,
-                    String(format: NSLocalizedString("insights.csv.detail.projected_visits_fmt", value: "%d projected visits", comment: ""), forecast.projectedVisits)
-                ])
-                rows.append([
-                    NSLocalizedString("insights.csv.section.forecast", value: "Forecast", comment: ""),
-                    NSLocalizedString("insights.csv.metric.confidence", value: "Confidence", comment: ""),
-                    forecast.confidence,
-                    forecast.basis
-                ])
-            }
-
-            rows += snapshot.comparisons.map {
-                [
-                    NSLocalizedString("insights.csv.section.comparison", value: "Comparison", comment: ""),
-                    $0.label,
-                    $0.currentRev,
-                    String(
-                        format: NSLocalizedString("insights.csv.detail.previous_change_fmt", value: "Previous: %@, change: %@", comment: ""),
-                        $0.prevRev,
-                        $0.percent
-                    )
-                ]
-            }
-
             rows += snapshot.serviceProfitability.map {
                 [
                     NSLocalizedString("insights.csv.section.service", value: "Service", comment: ""),
@@ -393,19 +314,6 @@ class InsightsViewModel {
                     $0.method,
                     $0.amount,
                     String(format: NSLocalizedString("insights.csv.detail.payments_fmt", value: "%d payments", comment: ""), $0.count)
-                ]
-            }
-
-            rows += snapshot.lapsedClients.map {
-                [
-                    NSLocalizedString("insights.csv.section.lapsed_client", value: "Lapsed Client", comment: ""),
-                    $0.name,
-                    $0.spent,
-                    String(
-                        format: NSLocalizedString("insights.csv.detail.lapsed_client_fmt", value: "%d days since last visit; pets: %@", comment: ""),
-                        $0.days,
-                        $0.pets
-                    )
                 ]
             }
 
@@ -454,7 +362,6 @@ class InsightsViewModel {
     private func fetchClientInsights() async {
         do {
             let result = try await actor.fetchClientInsights()
-            topClients = result.topClients
             retentionRate = result.retentionRate
             churnRiskCount = result.churnRiskCount
             retentionSeries = result.retentionSeries
@@ -481,9 +388,6 @@ class InsightsViewModel {
             guard !Task.isCancelled, requestedPeriodDays == revenuePeriodDays else { return }
             revenueDrilldown = result.revenueDrilldown
             serviceProfitability = result.serviceProfitability
-            lapsedClients = result.lapsedClients
-            forecast = result.forecast
-            comparisons = result.comparisons
             dataQualityIssues = result.dataQualityIssues
         } catch {
             Logger.insights.error("fetchActionableInsights failed: \(error)")

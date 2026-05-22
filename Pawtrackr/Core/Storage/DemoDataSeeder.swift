@@ -102,13 +102,6 @@ enum DemoDataSeeder {
         )
         rebuiltDates.append(now.addingTimeInterval(-24 * 86_400))
 
-        let upcoming = Appointment(
-            date: Calendar.current.date(byAdding: .hour, value: 26, to: now) ?? now.addingTimeInterval(26 * 60 * 60),
-            pet: luna,
-            user: nil
-        )
-        context.insert(upcoming)
-
         try context.save()
 
         for date in rebuiltDates {

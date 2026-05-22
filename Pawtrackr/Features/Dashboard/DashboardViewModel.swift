@@ -28,13 +28,11 @@ final class DashboardViewModel {
     }
 
     struct KPI: Sendable {
-        var appointmentsToday: Int = 0
         var inProgressCount: Int = 0
         var revenueToday: Decimal = .zero
         var revenueYesterday: Decimal = .zero
         var completedToday: Int = 0
 
-        var appointmentsTodayText: String { "\(appointmentsToday)" }
         @MainActor var revenueTodayString: String { revenueToday.moneyString }
 
         var revenueTrend: Double? {
@@ -71,7 +69,6 @@ final class DashboardViewModel {
     var state: State = .loading
     var kpi = KPI()
     var activeVisits: [Visit] = []
-    var upcomingAppointments: [Appointment] = []
     var recentClients: [Client] = []
     var overduePets: [Pet] = []
     var revenueSeries: [RevenuePoint] = []
@@ -168,7 +165,6 @@ final class DashboardViewModel {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await self.fetchKPIs() }
                 group.addTask { await self.fetchActiveVisits() }
-                group.addTask { await self.fetchUpcomingAppointments() }
                 group.addTask { await self.fetchRecentClients() }
                 group.addTask { await self.fetchOverduePets() }
                 group.addTask { await self.buildRevenueSeries(days: self.revenueWindowDays) }
@@ -216,16 +212,6 @@ final class DashboardViewModel {
         }
     }
 
-    func checkInFromAppointment(_ appointment: Appointment) async {
-        do {
-            let visitRepo = VisitRepository(modelContainer: dataStore.container, eventBus: eventBus)
-            _ = try await visitRepo.checkIn(from: appointment)
-            await refresh()
-        } catch {
-            setDashboardError(error, source: #function)
-        }
-    }
-
     func checkInPet(_ pet: Pet) async {
         guard pet.activeVisit == nil else { return }
 
@@ -239,16 +225,6 @@ final class DashboardViewModel {
     }
 
     // MARK: - Private fetches
-
-    private func fetchUpcomingAppointments() async {
-        do {
-            let ids = try await repository.fetchUpcomingAppointments(limit: 5)
-            upcomingAppointments = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Appointment }
-        } catch {
-            setDashboardError(error, source: #function)
-            upcomingAppointments = []
-        }
-    }
 
     private func fetchOverduePets() async {
         do {
@@ -268,7 +244,6 @@ final class DashboardViewModel {
         do {
             let stats = try await repository.fetchKPIs()
             kpi = KPI(
-                appointmentsToday: stats.appointmentsToday,
                 inProgressCount:   stats.inProgressCount,
                 revenueToday:      stats.revenueToday,
                 revenueYesterday:  stats.revenueYesterday,

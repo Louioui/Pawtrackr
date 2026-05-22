@@ -54,8 +54,6 @@ final class Visit {
 
     var user: User?
 
-    var appointment: Appointment?
-
     // MARK: - Init
     init(pet: Pet, startedAt: Date = .now, user: User? = nil) {
         self.uuid = UUID()

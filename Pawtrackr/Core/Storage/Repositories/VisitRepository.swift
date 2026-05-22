@@ -15,7 +15,6 @@ protocol VisitRepositoryProtocol: Sendable {
     func saveVisit(_ visit: Visit) async throws
     func deleteVisit(_ visit: Visit) async throws
     func checkIn(pet: Pet, date: Date) async throws -> Visit
-    func checkIn(from appointment: Appointment) async throws -> Visit
     func checkOut(visit: Visit, total: Decimal?, now: Date) async throws
 }
 
@@ -95,50 +94,6 @@ final class VisitRepository: VisitRepositoryProtocol {
                 entityName: "Visit",
                 recordUUID: visit.uuid,
                 changedKeys: ["uuid", "sessionToken", "pet", "startedAt", "createdAt", "updatedAt", "lastModifiedBy"]
-            )
-        }
-        eventBus.publish(.refreshRequired)
-        NotificationCenter.default.post(name: .visitDidStart, object: visit)
-        return visit
-    }
-
-    func checkIn(from appointment: Appointment) async throws -> Visit {
-        // `appointment.pet` is optional under CloudKit-compatible schema.
-        // If the pet record can't be resolved, we can't materialize a visit.
-        guard let pet = appointment.pet else {
-            throw AppError.database("Appointment is missing its pet reference and cannot be checked in.")
-        }
-        if let existing = try activeVisit(for: pet) {
-            existing.appointment = appointment
-            appointment.status = .checkedIn
-            appointment.visit = existing
-            existing.ensureSessionToken()
-            try modelContext.save()
-            await MainActor.run {
-                CloudKitMonitor.shared.recordLocalChange(
-                    "Linked appointment to active visit",
-                    entityName: "Visit",
-                    recordUUID: existing.uuid,
-                    changedKeys: ["appointment", "updatedAt", "lastModifiedAt", "lastModifiedBy"]
-                )
-            }
-            eventBus.publish(.refreshRequired)
-            NotificationCenter.default.post(name: .visitDidStart, object: existing)
-            return existing
-        }
-
-        let visit = Visit(pet: pet, startedAt: .now)
-        visit.appointment = appointment
-        appointment.status = .checkedIn
-        appointment.visit = visit
-        modelContext.insert(visit)
-        try modelContext.save()
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                "Checked in appointment",
-                entityName: "Visit",
-                recordUUID: visit.uuid,
-                changedKeys: ["uuid", "sessionToken", "pet", "appointment", "startedAt", "createdAt", "updatedAt", "lastModifiedBy"]
             )
         }
         eventBus.publish(.refreshRequired)

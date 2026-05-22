@@ -41,7 +41,7 @@ enum PawtrackrSchemaV1: VersionedSchema {
 
     static var models: [any PersistentModel.Type] {
         [
-            Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, Appointment.self, User.self,
+            Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, User.self,
             DaySummary.self, ServiceDaySummary.self, CategoryDaySummary.self, ClientInsightSummary.self,
             CheckoutTransaction.self, EmergencyContact.self, BusinessConfig.self, MessageTemplate.self,
             InventoryItem.self, InventoryTransaction.self, DeviceMetadata.self, PresenceRecord.self

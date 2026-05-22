@@ -24,9 +24,6 @@ final class DashboardRepositoryTests: XCTestCase {
         let pet = Pet(name: "Buddy", species: .dog)
         context.insert(pet)
         
-        let appt = Appointment(date: today.addingTimeInterval(3600), pet: pet, user: nil)
-        context.insert(appt)
-        
         let visit = Visit(pet: pet, startedAt: .now)
         context.insert(visit)
         
@@ -36,12 +33,10 @@ final class DashboardRepositoryTests: XCTestCase {
         try context.save()
         
         let kpis = try await repository.fetchKPIs()
-        
-        XCTAssertEqual(kpis.appointmentsToday, 1)
+
         XCTAssertEqual(kpis.inProgressCount, 1)
         XCTAssertEqual(kpis.revenueToday, Decimal(100))
-        XCTAssertEqual(kpis.completedToday, 5)
-    }
+        XCTAssertEqual(kpis.completedToday, 5)    }
 
     func testSummaryFetches_CollapseDuplicateCloudKitCacheRows() async throws {
         let cal = Calendar.current

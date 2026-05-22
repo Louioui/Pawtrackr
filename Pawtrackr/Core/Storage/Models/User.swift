@@ -12,7 +12,6 @@ final class User {
     @Relationship(deleteRule: .nullify, inverse: \Client.user) var clients: [Client]? = []
     @Relationship(deleteRule: .nullify, inverse: \Pet.user) var pets: [Pet]? = []
     @Relationship(deleteRule: .nullify, inverse: \Visit.user) var visits: [Visit]? = []
-    @Relationship(deleteRule: .nullify, inverse: \Appointment.user) var appointments: [Appointment]? = []
 
     init(name: String, email: String) {
         self.uuid = UUID()

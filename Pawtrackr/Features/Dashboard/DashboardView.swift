@@ -127,7 +127,6 @@ struct DashboardView: View {
 
                     VStack(spacing: 24) {
                         quickActionsSection
-                        upcomingSection(vm)
                         overduePetsSection(vm)
                         recentClientsSection(vm)
                         gallerySection(vm)
@@ -141,7 +140,6 @@ struct DashboardView: View {
                     if !vm.smartSuggestions.isEmpty { smartSuggestionsSection(vm) }
                     if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
                     reengagementSection(vm)
-                    if !vm.upcomingAppointments.isEmpty { upcomingSection(vm) }
                     if !vm.overduePets.isEmpty { overduePetsSection(vm) }
                     if !vm.recentClients.isEmpty { recentClientsSection(vm) }
                     revenueSection(vm)
@@ -395,12 +393,6 @@ struct DashboardView: View {
     private func generateSummaryText(_ vm: DashboardViewModel) -> String {
         var parts: [String] = []
 
-        if vm.kpi.appointmentsToday > 0 {
-            parts.append(String(format: NSLocalizedString("dashboard.summary.appointments_today_fmt", value: "%d appointments scheduled for today", comment: ""), vm.kpi.appointmentsToday))
-        } else {
-            parts.append(NSLocalizedString("dashboard.summary.no_appointments_today", value: "No appointments scheduled for today", comment: ""))
-        }
-
         if vm.kpi.inProgressCount > 0 {
             parts.append(String(format: NSLocalizedString("dashboard.summary.active_sessions_fmt", value: "%d active sessions in progress", comment: ""), vm.kpi.inProgressCount))
         }
@@ -420,10 +412,10 @@ struct DashboardView: View {
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
                     recentHistoryLink(scope: .today) {
-                        kpiCard(title: NSLocalizedString("dashboard.appointments", comment: ""), value: vm.kpi.appointmentsTodayText, symbol: "calendar")
+                        kpiCard(title: NSLocalizedString("dashboard.in_progress", comment: ""), value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
                     }
                     recentHistoryLink(scope: .today) {
-                        kpiCard(title: NSLocalizedString("dashboard.in_progress", comment: ""), value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
+                        kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
                     }
                 }
                 GridRow {
@@ -441,9 +433,7 @@ struct DashboardView: View {
                     .accessibilityHint(Text(NSLocalizedString("dashboard.opens_insights", value: "Opens Insights", comment: "")))
                     .accessibilityIdentifier("dashboard.kpi.revenueInsights")
                     .accessibilityAddTraits(.isButton)
-                    recentHistoryLink(scope: .today) {
-                        kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
-                    }
+                    .gridCellColumns(2)
                 }
             }
         }
@@ -492,47 +482,6 @@ struct DashboardView: View {
                 }
             }
         }
-    }
-
-    private func upcomingSection(_ vm: DashboardViewModel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(NSLocalizedString("dashboard.upcoming", comment: "Upcoming Appointments")).font(.headline)
-            Card {
-                VStack(spacing: 0) {
-                    ForEach(vm.upcomingAppointments) { appt in
-                        upcomingRow(appt, vm: vm)
-                        if appt != vm.upcomingAppointments.last { Divider().padding(.leading, 56) }
-                    }
-                }
-            }
-        }
-    }
-
-    private func upcomingRow(_ appt: Appointment, vm: DashboardViewModel) -> some View {
-        HStack(spacing: 12) {
-            if let pet = appt.pet {
-                AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(pet.name).font(.subheadline.weight(.semibold))
-                    Text(appt.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
-                }
-            } else {
-                Image(systemName: "questionmark.circle.fill").foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(NSLocalizedString("common.unknown_pet", comment: "")).font(.subheadline.weight(.semibold))
-                    Text(appt.date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            Button(NSLocalizedString("dashboard.check_in", comment: "")) {
-                Task { await vm.checkInFromAppointment(appt) }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(appt.pet == nil)
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
     }
 
     private func overduePetsSection(_ vm: DashboardViewModel) -> some View {

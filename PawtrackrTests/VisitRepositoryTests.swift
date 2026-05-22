@@ -160,16 +160,4 @@ final class VisitRepositoryTests: XCTestCase {
         let result = try await repository.fetchVisits(predicate: predicate, sortBy: [], limit: 3)
         XCTAssertEqual(result.count, 3)
     }
-
-    func testCheckInFromAppointment_LinksAppointmentAndMarksCheckedIn() async throws {
-        let appointment = Appointment(date: .now, pet: pet, user: nil)
-        context.insert(appointment)
-        try context.save()
-
-        let visit = try await repository.checkIn(from: appointment)
-
-        XCTAssertEqual(visit.appointment?.uuid, appointment.uuid)
-        XCTAssertEqual(appointment.status, .checkedIn)
-        XCTAssertEqual(appointment.visit?.uuid, visit.uuid)
-    }
 }

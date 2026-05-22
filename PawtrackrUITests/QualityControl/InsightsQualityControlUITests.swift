@@ -51,8 +51,7 @@ final class InsightsQualityControlUITests: QualityControlUITestCase {
             { self.app.otherElements["insights.section.topServices"].exists },
             { self.app.otherElements["insights.section.paymentMix"].exists },
             { self.app.otherElements["insights.section.category"].exists },
-            { self.app.otherElements["insights.section.retention"].exists },
-            { self.app.otherElements["insights.section.topClients"].exists }
+            { self.app.otherElements["insights.section.retention"].exists }
         ], timeout: 6)
 
         XCTAssertTrue(reachedLowerCards, "Scrolling should reveal lower Insights cards.")

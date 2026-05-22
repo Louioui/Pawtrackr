@@ -292,14 +292,14 @@ enum SummaryUpdater {
             clientDesc.relationshipKeyPathsForPrefetching = [\Client.pets]
             let clients = try context.fetch(clientDesc)
 
-            // Cache-warm: pull every Pet with its visits/appointments prefetched
+            // Cache-warm: pull every Pet with its visits prefetched
             // so the per-client aggregate loop below (which walks each client's
             // pets) doesn't fault relationships one row at a time. Result is
             // intentionally discarded — we just want the relationships warm.
             // Failures are non-critical; the aggregate loop will fault on demand.
             do {
                 var petDesc = FetchDescriptor<Pet>()
-                petDesc.relationshipKeyPathsForPrefetching = [\Pet.visits, \Pet.appointments]
+                petDesc.relationshipKeyPathsForPrefetching = [\.visits]
                 _ = try context.fetch(petDesc)
             } catch {
                 Logger.dataIntegrity.warning("SummaryUpdater pet prefetch failed (non-fatal): \(error.localizedDescription, privacy: .public)")

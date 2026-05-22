@@ -61,7 +61,6 @@ final class Pet {
     // MARK: - Relationships
     var owner: Client?
     @Relationship(deleteRule: .cascade, inverse: \Visit.pet) var visits: [Visit]? = []
-    @Relationship(deleteRule: .cascade, inverse: \Appointment.pet) var appointments: [Appointment]? = []
     
     var user: User?
     var activeVisit: Visit? {
@@ -135,14 +134,11 @@ final class Pet {
 
     /// Predicts the next suggested grooming date based on history or preferred frequency.
     var suggestedNextVisitDate: Date? {
-        // 1. If there's an active visit or a future appointment, we don't need a suggestion
+        // 1. If there's an active visit, we don't need a suggestion
         if isCheckedIn { return nil }
         
         // Ensure at least one completed visit exists to base prediction on
         guard (visits ?? []).contains(where: { $0.isCompleted }) else { return nil }
-        
-        let futureAppointments = (appointments ?? []).filter { $0.date > .now }
-        if !futureAppointments.isEmpty { return nil }
 
         // 2. Get the last visit date
         guard let lastVisitDate = (visits ?? []).compactMap({ $0.endedAt }).max() else {

@@ -10,7 +10,6 @@ import OSLog
 private let dashboardRepoLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "DashboardRepository")
 
 struct DashboardKPI: Sendable {
-    var appointmentsToday: Int = 0
     var inProgressCount: Int = 0
     var revenueToday: Decimal = .zero
     var revenueYesterday: Decimal = .zero
@@ -20,7 +19,6 @@ struct DashboardKPI: Sendable {
 protocol DashboardRepositoryProtocol: Sendable {
     func fetchKPIs() async throws -> DashboardKPI
     func fetchActiveVisits() async throws -> [PersistentIdentifier]
-    func fetchUpcomingAppointments(limit: Int) async throws -> [PersistentIdentifier]
     func fetchRecentClients(limit: Int) async throws -> [PersistentIdentifier]
     func fetchOverduePets(limit: Int) async throws -> [PersistentIdentifier]
     func fetchServiceDistribution(days: Int) async throws -> [String: Int]
@@ -36,11 +34,6 @@ final actor DashboardRepository: DashboardRepositoryProtocol {
         let cal = Calendar.current
         let start = cal.startOfDay(for: .now)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return DashboardKPI() }
-
-        let todayApptDesc = FetchDescriptor<Appointment>(
-            predicate: #Predicate { a in a.date >= start && a.date < end }
-        )
-        let todaysCount = try modelContext.fetchCount(todayApptDesc)
 
         let inProgDesc = FetchDescriptor<Visit>(
             predicate: #Predicate { v in v.endedAt == nil }
@@ -62,7 +55,6 @@ final actor DashboardRepository: DashboardRepositoryProtocol {
         let yesterdaySummary = SummaryUpdater.collapsedDayAggregates(from: yesterdaySummaries).values.first
 
         return DashboardKPI(
-            appointmentsToday: todaysCount,
             inProgressCount: inProgCount,
             revenueToday: summary?.revenue ?? .zero,
             revenueYesterday: yesterdaySummary?.revenue ?? .zero,
@@ -77,17 +69,6 @@ final actor DashboardRepository: DashboardRepositoryProtocol {
         )
         let visits = try modelContext.fetch(descriptor)
         return visits.map { $0.persistentModelID }
-    }
-
-    func fetchUpcomingAppointments(limit: Int) async throws -> [PersistentIdentifier] {
-        let now = Date()
-        let descriptor = FetchDescriptor<Appointment>(
-            predicate: #Predicate { a in a.date >= now },
-            sortBy: [SortDescriptor(\.date, order: .forward)]
-        )
-        let upcoming = try modelContext.fetch(descriptor)
-        let filtered = upcoming.filter { $0.status == .scheduled }.prefix(limit)
-        return filtered.map { $0.persistentModelID }
     }
     
     func fetchRecentClients(limit: Int) async throws -> [PersistentIdentifier] {

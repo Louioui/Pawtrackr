@@ -31,9 +31,6 @@ struct InsightsView: View {
     @State private var reportCSVDocument: ExportDocument?
     @State private var isPreparingReport = false
     @State private var selectedDrilldown: InsightsDrilldown?
-    @State private var scheduleConfirmation = ""
-    @State private var showingScheduleConfirmation = false
-    @State private var isSchedulingRecall = false
 
     var body: some View {
         Group {
@@ -73,11 +70,6 @@ struct InsightsView: View {
         .sheet(item: $selectedDrilldown) { drilldown in
             drilldownSheet(drilldown)
         }
-        .alert(localized("insights.recall.alert_title", value: "Appointment Scheduled"), isPresented: $showingScheduleConfirmation) {
-            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) { }
-        } message: {
-            Text(scheduleConfirmation)
-        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 reportButton
@@ -92,8 +84,6 @@ struct InsightsView: View {
             VStack(spacing: DS.Spacing.xl) {
                 kpiSummaryRow(vm)
                 revenueCard(vm)
-                forecastCard(vm)
-                comparisonCard(vm)
                 if !vm.dataQualityIssues.isEmpty {
                     dataQualityCard(vm)
                 }
@@ -102,8 +92,6 @@ struct InsightsView: View {
                 paymentMixCard(vm)
                 categoryCard(vm)
                 retentionCard(vm)
-                lapsedClientsCard(vm)
-                topClientsCard(vm)
             }
             .padding(DS.Spacing.lg)
             .accessibilityIdentifier("insights.mainScroll.content")
@@ -346,75 +334,6 @@ struct InsightsView: View {
         .background(DS.ColorToken.surface, in: Capsule())
     }
 
-    // MARK: - Forecasting
-
-    private func forecastCard(_ vm: InsightsViewModel) -> some View {
-        Card {
-            VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                HStack {
-                    Label(localized("insights.forecast.title", value: "30-Day Forecast"), systemImage: "wand.and.stars")
-                        .font(.headline)
-                    Spacer()
-                    Text(vm.forecast?.confidenceLabel ?? localized("insights.forecast.no_baseline", value: "No baseline"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                if let forecast = vm.forecast {
-                    HStack(spacing: 12) {
-                        metricPill(title: localized("insights.forecast.projected", value: "Projected"), value: forecast.projectedRevenue.moneyString, tint: DS.ColorToken.primary)
-                        metricPill(title: NSLocalizedString("insights.visits", value: "Visits", comment: ""), value: "\(forecast.projectedVisits)", tint: DS.ColorToken.success)
-                    }
-
-                    Text(String(format: localized("insights.forecast.daily_average_fmt", value: "%@ average daily revenue. %@."), forecast.dailyAverageRevenue.moneyString, forecast.basis))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    emptyState(icon: "chart.line.uptrend.xyaxis", message: localized("insights.forecast.empty", value: "Complete a few visits to unlock forecasting"))
-                }
-            }
-        }
-        .accessibilityIdentifier("insights.section.forecast")
-    }
-
-    private func comparisonCard(_ vm: InsightsViewModel) -> some View {
-        Card {
-            VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                Text(localized("insights.comparison_windows", value: "Comparison Windows")).font(.headline)
-
-                if vm.comparisons.isEmpty {
-                    emptyState(icon: "arrow.left.arrow.right", message: localized("insights.comparison.empty", value: "No comparison data yet"))
-                } else {
-                    ForEach(vm.comparisons) { item in
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.label)
-                                    .font(.subheadline.weight(.semibold))
-                                Text(String(format: localized("insights.comparison.visits_fmt", value: "%d vs %d visits"), item.currentVisits, item.previousVisits))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(item.currentRevenue.moneyString)
-                                    .font(.subheadline.weight(.bold))
-                                    .contentTransition(.numericText())
-                                Text(percentString(item.percentChange))
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(item.percentChange >= 0 ? DS.ColorToken.success : DS.ColorToken.danger)
-                            }
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier("insights.section.comparisons")
-    }
-
     // MARK: - Monthly Performance
 
     private func monthlyPerformanceCard(_ vm: InsightsViewModel) -> some View {
@@ -610,121 +529,11 @@ struct InsightsView: View {
         .accessibilityIdentifier("insights.section.retention")
     }
 
-    private func lapsedClientsCard(_ vm: InsightsViewModel) -> some View {
-        Card {
-            VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.lapsedClients", label: localized("insights.lapsed_clients.title", value: "Lapsed Clients"))
-                HStack {
-                    Text(localized("insights.lapsed_clients.title", value: "Lapsed Clients")).font(.headline)
-                    Spacer()
-                    Text("\(vm.lapsedClients.count)")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-
-                if vm.lapsedClients.isEmpty {
-                    emptyState(icon: "person.crop.circle.badge.checkmark", message: localized("insights.lapsed_clients.empty", value: "No 90-day lapsed clients"))
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(vm.lapsedClients.enumerated()), id: \.element.id) { index, client in
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack(alignment: .top) {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(client.name)
-                                            .font(.subheadline.weight(.semibold))
-                                        Text(String(format: localized("insights.lapsed_clients.detail_fmt", value: "%@ • %d days since last visit"), client.petNames, client.daysSinceLastVisit))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-
-                                    Spacer()
-
-                                    Text(client.totalSpent.moneyString)
-                                        .font(.subheadline.bold())
-                                }
-
-                                HStack(spacing: 10) {
-                                    Button {
-                                        messageLapsedClient(client)
-                                    } label: {
-                                        Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
-                                    }
-                                    .disabled(client.phone == nil)
-                                    .buttonStyle(.bordered)
-                                    .accessibilityIdentifier("insights.lapsed.message.\(index)")
-
-                                    Button {
-                                        scheduleLapsedClient(client)
-                                    } label: {
-                                        Label(localized("insights.action.schedule", value: "Schedule"), systemImage: "calendar.badge.plus")
-                                    }
-                                    .disabled(client.primaryPetUUID == nil || isSchedulingRecall)
-                                    .buttonStyle(.borderedProminent)
-                                    .accessibilityIdentifier("insights.lapsed.schedule.\(index)")
-                                }
-                                .font(.caption.weight(.semibold))
-                            }
-                            .padding(.vertical, 10)
-
-                            if index < vm.lapsedClients.count - 1 { Divider() }
-                        }
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("insights.section.lapsedClients")
-    }
-
-    private func topClientsCard(_ vm: InsightsViewModel) -> some View {
-        Card {
-            VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                lowerSectionAccessibilityAnchor(identifier: "insights.section.topClients", label: localized("insights.top_clients", value: "Top Clients"))
-                Text(localized("insights.top_clients", value: "Top Clients")).font(.headline)
-
-                if vm.topClients.isEmpty {
-                    emptyState(icon: "person.crop.circle", message: localized("insights.top_clients.empty", value: "No client data yet"))
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(vm.topClients.enumerated()), id: \.element.id) { index, client in
-                            HStack {
-                                Text("\(index + 1)").font(.caption2.bold()).frame(width: 20)
-                                Text(client.name).font(.subheadline.weight(.medium))
-                                Spacer()
-                                Text(client.totalSpent.moneyString).font(.subheadline.bold())
-                            }
-                            .padding(.vertical, 8)
-                            if index < vm.topClients.count - 1 { Divider() }
-                        }
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("insights.section.topClients")
-    }
-
     private func metricLabel(title: String, value: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption2).foregroundStyle(.secondary)
             Text(value).font(.headline).foregroundStyle(color)
         }
-    }
-
-    private func metricPill(title: String, value: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline)
-                .foregroundStyle(tint)
-                .contentTransition(.numericText())
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func lowerSectionAccessibilityAnchor(identifier: String, label: String) -> some View {
@@ -852,30 +661,18 @@ struct InsightsView: View {
     }
 
     private func showRetentionDrilldown(_ vm: InsightsViewModel) {
-        let lapsedRows = vm.lapsedClients.map {
-            InsightsDrilldownRow(
-                title: $0.name,
-                subtitle: "\($0.petNames) • \($0.daysSinceLastVisit) days since last visit",
-                trailing: $0.totalSpent.moneyString
-            )
-        }
-
-        let rows = lapsedRows.isEmpty
-            ? vm.topClients.map {
-                InsightsDrilldownRow(
-                    title: $0.name,
-                    subtitle: "\($0.visitCount) visits",
-                    trailing: $0.totalSpent.moneyString
-                )
-            }
-            : lapsedRows
-
+        let explainerRow = InsightsDrilldownRow(
+            title: localized("insights.drilldown.retention_what_title", value: "What this measures"),
+            subtitle: localized(
+                "insights.drilldown.retention_what_message",
+                value: "Share of clients who returned for another visit within the last 90 days. Higher means more repeat customers."
+            ),
+            trailing: "\(Int(vm.retentionRate * 100))%"
+        )
         selectedDrilldown = InsightsDrilldown(
-            title: localized("insights.drilldown.retention_title", value: "Retention Detail"),
-            subtitle: lapsedRows.isEmpty
-                ? localized("insights.drilldown.top_recurring_clients", value: "Top recurring clients")
-                : localized("insights.drilldown.clients_ready_for_recall", value: "Clients ready for recall"),
-            rows: rows
+            title: localized("insights.drilldown.retention_title", value: "Client Retention"),
+            subtitle: localized("insights.drilldown.retention_subtitle", value: "How retention is calculated"),
+            rows: [explainerRow]
         )
     }
 
@@ -887,57 +684,6 @@ struct InsightsView: View {
                 trailing: $0.total.moneyString
             )
         }
-    }
-
-    private func messageLapsedClient(_ client: InsightsViewModel.LapsedClientData) {
-        guard let phone = client.phone,
-              let sms = PhoneUtils.smsURLString(phone, body: client.suggestedMessage)
-        else { return }
-        URLOpener.open(sms)
-    }
-
-    private func scheduleLapsedClient(_ client: InsightsViewModel.LapsedClientData) {
-        guard let petUUID = client.primaryPetUUID else { return }
-        guard !isSchedulingRecall else { return }
-
-        isSchedulingRecall = true
-        let container = modelContext.container
-        let date = suggestedRecallDate()
-
-        Task {
-            do {
-                let scheduler = RecallSchedulingActor(modelContainer: container)
-                let recall = try await scheduler.scheduleRecall(forPetID: petUUID, date: date)
-                await MainActor.run {
-                    scheduleConfirmation = String(
-                        format: localized("insights.recall.scheduled_fmt", value: "%@ is scheduled for %@."),
-                        recall.petName,
-                        recall.date.formatted(date: .abbreviated, time: .shortened)
-                    )
-                    showingScheduleConfirmation = true
-                    isSchedulingRecall = false
-                }
-            } catch {
-                await MainActor.run {
-                    scheduleConfirmation = String(
-                        format: localized("insights.recall.error_fmt", value: "Could not schedule this appointment: %@"),
-                        error.localizedDescription
-                    )
-                    showingScheduleConfirmation = true
-                    isSchedulingRecall = false
-                }
-            }
-        }
-    }
-
-    private func suggestedRecallDate() -> Date {
-        let calendar = Calendar.current
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: .now) ?? .now.addingTimeInterval(86_400)
-        return calendar.nextDate(
-            after: tomorrow,
-            matching: DateComponents(hour: 9, minute: 0),
-            matchingPolicy: .nextTime
-        ) ?? tomorrow
     }
 
     private func percentString(_ value: Double) -> String {

@@ -129,7 +129,6 @@ struct GetBusinessStatsIntent: AppIntent {
         
         let summary = """
         Today's Summary:
-        - \(kpis.appointmentsToday) appointments scheduled.
         - \(kpis.completedToday) visits completed.
         - Total revenue: \(kpis.revenueToday.moneyString).
         - \(kpis.inProgressCount) sessions still in progress.

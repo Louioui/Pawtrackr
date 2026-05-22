@@ -22,7 +22,7 @@ struct FeatureTourView: View {
             symbol: "square.grid.2x2.fill",
             tint: .blue,
             title: "Your Dashboard",
-            body: "See today's appointments, in-progress visits, and revenue at a glance. Tap a card to jump straight into the work.",
+            body: "See in-progress visits and revenue at a glance. Tap a card to jump straight into the work.",
             primaryHint: "Tap the Dashboard tab"
         ),
         TourStep(

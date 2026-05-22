@@ -59,8 +59,7 @@ final class InsightsUITests: XCTestCase {
             { self.app.staticTexts["Top Services"].exists || self.app.staticTexts["insights.section.topServices"].exists },
             { self.app.staticTexts["Payment Mix"].exists || self.app.staticTexts["insights.section.paymentMix"].exists },
             { self.app.staticTexts["Visits by Category"].exists || self.app.staticTexts["insights.section.category"].exists },
-            { self.app.staticTexts["Client Retention"].exists || self.app.staticTexts["insights.section.retention"].exists },
-            { self.app.staticTexts["Top Clients"].exists || self.app.staticTexts["insights.section.topClients"].exists }
+            { self.app.staticTexts["Client Retention"].exists || self.app.staticTexts["insights.section.retention"].exists }
         ], timeout: 6)
         XCTAssertTrue(anyLowerCard, "Scrolling should reveal one of the lower analytics cards.")
     }

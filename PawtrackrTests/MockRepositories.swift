@@ -43,13 +43,11 @@ final class MockClientRepository: ClientRepositoryProtocol, @unchecked Sendable 
 final class MockDashboardRepository: DashboardRepositoryProtocol, @unchecked Sendable {
     var kpi = DashboardKPI()
     var activeVisits: [PersistentIdentifier] = []
-    
+
     func fetchKPIs() async throws -> DashboardKPI { return kpi }
     func fetchActiveVisits() async throws -> [PersistentIdentifier] { return activeVisits }
-    func fetchUpcomingAppointments(limit: Int) async throws -> [PersistentIdentifier] { return [] }
     func fetchRecentClients(limit: Int) async throws -> [PersistentIdentifier] { return [] }
-    func fetchOverduePets(limit: Int) async throws -> [PersistentIdentifier] { return [] }
-    func fetchServiceDistribution(days: Int) async throws -> [String : Int] { return [:] }
+    func fetchOverduePets(limit: Int) async throws -> [PersistentIdentifier] { return [] }    func fetchServiceDistribution(days: Int) async throws -> [String : Int] { return [:] }
     func fetchCategoryDistribution(days: Int) async throws -> [String : Int] { return [:] }
     func fetchRevenueSeries(days: Int) async throws -> [Date : Decimal] { return [:] }
     func fetchGalleryImages(days: Int, limit: Int) async throws -> [Data] { return [] }

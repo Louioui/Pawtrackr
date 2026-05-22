@@ -326,7 +326,6 @@
 
 // Dashboard
 "dashboard.title" = "Dashboard";
-"dashboard.appointments" = "Appointments";
 "dashboard.in_progress" = "In Progress";
 "dashboard.revenue" = "Revenue";
 "dashboard.completed" = "Completed";
@@ -435,9 +434,6 @@
 "visit.resume_checkout" = "Resume Checkout";
 
 // Appointments
-"appointments.title" = "Appointments";
-"appointments.add" = "Add Appointment";
-"appointments.pet" = "Pet";
 
 // Common form fields
 "form.name" = "Name";
@@ -604,7 +600,6 @@
 "common.back" = "Back";
 "common.share" = "Share";
 
-"dashboard.upcoming" = "Upcoming";
 "dashboard.smart_suggestions" = "Smart Suggestions";
 "dashboard.reengage" = "Re-engage";
 "dashboard.getting_started" = "Getting Started";
@@ -616,8 +611,6 @@
 "dashboard.view_owner" = "View Owner";
 "dashboard.greeting.morning" = "Good Morning";
 "dashboard.greeting.afternoon" = "Good Afternoon";
-"dashboard.summary.appointments_today_fmt" = "%d appointments scheduled for today";
-"dashboard.summary.no_appointments_today" = "No appointments scheduled for today";
 "dashboard.summary.active_sessions_fmt" = "%d active sessions in progress";
 "dashboard.summary.revenue_trend_fmt" = "revenue is %@ %@ from yesterday";
 "dashboard.trend.up" = "up";
@@ -676,10 +669,6 @@
 "insights.drilldown.average_visit_subtitle" = "Highest-value visits in the selected revenue window";
 "insights.drilldown.retention_title" = "Retention Detail";
 "insights.drilldown.top_recurring_clients" = "Top recurring clients";
-"insights.drilldown.clients_ready_for_recall" = "Clients ready for recall";
-"insights.recall.alert_title" = "Appointment Scheduled";
-"insights.recall.scheduled_fmt" = "%@ is scheduled for %@.";
-"insights.recall.error_fmt" = "Could not schedule this appointment: %@";
 "insights.retention.recurring" = "Recurring";
 "insights.retention.one_time" = "One-time";
 "insights.lapsed.your_pet" = "your pet";

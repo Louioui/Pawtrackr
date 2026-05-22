@@ -16,7 +16,6 @@ final class MessageTemplate {
     var type: TemplateType = MessageTemplate.TemplateType.custom
     
     enum TemplateType: String, Codable, CaseIterable, Identifiable {
-        case appointmentReminder = "Reminder"
         case readyForPickup = "Ready"
         case followUp = "Follow-up"
         case custom = "Custom"
@@ -50,7 +49,6 @@ final class MessageTemplate {
     static var defaults: [MessageTemplate] {
         [
             MessageTemplate(title: "Ready for Pickup", content: "Hi [OwnerName], [PetName] is all finished and ready for pickup! See you soon.", type: .readyForPickup),
-            MessageTemplate(title: "Appointment Reminder", content: "Reminder: [PetName] has a grooming appointment today at [Time]. See you then!", type: .appointmentReminder),
             MessageTemplate(title: "Post-Visit Follow-up", content: "Hi [OwnerName], thanks for bringing [PetName] to Pawtrackr today! We hope they enjoyed their spa day.", type: .followUp)
         ]
     }

@@ -47,7 +47,6 @@ final class InsightsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.retentionRate, 0)
         XCTAssertTrue(vm.revenueSeries.isEmpty)
         XCTAssertTrue(vm.serviceDistribution.isEmpty)
-        XCTAssertTrue(vm.topClients.isEmpty)
         XCTAssertFalse(vm.hasLoadedOnce)
     }
 
