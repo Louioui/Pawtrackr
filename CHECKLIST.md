@@ -28,6 +28,10 @@ Remaining as SCAFFOLD (unwired, kept as honest starting points):
 `RevenueActor`, `BackgroundAnalyticsJanitor`, `TransactionQueueService`,
 `PendingTransaction`, `UnifiedNavigationStack`, `NavigationPlaceholders`.
 
+Also removed during P20: `GroomingWorkflow` — a dead `@Model` not in
+`PawtrackrSchema.models`, carrying `@Attribute(.unique)` which CloudKit-backed
+SwiftData rejects. Inert today, but a launch-crash landmine if ever schema-registered.
+
 ## 20-paragraph triage
 
 - P2  Feature-driven directory layout ......... DONE (App/ Core/ Features/ UI/; 173 files relocated)
@@ -37,7 +41,9 @@ Remaining as SCAFFOLD (unwired, kept as honest starting points):
 - P6  macOS glassmorphic window styling ....... PENDING
 - P7  Keyboard shortcuts (Cmd-N/I/F) .......... PENDING
 - P8  Localizable.xcstrings en/es ............. PENDING (large)
-- P9  Decimal-only money ...................... NEEDS-AUDIT (checkout already Decimal per CLAUDE.md)
+- P9  Decimal-only money ...................... DONE (audited: all model money fields are Decimal;
+                                                no Double/Float currency math; Decimal+Money.swift
+                                                uses banker's rounding. No changes needed.)
 - P10 Timer Date() anchor + local ticking ..... PENDING
 - P11 Micro-animations / numericText .......... PENDING
 - P12 Per-property merge timestamps ........... PENDING (schema change) / NEEDS-DEVICE to verify
@@ -51,7 +57,17 @@ Remaining as SCAFFOLD (unwired, kept as honest starting points):
 - P18 CloudKit field encryption ............... PENDING (real approach: @Attribute(.encrypt) /
                                                 .encryptedValues on the model, not a custom class)
 - P19 Encryption-key-reset recovery ........... PENDING / NEEDS-DEVICE to verify
-- P20 #index + @Attribute(.externalStorage) ... PENDING
+- P20 @Attribute(.externalStorage) ............ DONE (already on every binary field: Client/Pet
+                                                photo+thumbnail, Visit before/after photo+thumbnail,
+                                                BusinessConfig logo. CheckoutDraft is JSON-persisted,
+                                                not a SwiftData model, so externalStorage is N/A.)
+- P20 #Index compound indexes ................. BLOCKED — #Index macro requires iOS 18; project
+                                                deploys to iOS 17. Raising the min OS drops iOS 17
+                                                devices: a product decision for the owner. Drafted
+                                                indexes (revert-on-file): Visit[startedAt|endedAt|
+                                                createdAt], Client[lastName+firstName|lastVisitDate],
+                                                Pet[createdAt|name], DaySummary[day],
+                                                CheckoutTransaction[createdAt|visitUUID|idempotencyKey].
 
 ## Cannot be done from this environment
 
