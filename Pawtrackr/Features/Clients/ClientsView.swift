@@ -32,164 +32,166 @@ struct ClientsView: View {
     @State private var isSearchPresented = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                if let viewModel {
-                    filterChips(viewModel)
-                    
-                    if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty && viewModel.needsAttentionClients.isEmpty {
-                        emptyState(viewModel)
-                    } else {
-                        clientSections(viewModel)
-                    }
-                } else {
-                    clientsSkeleton
-                }
-            }
-            .padding(.top, 12)
-            .padding(.bottom, 80)
-        }
-        #if os(macOS)
-        .searchable(text: searchTextBinding,
-                    prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
-        #else
-        .searchable(text: searchTextBinding,
-                    isPresented: $isSearchPresented,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
-        #endif
-        .background(DS.ColorToken.background)
-        .alert(item: errorBinding) { error in
-            Alert(
-                title: Text(NSLocalizedString("common.error", comment: "")),
-                message: Text(error.localizedDescription),
-                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
-            )
-        }
-        // Modern alert API — stacking two deprecated `Alert`-returning
-        // `.alert(item:)` modifiers on the same view makes SwiftUI
-        // silently drop one (the trash-button confirmation never shows).
-        // The error alert above keeps the deprecated API since only ONE
-        // deprecated alert in the chain is safe.
-        .alert(
-            clientToDeleteTitle,
-            isPresented: clientToDeletePresented,
-            presenting: clientToDelete,
-            actions: clientDeleteActions,
-            message: clientDeleteMessage
-        )
-        .fabOverlay {
-            #if os(iOS)
-            FAB(systemImage: "person.fill.badge.plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
-                showingNewClientSheet = true
-            }
-            .accessibilityIdentifier("clients.fab.addClient")
-            #endif
-        }
-        .toolbar {
-            #if os(macOS)
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingNewClientSheet = true
-                } label: {
-                    Label(NSLocalizedString("clients.add_client", comment: ""), systemImage: "person.fill.badge.plus")
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                .accessibilityIdentifier("clients.toolbar.addClient")
-            }
-            #endif
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    if let viewModel {
+                        filterChips(viewModel)
 
-            ToolbarItem(placement: .primaryAction) {
-                CloudKitStatusView()
-            }
-
-            ToolbarItem(placement: toolbarTrailingPlacement) {
-                sortingMenu
-            }
-
-            ToolbarItem(placement: toolbarTrailingPlacement) {
-                Button {
-                    showNotifications = true
-                } label: {
-                    Image(systemName: "bell.fill")
-                        .overlay(alignment: .topTrailing) {
-                            if notificationsCount > 0 {
-                                Text("\(min(notificationsCount, 9))")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 14, height: 14)
-                                    .background(Color.red, in: Circle())
-                                    .offset(x: 4, y: -4)
-                            }
+                        if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty && viewModel.needsAttentionClients.isEmpty {
+                            emptyState(viewModel)
+                        } else {
+                            clientSections(viewModel)
                         }
+                    } else {
+                        clientsSkeleton
+                    }
                 }
-                .accessibilityIdentifier("clients.toolbar.notifications")
-                .accessibilityLabel(
-                    String.localizedStringWithFormat(
-                        NSLocalizedString("clients.notifications_unread_fmt", value: "Notifications, %d unread", comment: ""),
-                        notificationsCount
-                    )
+                .padding(.top, 12)
+                .padding(.bottom, 80)
+            }
+            #if os(macOS)
+            .searchable(text: searchTextBinding,
+                        prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
+            #else
+            .searchable(text: searchTextBinding,
+                        isPresented: $isSearchPresented,
+                        placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
+            #endif
+            .background(DS.ColorToken.background)
+            .alert(item: errorBinding) { error in
+                Alert(
+                    title: Text(NSLocalizedString("common.error", comment: "")),
+                    message: Text(error.localizedDescription),
+                    dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
                 )
             }
-        }
-        .refreshable {
-            // Hop to MainActor to call the isolated VM, then run cloud sync
-            // concurrently with whatever local refresh the VM kicks off.
-            await MainActor.run { viewModel?.fetchClients() }
-            await CloudKitMonitor.shared.forceSync()
-        }
-        .navigationTitle(NSLocalizedString("clients.title", value: "Client Center", comment: ""))
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        #if os(macOS)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    viewModel?.fetchClients()
-                } label: {
-                    Label(NSLocalizedString("common.refresh", value: "Refresh", comment: ""), systemImage: "arrow.clockwise")
+            // Modern alert API — stacking two deprecated `Alert`-returning
+            // `.alert(item:)` modifiers on the same view makes SwiftUI
+            // silently drop one (the trash-button confirmation never shows).
+            // The error alert above keeps the deprecated API since only ONE
+            // deprecated alert in the chain is safe.
+            .alert(
+                clientToDeleteTitle,
+                isPresented: clientToDeletePresented,
+                presenting: clientToDelete,
+                actions: clientDeleteActions,
+                message: clientDeleteMessage
+            )
+            .fabOverlay {
+                #if os(iOS)
+                FAB(systemImage: "person.fill.badge.plus", accessibilityLabel: NSLocalizedString("clients.add_client", comment: "")) {
+                    showingNewClientSheet = true
                 }
-                .keyboardShortcut("r", modifiers: .command)
+                .accessibilityIdentifier("clients.fab.addClient")
+                #endif
             }
-        }
-        #endif
-        .sheet(isPresented: $showingNewClientSheet) {
-        } content: {
-            NewClientSheet(modelContext: modelContext)
-        }
-        .sheet(isPresented: $showNotifications) {
-            NotificationsSheet(notifications: $storedNotifications)
-        }
-        .onAppear {
-            if viewModel == nil {
-                viewModel = ClientsViewModel(modelContext: modelContext, eventBus: eventBus)
+            .toolbar {
+                #if os(macOS)
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingNewClientSheet = true
+                    } label: {
+                        Label(NSLocalizedString("clients.add_client", comment: ""), systemImage: "person.fill.badge.plus")
+                    }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .accessibilityIdentifier("clients.toolbar.addClient")
+                }
+                #endif
+
+                ToolbarItem(placement: .primaryAction) {
+                    CloudKitStatusView()
+                }
+
+                ToolbarItem(placement: toolbarTrailingPlacement) {
+                    sortingMenu
+                }
+
+                ToolbarItem(placement: toolbarTrailingPlacement) {
+                    Button {
+                        showNotifications = true
+                    } label: {
+                        Image(systemName: "bell.fill")
+                            .overlay(alignment: .topTrailing) {
+                                if notificationsCount > 0 {
+                                    Text("\(min(notificationsCount, 9))")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 14, height: 14)
+                                        .background(Color.red, in: Circle())
+                                        .offset(x: 4, y: -4)
+                                }
+                            }
+                    }
+                    .accessibilityIdentifier("clients.toolbar.notifications")
+                    .accessibilityLabel(
+                        String.localizedStringWithFormat(
+                            NSLocalizedString("clients.notifications_unread_fmt", value: "Notifications, %d unread", comment: ""),
+                            notificationsCount
+                        )
+                    )
+                }
             }
-            viewModel?.fetchClients()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
-            if let id = note.createdClientID, note.clientCreatePhase == .created {
+            .refreshable {
+                // Hop to MainActor to call the isolated VM, then run cloud sync
+                // concurrently with whatever local refresh the VM kicks off.
+                await MainActor.run { viewModel?.fetchClients() }
+                await CloudKitMonitor.shared.forceSync()
+            }
+            .navigationTitle(NSLocalizedString("clients.title", value: "Client Center", comment: ""))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            #if os(macOS)
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        viewModel?.fetchClients()
+                    } label: {
+                        Label(NSLocalizedString("common.refresh", value: "Refresh", comment: ""), systemImage: "arrow.clockwise")
+                    }
+                    .keyboardShortcut("r", modifiers: .command)
+                }
+            }
+            #endif
+            .sheet(isPresented: $showingNewClientSheet) {
+            } content: {
+                NewClientSheet(modelContext: modelContext)
+            }
+            .sheet(isPresented: $showNotifications) {
+                NotificationsSheet(notifications: $storedNotifications)
+            }
+            .onAppear {
+                if viewModel == nil {
+                    viewModel = ClientsViewModel(modelContext: modelContext, eventBus: eventBus)
+                }
+                viewModel?.fetchClients()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
+                if let id = note.createdClientID, note.clientCreatePhase == .created {
+                    storedNotifications.insert(
+                        NotificationItem(
+                            title: NSLocalizedString("clients.notification.client_created_title", value: "Client Created", comment: ""),
+                            message: NSLocalizedString("clients.notification.client_created_message", value: "A new client was added.", comment: ""),
+                            date: Date(),
+                            relatedID: id
+                        ),
+                        at: 0
+                    )
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .visitDidComplete)) { note in
                 storedNotifications.insert(
                     NotificationItem(
-                        title: NSLocalizedString("clients.notification.client_created_title", value: "Client Created", comment: ""),
-                        message: NSLocalizedString("clients.notification.client_created_message", value: "A new client was added.", comment: ""),
+                        title: NSLocalizedString("clients.notification.visit_completed_title", value: "Visit Completed", comment: ""),
+                        message: NSLocalizedString("clients.notification.visit_completed_message", value: "A visit was checked out.", comment: ""),
                         date: Date(),
-                        relatedID: id
+                        relatedID: note.visitID
                     ),
                     at: 0
                 )
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .visitDidComplete)) { note in
-            storedNotifications.insert(
-                NotificationItem(
-                    title: NSLocalizedString("clients.notification.visit_completed_title", value: "Visit Completed", comment: ""),
-                    message: NSLocalizedString("clients.notification.visit_completed_message", value: "A visit was checked out.", comment: ""),
-                    date: Date(),
-                    relatedID: note.visitID
-                ),
-                at: 0
-            )
         }
     }
 
@@ -463,7 +465,6 @@ struct ClientsView: View {
             ForEach(0..<3, id: \.self) { _ in
                 Card(elevation: .regular) {
                     HStack(spacing: 12) {
-                        Circle().fill(Color.secondary.opacity(0.15)).frame(width: 40, height: 40)
                         VStack(alignment: .leading, spacing: 6) {
                             RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.15)).frame(width: 160, height: 12)
                             RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)).frame(width: 120, height: 10)

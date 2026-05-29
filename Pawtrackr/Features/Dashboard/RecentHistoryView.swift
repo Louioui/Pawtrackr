@@ -73,16 +73,17 @@ struct RecentHistoryView: View {
     }
     
     private func deleteVisit(_ visit: Visit) {
-        do {
-            dataStore.container.mainContext.delete(visit)
-            try dataStore.container.mainContext.save()
-            CloudKitMonitor.shared.recordLocalChange("Deleted visit history")
-            HapticManager.notify(.success)
-            viewModel?.fetchVisits()
-        } catch {
-            HapticManager.notify(.error)
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting visit history")
-            viewModel?.appError = .database(error.localizedDescription)
+        Task {
+            do {
+                let repository = VisitRepository(modelContainer: dataStore.container, eventBus: eventBus)
+                try await repository.deleteVisit(visit)
+                HapticManager.notify(.success)
+                viewModel?.fetchVisits()
+            } catch {
+                HapticManager.notify(.error)
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting visit history")
+                viewModel?.appError = .database(error.localizedDescription)
+            }
         }
     }
 

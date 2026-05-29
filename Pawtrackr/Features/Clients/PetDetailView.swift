@@ -10,6 +10,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 // MARK: - ViewModel
 @Observable
@@ -22,10 +23,16 @@ final class PetDetailViewModel {
     // State
     var sheetDestination: SheetDestination?
     let visitTimer = VisitTimer()
-    
+
+    // Bumped after writes so views observing `activeVisit` re-render even when
+    // SwiftData's inverse-relationship update on `pet.visits` doesn't trigger
+    // the parent @Observable's invalidation chain.
+    var refreshNonce: Int = 0
+
     // Computed Data
     var activeVisit: Visit? {
-        pet.activeVisit
+        _ = refreshNonce
+        return pet.activeVisit
     }
     
     var sortedVisits: [Visit] {
@@ -84,13 +91,20 @@ final class PetDetailViewModel {
     
     // MARK: Intents
     func checkIn() {
-        guard activeVisit == nil else { return }
+        guard activeVisit == nil else {
+            Logger.petDetail.info("checkIn skipped: pet \(self.pet.uuid) already has active visit")
+            return
+        }
+        Logger.petDetail.info("checkIn start: pet \(self.pet.uuid)")
         Task {
             do {
-                _ = try await visitRepository.checkIn(pet: pet, date: .now)
+                let visit = try await visitRepository.checkIn(pet: pet, date: .now)
+                refreshNonce &+= 1
                 updateTimer()
+                Logger.petDetail.info("checkIn saved visit \(visit.uuid); pet.activeVisit=\(self.pet.activeVisit?.uuid.uuidString ?? "nil")")
             } catch {
                 appError = .database("Could not start a visit. Please try again.")
+                Logger.petDetail.error("checkIn failed: \(String(describing: error))")
             }
         }
     }
@@ -124,7 +138,6 @@ struct PetDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GlobalEventBus.self) private var eventBus
     @State private var viewModel: PetDetailViewModel?
-    @State private var confirmCheckIn: Bool = false
     private let initialPet: Pet
     var namespace: Namespace.ID
 
@@ -158,12 +171,6 @@ struct PetDetailView: View {
                     activity.userInfo = ["petID": vm.pet.uuid.uuidString]
                     activity.isEligibleForHandoff = true
                 }
-                .alert(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), vm.pet.name), isPresented: $confirmCheckIn) {
-                    Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
-                    Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) { vm.checkIn() }
-                } message: {
-                    Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
-                }
                 .sheet(item: $bvm.sheetDestination) { destination in
                     switch destination {
                     case .checkout(let petForCheckout):
@@ -179,12 +186,23 @@ struct PetDetailView: View {
                 .onChange(of: (vm.pet.visits ?? []).count) {
                     vm.updateTimer()
                 }
-                .alert(item: $bvm.appError) { error in
-                    Alert(
-                        title: Text(NSLocalizedString("common.error", comment: "")),
-                        message: Text(error.localizedDescription),
-                        dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
-                    )
+                // Use the modern `.alert(_:isPresented:presenting:actions:message:)`
+                // API instead of the deprecated `.alert(item:)`. Two deprecated
+                // `.alert` modifiers on the same view (along with the check-in
+                // confirm alert above) caused the second to silently win, so the
+                // "already in session" notice never appeared — the user saw a
+                // blue tile that responded to nothing.
+                .alert(
+                    Text(NSLocalizedString("common.error", comment: "")),
+                    isPresented: Binding(
+                        get: { bvm.appError != nil },
+                        set: { if !$0 { bvm.appError = nil } }
+                    ),
+                    presenting: bvm.appError
+                ) { _ in
+                    Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) {}
+                } message: { error in
+                    Text(error.localizedDescription)
                 }
             } else {
                 ProgressView()
@@ -317,7 +335,24 @@ struct PetDetailView: View {
             HStack(spacing: 12) {
                 actionTile(title: "Message", systemImage: "message.fill", tint: .indigo) { showCommunication = true }
                 actionTile(title: NSLocalizedString("pet.view_history", comment: ""), systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
-                actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil) { confirmCheckIn = true }
+                actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: false) {
+                    // Don't silently disable when there's already an active
+                    // visit — the user sees a blue tile and assumes it works.
+                    // Always respond: surface an inline notice if the pet
+                    // is already in session, otherwise check in directly.
+                    if vm.activeVisit != nil {
+                        vm.appError = .validation(.custom(message: NSLocalizedString(
+                            "pet.already_in_session",
+                            value: "\(vm.pet.name) is already in session.",
+                            comment: ""
+                        )))
+                        HapticManager.notify(.warning)
+                        return
+                    }
+                    vm.checkIn()
+                    HapticManager.notify(.success)
+                }
+                .opacity(vm.activeVisit != nil ? 0.55 : 1.0)
                 actionTile(title: NSLocalizedString("pet.check_out", comment: ""), systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)
@@ -585,13 +620,13 @@ struct PetDetailView: View {
 
 struct EngagementIndicator: View {
     let score: Double
-    
+
     var color: Color {
         if score >= 0.8 { return .green }
         if score >= 0.5 { return .orange }
         return .red
     }
-    
+
     var body: some View {
         Circle()
             .fill(color)
@@ -602,4 +637,8 @@ struct EngagementIndicator: View {
                     .scaleEffect(1.2)
             )
     }
+}
+
+private extension Logger {
+    static let petDetail = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "PetDetail")
 }

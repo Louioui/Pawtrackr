@@ -394,30 +394,18 @@ struct OnboardingView: View {
             VStack(spacing: DS.Spacing.xl) {
                 businessCardPreview
                 
-                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                    Text(NSLocalizedString("onboarding.regional.currency_symbol", value: "Currency Symbol", comment: "")).font(.headline)
-                    Picker(NSLocalizedString("onboarding.regional.currency", value: "Currency", comment: ""), selection: $viewModel.currencySymbol) {
-                        Text("$ (USD/CAD)").tag("$")
-                        Text("£ (GBP)").tag("£")
-                        Text("€ (EUR)").tag("€")
-                        Text("¥ (JPY)").tag("¥")
-                        Text("A$ (AUD)").tag("A$")
-                        Text("₪ (ILS)").tag("₪")
-                    }
-                    .pickerStyle(.segmented)
-                }
-                .padding(.horizontal, DS.Spacing.xxl)
-                
                 Text(NSLocalizedString("onboarding.regional.contact_message", value: "Contact details are optional. Add them now if you want them on receipts and exports.", comment: ""))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, DS.Spacing.xxl)
                 
-                VStack(spacing: DS.Spacing.lg) {
-                    onboardingTextField(title: NSLocalizedString("onboarding.regional.email", value: "Contact Email", comment: ""), text: $viewModel.email, icon: "envelope", contentType: .emailAddress)
-                    onboardingTextField(title: NSLocalizedString("onboarding.regional.phone", value: "Phone Number", comment: ""), text: $viewModel.phone, icon: "phone", contentType: .telephoneNumber)
-                    onboardingTextField(title: NSLocalizedString("onboarding.regional.address", value: "Business Address", comment: ""), text: $viewModel.address, icon: "mappin.and.ellipse", axis: .vertical, contentType: .fullStreetAddress)
+                Card {
+                    VStack(spacing: DS.Spacing.md) {
+                        onboardingTextField(title: NSLocalizedString("onboarding.regional.email", value: "Contact Email", comment: ""), text: $viewModel.email, icon: "envelope", contentType: .emailAddress)
+                        onboardingTextField(title: NSLocalizedString("onboarding.regional.phone", value: "Phone Number", comment: ""), text: $viewModel.phone, icon: "phone", contentType: .telephoneNumber)
+                            .phoneFieldFormatting($viewModel.phone)
+                        onboardingTextField(title: NSLocalizedString("onboarding.regional.address", value: "Business Address", comment: ""), text: $viewModel.address, icon: "mappin.and.ellipse", axis: .vertical, contentType: .fullStreetAddress)                    }
                 }
                 .padding(.horizontal, DS.Spacing.xxl)
             }

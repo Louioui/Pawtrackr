@@ -5,6 +5,7 @@ import OSLog
 import SwiftUI
 
 @Observable
+@MainActor
 final class OnboardingViewModel {
     @ObservationIgnored private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "Onboarding")
     @ObservationIgnored private let biometrics = BiometricAuthenticator()

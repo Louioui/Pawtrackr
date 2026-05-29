@@ -180,23 +180,23 @@ final class ClientDetailViewModel {
 
     func checkIn(pet: Pet, at date: Date = .now) {
         if activeVisit(for: pet) != nil { return }
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 _ = try await self.visitRepository.checkIn(pet: pet, date: date)
-                self.pets = client.pets ?? []
+                self.refreshPets()
+                self.refreshRecentVisits()
             } catch {
                 self.appError = .database(error.localizedDescription)
                 CloudKitMonitor.shared.reportLocalSaveError(error, operation: "checking in pet")
                 Logger.clientDetail.error("Failed to check in: \(String(describing: error))")
             }
-            self.refreshRecentVisits()
         }
     }
 
     func addService(_ service: Service, to visit: Visit, quantity: Int = 1) {
         visit.addItem(title: service.name, unitPrice: service.effectiveBasePrice, quantity: quantity, service: service)
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await self.visitRepository.saveVisit(visit)
@@ -211,17 +211,17 @@ final class ClientDetailViewModel {
 
     func checkOut(pet: Pet, customTotal: Decimal? = nil, at date: Date = .now) {
         guard let visit = activeVisit(for: pet) else { return }
-        Task { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await self.visitRepository.checkOut(visit: visit, total: customTotal, now: date)
-                self.pets = client.pets ?? []
+                self.refreshPets()
+                self.refreshRecentVisits()
             } catch {
                 self.appError = .database(error.localizedDescription)
                 CloudKitMonitor.shared.reportLocalSaveError(error, operation: "checking out pet")
                 Logger.clientDetail.error("Failed to check out: \(String(describing: error))")
             }
-            self.refreshRecentVisits()
         }
     }
 

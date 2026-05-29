@@ -449,10 +449,11 @@ struct DashboardView: View {
                     accessibilityIdentifier: "dashboard.quickAction.newClient"
                 ) { showNewClient = true }
                 actionCard(
-                    title: NSLocalizedString("dashboard.check_in", comment: ""),
+                    title: NSLocalizedString("dashboard.quick_check_in", value: "Quick Check-In", comment: ""),
                     symbol: "play.circle",
                     accessibilityIdentifier: "dashboard.quickAction.checkIn"
                 ) {
+                    // Navigate to clients and focus search if possible, or just navigate
                     selectSurface(.clients, resetPath: true)
                 }
                 actionCard(

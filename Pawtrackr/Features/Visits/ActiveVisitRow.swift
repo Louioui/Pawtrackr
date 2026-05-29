@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ActiveVisitRow: View {
     let visit: Visit
+    @Environment(NavigationRouter.self) private var router
     @StateObject private var timer = VisitTimer()
 
     var body: some View {
@@ -23,8 +24,13 @@ struct ActiveVisitRow: View {
                     .foregroundStyle(.secondary)
 
                 if let pet = visit.pet {
-                    NavigationLink(destination: CheckoutView(pet: pet, visit: visit)) {
-                        Image(systemName: "ellipsis.circle").font(.title3)
+                    Button {
+                        router.navigateToCheckout(pet)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.title3)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Session options")

@@ -65,12 +65,6 @@ struct ClientCard: View {
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
                     .id("name-\(client.id)")
-                
-                if let namespace {
-                    // Hidden anchor for name transition if needed
-                    Color.clear.frame(width: 0, height: 0)
-                        .matchedGeometryEffect(id: "name-\(client.id)", in: namespace)
-                }
             }
             
             Spacer()

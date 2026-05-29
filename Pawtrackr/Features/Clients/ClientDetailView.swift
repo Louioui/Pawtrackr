@@ -149,9 +149,25 @@ struct ClientDetailView: View {
                 contactEditorSheet
             }
             .modifier(CheckoutPresentationModifier(checkoutPet: $checkoutPet, vm: vm))
-            .alert(item: $alertDestination) { destination in
-                destinationAlert(destination, vm: vm)
-            }
+            // The deprecated `.alert(item:)` + `Alert(…)` API silently fails to
+            // present when stacked under multiple `.sheet(item:)` modifiers
+            // — that's why the Check In button looked broken to the user
+            // (the alert never appeared, so vm.checkIn was never called).
+            // Use the modern actions/message API instead.
+            .alert(
+                alertTitleText(for: alertDestination, vm: vm),
+                isPresented: Binding(
+                    get: { alertDestination != nil },
+                    set: { if !$0 { alertDestination = nil } }
+                ),
+                presenting: alertDestination,
+                actions: { destination in
+                    alertActions(for: destination, vm: vm)
+                },
+                message: { destination in
+                    alertMessage(for: destination)
+                }
+            )
             .onChange(of: (vm.client.pets ?? []).count) { _, _ in
                 vm.refreshPets()
             }
@@ -204,15 +220,7 @@ struct ClientDetailView: View {
                         .focused($contactNameFocused)
                     TextField(NSLocalizedString("form.relation", comment: ""), text: $newContactRelation)
                     TextField(NSLocalizedString("form.phone", comment: ""), text: $newContactPhone)
-                        .onChange(of: newContactPhone) { _, v in
-                            guard !v.isEmpty else { return }
-                            let formatted = PhoneUtils.formatAsYouType(v, includeExtension: false)
-                            if formatted != v { newContactPhone = formatted }
-                        }
-                    #if os(iOS)
-                        .keyboardType(.phonePad)
-                        .textContentType(.telephoneNumber)
-                    #endif
+                        .phoneFieldFormatting($newContactPhone)
                 }
             }
             .navigationTitle(editingContact == nil ? NSLocalizedString("client_detail.add_contact", comment: "") : NSLocalizedString("client_detail.edit_contact", comment: ""))
@@ -231,41 +239,59 @@ struct ClientDetailView: View {
         }
     }
 
-    private func destinationAlert(_ destination: AlertDestination, vm: ClientDetailViewModel) -> Alert {
+    private func alertTitleText(for destination: AlertDestination?, vm: ClientDetailViewModel) -> Text {
         switch destination {
         case .checkIn(let pet):
-            return Alert(
-                title: Text(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name)),
-                message: Text(NSLocalizedString("client_details.checkin_confirm_message", comment: "")),
-                primaryButton: .default(Text(NSLocalizedString("common.yes", comment: ""))) {
-                    vm.checkIn(pet: pet)
-                },
-                secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
-            )
+            return Text(String(format: NSLocalizedString("client_details.checkin_confirm_title_fmt", comment: ""), pet.name))
         case .deleteClient:
-            return Alert(
-                title: Text(String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName)),
-                message: Text(NSLocalizedString("clients.delete_confirm_message", comment: "")),
-                primaryButton: .destructive(Text(NSLocalizedString("common.yes", comment: ""))) {
-                    deleteClient(vm: vm)
-                },
-                secondaryButton: .cancel(Text(NSLocalizedString("common.no", comment: "")))
-            )
-        case .deleteError(let message):
-            return Alert(
-                title: Text(NSLocalizedString("clients.delete_failed", comment: "")),
-                message: Text(message),
-                dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
-            )
+            return Text(String(format: NSLocalizedString("clients.delete_confirm_title_fmt", comment: ""), vm.client.fullName))
+        case .deleteError:
+            return Text(NSLocalizedString("clients.delete_failed", comment: ""))
+        case .deleteContact:
+            return Text(NSLocalizedString("client_detail.delete_contact_title", comment: ""))
+        case .none:
+            return Text("")
+        }
+    }
+
+    @ViewBuilder
+    private func alertActions(for destination: AlertDestination, vm: ClientDetailViewModel) -> some View {
+        switch destination {
+        case .checkIn(let pet):
+            Button(NSLocalizedString("common.yes", comment: "")) {
+                vm.checkIn(pet: pet)
+                withAnimation(Animations.fastEaseOut) { showSessionStartedToast = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation(Animations.fastEaseOut) { showSessionStartedToast = false }
+                }
+            }
+            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
+        case .deleteClient:
+            Button(NSLocalizedString("common.yes", comment: ""), role: .destructive) {
+                deleteClient(vm: vm)
+            }
+            Button(NSLocalizedString("common.no", comment: ""), role: .cancel) {}
+        case .deleteError:
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) {}
         case .deleteContact(let contact):
-            return Alert(
-                title: Text(NSLocalizedString("client_detail.delete_contact_title", comment: "")),
-                message: Text(NSLocalizedString("client_detail.delete_contact_message", comment: "")),
-                primaryButton: .destructive(Text(NSLocalizedString("common.delete", comment: ""))) {
-                    confirmDeleteContact(contact)
-                },
-                secondaryButton: .cancel()
-            )
+            Button(NSLocalizedString("common.delete", comment: ""), role: .destructive) {
+                confirmDeleteContact(contact)
+            }
+            Button(NSLocalizedString("common.cancel", value: "Cancel", comment: ""), role: .cancel) {}
+        }
+    }
+
+    @ViewBuilder
+    private func alertMessage(for destination: AlertDestination) -> some View {
+        switch destination {
+        case .checkIn:
+            Text(NSLocalizedString("client_details.checkin_confirm_message", comment: ""))
+        case .deleteClient:
+            Text(NSLocalizedString("clients.delete_confirm_message", comment: ""))
+        case .deleteError(let message):
+            Text(message)
+        case .deleteContact:
+            Text(NSLocalizedString("client_detail.delete_contact_message", comment: ""))
         }
     }
 
@@ -280,6 +306,38 @@ struct ClientDetailView: View {
                 syncMetadataFooter(client: vm.client)
             }
             .padding(.vertical, 8)
+        }
+        // Toasts must overlay the full scroll area so they appear at the top of
+        // the screen regardless of scroll position. Previously this overlay was
+        // attached to `recentHistorySection`, which rendered the toast far below
+        // the fold — making the Check In button look like it did nothing.
+        .overlay(alignment: .top) {
+            VStack(spacing: 6) {
+                if showSessionStartedToast {
+                    SessionToast(
+                        text: sessionStartedToastText.isEmpty
+                            ? NSLocalizedString("client_detail.session_started", comment: "")
+                            : sessionStartedToastText,
+                        tint: .blue
+                    )
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                if showSavedToast {
+                    SavedToast(text: NSLocalizedString("client_detail.saved_successfully", comment: ""))
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .padding(.top, 8)
+            .allowsHitTesting(false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { notif in
+            guard let id = notif.createdClientID, notif.clientCreatePhase == .navigated else { return }
+            if id == vm.client.persistentModelID {
+                withAnimation(Animations.fastEaseOut) { showSavedToast = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation(Animations.fastEaseOut) { showSavedToast = false }
+                }
+            }
         }
     }
 
@@ -303,9 +361,6 @@ struct ClientDetailView: View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    AvatarView(.client(name: client.fullName), size: .lg)
-                        .matchedGeometryEffect(id: "avatar-\(client.id)", in: namespace)
-                    
                     VStack(alignment: .leading, spacing: 2) {
                         Text(client.fullName)
                             .font(.title3.weight(.semibold))
@@ -351,15 +406,7 @@ struct ClientDetailView: View {
                         HStack {
                             TextField(NSLocalizedString("new_client.phone", comment: ""), text: $editPhone)
                                 .textFieldStyle(.roundedBorder)
-                                .onChange(of: editPhone) { _, v in
-                                    guard !v.isEmpty else { return }
-                                    let f = PhoneUtils.formatAsYouType(v, includeExtension: false)
-                                    if f != v { editPhone = f }
-                                }
-                            #if os(iOS)
-                                .keyboardType(.phonePad)
-                                .textContentType(.telephoneNumber)
-                            #endif
+                                .phoneFieldFormatting($editPhone)
                             TextField(NSLocalizedString("new_client.email", comment: ""), text: $editEmail).textFieldStyle(.roundedBorder)
                         }
                     }
@@ -542,20 +589,48 @@ struct ClientDetailView: View {
                                     petStatusPill(pet)
                                 }
                                 HStack(spacing: 8) {
-                                    actionButton(title: NSLocalizedString("client_detail.check_in", comment: ""), systemImage: "arrow.down.right.circle.fill", tint: .blue) {
+                                    // Status & Timer Logic
+                                    actionButton(title: NSLocalizedString("client_detail.check_in", comment: ""), systemImage: "play.fill", tint: .blue) {
+                                        // The button is never silently disabled: if the pet
+                                        // already has an active visit, show a toast saying so
+                                        // instead of doing nothing (previously the user saw a
+                                        // blue button that looked active but didn't respond).
+                                        // Otherwise check in directly — the confirmation alert
+                                        // was failing to present under stacked .sheet modifiers.
+                                        if pet.activeVisit != nil {
+                                            sessionStartedToastText = NSLocalizedString(
+                                                "client_detail.pet_already_in_session",
+                                                value: "\(pet.name) is already in session",
+                                                comment: ""
+                                            )
+                                            withAnimation(Animations.fastEaseOut) { showSessionStartedToast = true }
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                                withAnimation(Animations.fastEaseOut) { showSessionStartedToast = false }
+                                            }
+                                            HapticManager.notify(.warning)
+                                            return
+                                        }
                                         vm.checkIn(pet: pet)
+                                        sessionStartedToastText = NSLocalizedString(
+                                            "client_detail.session_started",
+                                            value: "Session started for \(pet.name)",
+                                            comment: ""
+                                        )
                                         withAnimation(Animations.fastEaseOut) { showSessionStartedToast = true }
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                                             withAnimation(Animations.fastEaseOut) { showSessionStartedToast = false }
                                         }
+                                        HapticManager.notify(.success)
                                     }
-                                    .disabled(pet.activeVisit != nil)
+                                    .opacity(pet.activeVisit != nil ? 0.55 : 1.0)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
 
-                                    actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "creditcard.fill", tint: .green) {
-                                        // Open checkout; pass active visit so it finalizes the ongoing session
-                                        checkoutPet = pet
+                                    actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
+                                        // Trigger check-out / stop timer
+                                        vm.checkOut(pet: pet)
+                                        HapticManager.notify(.success)
                                     }
+                                    .opacity(pet.activeVisit == nil ? 0.3 : 1.0)
                                     .disabled(pet.activeVisit == nil)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
 
@@ -639,28 +714,6 @@ struct ClientDetailView: View {
             }
         }
         .padding(.bottom, 80) // space for FAB
-        .overlay(alignment: .top) {
-            VStack(spacing: 6) {
-                if showSessionStartedToast {
-                    SessionToast(text: NSLocalizedString("client_detail.session_started", comment: ""), tint: .blue)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-                if showSavedToast {
-                    SavedToast(text: NSLocalizedString("client_detail.saved_successfully", comment: ""))
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .padding(.top, 8)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { notif in
-            guard let id = notif.createdClientID, notif.clientCreatePhase == .navigated else { return }
-            if id == vm.client.persistentModelID {
-                withAnimation(Animations.fastEaseOut) { showSavedToast = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    withAnimation(Animations.fastEaseOut) { showSavedToast = false }
-                }
-            }
-        }
     }
 
     // MARK: - Toolbar
@@ -772,6 +825,7 @@ struct ClientDetailView: View {
 
     @State private var showSavedToast = false
     @State private var showSessionStartedToast = false
+    @State private var sessionStartedToastText: String = ""
 
     private struct SavedToast: View {
         var text: String
@@ -817,7 +871,7 @@ private struct CheckoutPresentationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.fullScreenCover(item: $checkoutPet) { pet in
+        content.adaptiveCover(item: $checkoutPet) { pet in
             CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
         }
         #else

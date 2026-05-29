@@ -48,14 +48,7 @@ struct EditClientSheet: View {
                     #endif
                     TextField(NSLocalizedString("new_client.phone", comment: ""), text: $phone)
                         .accessibilityIdentifier("editClient.phone")
-                        .autocorrectionDisabled()
-                        .onChange(of: phone) { _, newValue in
-                            if let pretty = PhoneUtils.display(newValue) { phone = pretty }
-                        }
-                    #if os(iOS)
-                    .keyboardType(.phonePad)
-                    .textContentType(.telephoneNumber)
-                    #endif
+                        .phoneFieldFormatting($phone)
                     TextField(NSLocalizedString("new_client.email", comment: ""), text: $email)
                         .accessibilityIdentifier("editClient.email")
                     #if os(iOS)

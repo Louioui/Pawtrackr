@@ -38,7 +38,8 @@ struct PetCard: View {
         Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(pet.gender)), thickness: 4)) {
             cardContent
         }
-        // Leading accent covers session identity; additional rail not needed.
+        .scaleEffect(isActive ? 1.01 : 1.0)
+        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isActive)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilitySummary)
         .onChange(of: scenePhase) { _, newPhase in
@@ -122,9 +123,21 @@ struct PetCard: View {
     private var behaviorTags: some View {
         if !pet.behaviorTags.isEmpty {
             FlowLayout(spacing: 6) {
-                ForEach(pet.behaviorTags, id: \.self) { tag in
+                ForEach(Array(pet.behaviorTags), id: \.self) { tag in
+                    let isHighPriority = tag.lowercased().contains("anxious") || tag.lowercased().contains("extra care")
                     let disp = BehaviorTagIcons.display(for: tag)
-                    Chip((disp.emoji != nil ? "\(disp.emoji!) " : "") + disp.label, style: .tinted, size: .xs)
+
+                    if isHighPriority {
+                        Chip((disp.emoji != nil ? "\(disp.emoji!) " : "") + disp.label,
+                             style: .filled,
+                             size: .xs)
+                        .foregroundStyle(.white)
+                        .background(Color.red.opacity(0.8), in: Capsule())
+                    } else {
+                        Chip((disp.emoji != nil ? "\(disp.emoji!) " : "") + disp.label,
+                             style: .tinted,
+                             size: .xs)
+                    }
                 }
             }
         }

@@ -19,6 +19,7 @@ final class ScalabilityTests: XCTDataTestCase {
                         phone: "555\(String(format: "%04d", i))",
                         email: "test\(i)@example.com",
                         address: "",
+                        photoData: nil,
                         pets: [NewPetData(name: "Pet \(i)", species: .dog, gender: .male, breed: nil, color: nil, photoData: nil, health: nil, behaviorTags: [], birthdate: nil)],
                         contacts: []
                     )

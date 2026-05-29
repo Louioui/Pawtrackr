@@ -51,6 +51,7 @@ final class Client {
         self.lastName = lastName.trimmed
         self.phone = phone?.trimmed
         self.email = email?.trimmed
+        updatePrimaryContact()
     }
 
     // MARK: - Derived Properties

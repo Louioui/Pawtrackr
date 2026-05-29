@@ -8,6 +8,13 @@
 import SwiftUI
 import SwiftData
 import Observation
+import PhotosUI
+import OSLog
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 @MainActor
 @Observable
@@ -23,6 +30,18 @@ final class NewClientViewModel {
     var phone = ""
     var email = ""
     var address = ""
+
+    // Photo handling
+    var photoSelection: PhotosPickerItem? = nil {
+        didSet {
+            Task { await loadAvatarImage() }
+        }
+    }
+#if os(iOS)
+    var avatarImage: UIImage? = nil
+#elseif os(macOS)
+    var avatarImage: NSImage? = nil
+#endif
 
     var contacts: [TempContact] = [TempContact(index: 1)]
     var pets: [TempPet] = [TempPet(index: 1)]
@@ -40,6 +59,17 @@ final class NewClientViewModel {
         self.repository = repository ?? ClientRepository(modelContainer: modelContext.container)
     }
 
+    private func loadAvatarImage() async {
+        guard let item = photoSelection else { return }
+        if let data = try? await item.loadTransferable(type: Data.self) {
+#if os(iOS)
+            self.avatarImage = UIImage(data: data)
+#elseif os(macOS)
+            self.avatarImage = NSImage(data: data)
+#endif
+        }
+    }
+
     func addPet() {
         pets.append(TempPet(index: pets.count + 1))
     }
@@ -49,6 +79,11 @@ final class NewClientViewModel {
     }
 
     func createClient() async -> CreateClientOutcome {
+        Logger.newClient.info("createClient enter: first='\(self.first)' last='\(self.last)' phone='\(self.phone)' isSaving=\(self.isSaving)")
+        guard !isSaving else {
+            Logger.newClient.warning("createClient ignored because a save is already in progress")
+            return .failed
+        }
         isSaving = true
         appError = nil
 
@@ -56,11 +91,19 @@ final class NewClientViewModel {
 
         do {
             try validate()
-            
+            Logger.newClient.info("createClient: validation passed")
+
             let e164 = PhoneUtils.toE164(phone)
+            Logger.newClient.info("createClient: e164=\(e164 ?? "nil"); checking duplicates")
             if let e164, let existing = try await repository.findClient(byPhone: e164) {
+                Logger.newClient.info("createClient: duplicate found")
                 duplicateClientID = existing
                 showDuplicateAlert = true
+                appError = .validation(.custom(message: NSLocalizedString(
+                    "new_client.duplicate_phone",
+                    value: "A client with this phone number already exists.",
+                    comment: ""
+                )))
                 return .duplicateFound
             }
 
@@ -87,46 +130,38 @@ final class NewClientViewModel {
                 return NewContactData(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
             }
 
-            let clientID: PersistentIdentifier
-            if newPets.isEmpty && newContacts.isEmpty {
-                let client = Client(
-                    firstName: first.capitalizedName,
-                    lastName: last.capitalizedName,
-                    phone: e164 ?? "",
-                    email: email.trimmed.lowercased()
-                )
-                client.address = address.trimmed
-                modelContext.insert(client)
-                try modelContext.save()
-                CloudKitMonitor.shared.recordLocalChange("Created client")
-                clientID = client.persistentModelID
-            } else {
-                clientID = try await repository.createClient(
-                    firstName: first.capitalizedName,
-                    lastName: last.capitalizedName,
-                    phone: e164 ?? "",
-                    email: email.trimmed.lowercased(),
-                    address: address.trimmed,
-                    pets: newPets,
-                    contacts: newContacts
-                )
-                CloudKitMonitor.shared.recordLocalChange("Created client with related records")
-            }
+#if os(iOS)
+            let avatarData = avatarImage?.jpegData(compressionQuality: 0.8)
+#elseif os(macOS)
+            let avatarData = avatarImage?.jpegData(compressionQuality: 0.8)
+#endif
+
+            let clientID = try await repository.createClient(
+                firstName: first.capitalizedName,
+                lastName: last.capitalizedName,
+                phone: e164 ?? "",
+                email: email.trimmed.lowercased(),
+                address: address.trimmed,
+                photoData: avatarData,
+                pets: newPets,
+                contacts: newContacts
+            )
+            Logger.newClient.info("createClient: saved client through repository")
 
             NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
                 ClientDidCreateKey.clientID.rawValue: clientID,
                 ClientDidCreateKey.phase.rawValue: ClientDidCreatePhase.created.rawValue
             ])
-            NotificationCenter.default.post(name: .clientOpenRequested, object: nil, userInfo: [
-                ClientOpenKey.clientID.rawValue: clientID
-            ])
-            
+
             HapticManager.notify(.success)
+            Logger.newClient.info("createClient: returning .created")
             return .created
         } catch let error as ValidationError {
+            Logger.newClient.error("createClient: validation failed: \(error.localizedDescription)")
             self.appError = .validation(error)
             return .failed
         } catch {
+            Logger.newClient.error("createClient: save/db error: \(String(describing: error))")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "creating client")
             self.appError = .database(error.localizedDescription)
             return .failed
@@ -146,17 +181,6 @@ final class NewClientViewModel {
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             throw ValidationError.custom(message: "Please enter a valid email address.")
         }
-        
-        // Ensure all pets in the list have names if they have other data
-        for (idx, pet) in pets.enumerated() {
-            if !pet.name.trimmed.isEmpty && pet.gender == nil {
-                throw ValidationError.custom(message: "Please select a gender for \(pet.name.trimmed).")
-            }
-            // If the user started typing a name, but left it empty, but filled breed or something else
-            if pet.name.trimmed.isEmpty && (!pet.breed.trimmed.isEmpty || !pet.color.trimmed.isEmpty) {
-                throw ValidationError.custom(message: "Pet #\(idx + 1) needs a name.")
-            }
-        }
     }
 
     private func isValidEmail(_ raw: String) -> Bool {
@@ -164,6 +188,10 @@ final class NewClientViewModel {
         let pattern = #"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$"#
         return s.range(of: pattern, options: .regularExpression) != nil
     }
+}
+
+private extension Logger {
+    static let newClient = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "NewClient")
 }
 
 // Temporary structs for form data
@@ -189,3 +217,12 @@ struct TempContact: Identifiable {
     var relation: String = ""
     var phone: String = ""
 }
+
+#if os(macOS)
+extension NSImage {
+    func jpegData(compressionQuality: CGFloat) -> Data? {
+        guard let tiff = tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: compressionQuality])
+    }
+}
+#endif

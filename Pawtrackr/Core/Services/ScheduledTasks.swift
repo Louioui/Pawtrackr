@@ -120,6 +120,13 @@ class ScheduledTasks {
 
     private func scheduleBackgroundMaintenance() {
         #if canImport(BackgroundTasks) && os(iOS)
+        // BGTaskScheduler is unavailable on the iOS Simulator — submit() always
+        // fails there with .unavailable. Skip the call so the log isn't poisoned
+        // with a misleading ERROR on every simulator launch.
+        #if targetEnvironment(simulator)
+        log.debug("Skipping BGTaskScheduler.submit on simulator (unsupported).")
+        return
+        #else
         let request = BGProcessingTaskRequest(identifier: Self.maintenanceTaskIdentifier)
         request.earliestBeginDate = nextMaintenanceDate()
         request.requiresExternalPower = false
@@ -130,6 +137,7 @@ class ScheduledTasks {
         } catch {
             log.error("Failed to schedule background maintenance: \(error.localizedDescription, privacy: .public)")
         }
+        #endif
         #endif
     }
 

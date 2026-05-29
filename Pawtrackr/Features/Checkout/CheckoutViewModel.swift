@@ -592,16 +592,13 @@ final class CheckoutViewModel {
                 Logger.checkout.error("CheckoutViewModel: Draft cleanup failed after checkout - \(error.localizedDescription)")
             }
 
-            // Refresh `self.visit` in the main context.
-            // Bypassing the cache ensures we get the results committed by the actor.
+            // Refresh `self.visit` in the main context without writing stale UI state
+            // over the transaction actor's committed checkout changes.
             let visitID = result.visitID
             let context = (pet.modelContext ?? visit.modelContext)
-            
+
             if let mainContext = context {
                 do {
-                    // Ensure the main context sees the changes from the background actor.
-                    try mainContext.save()
-
                     let descriptor = FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.persistentModelID == visitID })
                     if let refreshed = try mainContext.fetch(descriptor).first {
                         self.visit = refreshed

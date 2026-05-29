@@ -687,7 +687,7 @@ private struct VisitCheckoutModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.fullScreenCover(isPresented: $showCheckout) {
+        content.adaptiveCover(isPresented: $showCheckout) {
             if let pet = visit.pet {
                 CheckoutView(pet: pet, visit: visit)
             }
@@ -707,7 +707,7 @@ private struct VisitPreviewModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.fullScreenCover(item: previewItem) { item in
+        content.adaptiveCover(item: previewItem) { item in
             PhotoPreview(imageData: item.data, title: item.title)
         }
         #else

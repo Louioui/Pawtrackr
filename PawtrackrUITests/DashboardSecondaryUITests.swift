@@ -120,19 +120,21 @@ final class DashboardSecondaryUITests: XCTestCase {
     func testActiveSessionDisappearsAfterCheckoutCompletes() throws {
         waitForDashboard()
 
-        // Sanity: the seeded active session row must be present first.
+        // Sanity: the seeded active session row must be present and hittable
+        // (not just existing in the accessibility tree). Looping on .exists
+        // alone can break out before the row is scrolled into the viewport,
+        // and the later waitForHittable then never scrolls on its own.
         let checkoutButton = app.buttons["dashboard.activeSession.checkoutButton"]
         let scroll = app.scrollViews["dashboard.scroll"]
         var found = false
         for _ in 0..<6 {
-            if checkoutButton.exists { found = true; break }
+            if checkoutButton.exists && checkoutButton.isHittable { found = true; break }
             if scroll.exists { scroll.swipeUp() } else { app.swipeUp() }
         }
         XCTAssertTrue(found, "Seeded active session row must exist before checkout.")
 
         // Complete a minimum-viable checkout: open from active session,
         // skip through the steps with default selections, confirm.
-        XCTAssertTrue(checkoutButton.waitForHittable(timeout: 5))
         checkoutButton.tap()
 
         XCTAssertTrue(app.staticTexts["Pick the services"].waitForExistence(timeout: 8))
@@ -161,6 +163,79 @@ final class DashboardSecondaryUITests: XCTestCase {
         XCTAssertTrue(
             disappeared,
             "Dashboard's active-session row should disappear after the only seeded active visit is checked out. If this fails, the eventBus → DashboardViewModel.refresh path is broken (likely a retain-cycle regression in the AsyncStream observer)."
+        )
+    }
+
+    /// End-to-end exercise of the check-in button the user reports as broken:
+    /// 1) Check out the seeded active session so UITest Pet has no active visit.
+    /// 2) Navigate Clients → UITest Owner → tap the pet's Check In button.
+    /// 3) Confirm the alert.
+    /// 4) Verify a new active visit appears on the dashboard.
+    func testCheckInFromClientDetailCreatesActiveVisit() throws {
+        waitForDashboard()
+
+        // ---- Step 1: Clear the seeded active visit via checkout ----
+        let checkoutButton = app.buttons["dashboard.activeSession.checkoutButton"]
+        let scroll = app.scrollViews["dashboard.scroll"]
+        var found = false
+        for _ in 0..<6 {
+            if checkoutButton.exists && checkoutButton.isHittable { found = true; break }
+            if scroll.exists { scroll.swipeUp() } else { app.swipeUp() }
+        }
+        XCTAssertTrue(found, "Seeded active session row should be hittable on launch.")
+        checkoutButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Pick the services"].waitForExistence(timeout: 8))
+        let bath = app.buttons["checkout.service.Bath"]
+        if bath.waitForHittable(timeout: 5) { bath.tap() }
+
+        tapPrimaryButton(named: "Continue to Notes")
+        tapPrimaryButton(named: "Continue to Payment")
+        tapPrimaryButton(named: "Review Checkout")
+        XCTAssertTrue(app.buttons["Confirm & Pay"].waitForHittable(timeout: 8))
+        tapPrimaryButton(named: "Confirm & Pay")
+        XCTAssertTrue(app.staticTexts["Checkout Complete!"].waitForExistence(timeout: 15))
+
+        let doneButton = app.buttons["checkout.doneButton"]
+        if doneButton.waitForHittable(timeout: 5) { doneButton.tap() }
+        waitForDashboard()
+
+        // ---- Step 2: Navigate to Clients → UITest Owner ----
+        let clientsTab = app.tabBars.buttons["Clients"]
+        XCTAssertTrue(clientsTab.waitForHittable(timeout: 8), "Clients tab should be hittable.")
+        clientsTab.tap()
+
+        let row = app.buttons["clients.row.UITest Owner"]
+        let staticRow = app.staticTexts["UITest Owner"]
+        if row.waitForHittable(timeout: 8) {
+            row.tap()
+        } else if staticRow.waitForHittable(timeout: 4) {
+            staticRow.tap()
+        } else {
+            XCTFail("Could not find seeded UITest Owner row.")
+            return
+        }
+
+        // ---- Step 3: Tap Check In on the pet card and confirm ----
+        let checkInBtn = app.buttons["clientDetail.pet.UITest Pet.checkIn"]
+        let detailScroll = app.scrollViews.firstMatch
+        for _ in 0..<5 where !(checkInBtn.exists && checkInBtn.isHittable) {
+            if detailScroll.exists { detailScroll.swipeUp() } else { app.swipeUp() }
+        }
+        XCTAssertTrue(checkInBtn.waitForHittable(timeout: 5),
+                      "Check In button on UITest Pet should be hittable after the active visit is cleared.")
+        checkInBtn.tap()
+
+        // ---- Step 4: Verify a new active visit exists ----
+        // Easiest signal: the Check Out button on the same pet card becomes hittable
+        // (the Check In becomes disabled when activeVisit != nil).
+        let checkOutBtn = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
+        let checkOutAppeared = waitForCondition(timeout: 8) {
+            checkOutBtn.exists && checkOutBtn.isHittable
+        }
+        XCTAssertTrue(
+            checkOutAppeared,
+            "After tapping Check In, the same pet's Check Out button should become hittable (i.e. activeVisit is now set). If this fails, the check-in is reaching the alert but not actually creating a visit."
         )
     }
 

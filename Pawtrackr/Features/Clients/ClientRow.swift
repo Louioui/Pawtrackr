@@ -36,73 +36,28 @@ struct ClientRow: View {
 
     var body: some View {
         let primaryPet = (client.pets ?? []).sorted(by: { $0.name < $1.name }).first
-        Card(
-            elevation: .regular,
-            accent: inProgress ? .leading(.color(DS.ColorToken.success), thickness: 4) : nil
-        ) {
-            HStack(spacing: 12) {
-                // Avatars (up to 3 pets)
-                HStack(spacing: -8) {
-                    ForEach(Array((client.pets ?? []).sorted(by: { $0.name < $1.name }).prefix(3)), id: \.persistentModelID) { pet in
-                        IconCircle(size: .sm, style: .auto(species: pet.species, gender: pet.gender), lineWidth: 1)
-                    }
-                }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(client.fullName)
-                        .font(.headline)
-                        .lineLimit(1)
+        HStack(alignment: .center, spacing: 16) {
+            if let pet = primaryPet {
+                IconCircle(size: .md, style: .auto(species: pet.species, gender: pet.gender), lineWidth: 1)
 
-                    if let pet = primaryPet {
-                        Text("\(pet.name) • \(pet.breed ?? pet.species.rawValue.capitalized)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: 10) {
-                        // Phone actions (Call + SMS) with graceful fallback to plain text
-                        if let phone = formattedPhone {
-                            if let tel = PhoneUtils.telURLString(phone), let sms = PhoneUtils.smsURLString(phone),
-                               let telURL = URL(string: tel), let smsURL = URL(string: sms) {
-                                HStack(spacing: 10) {
-                                    Link(destination: telURL) {
-                                        Image(systemName: "phone.fill")
-                                    }
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityLabel("Call \(phone)")
-
-                                    Link(destination: smsURL) {
-                                        Image(systemName: "message.fill")
-                                    }
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityLabel("Text \(phone)")
-                                }
-                            } else {
-                                Label(phone, systemImage: "phone")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        if inProgress {
-                            Text(NSLocalizedString("status.in_session", comment: ""))
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(DS.ColorToken.success, in: Capsule())
-                                .foregroundStyle(.white)
-                                .accessibilityLabel(Text(NSLocalizedString("a11y.in_session", comment: "")))
-                        }
-                    }
-                }
-                Spacer()
+                Text(pet.name)
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.primary)
+            } else {
+                // Fallback if no pets exist for the client
+                Text(client.fullName)
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .foregroundStyle(.secondary)
             }
+
+            Spacer()
         }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .contentShape(Rectangle())
         .onTapGesture { onTap?() }
         .accessibilityAddTraits(.isButton)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(accessibilityLabel))
     }
 
     private var accessibilityLabel: String {

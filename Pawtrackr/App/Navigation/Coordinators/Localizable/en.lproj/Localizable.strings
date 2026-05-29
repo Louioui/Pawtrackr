@@ -719,7 +719,7 @@
 
 "onboarding.step.welcome" = "Welcome";
 "onboarding.step.business_profile" = "Business Profile";
-"onboarding.step.regional" = "Regional Info";
+"onboarding.step.regional" = "Contact Information";
 "onboarding.step.security" = "Security";
 "onboarding.step.permissions" = "Permissions";
 "onboarding.step.finish" = "Finish";

@@ -41,6 +41,7 @@ protocol ClientRepositoryProtocol: Sendable {
         phone: String,
         email: String,
         address: String,
+        photoData: Data?,
         pets: [NewPetData],
         contacts: [NewContactData]
     ) async throws -> PersistentIdentifier
@@ -200,11 +201,15 @@ final actor ClientRepository: ClientRepositoryProtocol {
         phone: String,
         email: String,
         address: String,
+        photoData: Data?,
         pets: [NewPetData],
         contacts: [NewContactData]
     ) async throws -> PersistentIdentifier {
-        let client = Client(firstName: firstName, lastName: lastName, phone: phone, email: email)
-        client.address = address
+        let client = Client(firstName: firstName, lastName: lastName)
+        client.setPhone(phone)
+        client.setEmail(email)
+        client.setAddress(address)
+        client.setPhotoData(photoData)
         modelContext.insert(client)
         
         for pd in pets {
@@ -233,7 +238,7 @@ final actor ClientRepository: ClientRepositoryProtocol {
                 "Created client",
                 entityName: "Client",
                 recordUUID: clientUUID,
-                changedKeys: ["uuid", "firstName", "lastName", "phone", "email", "address", "pets", "emergencyContacts", "createdAt", "updatedAt"]
+                changedKeys: ["uuid", "firstName", "lastName", "phone", "email", "address", "photoData", "pets", "emergencyContacts", "createdAt", "updatedAt"]
             )
         }
         return client.persistentModelID
@@ -241,10 +246,10 @@ final actor ClientRepository: ClientRepositoryProtocol {
 
     func saveClient(id: PersistentIdentifier, firstName: String, lastName: String, phone: String, email: String) async throws {
         guard let client = modelContext.model(for: id) as? Client else { return }
-        client.firstName = firstName
-        client.lastName = lastName
-        client.phone = phone
-        client.email = email
+        client.setFirstName(firstName)
+        client.setLastName(lastName)
+        client.setPhone(phone)
+        client.setEmail(email)
         try modelContext.save()
         let clientUUID = client.uuid
         await MainActor.run {
@@ -252,7 +257,7 @@ final actor ClientRepository: ClientRepositoryProtocol {
                 "Saved client",
                 entityName: "Client",
                 recordUUID: clientUUID,
-                changedKeys: ["firstName", "lastName", "phone", "email", "updatedAt", "lastModifiedBy"]
+                changedKeys: ["firstName", "lastName", "phone", "email", "primaryContactInfo", "updatedAt", "lastModifiedBy"]
             )
         }
     }

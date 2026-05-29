@@ -132,6 +132,10 @@ struct ContentView: View {
 
     private func evaluateFeatureTourIfReady() {
         guard !AppRuntime.isUITesting else { return }
+        // Don't try to present the tour cover while another modal is up
+        // (onboarding cover, what's-new sheet, or a presentedSheet) —
+        // SwiftUI only allows one presentation at a time per stack.
+        guard presentedSheet == nil else { return }
         if !appSettings.hasSeenAppTour {
             showFeatureTour = true
         }
@@ -259,18 +263,29 @@ struct ContentView: View {
         Group {
             #if os(macOS)
             splitView
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ecosystemStatusInset
+                }
             #else
             if horizontalSizeClass == .compact {
+                // On iPhone the TabView already owns the bottom safe area for
+                // its tab bar; a bottom safe-area-inset here overlaps with the
+                // tab bar and swallows taps on the middle tabs (and on
+                // anything near the bottom of the scrollable content, like
+                // the active-session row's checkout button). Sync state is
+                // already surfaced in the dashboard toolbar's CloudKitStatusView
+                // and the top-of-screen CloudKitAccountBanner, so the bottom
+                // strip is dropped on compact.
                 tabView
             } else {
                 splitView
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        ecosystemStatusInset
+                    }
             }
             #endif
         }
         .preferredColorScheme(appSettings.preferredColorScheme.swiftUIScheme)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ecosystemStatusInset
-        }
     }
 
     private var ecosystemStatusInset: some View {

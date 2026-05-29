@@ -126,6 +126,9 @@ struct RootView: View {
 
     private func evaluateWhatIsNew() {
         guard !AppRuntime.isUITesting else { return }
+        // Hold this back during onboarding so it doesn't race the cover —
+        // SwiftUI only presents one sheet/cover at a time per stack.
+        guard !onboardingIncomplete, !showOnboarding else { return }
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         let lastSeenVersion = UserDefaults.standard.string(forKey: "lastSeenVersion")
         if currentVersion != lastSeenVersion {

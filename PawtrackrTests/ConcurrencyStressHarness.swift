@@ -18,6 +18,7 @@ final class ConcurrencyStressHarness: XCTDataTestCase {
                         phone: "555\(String(format: "%04d", i))",
                         email: "",
                         address: "",
+                        photoData: nil,
                         pets: [],
                         contacts: []
                     )

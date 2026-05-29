@@ -61,6 +61,7 @@ enum AppColorScheme: String, CaseIterable, Identifiable {
 }
 
 @Observable
+@MainActor
 final class AppSettings {
     // MARK: - Defaults
 

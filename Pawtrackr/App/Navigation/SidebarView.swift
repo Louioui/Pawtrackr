@@ -75,6 +75,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .glassmorphicSidebar()
         .navigationTitle("Pawtrackr")
     }
     
