@@ -157,6 +157,7 @@ struct CloudKitDiagnosticsView: View {
                     Label(NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: ""),
                           systemImage: "arrow.clockwise.icloud")
                 }
+                .disabled(true) // Disabled per user request
 
                 Button {
                     Task { await monitor.refreshAccountStatus() }

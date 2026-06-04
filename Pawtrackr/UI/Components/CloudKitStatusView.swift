@@ -138,10 +138,7 @@ private struct CloudKitStatusPopover: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled({
-                if case .syncing = monitor.syncState { return true }
-                return false
-            }())
+            .disabled(true) // Disabled per user request
         }
         .padding(14)
     }

@@ -238,6 +238,11 @@ final class DashboardViewModel {
 
     private func setDashboardError(_ error: Error, source: String = #function) {
         dashboardLog.error("[\(source)] \(String(describing: error))")
+        if let appError = error as? AppError {
+            self.appError = appError
+        } else {
+            self.appError = .database(error.localizedDescription)
+        }
     }
 
     private func fetchKPIs() async {

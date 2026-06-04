@@ -49,10 +49,6 @@ struct NewClientSheet: View {
         @Bindable var viewModel = viewModel
         ScrollView {
             VStack(spacing: 16) {
-                // Owner Photo Card
-                OwnerPhotoCard(photoSelection: $viewModel.photoSelection, avatarImage: viewModel.avatarImage)
-                .padding(.horizontal)
-
                 // Owner Info Card
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
@@ -230,55 +226,4 @@ private extension View {
 
 private extension Logger {
     static let newClient = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "NewClient")
-}
-
-#if os(iOS)
-private typealias OwnerAvatarImage = UIImage
-#elseif os(macOS)
-private typealias OwnerAvatarImage = NSImage
-#endif
-
-private struct OwnerPhotoCard: View {
-    @Binding var photoSelection: PhotosPickerItem?
-    let avatarImage: OwnerAvatarImage?
-
-    var body: some View {
-        Card {
-            PhotosPicker(selection: $photoSelection, matching: .images) {
-                HStack(alignment: .center, spacing: 12) {
-                    avatarPreview
-                    Text(NSLocalizedString("new_client.photo_hint", value: "Tap to add owner photo", comment: ""))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .contentShape(Rectangle())
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var avatarPreview: some View {
-        if let avatarImage {
-            #if os(iOS)
-            Image(uiImage: avatarImage)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 44, height: 44)
-                .clipShape(Circle())
-            #elseif os(macOS)
-            Image(nsImage: avatarImage)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 44, height: 44)
-                .clipShape(Circle())
-            #endif
-        } else {
-            Image(systemName: "person.crop.circle.badge.plus")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(DS.ColorToken.primary)
-                .frame(width: 44, height: 44)
-                .background(DS.ColorToken.primary.opacity(0.12), in: Circle())
-        }
-    }
 }

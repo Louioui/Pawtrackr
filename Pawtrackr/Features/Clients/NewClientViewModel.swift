@@ -31,18 +31,6 @@ final class NewClientViewModel {
     var email = ""
     var address = ""
 
-    // Photo handling
-    var photoSelection: PhotosPickerItem? = nil {
-        didSet {
-            Task { await loadAvatarImage() }
-        }
-    }
-#if os(iOS)
-    var avatarImage: UIImage? = nil
-#elseif os(macOS)
-    var avatarImage: NSImage? = nil
-#endif
-
     var contacts: [TempContact] = [TempContact(index: 1)]
     var pets: [TempPet] = [TempPet(index: 1)]
 
@@ -59,16 +47,7 @@ final class NewClientViewModel {
         self.repository = repository ?? ClientRepository(modelContainer: modelContext.container)
     }
 
-    private func loadAvatarImage() async {
-        guard let item = photoSelection else { return }
-        if let data = try? await item.loadTransferable(type: Data.self) {
-#if os(iOS)
-            self.avatarImage = UIImage(data: data)
-#elseif os(macOS)
-            self.avatarImage = NSImage(data: data)
-#endif
-        }
-    }
+    private func loadAvatarImage() async { }
 
     func addPet() {
         pets.append(TempPet(index: pets.count + 1))
@@ -130,19 +109,13 @@ final class NewClientViewModel {
                 return NewContactData(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
             }
 
-#if os(iOS)
-            let avatarData = avatarImage?.jpegData(compressionQuality: 0.8)
-#elseif os(macOS)
-            let avatarData = avatarImage?.jpegData(compressionQuality: 0.8)
-#endif
-
             let clientID = try await repository.createClient(
                 firstName: first.capitalizedName,
                 lastName: last.capitalizedName,
                 phone: e164 ?? "",
                 email: email.trimmed.lowercased(),
                 address: address.trimmed,
-                photoData: avatarData,
+                photoData: nil,
                 pets: newPets,
                 contacts: newContacts
             )

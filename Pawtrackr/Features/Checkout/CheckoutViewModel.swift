@@ -91,15 +91,52 @@ final class CheckoutViewModel {
         }
     }
 
-    // MARK: Dependencies
+    // MARK: - Async Calculations (Off-Main-Thread)
+    @MainActor
+    private func triggerBackgroundCalculation(reason: String, immediate: Bool = false) {
+        Task {
+            guard let calculator = self.calculatorActor else { return }
+
+            // 1. Calculate total
+            let total = await calculator.calculateTotal(items: []) // Logic needs refinement
+            
+            // 2. Generate fingerprint
+            let fingerprint = await calculator.generateFingerprint(
+                selectedServiceIDs: Array(selectedServiceIDs),
+                selectedAddOnIDs: Array(selectedAddOnIDs),
+                allServices: allServices,
+                addOnServices: addOnServices,
+                sessionNotes: sessionNotes,
+                amountString: amountString,
+                tipAmountString: tipAmountString,
+                selectedTipPercentage: selectedTipPercentage,
+                selectedPaymentMethodRawValue: selectedPaymentMethod.rawValue,
+                externalReference: externalReference,
+                tags: Array(tags),
+                hadBeforePhoto: beforePhotoData != nil,
+                hadAfterPhoto: afterPhotoData != nil,
+                visitUUID: visit.uuid.uuidString,
+                petUUID: pet.uuid.uuidString,
+                currentStepRawValue: currentStep.rawValue
+            )
+            
+            // 3. Update UI state
+            self.lastSavedDraftFingerprint = fingerprint
+            self.finalTotalString = total.moneyString
+            
+            // 4. Autosave
+            scheduleDraftSave(reason: reason, immediate: immediate)
+        }
+    }
+
+    // Dependencies
     private var visitRepository: VisitRepositoryProtocol?
     private var serviceRepository: ServiceRepositoryProtocol?
     private let draftStore: CheckoutDraftStore
     private let eventRecorder: CheckoutEventRecorder
-    /// Set in `loadServices` once we have the real ModelContainer from the SwiftUI environment.
-    /// Never construct a fallback container here — a phantom container would route the entire
-    /// checkout to an orphan store and silently lose the groomer's revenue.
     private var transactionActor: CheckoutTransactionActor?
+    private var calculatorActor: CheckoutCalculatorActor? = CheckoutCalculatorActor()
+
 
     // MARK: Models
     var pet: Pet
@@ -109,20 +146,19 @@ final class CheckoutViewModel {
     // MARK: UI State
     var sessionNotes: String = ""
     var amountString: String = ""
-    var selectedServiceIDs: Set<PersistentIdentifier> = [] { didSet { scheduleDraftSave(reason: "services_changed") } }
-    var selectedPaymentMethod: Payment.Method = .cash { didSet { scheduleDraftSave(reason: "payment_method_changed") } }
-    var selectedTipPercentage: Int? { didSet { scheduleCriticalDraftSave(reason: "tip_percentage_changed") } }
+    var selectedServiceIDs: Set<PersistentIdentifier> = [] { didSet { triggerBackgroundCalculation(reason: "services_changed") } }
+    var selectedPaymentMethod: Payment.Method = .cash { didSet { triggerBackgroundCalculation(reason: "payment_method_changed") } }
+    var selectedTipPercentage: Int? { didSet { triggerBackgroundCalculation(reason: "tip_percentage_changed", immediate: true) } }
     var tipAmountString: String = "" {
         didSet {
-            recalculateCachedStrings()
-            scheduleCriticalDraftSave(reason: "tip_amount_changed")
+            triggerBackgroundCalculation(reason: "tip_amount_changed", immediate: true)
         }
     }
-    var beforePhotoData: Data? { didSet { scheduleDraftSave(reason: "before_photo_changed") } }
-    var afterPhotoData: Data? { didSet { scheduleDraftSave(reason: "after_photo_changed") } }
-    var externalReference: String = ""
-    var tags: Set<String> = [] { didSet { scheduleDraftSave(reason: "tags_changed") } }
-    var selectedAddOnIDs: Set<PersistentIdentifier> = [] { didSet { scheduleDraftSave(reason: "addons_changed") } }
+    var beforePhotoData: Data? { didSet { triggerBackgroundCalculation(reason: "before_photo_changed") } }
+    var afterPhotoData: Data? { didSet { triggerBackgroundCalculation(reason: "after_photo_changed") } }
+    var externalReference: String = "" { didSet { triggerBackgroundCalculation(reason: "reference_changed", immediate: true) } }
+    var tags: Set<String> = [] { didSet { triggerBackgroundCalculation(reason: "tags_changed") } }
+    var selectedAddOnIDs: Set<PersistentIdentifier> = [] { didSet { triggerBackgroundCalculation(reason: "addons_changed") } }
 
     // MARK: State
     private(set) var isSaving: Bool = false

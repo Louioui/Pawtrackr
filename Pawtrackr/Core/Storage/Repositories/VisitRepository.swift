@@ -80,14 +80,25 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
+        Logger.visits.info("VisitRepository: CheckIn initiated for pet \(pet.name)")
         if let existing = try activeVisit(for: pet) {
+            Logger.visits.info("VisitRepository: Pet already checked in, returning existing visit")
             existing.ensureSessionToken()
             return existing
         }
 
         let visit = Visit(pet: pet, startedAt: date)
         modelContext.insert(visit)
-        try modelContext.save()
+        Logger.visits.info("VisitRepository: Visit object created and inserted into context")
+        
+        do {
+            try modelContext.save()
+            Logger.visits.info("VisitRepository: Context save successful for new visit")
+        } catch {
+            Logger.visits.error("VisitRepository: Context save FAILED: \(error.localizedDescription)")
+            throw error
+        }
+        
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Checked in pet",
@@ -96,8 +107,14 @@ final class VisitRepository: VisitRepositoryProtocol {
                 changedKeys: ["uuid", "sessionToken", "pet", "startedAt", "createdAt", "updatedAt", "lastModifiedBy"]
             )
         }
+        Logger.visits.info("VisitRepository: CloudKit record change recorded")
+        
         eventBus.publish(.refreshRequired)
+        Logger.visits.info("VisitRepository: EventBus refresh published")
+        
         NotificationCenter.default.post(name: .visitDidStart, object: visit)
+        Logger.visits.info("VisitRepository: visitDidStart notification posted")
+        
         return visit
     }
     
@@ -145,7 +162,14 @@ final class VisitRepository: VisitRepositoryProtocol {
             predicate: #Predicate { $0.endedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .forward)]
         )
-        return try modelContext.fetch(activeDescriptor).first { $0.pet?.uuid == pet.uuid }
+        let visits = try modelContext.fetch(activeDescriptor)
+        let active = visits.first { $0.pet?.uuid == pet.uuid }
+        if let active = active {
+            Logger.visits.info("VisitRepository: activeVisit found for pet \(pet.name): visitID=\(active.uuid), endedAt=\(String(describing: active.endedAt))")
+        } else {
+            Logger.visits.info("VisitRepository: No active visit found for pet \(pet.name)")
+        }
+        return active
     }
 }
 

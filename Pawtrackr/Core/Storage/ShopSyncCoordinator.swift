@@ -26,7 +26,7 @@ final class ShopSyncCoordinator {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 Task { @MainActor in
-                    await self?.forceSynchronousUIRefresh()
+                    self?.forceSynchronousUIRefresh()
                 }
             }
             .store(in: &syncObservers)
