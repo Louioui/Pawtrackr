@@ -47,6 +47,34 @@
                   startingLineNumber = "2"
                   endingLineNumber = "2">
                </Location>
+               <Location
+                  uuid = "BC48C12B-0BFD-4092-869D-A2BF9ADBF23E - 59ac7a2f46c95e3d"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Pawtrackr.Payment.init(amount: __C.NSDecimal, method: Pawtrackr.Payment.Method, paidAt: Foundation.Date, note: Swift.Optional&lt;Swift.String&gt;, externalReference: Swift.Optional&lt;Swift.String&gt;) -&gt; Pawtrackr.Payment"
+                  moduleName = "Pawtrackr.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr7Payment5ModelfMm_.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "2"
+                  endingLineNumber = "2">
+               </Location>
+               <Location
+                  uuid = "BC48C12B-0BFD-4092-869D-A2BF9ADBF23E - b2b1fdfdc02cb310"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Pawtrackr.Payment.init(backingData: any SwiftData.BackingData&lt;Self.SwiftData.BackingData.Model == Pawtrackr.Payment&gt;) -&gt; Pawtrackr.Payment"
+                  moduleName = "Pawtrackr.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr7Payment5ModelfMm_.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "2"
+                  endingLineNumber = "2">
+               </Location>
             </Locations>
          </BreakpointContent>
       </BreakpointProxy>
@@ -88,6 +116,20 @@
                   moduleName = "Pawtrackr.debug.dylib"
                   usesParentBreakpointCondition = "Yes"
                   urlString = "file:///Users/mac/Desktop/Pawtrackr/@__swiftmacro_9Pawtrackr7Payment5ModelfMm_.swift"
+                  startingColumnNumber = "9223372036854775807"
+                  endingColumnNumber = "9223372036854775807"
+                  startingLineNumber = "2"
+                  endingLineNumber = "2">
+               </Location>
+               <Location
+                  uuid = "A5900804-1E10-408C-A3FD-DFB20A3B72EC - 59ac7a2f46c95e3d"
+                  shouldBeEnabled = "Yes"
+                  ignoreCount = "0"
+                  continueAfterRunningActions = "No"
+                  symbolName = "Pawtrackr.Payment.init(amount: __C.NSDecimal, method: Pawtrackr.Payment.Method, paidAt: Foundation.Date, note: Swift.Optional&lt;Swift.String&gt;, externalReference: Swift.Optional&lt;Swift.String&gt;) -&gt; Pawtrackr.Payment"
+                  moduleName = "Pawtrackr.debug.dylib"
+                  usesParentBreakpointCondition = "Yes"
+                  urlString = "file:///var/folders/04/292x6mqn79gbjprkxp37ttfm0000gn/T/swift-generated-sources/@__swiftmacro_9Pawtrackr7Payment5ModelfMm_.swift"
                   startingColumnNumber = "9223372036854775807"
                   endingColumnNumber = "9223372036854775807"
                   startingLineNumber = "2"
