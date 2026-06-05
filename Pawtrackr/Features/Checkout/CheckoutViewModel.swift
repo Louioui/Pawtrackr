@@ -91,6 +91,25 @@ final class CheckoutViewModel {
         }
     }
 
+    // MARK: - Loyalty
+    var pointsToRedeem: Int = 0 {
+        didSet {
+            triggerBackgroundCalculation(reason: "points_redeemed", immediate: true)
+        }
+    }
+    
+    var clientLoyaltyPoints: Int {
+        pet.owner?.loyaltyPoints ?? 0
+    }
+    
+    @MainActor
+    func applyPointRedemption() async throws {
+        guard let client = pet.owner else { return }
+        // Use loyaltyService (which is a ModelActor) to redeem points
+        let loyalty = LoyaltyService(modelContainer: pet.modelContext!.container)
+        try await loyalty.redeemPoints(client: client, points: pointsToRedeem)
+    }
+
     // MARK: - Async Calculations (Off-Main-Thread)
     @MainActor
     private func triggerBackgroundCalculation(reason: String, immediate: Bool = false) {

@@ -22,6 +22,7 @@ protocol VisitRepositoryProtocol: Sendable {
 final class VisitRepository: VisitRepositoryProtocol {
     private let modelContext: ModelContext
     private let eventBus: GlobalEventBus
+    private let loyaltyService: LoyaltyService
     
     /// `eventBus` is required: a default would create a fresh bus with no
     /// subscribers and silently swallow every `.refreshRequired` / checkout
@@ -29,6 +30,7 @@ final class VisitRepository: VisitRepositoryProtocol {
     init(modelContext: ModelContext, eventBus: GlobalEventBus) {
         self.modelContext = modelContext
         self.eventBus = eventBus
+        self.loyaltyService = LoyaltyService(modelContainer: modelContext.container)
     }
     
     func fetchVisits(predicate: Predicate<Visit>?, sortBy: [SortDescriptor<Visit>], limit: Int?) async throws -> [Visit] {
@@ -135,12 +137,16 @@ final class VisitRepository: VisitRepositoryProtocol {
         
         // Save the visit and its payment
         try modelContext.save()
+        
+        // Apply loyalty points
+        try await loyaltyService.applyPoints(for: visit)
+        
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Checked out visit",
                 entityName: "Visit",
                 recordUUID: visit.uuid,
-                changedKeys: ["endedAt", "total", "payment", "updatedAt", "lastModifiedAt", "lastModifiedBy"]
+                changedKeys: ["endedAt", "total", "payment", "updatedAt", "lastModifiedAt", "lastModifiedBy", "loyaltyPointsChange"]
             )
         }
 

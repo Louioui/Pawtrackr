@@ -87,7 +87,7 @@ final class RandomWorkflowFuzzTests: XCTestCase {
         XCTAssertTrue(petMatchClients.contains { ($0.pets ?? []).contains { $0.name == firstCreated.pet } })
 
         let checkoutPets = Array(pets.prefix(8))
-        let visitRepository = VisitRepository(modelContainer: container, eventBus: eventBus)
+        let visitRepository = VisitRepository(modelContext: container.mainContext, eventBus: eventBus)
         let paymentMethods: [Payment.Method] = [.cash, .creditCard, .debitCard, .zelle, .other]
         var expectedRevenue = Decimal.zero
 
@@ -114,16 +114,12 @@ final class RandomWorkflowFuzzTests: XCTestCase {
             try checkout.advance()
 
             let total = checkout.servicesTotalDecimal
-            XCTAssertGreaterThan(total, .zero)
+            XCTAssertGreaterThan(total, Decimal.zero)
             await checkout.processPayment()
 
-            XCTAssertEqual(checkout.state, .confirmed)
+            XCTAssertEqual(checkout.state, CheckoutViewModel.CheckoutState.confirmed)
             XCTAssertNil(checkout.appError)
-            // Assert on `checkout.visit` (the post-actor refreshed reference), not the
-            // test's local `visit` — SwiftData does not propagate the actor's mutations
-            // back into the main context's cached Visit. The VM's `processPayment` now
-            // re-fetches via a fresh context, which is what a SwiftUI screen with @Query
-            // would see after .visitDidComplete fires.
+            
             XCTAssertNotNil(checkout.visit.endedAt)
             XCTAssertEqual(checkout.visit.total, total)
             XCTAssertEqual(checkout.visit.payment?.amount, total)
@@ -132,7 +128,7 @@ final class RandomWorkflowFuzzTests: XCTestCase {
 
         SummaryUpdater.rebuildDay(for: Date(), in: context)
 
-        let dashboard = DashboardRepository(modelContainer: container)
+        let dashboard = DashboardRepository(modelContext: container.mainContext)
         let kpis = try await dashboard.fetchKPIs()
         XCTAssertEqual(kpis.inProgressCount, 0)
         XCTAssertEqual(kpis.completedToday, checkoutPets.count)

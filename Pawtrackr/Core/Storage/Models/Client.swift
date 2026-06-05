@@ -36,6 +36,7 @@ final class Client {
     // MARK: - Notes & Emergency Contact
     var notes: String?
     var lastVisitDate: Date?
+    var loyaltyPoints: Int = 0
 
     // MARK: - Relationships
     @Relationship(deleteRule: .cascade, inverse: \Pet.owner) var pets: [Pet]? = []

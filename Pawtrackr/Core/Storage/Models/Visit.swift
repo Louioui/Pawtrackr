@@ -23,6 +23,7 @@ final class Visit {
     var endedAt: Date?
     var lastModifiedBy: UUID = DeviceIdentity.currentID
     var lastModifiedAt: Date = Date()
+    var loyaltyPointsChange: Int = 0
 
     // MARK: - Notes & Media
     var note: String?

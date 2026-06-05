@@ -105,6 +105,7 @@ final class DashboardViewModel {
     }
 
     private func setupObservers() {
+        dashboardLog.info("DashboardViewModel: Setting up observers...")
         // EventBus Stream
         let stream = eventBus.stream
         observationTask = Task { [weak self] in
@@ -128,6 +129,7 @@ final class DashboardViewModel {
         ]
 
         for name in notifications {
+            dashboardLog.info("DashboardViewModel: Adding observer for \(name.rawValue)")
             let observer = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notif in
                 dashboardLog.info("DashboardViewModel: Received notification \(notif.name.rawValue)")
                 Task { [weak self] in await self?.refresh() }
@@ -146,6 +148,8 @@ final class DashboardViewModel {
         isRefreshing = true
         
         appError = nil
+        
+        dashboardLog.info("DashboardViewModel: Entering TaskGroup.")
 
         await PerformanceMonitor.measureAsyncNoThrow(label: "Dashboard.refresh") {
             await withTaskGroup(of: Void.self) { group in
@@ -159,6 +163,8 @@ final class DashboardViewModel {
                 group.addTask { dashboardLog.info("Starting Suggestions fetch"); await self.fetchSmartSuggestions(); dashboardLog.info("Finished Suggestions fetch") }
             }
         }
+        
+        dashboardLog.info("DashboardViewModel: Exited TaskGroup.")
 
         if case .loading = state {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {

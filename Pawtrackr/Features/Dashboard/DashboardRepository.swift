@@ -68,11 +68,16 @@ final class DashboardRepository: DashboardRepositoryProtocol {
     }
     
     func fetchActiveVisits() async throws -> [PersistentIdentifier] {
+        dashboardRepoLog.info("DashboardRepository: Fetching active visits...")
         let descriptor = FetchDescriptor<Visit>(
             predicate: #Predicate { v in v.endedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
         let visits = try modelContext.fetch(descriptor)
+        dashboardRepoLog.info("DashboardRepository: Found \(visits.count) active visits.")
+        for visit in visits {
+            dashboardRepoLog.info("DashboardRepository: Visit \(visit.uuid) pet: \(visit.pet?.name ?? "unknown")")
+        }
         return visits.map { $0.persistentModelID }
     }
     
