@@ -142,7 +142,8 @@ final class DashboardViewModel {
 
         for name in notifications {
             center.publisher(for: name)
-                .sink { [weak self] _ in
+                .sink { [weak self] notif in
+                    dashboardLog.info("DashboardViewModel: Received notification \(notif.name.rawValue)")
                     Task { [weak self] in await self?.refresh() }
                 }
                 .store(in: &observers)
@@ -150,16 +151,15 @@ final class DashboardViewModel {
     }
 
     // MARK: - Public
-
     func refresh() async {
-        guard !isRefreshing else { return }
+        dashboardLog.info("DashboardViewModel: Refresh initiated.")
+        guard !isRefreshing else {
+            dashboardLog.info("DashboardViewModel: Refresh already in progress, skipping.")
+            return
+        }
         isRefreshing = true
-        defer { isRefreshing = false }
-
+        
         appError = nil
-
-        // If it's the first load, keep .loading state.
-        // If it's a pull-to-refresh, we stay in .loaded but updates happen.
 
         await PerformanceMonitor.measureAsyncNoThrow(label: "Dashboard.refresh") {
             await withTaskGroup(of: Void.self) { group in
@@ -179,8 +179,10 @@ final class DashboardViewModel {
                 state = .loaded
             }
         }
+        
+        isRefreshing = false
+        dashboardLog.info("DashboardViewModel: Refresh complete.")
     }
-
     private func fetchChecklistStatus() async {
         // Since we are on @MainActor, we use a background task for SwiftData fetches
         // that aren't yet in the repository.

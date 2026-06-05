@@ -81,19 +81,27 @@ final class VisitRepository: VisitRepositoryProtocol {
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
         Logger.visits.info("VisitRepository: CheckIn initiated for pet \(pet.name)")
-        if let existing = try activeVisit(for: pet) {
+        
+        // Re-fetch pet in current context to ensure relationship integrity
+        let petID = pet.persistentModelID
+        guard let contextPet = modelContext.model(for: petID) as? Pet else {
+             Logger.visits.error("VisitRepository: Could not fetch pet in current context")
+             throw AppError.database("Pet not found in context")
+        }
+        
+        if let existing = try activeVisit(for: contextPet) {
             Logger.visits.info("VisitRepository: Pet already checked in, returning existing visit")
             existing.ensureSessionToken()
             return existing
         }
 
-        let visit = Visit(pet: pet, startedAt: date)
+        let visit = Visit(pet: contextPet, startedAt: date)
         modelContext.insert(visit)
         Logger.visits.info("VisitRepository: Visit object created and inserted into context")
         
         do {
             try modelContext.save()
-            Logger.visits.info("VisitRepository: Context save successful for new visit")
+            Logger.visits.info("VisitRepository: Context save successful for new visit. visitID=\(visit.uuid)")
         } catch {
             Logger.visits.error("VisitRepository: Context save FAILED: \(error.localizedDescription)")
             throw error

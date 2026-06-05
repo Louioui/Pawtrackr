@@ -27,8 +27,13 @@ protocol DashboardRepositoryProtocol: Sendable {
     func fetchGalleryImages(days: Int, limit: Int) async throws -> [Data]
 }
 
-@ModelActor
-final actor DashboardRepository: DashboardRepositoryProtocol {
+@MainActor
+final class DashboardRepository: DashboardRepositoryProtocol {
+    private let modelContext: ModelContext
+    
+    init(modelContainer: ModelContainer) {
+        self.modelContext = modelContainer.mainContext
+    }
     
     func fetchKPIs() async throws -> DashboardKPI {
         let cal = Calendar.current

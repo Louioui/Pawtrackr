@@ -2,15 +2,15 @@ import Foundation
 import SwiftData
 
 /// Predictive engine to forecast grooming shop trends.
-@ModelActor
 actor PredictiveForecastingEngine {
-    func forecastPeakCapacity(for period: DateInterval) async -> Double {
-        // Implementation: Analyze Visit history to predict demand.
-        return 0.85
+    private let modelContainer: ModelContainer
+    
+    init(modelContainer: ModelContainer) {
+        self.modelContainer = modelContainer
     }
     
-    func suggestOptimalSlot(for pet: Pet) async -> Date? {
-        // Implementation: Use pet behavioral data to suggest quieter times.
-        return nil
+    func analyzeGroomingTrends(over days: Int) async -> [Date: Decimal] {
+        // Implementation for trend forecasting...
+        return [:]
     }
 }

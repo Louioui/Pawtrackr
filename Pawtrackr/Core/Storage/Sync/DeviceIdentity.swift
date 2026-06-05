@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if os(iOS)
+import UIKit
+#endif
 
 enum DeviceIdentity {
     private static let defaultsKey = "PawtrackrDeviceIdentityUUID"
@@ -19,5 +22,13 @@ enum DeviceIdentity {
         let uuid = UUID()
         UserDefaults.standard.set(uuid.uuidString, forKey: defaultsKey)
         return uuid
+    }
+
+    static var currentName: String {
+#if os(macOS)
+        Host.current().localizedName ?? "Unknown Device"
+#else
+        UIDevice.current.name
+#endif
     }
 }
