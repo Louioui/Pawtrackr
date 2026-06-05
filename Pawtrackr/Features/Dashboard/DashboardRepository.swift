@@ -31,8 +31,8 @@ protocol DashboardRepositoryProtocol: Sendable {
 final class DashboardRepository: DashboardRepositoryProtocol {
     private let modelContext: ModelContext
     
-    init(modelContainer: ModelContainer) {
-        self.modelContext = modelContainer.mainContext
+    init(modelContext: ModelContext) {
+        self.modelContext = modelContext
     }
     
     func fetchKPIs() async throws -> DashboardKPI {

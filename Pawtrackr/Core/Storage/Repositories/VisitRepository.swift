@@ -26,8 +26,8 @@ final class VisitRepository: VisitRepositoryProtocol {
     /// `eventBus` is required: a default would create a fresh bus with no
     /// subscribers and silently swallow every `.refreshRequired` / checkout
     /// completion event. Pass the same bus the rest of the app holds.
-    init(modelContainer: ModelContainer, eventBus: GlobalEventBus) {
-        self.modelContext = modelContainer.mainContext
+    init(modelContext: ModelContext, eventBus: GlobalEventBus) {
+        self.modelContext = modelContext
         self.eventBus = eventBus
     }
     
@@ -107,6 +107,7 @@ final class VisitRepository: VisitRepositoryProtocol {
             throw error
         }
         
+        Logger.visits.info("VisitRepository: Attempting CloudKit recording...")
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Checked in pet",
@@ -117,9 +118,11 @@ final class VisitRepository: VisitRepositoryProtocol {
         }
         Logger.visits.info("VisitRepository: CloudKit record change recorded")
         
+        Logger.visits.info("VisitRepository: Attempting EventBus publish...")
         eventBus.publish(.refreshRequired)
         Logger.visits.info("VisitRepository: EventBus refresh published")
         
+        Logger.visits.info("VisitRepository: Attempting visitDidStart notification...")
         NotificationCenter.default.post(name: .visitDidStart, object: visit)
         Logger.visits.info("VisitRepository: visitDidStart notification posted")
         

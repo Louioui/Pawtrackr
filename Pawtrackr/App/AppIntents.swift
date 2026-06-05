@@ -109,7 +109,7 @@ struct CheckInPetIntent: AppIntent {
         // The intent's downstream consumers rely on NotificationCenter posts
         // from VisitRepository.checkIn (which use the global NotificationCenter),
         // so dashboards still refresh via that path.
-        let repo = VisitRepository(modelContainer: container, eventBus: GlobalEventBus())
+        let repo = VisitRepository(modelContext: context, eventBus: GlobalEventBus())
         _ = try await repo.checkIn(pet: model, date: .now)
         return .result(dialog: "Checked in \(model.name).")
     }
@@ -123,7 +123,7 @@ struct GetBusinessStatsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let container = try IntentContainerProvider.sharedContainer()
-        let repo = DashboardRepository(modelContainer: container)
+        let repo = DashboardRepository(modelContext: container.mainContext)
         
         let kpis = try await repo.fetchKPIs()
         

@@ -75,7 +75,7 @@ struct RecentHistoryView: View {
     private func deleteVisit(_ visit: Visit) {
         Task {
             do {
-                let repository = VisitRepository(modelContainer: dataStore.container, eventBus: eventBus)
+                let repository = VisitRepository(modelContext: dataStore.container.mainContext, eventBus: eventBus)
                 try await repository.deleteVisit(visit)
                 HapticManager.notify(.success)
                 viewModel?.fetchVisits()

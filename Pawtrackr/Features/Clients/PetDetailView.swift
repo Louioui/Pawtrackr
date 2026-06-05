@@ -64,7 +64,7 @@ final class PetDetailViewModel {
     
     init(pet: Pet, modelContext: ModelContext, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.pet = pet
-        self.visitRepository = VisitRepository(modelContainer: modelContext.container, eventBus: eventBus)
+        self.visitRepository = VisitRepository(modelContext: modelContext, eventBus: eventBus)
         
         Task { [weak self] in
             let notifications = NotificationCenter.default.notifications(named: .visitDidComplete).map { _ in () }

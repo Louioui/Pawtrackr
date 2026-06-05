@@ -89,12 +89,14 @@ final class DashboardViewModel {
     private var dataStore: DataStoreService
     private var eventBus: GlobalEventBus
     private var observers: [AnyCancellable] = []
+    private var notificationObservers: [NSObjectProtocol] = []
     private var observationTask: Task<Void, Never>?
 
     init(dataStore: DataStoreService, eventBus: GlobalEventBus, repository: DashboardRepositoryProtocol? = nil) {
+        dashboardLog.info("DashboardViewModel: Initialized")
         self.dataStore = dataStore
         self.eventBus = eventBus
-        self.repository = repository ?? DashboardRepository(modelContainer: dataStore.container)
+        self.repository = repository ?? DashboardRepository(modelContext: dataStore.container.mainContext)
         self.predictiveActor = PredictiveSchedulingActor(modelContainer: dataStore.container)
 
         setupObservers()
@@ -102,22 +104,8 @@ final class DashboardViewModel {
         Task { [weak self] in await self?.refresh() }
     }
 
-    deinit {
-        // Cannot touch MainActor-isolated `observationTask` from a nonisolated
-        // deinit. The task uses `[weak self]` and reacquires self per iteration
-        // (see setupObservers), so once the VM is released the next yielded
-        // event causes the task to return on its own. The Task object lingers
-        // briefly but holds no strong reference to self.
-    }
-
     private func setupObservers() {
         // EventBus Stream
-        // Capture the stream outside the Task closure so we don't hold `self`
-        // strongly across the for-await suspension. The previous pattern
-        // (`guard let self` outside the loop) created a retain cycle: the
-        // suspended task kept `self` alive, so the VM never deallocated even
-        // after the dashboard was dismissed. Now `self` is reacquired weakly
-        // on every iteration.
         let stream = eventBus.stream
         observationTask = Task { [weak self] in
             for await event in stream {
@@ -132,7 +120,6 @@ final class DashboardViewModel {
         }
 
         // NotificationCenter Observers
-        let center = NotificationCenter.default
         let notifications = [
             Notification.Name.clientDidCreate,
             Notification.Name.visitDidStart,
@@ -141,12 +128,11 @@ final class DashboardViewModel {
         ]
 
         for name in notifications {
-            center.publisher(for: name)
-                .sink { [weak self] notif in
-                    dashboardLog.info("DashboardViewModel: Received notification \(notif.name.rawValue)")
-                    Task { [weak self] in await self?.refresh() }
-                }
-                .store(in: &observers)
+            let observer = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notif in
+                dashboardLog.info("DashboardViewModel: Received notification \(notif.name.rawValue)")
+                Task { [weak self] in await self?.refresh() }
+            }
+            notificationObservers.append(observer)
         }
     }
 
@@ -163,14 +149,14 @@ final class DashboardViewModel {
 
         await PerformanceMonitor.measureAsyncNoThrow(label: "Dashboard.refresh") {
             await withTaskGroup(of: Void.self) { group in
-                group.addTask { await self.fetchKPIs() }
-                group.addTask { await self.fetchActiveVisits() }
-                group.addTask { await self.fetchRecentClients() }
-                group.addTask { await self.fetchOverduePets() }
-                group.addTask { await self.buildRevenueSeries(days: self.revenueWindowDays) }
-                group.addTask { await self.buildGallery(days: self.galleryWindowDays) }
-                group.addTask { await self.fetchChecklistStatus() }
-                group.addTask { await self.fetchSmartSuggestions() }
+                group.addTask { dashboardLog.info("Starting KPI fetch"); await self.fetchKPIs(); dashboardLog.info("Finished KPI fetch") }
+                group.addTask { dashboardLog.info("Starting ActiveVisits fetch"); await self.fetchActiveVisits(); dashboardLog.info("Finished ActiveVisits fetch") }
+                group.addTask { dashboardLog.info("Starting RecentClients fetch"); await self.fetchRecentClients(); dashboardLog.info("Finished RecentClients fetch") }
+                group.addTask { dashboardLog.info("Starting OverduePets fetch"); await self.fetchOverduePets(); dashboardLog.info("Finished OverduePets fetch") }
+                group.addTask { dashboardLog.info("Starting RevenueSeries fetch"); await self.buildRevenueSeries(days: self.revenueWindowDays); dashboardLog.info("Finished RevenueSeries fetch") }
+                group.addTask { dashboardLog.info("Starting Gallery fetch"); await self.buildGallery(days: self.galleryWindowDays); dashboardLog.info("Finished Gallery fetch") }
+                group.addTask { dashboardLog.info("Starting Checklist fetch"); await self.fetchChecklistStatus(); dashboardLog.info("Finished Checklist fetch") }
+                group.addTask { dashboardLog.info("Starting Suggestions fetch"); await self.fetchSmartSuggestions(); dashboardLog.info("Finished Suggestions fetch") }
             }
         }
 
@@ -218,7 +204,7 @@ final class DashboardViewModel {
         guard pet.activeVisit == nil else { return }
 
         do {
-            let visitRepo = VisitRepository(modelContainer: dataStore.container, eventBus: eventBus)
+            let visitRepo = VisitRepository(modelContext: dataStore.container.mainContext, eventBus: eventBus)
             _ = try await visitRepo.checkIn(pet: pet, date: Date.now)
             await refresh()
         } catch {
@@ -263,9 +249,15 @@ final class DashboardViewModel {
     }
 
     private func fetchActiveVisits() async {
+        dashboardLog.info("DashboardViewModel: Fetching active visits...")
         do {
             let ids = try await repository.fetchActiveVisits()
-            activeVisits = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Visit }
+            dashboardLog.info("DashboardViewModel: Repository returned \(ids.count) visit IDs.")
+            
+            let visits = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Visit }
+            dashboardLog.info("DashboardViewModel: Resolved \(visits.count) active visits.")
+            
+            activeVisits = visits
         } catch {
             setDashboardError(error, source: #function)
             activeVisits = []

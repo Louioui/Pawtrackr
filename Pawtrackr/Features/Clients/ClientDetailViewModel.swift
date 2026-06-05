@@ -54,7 +54,7 @@ final class ClientDetailViewModel {
     ) {
         self.client        = client
         self.modelContext  = modelContext
-        self.visitRepository = VisitRepository(modelContainer: modelContext.container, eventBus: eventBus)
+        self.visitRepository = VisitRepository(modelContext: modelContext, eventBus: eventBus)
         self.pets          = client.pets ?? []
         self.currentLimit  = max(1, initialLimit)
         let clientID = client.persistentModelID

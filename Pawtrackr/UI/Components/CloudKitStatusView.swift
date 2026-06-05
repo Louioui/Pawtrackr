@@ -138,7 +138,7 @@ private struct CloudKitStatusPopover: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(true) // Disabled per user request
+            .disabled(false) // Enabled for manual sync
         }
         .padding(14)
     }

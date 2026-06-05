@@ -186,6 +186,7 @@ final class CloudKitMonitor {
     private(set) var firstSyncCompleted: Bool
     private(set) var syncEvents: [SyncEvent]
     private(set) var pendingLocalChangeCount: Int = 0
+    var isAutomaticSyncEnabled: Bool = false // Add this flag
     private(set) var pendingLocalChangeDate: Date?
     private(set) var pendingLocalChangeDescription: String?
     private(set) var offlineBufferedMutationCount: Int = 0
@@ -381,10 +382,9 @@ final class CloudKitMonitor {
                 } else if self.accountState.isAvailable {
                     // Heartbeat our device info when we come online
                     self.updateDeviceMetadata()
-                    self.flushOfflineMutationBuffer(reason: "Network restored")
+                    // self.flushOfflineMutationBuffer(reason: "Network restored") // Disabled automatic sync
                     self.runSafeModeDiagnostics()
                 }
-                self.postChange()
             }
         }
         networkMonitor.start(queue: networkQueue)
@@ -1225,7 +1225,7 @@ final class CloudKitMonitor {
     }
 
     private func rebuildAndReconcileAfterImport() {
-        guard let modelContainer else { return }
+        guard let modelContainer, isAutomaticSyncEnabled else { return }
         // Coalesce rapid bursts of import events (e.g. initial sync, multi-device
         // flushes) so the reconciler runs once after the burst settles rather than
         // once per event.
