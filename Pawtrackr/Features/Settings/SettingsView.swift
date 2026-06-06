@@ -144,7 +144,7 @@ private struct SettingsDetailView: View {
         case .security: SecuritySectionView(appSettings: appSettings, showChangePIN: $showChangePIN)
         case .dataExport: DataExportSectionView(modelContext: modelContext)
         case .icloud: ICloudSectionView(showDiagnostics: $showDiagnostics)
-        case .help: HelpSectionView(modelContext: modelContext, showDiagnostics: $showDiagnostics)
+        case .help: HelpSectionView(modelContext: modelContext)
         case .devices: DevicesHealthView()
         case .about: AboutSectionView()
         }
@@ -326,7 +326,6 @@ private struct SettingsInfoRow: View {
 
 private struct HelpSectionView: View {
     let modelContext: ModelContext
-    @Binding var showDiagnostics: Bool
     @State private var isPreparingReport = false
     @State private var supportMessage: String?
 
@@ -351,13 +350,6 @@ private struct HelpSectionView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(isPreparingReport)
-
-                Button {
-                    showDiagnostics = true
-                } label: {
-                    Label(settingsLocalized("settings.icloud.open_diagnostics", value: "Open iCloud Diagnostics"), systemImage: "stethoscope")
-                }
-                .buttonStyle(.bordered)
 
                 if isPreparingReport {
                     ProgressView(settingsLocalized("settings.help.preparing_report", value: "Preparing report..."))
