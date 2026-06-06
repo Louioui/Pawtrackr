@@ -403,6 +403,10 @@ struct DashboardView: View {
             parts.append(String(format: NSLocalizedString("dashboard.summary.revenue_trend_fmt", value: "revenue is %@ %@ from yesterday", comment: ""), direction, pct))
         }
 
+        guard !parts.isEmpty else {
+            return NSLocalizedString("dashboard.summary.no_activity_today", value: "No activity yet today.", comment: "")
+        }
+
         return parts.joined(separator: ", ") + "."
     }
 

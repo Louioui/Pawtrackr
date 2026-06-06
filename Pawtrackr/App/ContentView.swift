@@ -329,10 +329,7 @@ struct ContentView: View {
             .tag(NavigationItem.insights)
 
             NavigationStack(path: $router.settingsPath) {
-                                SettingsView()
-                    .navigationDestination(for: AppDestination.self) { destination in
-                        destinationView(for: destination)
-                    }
+                SettingsView()
                     .navigationDestination(for: AppDestination.self) { destination in
                         destinationView(for: destination)
                     }
@@ -396,10 +393,7 @@ struct ContentView: View {
             }
         case .settings:
             NavigationStack(path: $router.settingsPath) {
-                                SettingsView()
-                    .navigationDestination(for: AppDestination.self) { destination in
-                        destinationView(for: destination)
-                    }
+                SettingsView()
                     .navigationDestination(for: AppDestination.self) { destination in
                         destinationView(for: destination)
                     }
