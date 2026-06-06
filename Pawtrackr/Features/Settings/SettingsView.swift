@@ -451,6 +451,7 @@ private struct BusinessSectionView: View {
 
 private struct PreferencesSectionView: View {
     @Bindable var appSettings: AppSettings
+
     var body: some View {
         CardView {
             Picker(selection: $appSettings.preferredColorScheme) {
@@ -458,9 +459,64 @@ private struct PreferencesSectionView: View {
                     Text(scheme.displayName).tag(scheme)
                 }
             } label: { Label(settingsLocalized("settings.preferences.appearance", value: "Appearance"), systemImage: "circle.lefthalf.filled") }
-            
+
+            Picker(selection: $appSettings.defaultLaunchTab) {
+                ForEach(NavigationItem.allCases) { item in
+                    Label(item.label, systemImage: item.icon)
+                        .tag(item.rawValue)
+                }
+            } label: {
+                Label(settingsLocalized("settings.preferences.default_launch", value: "Default Launch Tab"), systemImage: "rectangle.stack.fill")
+            }
+
+            SettingsLabeledField(
+                title: settingsLocalized("settings.preferences.device_name", value: "Device Name"),
+                systemImage: "iphone.gen3"
+            ) {
+                TextField(settingsLocalized("settings.preferences.device_name_placeholder", value: "Reception iPad"), text: $appSettings.deviceName)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            ColorPicker(
+                selection: brandColorBinding,
+                supportsOpacity: false
+            ) {
+                Label(settingsLocalized("settings.preferences.brand_color", value: "Brand Color"), systemImage: "paintpalette.fill")
+            }
+
+            HStack {
+                Text(settingsLocalized("settings.preferences.brand_color_hex", value: "Brand Color Hex"))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(appSettings.brandColorHex.uppercased())
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
             Toggle(isOn: $appSettings.hapticsEnabled) {
                 Label(settingsLocalized("settings.preferences.haptics", value: "Haptic Feedback"), systemImage: "hand.tap.fill")
+            }
+
+            Toggle(isOn: $appSettings.optimizeMediaForICloud) {
+                Label(settingsLocalized("settings.preferences.optimize_media", value: "Optimize Media for iCloud"), systemImage: "photo.on.rectangle.angled")
+            }
+
+            Text(settingsLocalized(
+                "settings.preferences.optimize_media_detail",
+                value: "Keeps photo storage lighter while preserving synced originals where available."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var brandColorBinding: Binding<Color> {
+        Binding {
+            Color(hex: appSettings.brandColorHex) ?? DS.ColorToken.primary
+        } set: { newColor in
+            if let hex = newColor.settingsHexRGB {
+                appSettings.brandColorHex = hex
             }
         }
     }
@@ -472,13 +528,59 @@ private struct SecuritySectionView: View {
     
     var body: some View {
         CardView {
-            Toggle(settingsLocalized("settings.security.enable_lock", value: "Enable App Lock"), isOn: $appSettings.isLockEnabled)
-            Toggle(settingsLocalized("settings.security.biometric_unlock", value: "Biometric Unlock"), isOn: $appSettings.isBiometricLockEnabled)
+            Toggle(isOn: $appSettings.isLockEnabled) {
+                Label(settingsLocalized("settings.security.enable_lock", value: "Enable App Lock"), systemImage: "lock.shield.fill")
+            }
+
+            Toggle(isOn: $appSettings.isBiometricLockEnabled) {
+                Label(settingsLocalized("settings.security.biometric_unlock", value: "Biometric Unlock"), systemImage: "faceid")
+            }
+            .disabled(!appSettings.isLockEnabled)
+
+            Toggle(isOn: $appSettings.autoLockOnBackground) {
+                Label(settingsLocalized("settings.security.lock_on_background", value: "Lock When App Closes"), systemImage: "rectangle.portrait.and.arrow.right")
+            }
+            .disabled(!appSettings.isLockEnabled)
+
+            Toggle(isOn: $appSettings.autoLockAfterInactivity) {
+                Label(settingsLocalized("settings.security.lock_after_inactivity", value: "Lock After Inactivity"), systemImage: "timer")
+            }
+            .disabled(!appSettings.isLockEnabled)
+
+            Text(String(format: settingsLocalized(
+                "settings.security.lock_after_inactivity_detail_fmt",
+                value: "When enabled, Pawtrackr locks after %d minutes without interaction."
+            ), appSettings.idleLockMinutes))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
             if appSettings.isLockEnabled {
                 Button(settingsLocalized("settings.pin.change", value: "Change PIN")) { showChangePIN = true }
                     .buttonStyle(.bordered)
             }
         }
+    }
+}
+
+private struct SettingsLabeledField<Content: View>: View {
+    let title: String
+    let systemImage: String
+    let content: Content
+
+    init(title: String, systemImage: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.systemImage = systemImage
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.medium))
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -516,5 +618,32 @@ private struct CardView<Content: View>: View {
             .scaleEffect(isHovering ? 1.01 : 1.0)
             .onHover { isHovering = $0 }
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovering)
+    }
+}
+
+private extension Color {
+    var settingsHexRGB: String? {
+        #if os(iOS)
+        let platformColor = UIColor(self)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard platformColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return nil }
+        #elseif os(macOS)
+        guard let platformColor = NSColor(self).usingColorSpace(.sRGB) else { return nil }
+        let red = platformColor.redComponent
+        let green = platformColor.greenComponent
+        let blue = platformColor.blueComponent
+        #else
+        return nil
+        #endif
+
+        return String(
+            format: "#%02X%02X%02X",
+            Int((red * 255).rounded()),
+            Int((green * 255).rounded()),
+            Int((blue * 255).rounded())
+        )
     }
 }
