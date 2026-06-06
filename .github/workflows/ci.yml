@@ -2,9 +2,9 @@ name: Pawtrackr CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "Master", "main" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "Master", "main" ]
 
 jobs:
   test:

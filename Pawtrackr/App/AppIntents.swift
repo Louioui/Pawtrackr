@@ -157,7 +157,7 @@ enum IntentContainerProvider {
             "Pawtrackr",
             schema: schema,
             isStoredInMemoryOnly: false,
-            cloudKitDatabase: .automatic
+            cloudKitDatabase: AppRuntime.allowsICloudSync ? .automatic : .none
         )
         let container = try ModelContainer(
             for: schema,

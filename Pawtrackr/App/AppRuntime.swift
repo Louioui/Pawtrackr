@@ -51,6 +51,15 @@ enum AppRuntime {
             || env[inMemoryStoreEnvironmentKey] == "1"
     }
 
+    /// True when this launch should talk to iCloud-backed sync services.
+    ///
+    /// Real app launches keep iCloud sync enabled. Tests and in-memory runs stay
+    /// local-only so they do not open a CloudKit-backed store in the test host.
+    static var allowsICloudSync: Bool {
+        guard !isRunningTests, !prefersInMemoryStore else { return false }
+        return true
+    }
+
     /// Current UI-test launch scenario (e.g. "empty", "loaded", "error").
     static var currentScenario: Scenario {
         let raw = ProcessInfo.processInfo.environment["PAWTRACKR_SCENARIO"] ?? ""

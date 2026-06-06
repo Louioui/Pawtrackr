@@ -13,7 +13,7 @@ final class DashboardRepositoryTests: XCTestCase {
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, configurations: [config])
         context = container.mainContext
-        repository = DashboardRepository(modelContainer: container)
+        repository = DashboardRepository(modelContext: context)
     }
 
     func testFetchKPIs_ReturnsCorrectAggregation() async throws {

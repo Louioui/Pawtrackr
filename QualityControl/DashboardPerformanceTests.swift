@@ -28,6 +28,7 @@ final class DashboardPerformanceTests: XCTestCase {
         XCTAssertTrue(duration < 150, "Dashboard took \(duration)ms to become interactive, exceeding 150ms threshold")
     }
     
+    @MainActor
     func testRetainCycleSafety() {
         var vm: DashboardViewModel? = DashboardViewModel(dataStore: DataStoreService(inMemory: true), eventBus: GlobalEventBus())
         weak var weakVM = vm

@@ -24,7 +24,7 @@ final class DataIntegrityTests: XCTestCase {
         // Simulate background/foreground cycle
         timer.sceneBecameActive()
         
-        XCTAssertTrue(timer.secondsElapsed >= 3600, "Timer should correctly calculate elapsed time even if app was backgrounded")
+        XCTAssertTrue(timer.elapsedSeconds >= 3600, "Timer should correctly calculate elapsed time even if app was backgrounded")
     }
     
     @MainActor

@@ -33,7 +33,7 @@ final class CheckoutHistoryIntegrationTests: XCTestCase {
         context.insert(nailTrim)
         try context.save()
 
-        visitRepo = VisitRepository(modelContainer: container, eventBus: GlobalEventBus())
+        visitRepo = VisitRepository(modelContext: context, eventBus: GlobalEventBus())
         actor = CheckoutTransactionActor(modelContainer: container)
         Formatters.updateCurrencySymbol("$")
     }

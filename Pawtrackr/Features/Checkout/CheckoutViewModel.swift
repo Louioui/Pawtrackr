@@ -691,6 +691,7 @@ final class CheckoutViewModel {
             if let clientID = result.clientID { userInfo[VisitDidCompleteKey.clientID.rawValue] = clientID }
             
             NotificationCenter.default.post(name: .visitDidComplete, object: nil, userInfo: userInfo)
+            queuePhysicalReceiptPrint()
             
             Logger.checkout.info("CheckoutViewModel: Checkout saved successfully via Actor")
             trace("checkout_saved")
@@ -886,6 +887,24 @@ final class CheckoutViewModel {
         let petName = pet.name
         Task { [eventRecorder] in
             await eventRecorder.record(event, visitID: visitID, petName: petName)
+        }
+    }
+
+    private func queuePhysicalReceiptPrint() {
+        let snapshot = PDFReceiptService.shared.makeSnapshot(for: visit)
+        let transactionToken = "checkout:\(visit.uuid.uuidString)"
+        let opensCashDrawer = selectedPaymentMethod == .cash
+
+        Task.detached(priority: .utility) {
+            let payload = ThermalReceiptPayloadBuilder.payload(for: snapshot, opensCashDrawer: opensCashDrawer)
+            do {
+                try await BluetoothPeripheralManager.shared.transmitThermalReceiptPayload(
+                    transactionToken: transactionToken,
+                    payload: payload
+                )
+            } catch {
+                Logger.checkout.error("Physical receipt print failed for \(transactionToken, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 }

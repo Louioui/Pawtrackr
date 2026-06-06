@@ -10,7 +10,7 @@ final class PerformanceTests: XCTestCase {
         // Use the in-memory test container to avoid touching the user's real
         // CloudKit-backed store from a unit test.
         let store = DataStoreService(inMemory: true)
-        let repo = DashboardRepository(modelContainer: store.container)
+        let repo = DashboardRepository(modelContext: store.container.mainContext)
 
         let start = CFAbsoluteTimeGetCurrent()
         _ = try await repo.fetchKPIs()

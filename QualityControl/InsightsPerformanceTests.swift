@@ -12,9 +12,11 @@ final class InsightsPerformanceTests: XCTestCase {
         // 1. Seed 1000 summary records
         let context = container.mainContext
         for i in 0..<1000 {
-            let summary = DaySummary(day: Calendar.current.date(byAdding: .day, value: -i, to: .now)!)
-            summary.revenue = Decimal(100)
-            summary.visitCount = 1
+            let summary = DaySummary(
+                day: Calendar.current.date(byAdding: .day, value: -i, to: .now)!,
+                revenue: Decimal(100),
+                visitCount: 1
+            )
             context.insert(summary)
         }
         try context.save()

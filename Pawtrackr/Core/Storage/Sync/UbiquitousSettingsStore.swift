@@ -46,6 +46,10 @@ final class UbiquitousSettingsStore {
     /// value is published upward.
     func start(appSettings: AppSettings) {
         guard observer == nil else { return }
+        guard AppRuntime.allowsICloudSync else {
+            logger.debug("Skipping iCloud settings sync for this runtime.")
+            return
+        }
         self.appSettings = appSettings
 
         let store = NSUbiquitousKeyValueStore.default
@@ -66,6 +70,7 @@ final class UbiquitousSettingsStore {
     /// Non-synced keys are ignored, so callers need not pre-filter.
     nonisolated func push(_ value: String, forKey key: String) {
         guard Self.syncedKeys.contains(key) else { return }
+        guard AppRuntime.allowsICloudSync else { return }
         NSUbiquitousKeyValueStore.default.set(value, forKey: key)
     }
 

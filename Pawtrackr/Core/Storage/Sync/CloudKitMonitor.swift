@@ -198,7 +198,7 @@ final class CloudKitMonitor {
     // MARK: - Private
 
     private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "CloudKit")
-    private let container: CKContainer
+    private let container: CKContainer?
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "Pawtrackr.CloudKit.Network")
     private var observers: [NSObjectProtocol] = []
@@ -231,7 +231,7 @@ final class CloudKitMonitor {
     // MARK: - Init
 
     private init() {
-        self.container = CKContainer(identifier: "iCloud.PartnerShipWithMedia.Pawtrackr")
+        self.container = AppRuntime.allowsICloudSync ? CKContainer(identifier: "iCloud.PartnerShipWithMedia.Pawtrackr") : nil
         self.lastSyncDate = UserDefaults.standard.object(forKey: DefaultsKey.lastSyncDate) as? Date
         self.lastAttemptDate = UserDefaults.standard.object(forKey: DefaultsKey.lastAttemptDate) as? Date
         self.lastImportDate = UserDefaults.standard.object(forKey: DefaultsKey.lastImportDate) as? Date
@@ -290,13 +290,19 @@ final class CloudKitMonitor {
 
     /// Re-checks the iCloud account status. Safe to call repeatedly.
     func refreshAccountStatus() async {
+        guard let container else {
+            accountState = .couldNotDetermine
+            postChange()
+            return
+        }
+
         do {
             let status = try await ResilienceCoordinator.run(
                 label: "CloudKit account status",
                 policy: .cloudKit,
                 classify: ResilienceCoordinator.cloudKitDisposition(for:)
-            ) { [self] in
-                try await self.container.accountStatus()
+            ) {
+                try await container.accountStatus()
             }
             // We're already @MainActor — no need for an explicit hop.
             applyAccountStatus(status)
@@ -698,6 +704,15 @@ final class CloudKitMonitor {
                         comment: ""
                     )
                     accountState = .noAccount
+                    iCloudAppAccessMayBeDisabled = false
+                case .accountTemporarilyUnavailable:
+                    lastErrorMessage = NSLocalizedString(
+                        "cloudkit.error.account_temporarily_unavailable",
+                        value: "Enter your Apple Account password in Settings to resume iCloud sync.",
+                        comment: ""
+                    )
+                    accountState = .temporarilyUnavailable
+                    iCloudAppAccessMayBeDisabled = false
                 case .partialFailure:
                     lastErrorMessage = NSLocalizedString(
                         "cloudkit.error.partial",

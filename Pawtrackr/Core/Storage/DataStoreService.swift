@@ -25,11 +25,12 @@ public final class DataStoreService {
     convenience init(inMemory: Bool) {
         do {
             let schema = Schema(PawtrackrSchema.models)
+            let usesCloudKit = !inMemory && AppRuntime.allowsICloudSync
             let config = ModelConfiguration(
                 inMemory ? "PawtrackrTests" : "Pawtrackr",
                 schema: schema,
                 isStoredInMemoryOnly: inMemory,
-                cloudKitDatabase: inMemory ? .none : .automatic
+                cloudKitDatabase: usesCloudKit ? .automatic : .none
             )
             let container = try ModelContainer(
                 for: schema,

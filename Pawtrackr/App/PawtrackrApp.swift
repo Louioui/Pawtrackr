@@ -73,7 +73,7 @@ struct PawtrackrApp: App {
         // boot loop and the user picked "Run Without iCloud", skip CloudKit
         // on this launch so they can actually open the app.
         let cloudKitDisabledByRecovery = UserDefaults.standard.bool(forKey: PawtrackrApp.cloudKitDisabledByRecoveryKey)
-        let wantsCloudKit = !inMemory && !cloudKitDisabledByRecovery
+        let wantsCloudKit = !inMemory && !cloudKitDisabledByRecovery && AppRuntime.allowsICloudSync
 
         let schema = Schema(PawtrackrSchema.models)
         let containerName = inMemory ? "PawtrackrTests" : "Pawtrackr"
@@ -156,7 +156,7 @@ struct PawtrackrApp: App {
         }
 
         // 3. Start side effects AFTER full initialization
-        let cloudKitActive = !inMemory && !cloudKitDisabledByRecovery && !fellBackToLocalOnly
+        let cloudKitActive = wantsCloudKit && !fellBackToLocalOnly
         if let localContainer = initialContainer {
             if inMemory {
                 Task { @MainActor in
@@ -195,6 +195,14 @@ struct PawtrackrApp: App {
                 Task {
                     await RemoteConfigService.shared.fetchConfig()
                 }
+
+                #if targetEnvironment(simulator)
+                logger.debug("Skipping Bluetooth printer discovery on simulator (unsupported).")
+                #else
+                Task.detached(priority: .utility) {
+                    await BluetoothPeripheralManager.shared.startPrinterDiscovery(autoConnect: true)
+                }
+                #endif
             }
 
             // Access UserDefaults directly to avoid using StateObject before it is installed on a view
