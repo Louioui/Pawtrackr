@@ -150,7 +150,6 @@ public struct PinLockView: View {
         lockContent
             .padding(24)
             .frame(maxWidth: 420)
-            .onChange(of: digits) { _, _ in validateIfComplete() }
             .onAppear {
                 cachedBiometricType = authenticator.biometricType()
                 authenticateWithBiometrics()
@@ -270,6 +269,11 @@ public struct PinLockView: View {
         guard !isLockedOut else { return }
         guard digits.count < 4 else { return }
         digits.append(v)
+        // Validate from the tap (not via .onChange(of: digits)) so we never
+        // mutate `digits` inside its own change handler — that produced the
+        // "onChange(of: Array<Int>) tried to update multiple times per frame"
+        // runtime warning.
+        if digits.count == 4 { validateIfComplete() }
     }
 
     private func deleteDigit() {
