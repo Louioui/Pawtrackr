@@ -18,6 +18,8 @@ struct DashboardView: View {
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
     @State private var showActivityFeed = false
+    @State private var showQuickCheckIn = false
+    @State private var showQuickCheckOut = false
     @State private var selectedRevenueDate: Date?
     var namespace: Namespace.ID
 
@@ -29,6 +31,18 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showActivityFeed) {
                 ActivityFeedView()
+            }
+            .sheet(isPresented: $showQuickCheckIn) {
+                QuickCheckInSheet { pet in
+                    showQuickCheckIn = false
+                    Task { await vm?.checkInPet(pet) }
+                }
+            }
+            .sheet(isPresented: $showQuickCheckOut) {
+                QuickCheckOutSheet(activeVisits: vm?.activeVisits ?? []) { pet in
+                    showQuickCheckOut = false
+                    router.navigateToCheckout(pet)
+                }
             }
             .alert(item: appErrorBinding) { error in
                 Alert(
@@ -457,15 +471,18 @@ struct DashboardView: View {
                     symbol: "play.circle",
                     accessibilityIdentifier: "dashboard.quickAction.checkIn"
                 ) {
-                    // Navigate to clients and focus search if possible, or just navigate
-                    selectSurface(.clients, resetPath: true)
+                    // Present a pet picker and actually start a visit, rather than
+                    // just navigating to the Clients tab.
+                    showQuickCheckIn = true
                 }
                 actionCard(
                     title: NSLocalizedString("dashboard.check_out", comment: ""),
                     symbol: "stop.circle",
                     accessibilityIdentifier: "dashboard.quickAction.checkOut"
                 ) {
-                    selectRecentHistory(resetPath: true)
+                    // Present the active sessions so one can be completed via the
+                    // full checkout flow, rather than just opening history.
+                    showQuickCheckOut = true
                 }
                 actionCard(
                     title: NSLocalizedString("dashboard.reports", comment: ""),
@@ -731,13 +748,6 @@ struct DashboardView: View {
         ])
     }
 
-    private func selectRecentHistory(resetPath: Bool = false) {
-        NotificationCenter.default.post(name: .selectNavigationItem, object: nil, userInfo: [
-            NavigationSelectionKey.item.rawValue: "recenthistory",
-            NavigationSelectionKey.resetPath.rawValue: resetPath
-        ])
-    }
-
     private func openClient(_ client: Client) {
         NotificationCenter.default.post(name: .navigateToClient, object: nil, userInfo: [
             "uuid": client.uuid
@@ -787,6 +797,126 @@ private extension View {
             accessibilityIdentifier(identifier)
         } else {
             self
+        }
+    }
+}
+
+// MARK: - Quick action pickers
+
+/// Lists pets that are not currently in session so the dashboard "Quick
+/// Check-In" tile can start a visit directly instead of just navigating.
+private struct QuickCheckInSheet: View {
+    let onSelect: (Pet) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Pet.name) private var pets: [Pet]
+    @State private var search = ""
+
+    private var candidates: [Pet] {
+        pets.filter { $0.activeVisit == nil }.filter { pet in
+            search.isEmpty
+                || pet.name.localizedCaseInsensitiveContains(search)
+                || (pet.owner?.fullName.localizedCaseInsensitiveContains(search) ?? false)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if candidates.isEmpty {
+                    ContentUnavailableView(
+                        NSLocalizedString("dashboard.checkin_picker.empty_title", value: "No Pets to Check In", comment: ""),
+                        systemImage: "pawprint",
+                        description: Text(NSLocalizedString("dashboard.checkin_picker.empty_detail", value: "Every pet is already in session, or you haven't added any pets yet.", comment: ""))
+                    )
+                } else {
+                    List(candidates, id: \.uuid) { pet in
+                        Button {
+                            onSelect(pet)
+                        } label: {
+                            HStack(spacing: 12) {
+                                AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(pet.name).font(.headline)
+                                    if let owner = pet.owner?.fullName, !owner.isEmpty {
+                                        Text(owner).font(.footnote).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "play.circle.fill").foregroundStyle(.blue)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("dashboard.checkinPicker.row.\(pet.name)")
+                    }
+                }
+            }
+            .searchable(text: $search)
+            .navigationTitle(NSLocalizedString("dashboard.checkin_picker.title", value: "Check In", comment: ""))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("common.cancel", value: "Cancel", comment: "")) { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// Lists active sessions so the dashboard "Check-Out" tile can route a visit
+/// into the full checkout flow instead of just opening history.
+private struct QuickCheckOutSheet: View {
+    let activeVisits: [Visit]
+    let onSelect: (Pet) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if activeVisits.isEmpty {
+                    ContentUnavailableView(
+                        NSLocalizedString("dashboard.checkout_picker.empty_title", value: "No Active Sessions", comment: ""),
+                        systemImage: "clock.badge.xmark",
+                        description: Text(NSLocalizedString("dashboard.checkout_picker.empty_detail", value: "Check a pet in first to start a session you can check out.", comment: ""))
+                    )
+                } else {
+                    List(activeVisits, id: \.uuid) { visit in
+                        if let pet = visit.pet {
+                            Button {
+                                onSelect(pet)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(pet.name).font(.headline)
+                                        if let owner = pet.owner?.fullName, !owner.isEmpty {
+                                            Text(owner).font(.footnote).foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: "stop.circle.fill").foregroundStyle(.green)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("dashboard.checkoutPicker.row.\(pet.name)")
+                        }
+                    }
+                }
+            }
+            .navigationTitle(NSLocalizedString("dashboard.checkout_picker.title", value: "Check Out", comment: ""))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("common.cancel", value: "Cancel", comment: "")) { dismiss() }
+                }
+            }
         }
     }
 }

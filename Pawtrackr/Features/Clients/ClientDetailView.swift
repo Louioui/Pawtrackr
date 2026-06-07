@@ -576,6 +576,7 @@ struct ClientDetailView: View {
             Text(String(format: NSLocalizedString("client_detail.pets_count_fmt", comment: ""), vm.pets.count)).font(.headline).padding(.horizontal)
             VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
+                    let activeVisit = pet.activeVisit
                     Card {
                         HStack(alignment: .top, spacing: 12) {
                             AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md, ringWidth: 3)
@@ -589,15 +590,8 @@ struct ClientDetailView: View {
                                     petStatusPill(pet)
                                 }
                                 HStack(spacing: 8) {
-                                    // Status & Timer Logic
                                     actionButton(title: NSLocalizedString("client_detail.check_in", comment: ""), systemImage: "play.fill", tint: .blue) {
-                                        // The button is never silently disabled: if the pet
-                                        // already has an active visit, show a toast saying so
-                                        // instead of doing nothing (previously the user saw a
-                                        // blue button that looked active but didn't respond).
-                                        // Otherwise check in directly — the confirmation alert
-                                        // was failing to present under stacked .sheet modifiers.
-                                        if pet.activeVisit != nil {
+                                        if activeVisit != nil {
                                             sessionStartedToastText = NSLocalizedString(
                                                 "client_detail.pet_already_in_session",
                                                 value: "\(pet.name) is already in session",
@@ -622,16 +616,15 @@ struct ClientDetailView: View {
                                         }
                                         HapticManager.notify(.success)
                                     }
-                                    .opacity(pet.activeVisit != nil ? 0.55 : 1.0)
+                                    .opacity(activeVisit == nil ? 1.0 : 0.55)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
 
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
-                                        // Trigger check-out / stop timer
-                                        vm.checkOut(pet: pet)
+                                        checkoutPet = pet
                                         HapticManager.notify(.success)
                                     }
-                                    .opacity(pet.activeVisit == nil ? 0.3 : 1.0)
-                                    .disabled(pet.activeVisit == nil)
+                                    .opacity(activeVisit == nil ? 0.3 : 1.0)
+                                    .disabled(activeVisit == nil)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
 
                                     actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {

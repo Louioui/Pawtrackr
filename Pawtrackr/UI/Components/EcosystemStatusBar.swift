@@ -62,6 +62,9 @@ struct EcosystemStatusBar: View {
         if case .error = monitor.syncState {
             return "SHOP_SYNC_ATTENTION"
         }
+        if monitor.pendingChangesSummary != nil {
+            return "SHOP_SYNC_PENDING"
+        }
         if isUpdating {
             return "SHOP_SYNC_UPDATING"
         }
@@ -82,6 +85,9 @@ struct EcosystemStatusBar: View {
     }
 
     private var accessibilityLabel: String {
+        if let pending = monitor.pendingChangesSummary {
+            return "\(statusCode), \(pending)"
+        }
         if monitor.offlineBufferedMutationCount > 0 {
             return "\(statusCode), \(monitor.offlineBufferedMutationCount) local changes buffered"
         }

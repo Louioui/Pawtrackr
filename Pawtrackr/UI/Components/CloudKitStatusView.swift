@@ -62,6 +62,9 @@ struct CloudKitStatusView: View {
         case .syncing: return NSLocalizedString("cloudkit.status.syncing", value: "Syncing with iCloud", comment: "")
         case .error(let message): return message
         case .idle:
+            if let pending = monitor.pendingChangesSummary {
+                return pending
+            }
             if monitor.accountState.isAvailable {
                 return NSLocalizedString("cloudkit.status.synced", value: "Synced with iCloud", comment: "")
             }
@@ -95,7 +98,7 @@ private struct CloudKitStatusPopover: View {
                 Label(monitor.networkState.displayLabel, systemImage: monitor.networkState.isOnline ? "wifi" : "wifi.slash")
                 Spacer(minLength: 8)
                 if let pending = monitor.pendingChangesSummary {
-                    Label(pending, systemImage: "arrow.up.icloud")
+                    Label(pending, systemImage: "icloud.and.arrow.up")
                 }
             }
             .font(.caption2)

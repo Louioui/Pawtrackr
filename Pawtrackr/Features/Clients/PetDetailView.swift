@@ -22,7 +22,6 @@ final class PetDetailViewModel {
     
     // State
     var sheetDestination: SheetDestination?
-    let visitTimer = VisitTimer()
 
     // Bumped after writes so views observing `activeVisit` re-render even when
     // SwiftData's inverse-relationship update on `pet.visits` doesn't trigger
@@ -65,30 +64,8 @@ final class PetDetailViewModel {
     init(pet: Pet, modelContext: ModelContext, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.pet = pet
         self.visitRepository = VisitRepository(modelContext: modelContext, eventBus: eventBus)
-        
-        Task { [weak self] in
-            let notifications = NotificationCenter.default.notifications(named: .visitDidComplete).map { _ in () }
-            for await _ in notifications {
-                self?.updateTimerOnMain()
-            }
-        }
-        
-        updateTimer()
     }
-    
-    @MainActor
-    private func updateTimerOnMain() {
-        updateTimer()
-    }
-    
-    func updateTimer() {
-        if let v = activeVisit {
-            visitTimer.load(startedAt: v.startedAt, endedAt: v.endedAt)
-        } else {
-            visitTimer.reset()
-        }
-    }
-    
+
     // MARK: Intents
     func checkIn() {
         guard activeVisit == nil else {
@@ -100,7 +77,6 @@ final class PetDetailViewModel {
             do {
                 let visit = try await visitRepository.checkIn(pet: pet, date: .now)
                 refreshNonce &+= 1
-                updateTimer()
                 Logger.petDetail.info("checkIn saved visit \(visit.uuid); pet.activeVisit=\(self.pet.activeVisit?.uuid.uuidString ?? "nil")")
             } catch {
                 appError = .database("Could not start a visit. Please try again.")
@@ -182,9 +158,6 @@ struct PetDetailView: View {
                             PetHistoryView(pet: petForHistory, wrapsInNavigationStack: false)
                         }
                     }
-                }
-                .onChange(of: (vm.pet.visits ?? []).count) {
-                    vm.updateTimer()
                 }
                 // Use the modern `.alert(_:isPresented:presenting:actions:message:)`
                 // API instead of the deprecated `.alert(item:)`. Two deprecated
@@ -321,11 +294,22 @@ struct PetDetailView: View {
                     .padding(.horizontal, 10)
                     .background(DS.ColorToken.success.opacity(0.12), in: Capsule())
                 Spacer()
-                Label(vm.visitTimer.formattedElapsed, systemImage: "clock.arrow.circlepath")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.accentColor)
-                    .monospacedDigit()
-                    .accessibilityLabel(vm.visitTimer.accessibilityElapsedLabel)
+                // Drive the elapsed clock from the active visit's start date via a
+                // self-updating TimelineView. The view model's `visitTimer` is a
+                // Combine `ObservableObject` held as a plain `let` on an @Observable
+                // VM, so SwiftUI never subscribes to its per-second ticks — the label
+                // would render once and freeze at "0m". TimelineView ticks on its own,
+                // matching the working pattern in ClientDetailView's status pill.
+                if let started = vm.activeVisit?.startedAt {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        let secs = max(0, Int(Date().timeIntervalSince(started)))
+                        Label(VisitTimer.format(seconds: secs), systemImage: "clock.arrow.circlepath")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.accentColor)
+                            .monospacedDigit()
+                            .accessibilityLabel(VisitTimer.spelledOut(seconds: secs))
+                    }
+                }
             }
         }
         
@@ -513,9 +497,14 @@ struct PetDetailView: View {
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(visit.totalCurrencyString)
                                 .font(.subheadline.weight(.semibold))
-                            Text(vmElapsedLabel())
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                            // Live-ticking elapsed time, driven off the visit start
+                            // date (see note in `sessionStatus`).
+                            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                                let secs = max(0, Int(Date().timeIntervalSince(visit.startedAt)))
+                                Text(VisitTimer.format(seconds: secs))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -611,10 +600,6 @@ struct PetDetailView: View {
 
     private func startedString(_ date: Date) -> String {
         "\(Self.relativeDayFormatter.string(from: date)), \(Self.timeOnlyFormatter.string(from: date))"
-    }
-
-    private func vmElapsedLabel() -> String {
-        viewModel?.visitTimer.formattedElapsed ?? ""
     }
 }
 

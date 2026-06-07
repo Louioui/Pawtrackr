@@ -35,6 +35,7 @@ enum AppSettingsKeys {
     static let defaultLaunchTab = "defaultLaunchTab"
     static let optimizeMediaForICloud = CloudMediaPolicy.optimizedMediaDefaultsKey
     static let deviceName = "deviceName"
+    static let idleLockMinutes = "idleLockMinutes"
 }
 
 /// User-selectable color scheme preference. `system` defers to the OS.
@@ -118,6 +119,15 @@ final class AppSettings {
 
     var currencySymbol: String {
         didSet {
+            // Sanitize: a blank or whitespace-only symbol would corrupt money
+            // formatting everywhere. Trim, cap at 3 chars (covers "$", "kr",
+            // "CHF"), and fall back to the default when empty. Re-assigning the
+            // property inside its own didSet does not retrigger the observer.
+            let trimmed = currencySymbol.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = trimmed.isEmpty ? Defaults.currencySymbol : String(trimmed.prefix(3))
+            if normalized != currencySymbol {
+                currencySymbol = normalized
+            }
             UserDefaults.standard.set(currencySymbol, forKey: AppSettingsKeys.currencySymbol)
             UbiquitousSettingsStore.shared.push(currencySymbol, forKey: AppSettingsKeys.currencySymbol)
         }
@@ -217,8 +227,18 @@ final class AppSettings {
         }
     }
 
-    /// Fixed idle threshold (minutes) for auto-lock.
-    let idleLockMinutes: Int = Defaults.idleLockMinutes
+    /// Idle threshold (minutes) for auto-lock. Adjustable in Settings and
+    /// clamped to a sane 1...60 range so the lock timer can't be disabled by
+    /// stuffing in 0 or made effectively infinite.
+    var idleLockMinutes: Int {
+        didSet {
+            let clamped = min(60, max(1, idleLockMinutes))
+            if clamped != idleLockMinutes {
+                idleLockMinutes = clamped
+            }
+            UserDefaults.standard.set(idleLockMinutes, forKey: AppSettingsKeys.idleLockMinutes)
+        }
+    }
 
     // MARK: - Init
 
@@ -250,12 +270,18 @@ final class AppSettings {
             AppSettingsKeys.hapticsEnabled: Defaults.hapticsEnabled,
             AppSettingsKeys.brandColorHex: Defaults.brandColorHex,
             AppSettingsKeys.defaultLaunchTab: Defaults.defaultLaunchTab,
-            AppSettingsKeys.optimizeMediaForICloud: Defaults.optimizeMediaForICloud
+            AppSettingsKeys.optimizeMediaForICloud: Defaults.optimizeMediaForICloud,
+            AppSettingsKeys.idleLockMinutes: Defaults.idleLockMinutes
         ])
 
         // Read values
         self.businessName = UserDefaults.standard.string(forKey: AppSettingsKeys.businessName) ?? Defaults.businessName
-        self.currencySymbol = UserDefaults.standard.string(forKey: AppSettingsKeys.currencySymbol) ?? Defaults.currencySymbol
+        // didSet sanitization does not run during init, so normalize here too.
+        let storedCurrency = (UserDefaults.standard.string(forKey: AppSettingsKeys.currencySymbol) ?? Defaults.currencySymbol)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.currencySymbol = storedCurrency.isEmpty ? Defaults.currencySymbol : String(storedCurrency.prefix(3))
+        let storedIdle = UserDefaults.standard.integer(forKey: AppSettingsKeys.idleLockMinutes)
+        self.idleLockMinutes = storedIdle == 0 ? Defaults.idleLockMinutes : min(60, max(1, storedIdle))
         self.isLockEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.isLockEnabled)
         self.isBiometricLockEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.isBiometricLockEnabled)
         self.autoLockOnBackground = UserDefaults.standard.bool(forKey: AppSettingsKeys.autoLockOnBackground)
@@ -330,6 +356,14 @@ final class AppSettings {
     func resetPINToDefault() {
         appPIN = Defaults.pin
         lastPINChangeDate = Date()
+    }
+
+    /// Re-arms the new-user guidance (feature tour + dashboard getting-started
+    /// checklist). Intentionally non-destructive: it does NOT touch the business
+    /// configuration, clients, pets, or visits — it only re-shows the helper UI.
+    func replayGettingStarted() {
+        hasSeenAppTour = false
+        isChecklistDismissed = false
     }
 
     /// Checks if a PIN is valid (exactly 4 numeric digits).

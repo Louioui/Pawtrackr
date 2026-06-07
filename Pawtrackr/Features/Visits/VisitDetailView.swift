@@ -25,7 +25,6 @@ struct VisitDetailView: View {
     
     let visit: Visit
     private let heroNamespace: Namespace.ID?
-    @StateObject private var visitTimer = VisitTimer()
     @State private var showCheckout = false
     @State private var previewData: Data? = nil
     @State private var previewTitle: String = ""
@@ -60,9 +59,6 @@ struct VisitDetailView: View {
             .toolbar { toolbarContent }
             .modifier(VisitCheckoutModifier(showCheckout: $showCheckout, visit: visit))
             .modifier(VisitPreviewModifier(previewItem: previewItemBinding))
-            .onAppear {
-                visitTimer.load(startedAt: visit.startedAt, endedAt: visit.endedAt)
-            }
     }
 
     private var visitContent: some View {
@@ -314,12 +310,29 @@ struct VisitDetailView: View {
                     value: visit.endedAt?.formatted(date: .abbreviated, time: .shortened) ?? NSLocalizedString("visit.in_progress", comment: "")
                 )
 
+                durationRow
+            }
+        }
+    }
+
+    /// Duration ticks live while the visit is still in progress; once it's
+    /// checked out the value is fixed, so a static row is enough.
+    @ViewBuilder
+    private var durationRow: some View {
+        if visit.endedAt == nil {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
                 detailRow(
                     icon: "clock.fill",
                     title: NSLocalizedString("visit.duration", comment: ""),
                     value: visit.durationString
                 )
             }
+        } else {
+            detailRow(
+                icon: "clock.fill",
+                title: NSLocalizedString("visit.duration", comment: ""),
+                value: visit.durationString
+            )
         }
     }
 
@@ -569,7 +582,6 @@ struct VisitDetailView: View {
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .buttonStyle(.plain)
                 // Fill available width and stay square. The previous fixed
                 // 180×180 frame plus 12pt spacing exceeded the usable width
                 // on iPhone SE (~288pt) once Card padding was applied,
@@ -581,6 +593,10 @@ struct VisitDetailView: View {
                 .accessibilityLabel(Text(String(format: NSLocalizedString("visit.photo_a11y_label_fmt", comment: ""), title)))
                 .accessibilityHint(Text(NSLocalizedString("visit.photo_a11y_hint", comment: "")))
             }
+            // Plain style belongs on the Button, not the label's ZStack —
+            // otherwise the default style accent-tints the placeholder icon
+            // and "No photo" text blue and adds a press highlight.
+            .buttonStyle(.plain)
         }
     }
 

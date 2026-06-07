@@ -164,7 +164,6 @@ class InsightsViewModel {
         defer { isRefreshing = false }
 
         _ = await PerformanceMonitor.measureAsyncNoThrow(label: "Insights.refresh") {
-            try? await Task.sleep(for: .milliseconds(500)) // Yield to allow UI to render 'loading' state
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await self.fetchRevenue() }
                 group.addTask { await self.fetchMonthlyGrowth() }

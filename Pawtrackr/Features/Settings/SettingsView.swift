@@ -134,8 +134,22 @@ private struct SettingsDetailView: View {
                     }
             }
         }
+        .alert(
+            settingsLocalized("settings.reset_guide.title", value: "Replay Getting Started?"),
+            isPresented: $showResetFirstRunConfirm
+        ) {
+            Button(settingsLocalized("common.cancel", value: "Cancel"), role: .cancel) {}
+            Button(settingsLocalized("settings.reset_guide.confirm", value: "Replay")) {
+                appSettings.replayGettingStarted()
+            }
+        } message: {
+            Text(settingsLocalized(
+                "settings.reset_guide.message",
+                value: "This re-shows the new-user tour and dashboard checklist. Your business settings, clients, and visits are not affected."
+            ))
+        }
     }
-    
+
     @ViewBuilder
     private var content: some View {
         switch section {
@@ -146,7 +160,7 @@ private struct SettingsDetailView: View {
         case .icloud: ICloudSectionView(showDiagnostics: $showDiagnostics)
         case .help: HelpSectionView(modelContext: modelContext)
         case .devices: DevicesHealthView()
-        case .about: AboutSectionView()
+        case .about: AboutSectionView(showResetFirstRunConfirm: $showResetFirstRunConfirm)
         }
     }
 }
@@ -547,6 +561,17 @@ private struct SecuritySectionView: View {
             }
             .disabled(!appSettings.isLockEnabled)
 
+            Stepper(value: $appSettings.idleLockMinutes, in: 1...60) {
+                HStack {
+                    Label(settingsLocalized("settings.security.idle_minutes", value: "Idle Timeout"), systemImage: "hourglass")
+                    Spacer()
+                    Text(String(format: settingsLocalized("settings.security.idle_minutes_value_fmt", value: "%d min"), appSettings.idleLockMinutes))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .disabled(!appSettings.isLockEnabled || !appSettings.autoLockAfterInactivity)
+
             Text(String(format: settingsLocalized(
                 "settings.security.lock_after_inactivity_detail_fmt",
                 value: "When enabled, Pawtrackr locks after %d minutes without interaction."
@@ -585,6 +610,8 @@ private struct SettingsLabeledField<Content: View>: View {
 }
 
 private struct AboutSectionView: View {
+    @Binding var showResetFirstRunConfirm: Bool
+
     var body: some View {
         CardView {
             HStack {
@@ -593,6 +620,16 @@ private struct AboutSectionView: View {
                 Text(versionText)
                     .foregroundStyle(.secondary)
             }
+
+            Divider()
+
+            Button {
+                showResetFirstRunConfirm = true
+            } label: {
+                Label(settingsLocalized("settings.about.replay_guide", value: "Replay Getting Started"), systemImage: "sparkles")
+            }
+            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

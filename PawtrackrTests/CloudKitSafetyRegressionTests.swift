@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import CloudKit
 @testable import Pawtrackr
 
 @MainActor
@@ -164,6 +165,37 @@ final class CloudKitSafetyRegressionTests: XCTestCase {
         XCTAssertEqual(batch.count, 40)
         XCTAssertEqual(batch.first?.changedKeys, ["note", "updatedAt"])
         XCTAssertEqual(OfflineMutationBuffer.count, 45)
+    }
+
+    func testCloudKitQuotaClassifierFindsNestedPartialFailure() throws {
+        let partial = CKError(
+            .partialFailure,
+            userInfo: [
+                CKPartialErrorsByItemIDKey: [
+                    "record-1": CKError(.quotaExceeded)
+                ]
+            ]
+        )
+
+        let wrapped = NSError(
+            domain: NSCocoaErrorDomain,
+            code: 134417,
+            userInfo: [NSUnderlyingErrorKey: partial]
+        )
+
+        XCTAssertTrue(CloudKitMonitor.isQuotaExceededError(wrapped))
+    }
+
+    func testCloudKitQuotaClassifierFindsDaemonQuotaText() throws {
+        let daemonStyleError = NSError(
+            domain: CKError.errorDomain,
+            code: CKError.Code.partialFailure.rawValue,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Received error 47 (quotaExceeded) from the server"
+            ]
+        )
+
+        XCTAssertTrue(CloudKitMonitor.isQuotaExceededError(daemonStyleError))
     }
 
     func testPetHistoryUsesCheckoutCompletionDateForMonthScope() async throws {

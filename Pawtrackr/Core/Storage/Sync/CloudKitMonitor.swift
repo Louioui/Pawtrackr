@@ -226,6 +226,7 @@ final class CloudKitMonitor {
         static let pendingLocalChangeCount = "cloudkit.pendingLocalChangeCount"
         static let pendingLocalChangeDate = "cloudkit.pendingLocalChangeDate"
         static let pendingLocalChangeDescription = "cloudkit.pendingLocalChangeDescription"
+        static let quotaExceeded = "cloudkit.quotaExceeded"
     }
 
     // MARK: - Init
@@ -242,6 +243,7 @@ final class CloudKitMonitor {
         self.pendingLocalChangeDate = UserDefaults.standard.object(forKey: DefaultsKey.pendingLocalChangeDate) as? Date
         self.pendingLocalChangeDescription = UserDefaults.standard.string(forKey: DefaultsKey.pendingLocalChangeDescription)
         self.offlineBufferedMutationCount = OfflineMutationBuffer.count
+        self.quotaExceeded = UserDefaults.standard.bool(forKey: DefaultsKey.quotaExceeded)
     }
 
     // MARK: - Lifecycle
@@ -627,9 +629,16 @@ final class CloudKitMonitor {
         if let error = event.error {
             handleError(error, kind: kind, startedAt: event.startDate, endedAt: event.endDate ?? Date())
         } else {
-            // Successful sync of any kind (setup / import / export)
-            quotaExceeded = false
-            lastErrorMessage = nil
+            // Successful setup/import events can arrive while an export is still
+            // blocked by account quota. Keep quota visible until an export really
+            // succeeds so the UI doesn't briefly claim the queue is healthy.
+            if event.type == .export {
+                quotaExceeded = false
+                UserDefaults.standard.set(false, forKey: DefaultsKey.quotaExceeded)
+                lastErrorMessage = nil
+            } else if !quotaExceeded {
+                lastErrorMessage = nil
+            }
             syncState = .idle
             lastSyncDate = event.endDate ?? Date()
             UserDefaults.standard.set(lastSyncDate, forKey: DefaultsKey.lastSyncDate)
@@ -681,47 +690,46 @@ final class CloudKitMonitor {
 
         log.error("CloudKit event error: \(error.localizedDescription, privacy: .public) (\(nsError.code))")
 
-        if let ckError = ckError(from: error) {
-            if isQuotaExceeded(ckError) {
-                quotaExceeded = true
+        if Self.isQuotaExceededError(error) {
+            quotaExceeded = true
+            UserDefaults.standard.set(true, forKey: DefaultsKey.quotaExceeded)
+            lastErrorMessage = NSLocalizedString(
+                "cloudkit.error.quota",
+                value: "Your iCloud storage is full. Free up space or upgrade.",
+                comment: ""
+            )
+        } else if let ckError = ckError(from: error) {
+            switch ckError.code {
+            case .networkUnavailable, .networkFailure:
                 lastErrorMessage = NSLocalizedString(
-                    "cloudkit.error.quota",
-                    value: "Your iCloud storage is full. Free up space or upgrade.",
+                    "cloudkit.error.network",
+                    value: "Can't reach iCloud — check your connection.",
                     comment: ""
                 )
-            } else {
-                switch ckError.code {
-                case .networkUnavailable, .networkFailure:
-                    lastErrorMessage = NSLocalizedString(
-                        "cloudkit.error.network",
-                        value: "Can't reach iCloud — check your connection.",
-                        comment: ""
-                    )
-                case .notAuthenticated:
-                    lastErrorMessage = NSLocalizedString(
-                        "cloudkit.error.signed_out",
-                        value: "Sign in to iCloud in Settings to sync your data.",
-                        comment: ""
-                    )
-                    accountState = .noAccount
-                    iCloudAppAccessMayBeDisabled = false
-                case .accountTemporarilyUnavailable:
-                    lastErrorMessage = NSLocalizedString(
-                        "cloudkit.error.account_temporarily_unavailable",
-                        value: "Enter your Apple Account password in Settings to resume iCloud sync.",
-                        comment: ""
-                    )
-                    accountState = .temporarilyUnavailable
-                    iCloudAppAccessMayBeDisabled = false
-                case .partialFailure:
-                    lastErrorMessage = NSLocalizedString(
-                        "cloudkit.error.partial",
-                        value: "Some changes didn't sync. They'll retry shortly.",
-                        comment: ""
-                    )
-                default:
-                    lastErrorMessage = ckError.localizedDescription
-                }
+            case .notAuthenticated:
+                lastErrorMessage = NSLocalizedString(
+                    "cloudkit.error.signed_out",
+                    value: "Sign in to iCloud in Settings to sync your data.",
+                    comment: ""
+                )
+                accountState = .noAccount
+                iCloudAppAccessMayBeDisabled = false
+            case .accountTemporarilyUnavailable:
+                lastErrorMessage = NSLocalizedString(
+                    "cloudkit.error.account_temporarily_unavailable",
+                    value: "Enter your Apple Account password in Settings to resume iCloud sync.",
+                    comment: ""
+                )
+                accountState = .temporarilyUnavailable
+                iCloudAppAccessMayBeDisabled = false
+            case .partialFailure:
+                lastErrorMessage = NSLocalizedString(
+                    "cloudkit.error.partial",
+                    value: "Some changes didn't sync. They'll retry shortly.",
+                    comment: ""
+                )
+            default:
+                lastErrorMessage = ckError.localizedDescription
             }
         } else {
             lastErrorMessage = error.localizedDescription
@@ -877,6 +885,7 @@ final class CloudKitMonitor {
     var statusIconName: String {
         if !accountState.isAvailable { return "exclamationmark.icloud.fill" }
         if quotaExceeded || iCloudAppAccessMayBeDisabled { return "exclamationmark.icloud.fill" }
+        if hasPendingLocalChanges { return "exclamationmark.icloud.fill" }
         switch syncState {
         case .syncing: return "arrow.triangle.2.circlepath.icloud"
         case .error: return "xmark.icloud.fill"
@@ -886,6 +895,7 @@ final class CloudKitMonitor {
 
     var statusTint: SyncStatusTint {
         if !accountState.isAvailable || quotaExceeded || iCloudAppAccessMayBeDisabled { return .warning }
+        if hasPendingLocalChanges { return .warning }
         switch syncState {
         case .error: return .danger
         case .syncing: return .neutral
@@ -1002,10 +1012,10 @@ final class CloudKitMonitor {
             ))
         }
 
-        if pendingLocalChangeCount > 0 {
+        if hasPendingLocalChanges {
             issues.append(SyncHealthIssue(
                 id: "pending",
-                severity: .info,
+                severity: .warning,
                 title: NSLocalizedString("cloudkit.health.pending.title", value: "Changes are waiting to upload", comment: ""),
                 detail: pendingChangesSummary ?? NSLocalizedString("cloudkit.health.pending.detail", value: "iCloud will upload them automatically.", comment: "")
             ))
@@ -1027,7 +1037,7 @@ final class CloudKitMonitor {
         if let danger = healthIssues.first(where: { $0.severity == .danger }) {
             return danger.title
         }
-        if let warning = healthIssues.first(where: { $0.severity == .warning }) {
+        if let warning = healthIssues.first(where: { $0.severity == .warning && $0.id != "pending" }) {
             return warning.title
         }
         if let pending = pendingChangesSummary {
@@ -1052,6 +1062,10 @@ final class CloudKitMonitor {
     enum SyncStatusTint { case success, neutral, warning, danger }
 
     // MARK: - Private
+
+    private var hasPendingLocalChanges: Bool {
+        max(pendingLocalChangeCount, offlineBufferedMutationCount) > 0
+    }
 
     private func postChange() {
         NotificationCenter.default.post(name: .cloudKitStateDidChange, object: self)
@@ -1322,13 +1336,73 @@ final class CloudKitMonitor {
         return nil
     }
 
-    private func isQuotaExceeded(_ error: CKError) -> Bool {
-        if error.code == .quotaExceeded {
+    nonisolated static func isQuotaExceededError(_ error: Error) -> Bool {
+        isQuotaExceededError(error, depth: 0)
+    }
+
+    nonisolated private static func isQuotaExceededError(_ error: Error, depth: Int) -> Bool {
+        guard depth < 8 else { return false }
+
+        if let ckError = error as? CKError {
+            if ckError.code == .quotaExceeded {
+                return true
+            }
+            if ckError.partialErrorsByItemID?.values.contains(where: {
+                isQuotaExceededError($0, depth: depth + 1)
+            }) == true {
+                return true
+            }
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == CKError.errorDomain && nsError.code == CKError.Code.quotaExceeded.rawValue {
             return true
         }
-        return error.partialErrorsByItemID?.values.contains { partialError in
-            (partialError as? CKError)?.code == .quotaExceeded
-        } ?? false
+
+        let messageBits = [
+            nsError.localizedDescription,
+            nsError.localizedFailureReason,
+            nsError.localizedRecoverySuggestion
+        ].compactMap { $0 } + nsError.userInfo.values.compactMap { value -> String? in
+            value as? String
+        }
+        let foldedMessage = messageBits.joined(separator: " ").lowercased()
+        if foldedMessage.contains("quotaexceeded")
+            || foldedMessage.contains("quota exceeded")
+            || foldedMessage.contains("storage is full") {
+            return true
+        }
+
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error,
+           isQuotaExceededError(underlying, depth: depth + 1) {
+            return true
+        }
+
+        if let detailed = nsError.userInfo[NSDetailedErrorsKey] as? [Error],
+           detailed.contains(where: { isQuotaExceededError($0, depth: depth + 1) }) {
+            return true
+        }
+
+        if let partials = nsError.userInfo[CKPartialErrorsByItemIDKey] as? [AnyHashable: Error],
+           partials.values.contains(where: { isQuotaExceededError($0, depth: depth + 1) }) {
+            return true
+        }
+
+        for value in nsError.userInfo.values {
+            if let nested = value as? Error, isQuotaExceededError(nested, depth: depth + 1) {
+                return true
+            }
+            if let nested = value as? [Error],
+               nested.contains(where: { isQuotaExceededError($0, depth: depth + 1) }) {
+                return true
+            }
+            if let nested = value as? [AnyHashable: Error],
+               nested.values.contains(where: { isQuotaExceededError($0, depth: depth + 1) }) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func cloudKitErrorCodeDescription(for error: Error) -> String {
@@ -1348,6 +1422,7 @@ final class CloudKitMonitor {
         UserDefaults.standard.removeObject(forKey: DefaultsKey.pendingLocalChangeCount)
         UserDefaults.standard.removeObject(forKey: DefaultsKey.pendingLocalChangeDate)
         UserDefaults.standard.removeObject(forKey: DefaultsKey.pendingLocalChangeDescription)
+        UserDefaults.standard.removeObject(forKey: DefaultsKey.quotaExceeded)
         SummaryUpdater.resetSummaryRebuildState()
     }
 

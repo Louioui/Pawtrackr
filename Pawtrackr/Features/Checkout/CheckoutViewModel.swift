@@ -115,11 +115,10 @@ final class CheckoutViewModel {
     private func triggerBackgroundCalculation(reason: String, immediate: Bool = false) {
         Task {
             guard let calculator = self.calculatorActor else { return }
-
-            // 1. Calculate total
-            let total = await calculator.calculateTotal(items: []) // Logic needs refinement
             
-            // 2. Generate fingerprint
+            // Generate the draft fingerprint off the main actor. Money totals are
+            // authoritative in `servicesTotalDecimal`; do not let the background
+            // fingerprint path overwrite displayed totals with placeholder math.
             let fingerprint = await calculator.generateFingerprint(
                 selectedServiceIDs: Array(selectedServiceIDs),
                 selectedAddOnIDs: Array(selectedAddOnIDs),
@@ -139,11 +138,9 @@ final class CheckoutViewModel {
                 currentStepRawValue: currentStep.rawValue
             )
             
-            // 3. Update UI state
             self.lastSavedDraftFingerprint = fingerprint
-            self.finalTotalString = total.moneyString
+            self.recalculateCachedStrings()
             
-            // 4. Autosave
             scheduleDraftSave(reason: reason, immediate: immediate)
         }
     }
@@ -170,6 +167,7 @@ final class CheckoutViewModel {
     var selectedTipPercentage: Int? { didSet { triggerBackgroundCalculation(reason: "tip_percentage_changed", immediate: true) } }
     var tipAmountString: String = "" {
         didSet {
+            recalculateCachedStrings()
             triggerBackgroundCalculation(reason: "tip_amount_changed", immediate: true)
         }
     }
@@ -477,6 +475,7 @@ final class CheckoutViewModel {
         let tip = (subtotalDecimal * Decimal(percentage) / Decimal(100)).roundedMoney()
         selectedTipPercentage = percentage
         tipAmountString = tip.moneyString
+        recalculateCachedStrings()
         trace("tip_selected_\(percentage)")
     }
 
