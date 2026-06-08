@@ -70,11 +70,26 @@ struct VisitDetailView: View {
         usesWideDetailLayout ? 16 : 12
     }
 
+    private var contentBottomPadding: CGFloat {
+        #if os(iOS)
+        if usesWideDetailLayout {
+            return 28
+        }
+
+        // Paid detail screens hide the tab bar. Unpaid visits can still show
+        // the checkout action in the bottom toolbar, so keep space for it.
+        return visit.payment == nil ? 104 : 44
+        #else
+        return 28
+        #endif
+    }
+
     var body: some View {
         visitContent
             .navigationTitle(NSLocalizedString("visit.title", comment: ""))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .tabBar)
 #endif
             .toolbar { toolbarContent }
             .modifier(VisitCheckoutModifier(showCheckout: $showCheckout, visit: visit))
@@ -98,7 +113,7 @@ struct VisitDetailView: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, contentHorizontalPadding)
             .padding(.top, usesWideDetailLayout ? 18 : 8)
-            .padding(.bottom, usesWideDetailLayout ? 28 : 16)
+            .padding(.bottom, contentBottomPadding)
         }
         .background(detailBackground.ignoresSafeArea())
     }
@@ -600,7 +615,7 @@ struct VisitDetailView: View {
     }
 
     private var photoBoxAspectRatio: CGFloat {
-        usesWideDetailLayout ? 4 / 3 : 16 / 10
+        usesWideDetailLayout ? 4 / 3 : 1
     }
 
     private var photoBoxMaxWidth: CGFloat? {
@@ -670,7 +685,28 @@ struct VisitDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var compactPhotosLayout: some View {
+        #if os(iOS)
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ],
+            spacing: 10
+        ) {
+            photoBox(
+                title: NSLocalizedString("photobox.before", comment: ""),
+                displayData: beforeDisplayPhoto,
+                previewData: beforePreviewPhoto
+            )
+            photoBox(
+                title: NSLocalizedString("photobox.after", comment: ""),
+                displayData: afterDisplayPhoto,
+                previewData: afterPreviewPhoto
+            )
+        }
+        #else
         VStack(spacing: 12) {
             photoBox(
                 title: NSLocalizedString("photobox.before", comment: ""),
@@ -683,6 +719,7 @@ struct VisitDetailView: View {
                 previewData: afterPreviewPhoto
             )
         }
+        #endif
     }
     
     @ViewBuilder
