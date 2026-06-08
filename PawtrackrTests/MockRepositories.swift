@@ -51,5 +51,4 @@ final class MockDashboardRepository: DashboardRepositoryProtocol, @unchecked Sen
     func fetchServiceDistribution(days: Int) async throws -> [String : Int] { return [:] }
     func fetchCategoryDistribution(days: Int) async throws -> [String : Int] { return [:] }
     func fetchRevenueSeries(days: Int) async throws -> [Date : Decimal] { return [:] }
-    func fetchGalleryImages(days: Int, limit: Int) async throws -> [Data] { return [] }
 }

@@ -63,14 +63,26 @@ final actor PredictiveSchedulingActor {
             if avgInterval > 0, daysSinceLastVisit > (avgInterval * 1.2) {
                 let weeks = max(1, Int(avgInterval / (7 * 24 * 3600)))
                 let weeksWord = weeks == 1 ? "week" : "weeks"
-                let daysOverdue = Int(daysSinceLastVisit / (24 * 3600))
+                let expectedDate = lastVisitDate.addingTimeInterval(avgInterval)
+                let daysOverdue = max(
+                    1,
+                    Calendar.current.dateComponents([.day], from: expectedDate, to: Date.now).day ?? 1
+                )
+                let actionType: SmartSuggestion.ActionType
+                if pet.owner?.smsURL != nil {
+                    actionType = .text
+                } else if pet.owner?.telURL != nil {
+                    actionType = .call
+                } else {
+                    actionType = .rebook
+                }
                 let suggestion = SmartSuggestion(
                     petID: pet.persistentModelID,
                     clientID: pet.owner?.persistentModelID,
                     petName: pet.name,
                     ownerName: pet.owner?.fullName ?? "Unknown Owner",
-                    message: "\(pet.name) usually visits every \(weeks) \(weeksWord). It's been \(daysOverdue) days since their last visit.",
-                    actionType: .text,
+                    message: "\(pet.name) is \(daysOverdue)d past their usual \(weeks) \(weeksWord) cadence. Last visit \(lastVisitDate.formatted(date: .abbreviated, time: .omitted)).",
+                    actionType: actionType,
                     overdueRatio: daysSinceLastVisit / avgInterval
                 )
                 suggestions.append(suggestion)

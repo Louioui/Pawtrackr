@@ -50,15 +50,6 @@ final class DashboardViewModel {
         var amountDouble: Double { (amount as NSDecimalNumber).doubleValue }
     }
 
-    struct GalleryItem: Identifiable, @unchecked Sendable {
-        let id = UUID()
-        #if canImport(UIKit)
-        let uiImage: UIImage?
-        #elseif canImport(AppKit)
-        let nsImage: NSImage?
-        #endif
-    }
-
     struct ChecklistItem: Identifiable, Sendable {
         let id = UUID()
         let title: String
@@ -72,7 +63,6 @@ final class DashboardViewModel {
     var recentClients: [Client] = []
     var overduePets: [Pet] = []
     var revenueSeries: [RevenuePoint] = []
-    var gallery: [GalleryItem] = []
     var checklist: [ChecklistItem] = []
     var smartSuggestions: [SmartSuggestion] = []
     var appError: AppError? = nil
@@ -82,7 +72,6 @@ final class DashboardViewModel {
     private let repository: DashboardRepositoryProtocol
     private let predictiveActor: PredictiveSchedulingActor
     private let revenueWindowDays = 7
-    private let galleryWindowDays = 14
     private let recentClientLimit = 5
     private let overduePetLimit  = 5
 
@@ -158,7 +147,6 @@ final class DashboardViewModel {
                 group.addTask { dashboardLog.info("Starting RecentClients fetch"); await self.fetchRecentClients(); dashboardLog.info("Finished RecentClients fetch") }
                 group.addTask { dashboardLog.info("Starting OverduePets fetch"); await self.fetchOverduePets(); dashboardLog.info("Finished OverduePets fetch") }
                 group.addTask { dashboardLog.info("Starting RevenueSeries fetch"); await self.buildRevenueSeries(days: self.revenueWindowDays); dashboardLog.info("Finished RevenueSeries fetch") }
-                group.addTask { dashboardLog.info("Starting Gallery fetch"); await self.buildGallery(days: self.galleryWindowDays); dashboardLog.info("Finished Gallery fetch") }
                 group.addTask { dashboardLog.info("Starting Checklist fetch"); await self.fetchChecklistStatus(); dashboardLog.info("Finished Checklist fetch") }
                 group.addTask { dashboardLog.info("Starting Suggestions fetch"); await self.fetchSmartSuggestions(); dashboardLog.info("Finished Suggestions fetch") }
             }
@@ -290,28 +278,6 @@ final class DashboardViewModel {
         } catch {
             setDashboardError(error, source: #function)
             revenueSeries = []
-        }
-    }
-
-    private func buildGallery(days: Int) async {
-        do {
-            let photos = try await repository.fetchGalleryImages(days: days, limit: 12)
-            guard !Task.isCancelled else { return }
-            let items = await Task.detached(priority: .userInitiated) {
-                photos.map { data -> GalleryItem in
-                    let decoded = ImageCache.shared.image(data: data, maxDimension: 300)
-                    #if canImport(UIKit)
-                    return GalleryItem(uiImage: decoded)
-                    #elseif canImport(AppKit)
-                    return GalleryItem(nsImage: decoded)
-                    #endif
-                }
-            }.value
-            guard !Task.isCancelled else { return }
-            gallery = items
-        } catch {
-            setDashboardError(error, source: #function)
-            gallery = []
         }
     }
 

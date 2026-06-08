@@ -42,12 +42,32 @@ struct VisitDetailView: View {
         #endif
     }
 
+    private var usesWideDetailLayout: Bool {
+        #if os(macOS)
+        true
+        #else
+        usesTabletLayout
+        #endif
+    }
+
+    private var contentMaxWidth: CGFloat? {
+        #if os(macOS)
+        920
+        #else
+        usesTabletLayout ? 1040 : nil
+        #endif
+    }
+
     private var contentHorizontalPadding: CGFloat {
+        #if os(macOS)
+        18
+        #else
         usesTabletLayout ? 24 : 16
+        #endif
     }
 
     private var contentSpacing: CGFloat {
-        usesTabletLayout ? 16 : 12
+        usesWideDetailLayout ? 16 : 12
     }
 
     var body: some View {
@@ -66,7 +86,7 @@ struct VisitDetailView: View {
             VStack(alignment: .leading, spacing: contentSpacing) {
                 header
 
-                if usesTabletLayout {
+                if usesWideDetailLayout {
                     tabletDetailLayout
                 } else {
                     compactDetailLayout
@@ -74,11 +94,11 @@ struct VisitDetailView: View {
                 
                 syncMetadataFooter
             }
-            .frame(maxWidth: usesTabletLayout ? 1040 : nil)
+            .frame(maxWidth: contentMaxWidth ?? .infinity)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, contentHorizontalPadding)
-            .padding(.top, usesTabletLayout ? 18 : 8)
-            .padding(.bottom, usesTabletLayout ? 28 : 16)
+            .padding(.top, usesWideDetailLayout ? 18 : 8)
+            .padding(.bottom, usesWideDetailLayout ? 28 : 16)
         }
         .background(detailBackground.ignoresSafeArea())
     }
@@ -212,45 +232,86 @@ struct VisitDetailView: View {
     
     private var header: some View {
         Card(elevation: .regular, accent: .leading(.color(DS.ColorToken.gender(visit.pet?.gender)), thickness: 4)) {
+            ViewThatFits(in: .horizontal) {
+                headerHorizontal
+                headerVertical
+            }
+        }
+    }
+
+    private var headerHorizontal: some View {
+        HStack(spacing: 12) {
+            heroAvatar
+            headerText
+            Spacer(minLength: 12)
+            statusCluster
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var headerVertical: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 heroAvatar
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
-                        .font(.title3.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Text(petSubtitle(visit.pet))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
+                headerText
                 Spacer()
-                if visit.isPaid {
-                    Text(NSLocalizedString("status.paid", comment: ""))
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.green.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-                } else if visit.isCompleted {
-                    Text(NSLocalizedString("status.completed", comment: ""))
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-                } else {
-                    Text(NSLocalizedString("status.in_session", comment: ""))
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                }
-                if let total = amountText {
-                    Chip(total, style: .tinted, size: .sm, tint: Color.accentColor)
-                        .accessibilityLabel(String(format: NSLocalizedString("visit.total_a11y_fmt", value: "Total %@", comment: ""), total))
-                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            statusCluster
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var headerText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
+                .font(.title3.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(petSubtitle(visit.pet))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .layoutPriority(2)
+    }
+
+    private var statusCluster: some View {
+        HStack(spacing: 8) {
+            statusBadge
+            if let total = amountText {
+                Chip(total, style: .tinted, size: .sm, tint: Color.accentColor)
+                    .accessibilityLabel(String(format: NSLocalizedString("visit.total_a11y_fmt", value: "Total %@", comment: ""), total))
+            }
+        }
+        .layoutPriority(1)
+    }
+
+    private var statusBadge: some View {
+        Text(statusBadgeTitle)
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(statusBadgeTint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var statusBadgeTitle: String {
+        if visit.isPaid {
+            return NSLocalizedString("status.paid", comment: "")
+        } else if visit.isCompleted {
+            return NSLocalizedString("status.completed", comment: "")
+        } else {
+            return NSLocalizedString("status.in_session", comment: "")
+        }
+    }
+
+    private var statusBadgeTint: Color {
+        if visit.isPaid {
+            return .green
+        } else if visit.isCompleted {
+            return .orange
+        } else {
+            return .blue
         }
     }
     
@@ -274,7 +335,7 @@ struct VisitDetailView: View {
         )
 
         if let heroNamespace {
-            avatar.matchedGeometryEffect(id: heroID, in: heroNamespace)
+            avatar.matchedGeometryEffect(id: heroID, in: heroNamespace, isSource: false)
         } else {
             avatar
         }
@@ -388,24 +449,43 @@ struct VisitDetailView: View {
     }
 
     private func detailRow(icon: String, title: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: icon)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
 
-            Text(title)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                Text(title)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
-            Spacer(minLength: 12)
+                Spacer(minLength: 12)
 
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .multilineTextAlignment(.trailing)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
+
+                    Text(title)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
     
@@ -499,9 +579,37 @@ struct VisitDetailView: View {
     
     @State private var showTransformation = false
 
+    private var beforeDisplayPhoto: Data? {
+        visit.beforeThumbnailData ?? visit.beforePhotoData
+    }
+
+    private var afterDisplayPhoto: Data? {
+        visit.afterThumbnailData ?? visit.afterPhotoData
+    }
+
+    private var beforePreviewPhoto: Data? {
+        visit.beforePhotoData ?? visit.beforeThumbnailData
+    }
+
+    private var afterPreviewPhoto: Data? {
+        visit.afterPhotoData ?? visit.afterThumbnailData
+    }
+
+    private var hasVisitPhotos: Bool {
+        beforePreviewPhoto != nil || afterPreviewPhoto != nil
+    }
+
+    private var photoBoxAspectRatio: CGFloat {
+        usesWideDetailLayout ? 4 / 3 : 16 / 10
+    }
+
+    private var photoBoxMaxWidth: CGFloat? {
+        usesWideDetailLayout ? 280 : nil
+    }
+
     private var photosCard: some View {
         Group {
-            if visit.beforePhotoData == nil && visit.afterPhotoData == nil {
+            if !hasVisitPhotos {
                 EmptyView()
             } else {
                 Card {
@@ -510,7 +618,7 @@ struct VisitDetailView: View {
                             Text(NSLocalizedString("visit.photos", comment: ""))
                                 .font(.subheadline.weight(.semibold))
                             Spacer()
-                            if visit.beforePhotoData != nil && visit.afterPhotoData != nil {
+                            if beforePreviewPhoto != nil && afterPreviewPhoto != nil {
                                 Button {
                                     showTransformation = true
                                 } label: {
@@ -522,29 +630,63 @@ struct VisitDetailView: View {
                                 .tint(.blue)
                             }
                         }
-                        
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 12) {
-                                photoBox(title: NSLocalizedString("photobox.before", comment: ""), data: visit.beforePhotoData)
-                                photoBox(title: NSLocalizedString("photobox.after", comment: ""), data: visit.afterPhotoData)
-                            }
 
-                            VStack(spacing: 12) {
-                                photoBox(title: NSLocalizedString("photobox.before", comment: ""), data: visit.beforePhotoData)
-                                photoBox(title: NSLocalizedString("photobox.after", comment: ""), data: visit.afterPhotoData)
-                            }
-                        }
+                        photosLayout
                     }
                 }
             }
         }
         .sheet(isPresented: $showTransformation) {
-            TransformationView(beforeData: visit.beforePhotoData, afterData: visit.afterPhotoData, petName: visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: ""))
+            TransformationView(
+                beforeData: beforePreviewPhoto,
+                afterData: afterPreviewPhoto,
+                petName: visit.pet?.name ?? NSLocalizedString("common.unknown_pet", comment: "")
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var photosLayout: some View {
+        if usesWideDetailLayout {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    photoBox(
+                        title: NSLocalizedString("photobox.before", comment: ""),
+                        displayData: beforeDisplayPhoto,
+                        previewData: beforePreviewPhoto
+                    )
+                    photoBox(
+                        title: NSLocalizedString("photobox.after", comment: ""),
+                        displayData: afterDisplayPhoto,
+                        previewData: afterPreviewPhoto
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                compactPhotosLayout
+            }
+        } else {
+            compactPhotosLayout
+        }
+    }
+
+    private var compactPhotosLayout: some View {
+        VStack(spacing: 12) {
+            photoBox(
+                title: NSLocalizedString("photobox.before", comment: ""),
+                displayData: beforeDisplayPhoto,
+                previewData: beforePreviewPhoto
+            )
+            photoBox(
+                title: NSLocalizedString("photobox.after", comment: ""),
+                displayData: afterDisplayPhoto,
+                previewData: afterPreviewPhoto
+            )
         }
     }
     
     @ViewBuilder
-    private func photoBox(title: String, data: Data?) -> some View {
+    private func photoBox(title: String, displayData: Data?, previewData: Data?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.footnote.weight(.semibold))
@@ -552,7 +694,10 @@ struct VisitDetailView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Button {
-                if let data { previewData = data; previewTitle = title }
+                if let previewData {
+                    self.previewData = previewData
+                    previewTitle = title
+                }
             } label: {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
@@ -560,42 +705,21 @@ struct VisitDetailView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(.gray.opacity(0.2))
                     Group {
-#if canImport(UIKit)
-                        if let d = data, let ui = ImageCache.shared.image(data: d, maxDimension: 360) {
-                            Image(uiImage: ui)
-                                .resizable()
-                                .scaledToFill()
+                        if let displayData {
+                            LazyImageDataImage(data: displayData, maxDimension: 420)
                         } else {
                             placeholder
                         }
-#elseif canImport(AppKit)
-                        if let d = data, let ns = NSImage(data: d) {
-                            Image(nsImage: ns)
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            placeholder
-                        }
-#else
-                        placeholder
-#endif
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipped()
                 }
-                // Fill available width and stay square. The previous fixed
-                // 180×180 frame plus 12pt spacing exceeded the usable width
-                // on iPhone SE (~288pt) once Card padding was applied,
-                // forcing the second box to clip or push off-screen. Going
-                // adaptive lets the boxes shrink together on small screens
-                // and grow together on iPad / Mac.
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: photoBoxMaxWidth ?? .infinity)
+                .aspectRatio(photoBoxAspectRatio, contentMode: .fit)
                 .accessibilityLabel(Text(String(format: NSLocalizedString("visit.photo_a11y_label_fmt", comment: ""), title)))
                 .accessibilityHint(Text(NSLocalizedString("visit.photo_a11y_hint", comment: "")))
             }
-            // Plain style belongs on the Button, not the label's ZStack —
-            // otherwise the default style accent-tints the placeholder icon
-            // and "No photo" text blue and adds a press highlight.
+            .disabled(previewData == nil)
             .buttonStyle(.plain)
         }
     }

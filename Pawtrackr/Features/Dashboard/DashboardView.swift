@@ -143,7 +143,6 @@ struct DashboardView: View {
                         quickActionsSection
                         overduePetsSection(vm)
                         recentClientsSection(vm)
-                        gallerySection(vm)
                     }
                     .frame(maxWidth: 350)
                 }
@@ -151,13 +150,11 @@ struct DashboardView: View {
                 VStack(spacing: 24) {
                     kpiSection(vm)
                     quickActionsSection
-                    if !vm.smartSuggestions.isEmpty { smartSuggestionsSection(vm) }
                     if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
                     reengagementSection(vm)
                     if !vm.overduePets.isEmpty { overduePetsSection(vm) }
                     if !vm.recentClients.isEmpty { recentClientsSection(vm) }
                     revenueSection(vm)
-                    if !vm.gallery.isEmpty { gallerySection(vm) }
                 }
                 #endif
             }
@@ -216,25 +213,6 @@ struct DashboardView: View {
     }
 
     // MARK: - Sections (unchanged logic, just ensuring they use the VM)
-
-    private func smartSuggestionsSection(_ vm: DashboardViewModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(NSLocalizedString("dashboard.smart_suggestions", value: "Smart Suggestions", comment: ""), systemImage: "sparkles")
-                    .font(.headline)
-                    .foregroundStyle(.purple)
-                Spacer()
-            }
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(vm.smartSuggestions) { suggestion in
-                        suggestionCard(suggestion)
-                    }
-                }
-            }
-        }
-    }
 
     private func suggestionCard(_ suggestion: SmartSuggestion) -> some View {
         Card(elevation: .regular, accent: .leading(.color(.purple), thickness: 4)) {
@@ -326,18 +304,32 @@ struct DashboardView: View {
 
     private func reengagementSection(_ vm: DashboardViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !vm.overduePets.isEmpty {
+            if !vm.smartSuggestions.isEmpty || !vm.overduePets.isEmpty {
                 HStack {
                     Text(NSLocalizedString("dashboard.reengagement_suggestions", value: "Re-engagement Suggestions", comment: ""))
                         .font(.headline)
                     Spacer()
-                    Chip(String(format: NSLocalizedString("dashboard.actionable_count_fmt", value: "%d Actionable", comment: ""), vm.overduePets.count), style: .tinted, size: .sm, tint: .orange)
+                    Chip(
+                        String(
+                            format: NSLocalizedString("dashboard.actionable_count_fmt", value: "%d Actionable", comment: ""),
+                            max(vm.smartSuggestions.count, vm.overduePets.count)
+                        ),
+                        style: .tinted,
+                        size: .sm,
+                        tint: .orange
+                    )
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
-                        ForEach(vm.overduePets.prefix(3)) { pet in
-                            reengagementCard(pet)
+                        if !vm.smartSuggestions.isEmpty {
+                            ForEach(vm.smartSuggestions.prefix(3)) { suggestion in
+                                suggestionCard(suggestion)
+                            }
+                        } else {
+                            ForEach(vm.overduePets.prefix(3)) { pet in
+                                reengagementCard(pet)
+                            }
                         }
                     }
                 }
@@ -364,6 +356,12 @@ struct DashboardView: View {
                     .foregroundColor(.orange)
                     .clipShape(Capsule())
 
+                Text(reengagementMessage(for: pet))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 HStack {
                     if let sms = pet.owner?.smsURL {
                         Link(destination: sms) {
@@ -387,6 +385,46 @@ struct DashboardView: View {
             }
             .frame(width: 180)
         }
+    }
+
+    private func reengagementMessage(for pet: Pet) -> String {
+        let lastVisit = (pet.visits ?? [])
+            .filter(\.isCompleted)
+            .sorted { $0.sortKeyDate > $1.sortKeyDate }
+            .first
+
+        if let status = pet.nextVisitStatus, let lastVisit {
+            return String(
+                format: NSLocalizedString(
+                    "dashboard.reengagement.message_with_last_fmt",
+                    value: "%@. Last visit %@.",
+                    comment: ""
+                ),
+                status,
+                lastVisit.sortKeyDate.formatted(date: .abbreviated, time: .omitted)
+            )
+        }
+
+        if let status = pet.nextVisitStatus {
+            return status
+        }
+
+        if let owner = pet.owner?.fullName, !owner.isEmpty {
+            return String(
+                format: NSLocalizedString(
+                    "dashboard.reengagement.message_owner_fmt",
+                    value: "Follow up with %@ to keep the next appointment on the books.",
+                    comment: ""
+                ),
+                owner
+            )
+        }
+
+        return NSLocalizedString(
+            "dashboard.reengagement.message_default",
+            value: "Follow up to keep the next appointment on the books.",
+            comment: ""
+        )
     }
 
     private func smartSummary(_ vm: DashboardViewModel) -> some View {
@@ -512,45 +550,163 @@ struct DashboardView: View {
             LazyVStack(spacing: 12) {
                 ForEach(vm.overduePets, id: \.uuid) { pet in
                     if let owner = pet.owner {
-                        Card {
-                            VStack(spacing: 8) {
-                                PetCard(
-                                    pet: pet,
-                                    activeVisit: pet.activeVisit,
-                                    onViewDetails: { openPet(pet) },
-                                    onCheckIn: { Task { await vm.checkInPet(pet) } },
-                                    onCheckOut: { router.navigateToCheckout(pet) },
-                                    namespace: namespace
-                                )
-
-                                if owner.smsURL != nil || owner.telURL != nil {
-                                    HStack(spacing: 12) {
-                                        if let sms = owner.smsURL {
-                                            Link(destination: sms) {
-                                                Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
-                                                    .font(.caption.weight(.semibold))
-                                                    .padding(.vertical, 8)
-                                                    .frame(maxWidth: .infinity)
-                                                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                                            }
-                                        }
-                                        if let tel = owner.telURL {
-                                            Link(destination: tel) {
-                                                Label(NSLocalizedString("dashboard.call", comment: ""), systemImage: "phone.fill")
-                                                    .font(.caption.weight(.semibold))
-                                                    .padding(.vertical, 8)
-                                                    .frame(maxWidth: .infinity)
-                                                    .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        attentionPetCard(pet, owner: owner, vm: vm)
                     }
                 }
             }
         }
+    }
+
+    private func attentionPetCard(_ pet: Pet, owner: Client, vm: DashboardViewModel) -> some View {
+        Card(elevation: .regular, accent: .leading(.color(attentionTint(for: pet)), thickness: 4)) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    AvatarView(
+                        .pet(
+                            species: pet.species,
+                            gender: pet.gender,
+                            name: pet.name,
+                            imageData: pet.photoData,
+                            thumbnailData: pet.thumbnailData
+                        ),
+                        size: .md
+                    )
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(pet.name)
+                                .font(.subheadline.weight(.bold))
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            if let status = pet.nextVisitStatus {
+                                Chip(status, style: .tinted, size: .xs, tint: attentionTint(for: pet))
+                            }
+                        }
+
+                        Text(owner.fullName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        attentionReasons(for: pet, owner: owner)
+
+                        if let lastVisit = lastCompletedVisit(for: pet) {
+                            Text(
+                                String(
+                                    format: NSLocalizedString("pet.last_visit_fmt", comment: ""),
+                                    lastVisit.sortKeyDate.formatted(date: .abbreviated, time: .omitted)
+                                )
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    if let sms = owner.smsURL {
+                        Link(destination: sms) {
+                            Label(NSLocalizedString("dashboard.message", comment: ""), systemImage: "message.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    if let tel = owner.telURL {
+                        Link(destination: tel) {
+                            Label(NSLocalizedString("dashboard.call", comment: ""), systemImage: "phone.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    if pet.activeVisit == nil {
+                        Button {
+                            Task { await vm.checkInPet(pet) }
+                        } label: {
+                            Label(NSLocalizedString("client_detail.check_in", value: "Check In", comment: ""), systemImage: "play.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    } else {
+                        Button {
+                            router.navigateToCheckout(pet)
+                        } label: {
+                            Label(NSLocalizedString("client_detail.check_out", value: "Check Out", comment: ""), systemImage: "stop.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .tint(.green)
+                    }
+
+                    Button {
+                        openPet(pet)
+                    } label: {
+                        Label(NSLocalizedString("dashboard.view_details", value: "View Details", comment: ""), systemImage: "chevron.right")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private func attentionReasons(for pet: Pet, owner: Client) -> some View {
+        FlowLayout(spacing: 6, rowSpacing: 6) {
+            ForEach(attentionReasonLabels(for: pet, owner: owner), id: \.self) { label in
+                Chip(label, style: .tinted, size: .xs, tint: attentionTint(for: pet))
+            }
+        }
+    }
+
+    private func attentionReasonLabels(for pet: Pet, owner: Client) -> [String] {
+        var labels: [String] = []
+
+        if pet.isOverdue {
+            labels.append(NSLocalizedString("dashboard.attention.reason_overdue", value: "Due now", comment: ""))
+        }
+
+        if !pet.behaviorTags.isEmpty {
+            labels.append(contentsOf: pet.behaviorTags.prefix(2))
+        }
+
+        if let health = pet.health?.trimmingCharacters(in: .whitespacesAndNewlines), !health.isEmpty {
+            labels.append(NSLocalizedString("dashboard.attention.reason_health", value: "Health note", comment: ""))
+        }
+
+        if owner.smsURL == nil && owner.telURL == nil {
+            labels.append(NSLocalizedString("dashboard.attention.reason_missing_contact", value: "Missing contact", comment: ""))
+        }
+
+        return labels.isEmpty
+            ? [NSLocalizedString("dashboard.attention.reason_review", value: "Review", comment: "")]
+            : Array(labels.prefix(3))
+    }
+
+    private func attentionTint(for pet: Pet) -> Color {
+        if pet.isOverdue {
+            return .orange
+        }
+
+        if let health = pet.health?.trimmingCharacters(in: .whitespacesAndNewlines), !health.isEmpty {
+            return .red
+        }
+
+        return .blue
+    }
+
+    private func lastCompletedVisit(for pet: Pet) -> Visit? {
+        (pet.visits ?? [])
+            .filter(\.isCompleted)
+            .sorted { $0.sortKeyDate > $1.sortKeyDate }
+            .first
     }
 
     private func recentClientsSection(_ vm: DashboardViewModel) -> some View {
@@ -628,35 +784,6 @@ struct DashboardView: View {
         guard let selectedRevenueDate else { return nil }
         let calendar = Calendar.current
         return vm.revenueSeries.first { calendar.isDate($0.date, inSameDayAs: selectedRevenueDate) }
-    }
-
-    private func gallerySection(_ vm: DashboardViewModel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(NSLocalizedString("dashboard.pet_gallery", comment: "")).font(.headline)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(vm.gallery) { item in
-                    Card {
-                        #if canImport(UIKit)
-                        if let uiImage = item.uiImage {
-                            Image(uiImage: uiImage).resizable().scaledToFill()
-                                .frame(height: 120).clipped().cornerRadius(8)
-                        } else {
-                            LabelContent(title: NSLocalizedString("dashboard.no_photo", comment: ""), systemImage: "photo")
-                                .frame(height: 120)
-                        }
-                        #elseif canImport(AppKit)
-                        if let nsImage = item.nsImage {
-                            Image(nsImage: nsImage).resizable().scaledToFill()
-                                .frame(height: 120).clipped().cornerRadius(8)
-                        } else {
-                            LabelContent(title: NSLocalizedString("dashboard.no_photo", comment: ""), systemImage: "photo")
-                                .frame(height: 120)
-                        }
-                        #endif
-                    }
-                }
-            }
-        }
     }
 
     private func kpiCard(title: String, value: String, symbol: String, trend: Double? = nil) -> some View {

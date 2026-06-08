@@ -73,7 +73,7 @@ final class Pet {
         (visits ?? [])
             .filter { $0.isCompleted }
             .sorted { $0.startedAt > $1.startedAt }
-            .map { ($0.beforePhotoData, $0.afterThumbnailData ?? $0.afterPhotoData, $0.startedAt) }
+            .map { ($0.beforeThumbnailData ?? $0.beforePhotoData, $0.afterThumbnailData ?? $0.afterPhotoData, $0.startedAt) }
     }
 
     // MARK: - Business Intelligence (Lifetime Value & Trends)

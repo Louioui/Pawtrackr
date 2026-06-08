@@ -24,7 +24,6 @@ protocol DashboardRepositoryProtocol: Sendable {
     func fetchServiceDistribution(days: Int) async throws -> [String: Int]
     func fetchCategoryDistribution(days: Int) async throws -> [String: Int]
     func fetchRevenueSeries(days: Int) async throws -> [Date: Decimal]
-    func fetchGalleryImages(days: Int, limit: Int) async throws -> [Data]
 }
 
 @MainActor
@@ -91,11 +90,17 @@ final class DashboardRepository: DashboardRepositoryProtocol {
     }
 
     func fetchOverduePets(limit: Int) async throws -> [PersistentIdentifier] {
-        let descriptor = FetchDescriptor<Pet>(
+        var descriptor = FetchDescriptor<Pet>(
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
+        descriptor.relationshipKeyPathsForPrefetching = [\.visits, \.owner]
         let pets = try modelContext.fetch(descriptor)
-        let filtered = pets.filter { $0.isOverdue }.prefix(limit)
+        let filtered = pets
+            .filter { $0.isOverdue }
+            .sorted {
+                ($0.suggestedNextVisitDate ?? .distantFuture) < ($1.suggestedNextVisitDate ?? .distantFuture)
+            }
+            .prefix(limit)
         return filtered.map { $0.persistentModelID }
     }
 
@@ -135,20 +140,4 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         }
     }
     
-    func fetchGalleryImages(days: Int, limit: Int) async throws -> [Data] {
-        let cal = Calendar.current
-        let end = cal.startOfDay(for: .now)
-        guard let start = cal.date(byAdding: .day, value: -days, to: end) else { return [] }
-
-        var descriptor = FetchDescriptor<Visit>(
-            predicate: #Predicate { v in v.startedAt >= start && v.startedAt < end },
-            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
-        )
-        descriptor.fetchLimit = limit * 2
-
-        let visits = try modelContext.fetch(descriptor)
-        return Array(visits
-            .compactMap { $0.afterThumbnailData ?? $0.beforeThumbnailData }
-            .prefix(limit))
-    }
 }

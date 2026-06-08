@@ -90,7 +90,10 @@ struct VisitRow: View {
             if let note = visit.note, !note.trimmed.isEmpty {
                 Label("Note", systemImage: "note.text")
             }
-            if visit.beforePhotoData != nil || visit.afterPhotoData != nil {
+            if visit.beforePhotoData != nil
+                || visit.afterPhotoData != nil
+                || visit.beforeThumbnailData != nil
+                || visit.afterThumbnailData != nil {
                 Label("Photos", systemImage: "photo.on.rectangle")
             }
             Spacer()
