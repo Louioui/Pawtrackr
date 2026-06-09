@@ -41,6 +41,7 @@ final class Pet {
     var notes: String?
     var health: String?
     var behaviorTagsRaw: String = ""
+    var lastAttentionOutreachAt: Date?
     @Transient
     var behaviorTags: [String] {
         get { Self.decodeBehaviorTags(from: behaviorTagsRaw) }
@@ -169,6 +170,14 @@ final class Pet {
     var isOverdue: Bool {
         guard let suggested = suggestedNextVisitDate else { return false }
         return Date() > suggested
+    }
+
+    /// Returns true when the dashboard/client center should flag this pet for outreach.
+    /// Contacting the owner clears the flag until the next suggested visit becomes due.
+    var needsAttention: Bool {
+        guard isOverdue, let suggested = suggestedNextVisitDate else { return false }
+        guard let lastAttentionOutreachAt else { return true }
+        return lastAttentionOutreachAt < suggested
     }
 
     /// Human-readable string indicating when the next visit is expected or how overdue it is.
@@ -318,6 +327,11 @@ final class Pet {
 
     func setSpecialInstructions(_ value: String?) {
         specialInstructions = value
+        didUpdate()
+    }
+
+    func recordAttentionOutreach(at date: Date = .now) {
+        lastAttentionOutreachAt = date
         didUpdate()
     }
 

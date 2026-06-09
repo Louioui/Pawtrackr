@@ -385,7 +385,10 @@ struct ClientDetailView: View {
                         .font(.title3)
                     } else {
                         HStack(spacing: 12) {
-                            Button { showCommunication = true } label: { Image(systemName: "message.circle.fill") }
+                            Button {
+                                viewModel?.recordAttentionOutreach(method: "message")
+                                showCommunication = true
+                            } label: { Image(systemName: "message.circle.fill") }
                                 .font(.title3)
                                 .foregroundStyle(.blue)
                                 .accessibilityIdentifier("clientDetail.message")
@@ -413,14 +416,23 @@ struct ClientDetailView: View {
                 } else {
                     VStack(spacing: 10) {
                         contactRow(icon: "phone.fill", text: PhoneUtils.display(client.phone ?? "") ?? "—") {
-                            if let tel = PhoneUtils.telURLString(client.phone ?? ""), let url = URL(string: tel) { URLOpener.open(url) }
+                            if let tel = PhoneUtils.telURLString(client.phone ?? ""), let url = URL(string: tel) {
+                                viewModel?.recordAttentionOutreach(method: "call")
+                                URLOpener.open(url)
+                            }
                         } trailing: {
                             HStack(spacing: 8) {
                                 if let sms = PhoneUtils.smsURLString(client.phone ?? ""), let smsURL = URL(string: sms) {
-                                    Button { URLOpener.open(smsURL) } label: { Image(systemName: "message.fill") }
+                                    Button {
+                                        viewModel?.recordAttentionOutreach(method: "message")
+                                        URLOpener.open(smsURL)
+                                    } label: { Image(systemName: "message.fill") }
                                 }
                                 if let tel = PhoneUtils.telURLString(client.phone ?? ""), let telURL = URL(string: tel) {
-                                    Button { URLOpener.open(telURL) } label: { Image(systemName: "phone.fill") }
+                                    Button {
+                                        viewModel?.recordAttentionOutreach(method: "call")
+                                        URLOpener.open(telURL)
+                                    } label: { Image(systemName: "phone.fill") }
                                 }
                             }
                         }

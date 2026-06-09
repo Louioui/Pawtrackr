@@ -101,4 +101,25 @@ final class DashboardRepositoryTests: XCTestCase {
         XCTAssertEqual(overdue.count, 1)
         XCTAssertEqual(overduePets.first?.name, "OldTimer")
     }
+
+    func testFetchOverduePets_ExcludesPetsAfterAttentionOutreach() async throws {
+        let pet = Pet(name: "CalledBack", species: .dog)
+        pet.preferredGroomingFrequency = .weekly
+        let twoWeeksAgo = Calendar.current.date(byAdding: .day, value: -14, to: .now)!
+        let visit = Visit(pet: pet, startedAt: twoWeeksAgo)
+        visit.markCheckedOut(now: twoWeeksAgo.addingTimeInterval(3600))
+
+        context.insert(pet)
+        context.insert(visit)
+        try context.save()
+
+        XCTAssertTrue(pet.needsAttention)
+
+        pet.recordAttentionOutreach()
+        try context.save()
+
+        let overdue = try await repository.fetchOverduePets(limit: 10)
+        XCTAssertTrue(overdue.isEmpty)
+        XCTAssertFalse(pet.needsAttention)
+    }
 }

@@ -162,6 +162,20 @@ final class ClientDetailViewModelTests: XCTestCase {
             "VM must ignore .visitDidComplete events for other clients.")
     }
 
+    func testRecordAttentionOutreach_ClearsNeedsAttentionForDuePet() async throws {
+        pet.preferredGroomingFrequency = .weekly
+        let twoWeeksAgo = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -14, to: .now))
+        seedCompletedVisit(at: twoWeeksAgo, total: 30)
+
+        XCTAssertTrue(pet.needsAttention)
+
+        let vm = ClientDetailViewModel(client: client, modelContext: context)
+        vm.recordAttentionOutreach(method: "call")
+
+        XCTAssertNotNil(pet.lastAttentionOutreachAt)
+        XCTAssertFalse(pet.needsAttention)
+    }
+
     // MARK: - Helpers
 
     /// `refreshRecentVisits` is non-async; poll `recentVisits.count` (or a custom predicate)

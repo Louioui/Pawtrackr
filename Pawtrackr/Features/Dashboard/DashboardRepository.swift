@@ -96,7 +96,7 @@ final class DashboardRepository: DashboardRepositoryProtocol {
         descriptor.relationshipKeyPathsForPrefetching = [\.visits, \.owner]
         let pets = try modelContext.fetch(descriptor)
         let filtered = pets
-            .filter { $0.isOverdue }
+            .filter { $0.needsAttention }
             .sorted {
                 ($0.suggestedNextVisitDate ?? .distantFuture) < ($1.suggestedNextVisitDate ?? .distantFuture)
             }

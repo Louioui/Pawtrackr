@@ -27,6 +27,7 @@ final class ClientDetailViewModel {
     let client: Client
     private let modelContext: ModelContext
     private let visitRepository: VisitRepositoryProtocol
+    private let eventBus: GlobalEventBus
 
     // MARK: - Outputs
     var pets: [Pet] = []
@@ -54,6 +55,7 @@ final class ClientDetailViewModel {
     ) {
         self.client        = client
         self.modelContext  = modelContext
+        self.eventBus      = eventBus
         self.visitRepository = VisitRepository(modelContext: modelContext, eventBus: eventBus)
         self.pets          = client.pets ?? []
         self.currentLimit  = max(1, initialLimit)
@@ -177,6 +179,34 @@ final class ClientDetailViewModel {
     }
 
     // MARK: - Actions
+
+    func recordAttentionOutreach(method: String) {
+        let petsToClear = (client.pets ?? []).filter { $0.needsAttention }
+        guard !petsToClear.isEmpty else { return }
+
+        do {
+            for pet in petsToClear {
+                pet.recordAttentionOutreach()
+            }
+
+            try modelContext.save()
+            refreshPets()
+
+            CloudKitMonitor.shared.recordLocalChange(
+                "Recorded \(method) outreach",
+                entityName: "Pet",
+                recordUUID: petsToClear.first?.uuid,
+                changedKeys: ["lastAttentionOutreachAt"]
+            )
+            NotificationCenter.default.post(name: .serviceDidUpdate, object: nil)
+            eventBus.publish(.refreshRequired)
+            Logger.clientDetail.info("Cleared needs-attention flag for \(petsToClear.count, privacy: .public) pet(s) after \(method, privacy: .public)")
+        } catch {
+            appError = .database(error.localizedDescription)
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "recording attention outreach")
+            Logger.clientDetail.error("Failed to record attention outreach: \(String(describing: error))")
+        }
+    }
 
     func checkIn(pet: Pet, at date: Date = .now) {
         if activeVisit(for: pet) != nil { return }

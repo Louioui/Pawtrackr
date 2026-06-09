@@ -344,7 +344,7 @@ struct ContentView: View {
         #if os(macOS)
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: $sidebarSelection) { item in
-                selectSurface(item)
+                selectSurface(item, resetPath: true)
             }
                 .navigationSplitViewColumnWidth(min: 220, ideal: 245, max: 300)
         } detail: {
@@ -358,7 +358,7 @@ struct ContentView: View {
         #else
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: $sidebarSelection) { item in
-                selectSurface(item)
+                selectSurface(item, resetPath: true)
                 collapseSplitSidebarAfterSelectionIfNeeded()
             }
         } detail: {
@@ -411,28 +411,50 @@ struct ContentView: View {
         case .clientDetail(let id):
             if let client = modelContext.model(for: id) as? Client {
                 ClientDetailView(client: client, namespace: sharedNamespace)
+            } else {
+                missingDestinationView
             }
 
         case .petDetail(let id):
             if let pet = modelContext.model(for: id) as? Pet {
                 PetDetailView(pet: pet, namespace: sharedNamespace)
+            } else {
+                missingDestinationView
             }
 
         case .visitDetail(let id):
             if let visit = modelContext.model(for: id) as? Visit {
                 VisitDetailView(visit: visit)
+            } else {
+                missingDestinationView
             }
 
         case .petHistory(let id):
             if let pet = modelContext.model(for: id) as? Pet {
                 PetHistoryView(pet: pet, wrapsInNavigationStack: false)
+            } else {
+                missingDestinationView
             }
 
         case .checkout(let id):
             if let pet = modelContext.model(for: id) as? Pet {
                 CheckoutView(pet: pet, visit: pet.activeVisit)
+            } else {
+                missingDestinationView
             }
         }
+    }
+
+    private var missingDestinationView: some View {
+        ContentUnavailableView(
+            NSLocalizedString("content.missing_record_title", value: "Record Unavailable", comment: ""),
+            systemImage: "exclamationmark.triangle.fill",
+            description: Text(NSLocalizedString(
+                "content.missing_record_message",
+                value: "This record may have been deleted or is still syncing. Return to the list and try again.",
+                comment: ""
+            ))
+        )
     }
 }
 

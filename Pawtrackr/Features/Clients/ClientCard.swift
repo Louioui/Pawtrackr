@@ -15,14 +15,14 @@ struct ClientCard: View {
     
     // IMPROVEMENT: Logic is self-contained within the card.
     private var isInProgress: Bool { client.hasActiveVisit }
-    private var isOverdue: Bool { (client.pets ?? []).contains { $0.isOverdue } }
+    private var needsAttention: Bool { (client.pets ?? []).contains { $0.needsAttention } }
     private var hasMissingInfo: Bool { client.phone == nil || client.email == nil }
     
     @State private var pulse: Bool = false
 
     var body: some View {
         // FIX: Use the correct Card initializer with a Card.Accent struct.
-        let accentColor = isInProgress ? DS.ColorToken.success : (isOverdue ? Color.orange : nil)
+        let accentColor = isInProgress ? DS.ColorToken.success : (needsAttention ? Color.orange : nil)
         Card(elevation: .regular, accent: accentColor != nil ? .leading(.color(accentColor!), thickness: 4) : nil) {
             VStack(alignment: .leading, spacing: 10) {
                 header
@@ -32,23 +32,6 @@ struct ClientCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .contextMenu {
-            if let phone = client.phone, !phone.isEmpty {
-                // FIX: Use correct PhoneUtils methods and guard against iOS-only APIs.
-                #if canImport(UIKit)
-                if let telStr = PhoneUtils.telURLString(phone), let telURL = URL(string: telStr) {
-                    Link(destination: telURL) {
-                        Label("Call \(PhoneUtils.display(phone) ?? phone)", systemImage: "phone.fill")
-                    }
-                }
-                if let smsStr = PhoneUtils.smsURLString(phone), let smsURL = URL(string: smsStr) {
-                    Link(destination: smsURL) {
-                        Label("Text Message", systemImage: "message.fill")
-                    }
-                }
-                #endif
-            }
-        }
     }
 
     private var header: some View {
@@ -71,8 +54,8 @@ struct ClientCard: View {
             // FIX: Replaced 'Pill' with the correct 'Chip' component.
             if isInProgress {
                 Chip.success("In Session")
-            } else if isOverdue {
-                Chip.warning("Overdue")
+            } else if needsAttention {
+                Chip.warning(NSLocalizedString("clients.needs_attention", value: "Needs Attention", comment: ""))
             } else if hasMissingInfo {
                 Chip.info("Missing Info")
             }

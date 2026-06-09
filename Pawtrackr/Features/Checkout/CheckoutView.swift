@@ -283,6 +283,10 @@ struct CheckoutView: View {
                                     behaviorTag(for: tag)
                                 }
                             }
+
+                            if hasSafetyBehaviorWarning {
+                                behaviorSafetyBanner
+                            }
                             
                             TextEditor(text: $notesEditorText)
                                 #if os(iOS)
@@ -972,6 +976,7 @@ struct CheckoutView: View {
     func behaviorTag(for raw: String) -> some View {
         let isSelected = viewModel.tags.contains(raw)
         let display = BehaviorTagIcons.display(for: raw)
+        let tint = behaviorTagTint(for: raw)
         return Button {
             HapticManager.impact(.light)
             viewModel.toggleTag(raw)
@@ -983,11 +988,79 @@ struct CheckoutView: View {
             .font(Font.caption.weight(.bold))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Capsule().fill(isSelected ? Color.orange.opacity(0.15) : Color.clear))
-            .overlay(Capsule().stroke(isSelected ? Color.orange : Color.gray.opacity(0.3), lineWidth: 1))
-            .foregroundStyle(isSelected ? Color.orange : Color.secondary)
+            .background(Capsule().fill(isSelected ? tint.opacity(0.15) : Color.clear))
+            .overlay(Capsule().stroke(isSelected ? tint : Color.gray.opacity(0.3), lineWidth: 1))
+            .foregroundStyle(isSelected ? tint : Color.secondary)
         }
         .buttonStyle(.plain)
+    }
+
+    private var safetyBehaviorTags: [Pet.BehaviorTag] {
+        Pet.BehaviorTag.allCases.filter { tag in
+            switch tag {
+            case .aggressive, .specialNeeds:
+                return viewModel.tags.contains(tag.displayName)
+            default:
+                return false
+            }
+        }
+    }
+
+    private var hasSafetyBehaviorWarning: Bool {
+        !safetyBehaviorTags.isEmpty
+    }
+
+    private var behaviorSafetyBanner: some View {
+        let tags = safetyBehaviorTags
+        let message: String
+        if tags.contains(.aggressive), tags.contains(.specialNeeds) {
+            message = localized(
+                "checkout.safety_alert.aggressive_special_needs",
+                value: "Aggressive and special-needs handling selected. Assign an experienced worker, use a calm approach, and review notes before continuing."
+            )
+        } else if tags.contains(.aggressive) {
+            message = localized(
+                "checkout.safety_alert.aggressive",
+                value: "Aggressive behavior selected. Warn the team before handling, use a second worker if needed, and avoid rushed movements."
+            )
+        } else {
+            message = localized(
+                "checkout.safety_alert.special_needs",
+                value: "Special needs selected. Review handling notes, medical or comfort needs, and assign extra time."
+            )
+        }
+
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(DS.ColorToken.danger)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(localized("checkout.safety_alert.title", value: "Safety alert"))
+                    .font(.subheadline.weight(.bold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.ColorToken.danger.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(DS.ColorToken.danger.opacity(0.35), lineWidth: 1)
+        )
+        .accessibilityIdentifier("checkout.behavior.safetyAlert")
+    }
+
+    private func behaviorTagTint(for raw: String) -> Color {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == Pet.BehaviorTag.aggressive.displayName.lowercased() {
+            return DS.ColorToken.danger
+        }
+        if normalized == Pet.BehaviorTag.specialNeeds.displayName.lowercased() {
+            return DS.ColorToken.warning
+        }
+        return Color.orange
     }
 
     func paymentCard(for option: PaymentOption) -> some View {

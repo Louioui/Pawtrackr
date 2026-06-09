@@ -38,7 +38,7 @@ struct ClientsView: View {
                     if let viewModel {
                         filterChips(viewModel)
 
-                        if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty && viewModel.needsAttentionClients.isEmpty {
+                        if viewModel.inProgressClients.isEmpty && viewModel.otherClients.isEmpty {
                             emptyState(viewModel)
                         } else {
                             clientSections(viewModel)
@@ -266,11 +266,6 @@ struct ClientsView: View {
             clientList(for: viewModel.inProgressClients)
         }
         
-        if !viewModel.needsAttentionClients.isEmpty && viewModel.selectedFilter == .all {
-            sectionHeader(NSLocalizedString("clients.needs_attention", value: "Needs Attention", comment: ""), count: viewModel.needsAttentionClients.count, topPadding: 16)
-            clientList(for: viewModel.needsAttentionClients)
-        }
-
         sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: 16)
         VStack(spacing: 10) {
             clientList(for: viewModel.otherClients, enableInfiniteScroll: true)
@@ -311,6 +306,7 @@ struct ClientsView: View {
                     #if canImport(UIKit)
                     if let phone = client.phone, let tel = PhoneUtils.telURLString(phone), let url = URL(string: tel) {
                         Button {
+                            viewModel?.recordAttentionOutreach(for: client, method: "call")
                             UIApplication.shared.open(url)
                             HapticManager.selectionChanged()
                         } label: {
@@ -320,6 +316,7 @@ struct ClientsView: View {
                     
                     if let phone = client.phone, let sms = PhoneUtils.smsURLString(phone), let url = URL(string: sms) {
                         Button {
+                            viewModel?.recordAttentionOutreach(for: client, method: "message")
                             UIApplication.shared.open(url)
                             HapticManager.selectionChanged()
                         } label: {
@@ -375,8 +372,8 @@ struct ClientsView: View {
                 description = NSLocalizedString("clients.empty.active_desc", value: "There are no pets currently checked in.", comment: "")
                 icon = "hourglass.badge.plus"
             case .overdue:
-                title = NSLocalizedString("clients.empty.overdue_title", value: "All Caught Up!", comment: "")
-                description = NSLocalizedString("clients.empty.overdue_desc", value: "No clients have pets that are overdue for a visit.", comment: "")
+                title = NSLocalizedString("clients.empty.overdue_title", value: "No Attention Needed", comment: "")
+                description = NSLocalizedString("clients.empty.overdue_desc", value: "No client outreach is pending right now.", comment: "")
                 icon = "checkmark.seal.fill"
             case .missingInfo:
                 title = NSLocalizedString("clients.empty.missing_info_title", value: "Data looks great!", comment: "")

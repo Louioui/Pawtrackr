@@ -9,6 +9,7 @@
 import SwiftUI
 import SwiftData
 import Combine
+import OSLog
 
 @Observable
 @MainActor
@@ -26,7 +27,7 @@ final class ClientsViewModel {
             case .active:
                 return NSLocalizedString("clients.filter.active", value: "Active", comment: "")
             case .overdue:
-                return NSLocalizedString("clients.filter.overdue", value: "Overdue", comment: "")
+                return NSLocalizedString("clients.filter.overdue", value: "Needs Attention", comment: "")
             case .missingInfo:
                 return NSLocalizedString("clients.filter.missing_info", value: "Missing Info", comment: "")
             }
@@ -161,7 +162,7 @@ final class ClientsViewModel {
                 case .overdue:
                     inProgress = []
                     others = others.filter { client in
-                        (client.pets ?? []).contains { $0.isOverdue }
+                        (client.pets ?? []).contains { $0.needsAttention }
                     }
                 case .missingInfo:
                     inProgress = inProgress.filter { $0.phone == nil || $0.email == nil }
@@ -172,9 +173,9 @@ final class ClientsViewModel {
                 let sortedInProgress = sortClients(inProgress)
                 let sortedOthers = sortClients(others)
 
-                // Identify "Needs Attention" (Overdue but not active)
+                // Identify "Needs Attention" (overdue and not yet cleared by outreach).
                 self.needsAttentionClients = sortedOthers.filter { client in
-                    (client.pets ?? []).contains { $0.isOverdue }
+                    (client.pets ?? []).contains { $0.needsAttention }
                 }
 
                 self.inProgressClients = sortedInProgress
@@ -189,6 +190,33 @@ final class ClientsViewModel {
                 canLoadMore = false
                 isLoadingMore = false
             }
+        }
+    }
+
+    func recordAttentionOutreach(for client: Client, method: String) {
+        let petsToClear = (client.pets ?? []).filter { $0.needsAttention }
+        guard !petsToClear.isEmpty else { return }
+
+        do {
+            for pet in petsToClear {
+                pet.recordAttentionOutreach()
+            }
+
+            try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange(
+                "Recorded \(method) outreach",
+                entityName: "Pet",
+                recordUUID: petsToClear.first?.uuid,
+                changedKeys: ["lastAttentionOutreachAt"]
+            )
+            NotificationCenter.default.post(name: .serviceDidUpdate, object: nil)
+            eventBus?.publish(.refreshRequired)
+            fetchClients()
+            Logger.ui.info("Client list cleared needs-attention flag for \(petsToClear.count, privacy: .public) pet(s) after \(method, privacy: .public)")
+        } catch {
+            appError = .database(error.localizedDescription)
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "recording attention outreach from client list")
+            Logger.database.error("Failed to record client-list attention outreach: \(String(describing: error))")
         }
     }
 

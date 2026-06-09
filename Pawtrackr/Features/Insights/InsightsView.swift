@@ -12,6 +12,7 @@ private struct InsightsDrilldown: Identifiable {
     let id = UUID()
     let title: String
     let subtitle: String
+    let summary: String
     let rows: [InsightsDrilldownRow]
 }
 
@@ -490,6 +491,23 @@ struct InsightsView: View {
                             Text(localized("insights.visits_lowercase", value: "visits")).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
+
+                    Divider()
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(vm.categoryDistribution.enumerated()), id: \.element.id) { index, item in
+                            categoryBreakdownRow(item, total: vm.totalCategoryVisits)
+                            if index < vm.categoryDistribution.count - 1 { Divider() }
+                        }
+                    }
+
+                    Button {
+                        showCategoryDrilldown(vm)
+                    } label: {
+                        Label(localized("insights.action.view_category_breakdown", value: "View category explanation"), systemImage: "list.bullet.rectangle")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
         }
@@ -534,6 +552,28 @@ struct InsightsView: View {
             Text(title).font(.caption2).foregroundStyle(.secondary)
             Text(value).font(.headline).foregroundStyle(color)
         }
+    }
+
+    private func categoryBreakdownRow(_ item: InsightsViewModel.DistributionData, total: Int) -> some View {
+        let percent = total > 0 ? Int((Double(item.count) / Double(total) * 100).rounded()) : 0
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "circle.fill")
+                .font(.caption2)
+                .foregroundStyle(DS.ColorToken.primary)
+                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.subheadline.weight(.semibold))
+                Text(String(format: localized("insights.category.row_detail_fmt", value: "%d%% of categorized visit line items"), percent))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(String(format: localized("insights.visits_count_fmt", value: "%d visits"), item.count))
+                .font(.subheadline.weight(.bold))
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 
     private func lowerSectionAccessibilityAnchor(identifier: String, label: String) -> some View {
@@ -588,6 +628,18 @@ struct InsightsView: View {
         NavigationStack {
             List {
                 Section {
+                    Label {
+                        Text(drilldown.summary)
+                            .font(.subheadline)
+                    } icon: {
+                        Image(systemName: "info.circle.fill")
+                    }
+                    .foregroundStyle(.primary)
+                } header: {
+                    Text(localized("insights.drilldown.what_this_means", value: "What this means"))
+                }
+
+                Section {
                     if drilldown.rows.isEmpty {
                         ContentUnavailableView(
                             localized("insights.drilldown.no_rows_title", value: "No Rows"),
@@ -637,6 +689,10 @@ struct InsightsView: View {
         selectedDrilldown = InsightsDrilldown(
             title: localized("insights.drilldown.revenue_title", value: "Revenue Detail"),
             subtitle: String(format: localized("insights.window_days_fmt", value: "%d-day window"), vm.revenuePeriodDays),
+            summary: localized(
+                "insights.drilldown.revenue_summary",
+                value: "This lists the completed visits included in the selected revenue window. Use it to reconcile cash, card, and checkout history."
+            ),
             rows: visitDrilldownRows(vm.revenueDrilldown)
         )
     }
@@ -648,6 +704,10 @@ struct InsightsView: View {
             subtitle: rows.isEmpty
                 ? localized("insights.drilldown.no_visits_for_day", value: "No visits recorded for this day")
                 : localized("insights.drilldown.chart_bar_visits", value: "Visits behind this chart bar"),
+            summary: localized(
+                "insights.drilldown.revenue_day_summary",
+                value: "This view opens the visits behind one chart bar so the team can verify exactly which checkouts created the total."
+            ),
             rows: visitDrilldownRows(rows.isEmpty ? vm.revenueDrilldown : rows)
         )
     }
@@ -656,6 +716,14 @@ struct InsightsView: View {
         selectedDrilldown = InsightsDrilldown(
             title: localized("insights.drilldown.average_visit_title", value: "Average Visit Detail"),
             subtitle: localized("insights.drilldown.average_visit_subtitle", value: "Highest-value visits in the selected revenue window"),
+            summary: String(
+                format: localized(
+                    "insights.drilldown.average_visit_summary_fmt",
+                    value: "Average visit is total revenue divided by completed visits. Current average: %@ across %d visits."
+                ),
+                vm.averageVisitValue.moneyString,
+                vm.totalVisitsInPeriod
+            ),
             rows: visitDrilldownRows(vm.revenueDrilldown.sorted { $0.total > $1.total })
         )
     }
@@ -672,8 +740,35 @@ struct InsightsView: View {
         selectedDrilldown = InsightsDrilldown(
             title: localized("insights.drilldown.retention_title", value: "Client Retention"),
             subtitle: localized("insights.drilldown.retention_subtitle", value: "How retention is calculated"),
+            summary: localized(
+                "insights.drilldown.retention_summary",
+                value: "Retention shows how many clients returned for another visit within the last 90 days. Churn risk is the client count that has not returned on schedule."
+            ),
             rows: [explainerRow]
         )
+    }
+
+    private func showCategoryDrilldown(_ vm: InsightsViewModel) {
+        selectedDrilldown = InsightsDrilldown(
+            title: localized("insights.drilldown.category_title", value: "Visit Category Detail"),
+            subtitle: localized("insights.drilldown.category_subtitle", value: "Category share for completed visit line items"),
+            summary: localized(
+                "insights.drilldown.category_summary",
+                value: "This breaks down which types of services are driving completed visits. A category can count more than once when a checkout includes multiple line items."
+            ),
+            rows: categoryDrilldownRows(vm.categoryDistribution, total: vm.totalCategoryVisits)
+        )
+    }
+
+    private func categoryDrilldownRows(_ rows: [InsightsViewModel.DistributionData], total: Int) -> [InsightsDrilldownRow] {
+        rows.map { item in
+            let percent = total > 0 ? Int((Double(item.count) / Double(total) * 100).rounded()) : 0
+            return InsightsDrilldownRow(
+                title: item.name,
+                subtitle: String(format: localized("insights.category.row_detail_fmt", value: "%d%% of categorized visit line items"), percent),
+                trailing: String(format: localized("insights.visits_count_fmt", value: "%d visits"), item.count)
+            )
+        }
     }
 
     private func visitDrilldownRows(_ rows: [InsightsViewModel.RevenueVisitData]) -> [InsightsDrilldownRow] {
