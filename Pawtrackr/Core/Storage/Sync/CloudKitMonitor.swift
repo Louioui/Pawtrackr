@@ -186,10 +186,15 @@ final class CloudKitMonitor {
     private(set) var firstSyncCompleted: Bool
     private(set) var syncEvents: [SyncEvent]
     private(set) var pendingLocalChangeCount: Int = 0
-    var isAutomaticSyncEnabled: Bool = false // Add this flag
+    private(set) var isAutomaticSyncEnabled: Bool = false
     private(set) var pendingLocalChangeDate: Date?
     private(set) var pendingLocalChangeDescription: String?
     private(set) var offlineBufferedMutationCount: Int = 0
+    private(set) var manualCheckRemainingSeconds: Int = 0
+
+    var canForceSync: Bool {
+        manualCheckRemainingSeconds == 0
+    }
 
     /// Container identifier from the entitlements file. Surfaced for the
     /// diagnostics screen so users can read it back to support.
@@ -215,6 +220,7 @@ final class CloudKitMonitor {
     private var remoteStoreRefreshTask: Task<Void, Never>?
     private var offlineFlushTask: Task<Void, Never>?
     private var reconcileDebounceTask: Task<Void, Never>?
+    private var manualCheckCooldownTask: Task<Void, Never>?
 
     private enum DefaultsKey {
         static let lastSyncDate = "cloudkit.lastSyncDate"
@@ -252,6 +258,7 @@ final class CloudKitMonitor {
     func start(modelContainer: ModelContainer? = nil, eventBus: GlobalEventBus? = nil) {
         if let modelContainer {
             self.modelContainer = modelContainer
+            isAutomaticSyncEnabled = true
         }
         if let eventBus {
             self.eventBus = eventBus
@@ -390,7 +397,7 @@ final class CloudKitMonitor {
                 } else if self.accountState.isAvailable {
                     // Heartbeat our device info when we come online
                     self.updateDeviceMetadata()
-                    // self.flushOfflineMutationBuffer(reason: "Network restored") // Disabled automatic sync
+                    self.flushOfflineMutationBuffer(reason: "Network restored")
                     self.runSafeModeDiagnostics()
                 }
             }
@@ -582,6 +589,7 @@ final class CloudKitMonitor {
     private func handlePersistentStoreRemoteChange() {
         recordSyncAttempt()
         syncState = .syncing
+        modelContainer?.mainContext.processPendingChanges()
         appendEvent(
             kind: .importFromCloud,
             status: .started,
@@ -595,6 +603,7 @@ final class CloudKitMonitor {
         remoteStoreRefreshTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard let self, !Task.isCancelled else { return }
+            self.modelContainer?.mainContext.processPendingChanges()
             self.rebuildAndReconcileAfterImport()
             if case .syncing = self.syncState {
                 self.syncState = .idle
@@ -754,6 +763,25 @@ final class CloudKitMonitor {
     /// therefore avoid claiming success here; real health is driven by
     /// NSPersistentCloudKitContainer events.
     func forceSync() async {
+        guard canForceSync else {
+            appendEvent(
+                kind: .healthCheck,
+                status: .waiting,
+                message: String(
+                    format: NSLocalizedString(
+                        "cloudkit.manual_check.cooldown_event_fmt",
+                        value: "Manual iCloud check is cooling down for %d more second(s)",
+                        comment: ""
+                    ),
+                    manualCheckRemainingSeconds
+                ),
+                errorCode: nil
+            )
+            postChange()
+            return
+        }
+
+        startManualCheckCooldown()
         recordSyncAttempt()
         appendEvent(
             kind: .healthCheck,
@@ -990,7 +1018,11 @@ final class CloudKitMonitor {
                 id: "quota",
                 severity: .danger,
                 title: NSLocalizedString("cloudkit.health.quota.title", value: "iCloud storage is full", comment: ""),
-                detail: NSLocalizedString("cloudkit.health.quota.detail", value: "New visits and photos cannot upload until storage is available.", comment: "")
+                detail: NSLocalizedString(
+                    "cloudkit.health.quota.detail",
+                    value: "Changes are saving locally until iCloud storage is cleared.",
+                    comment: ""
+                )
             ))
         }
 
@@ -1242,6 +1274,22 @@ final class CloudKitMonitor {
                 self.syncState = .idle
             }
             self.postChange()
+        }
+    }
+
+    private func startManualCheckCooldown(seconds: Int = 30) {
+        manualCheckCooldownTask?.cancel()
+        manualCheckRemainingSeconds = seconds
+        postChange()
+
+        manualCheckCooldownTask = Task { @MainActor [weak self] in
+            while true {
+                guard let self, self.manualCheckRemainingSeconds > 0 else { return }
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                self.manualCheckRemainingSeconds = max(0, self.manualCheckRemainingSeconds - 1)
+                self.postChange()
+            }
         }
     }
 

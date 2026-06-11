@@ -52,6 +52,7 @@ struct ClientsView: View {
             }
             #if os(macOS)
             .searchable(text: searchTextBinding,
+                        isPresented: $isSearchPresented,
                         prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
             #else
             .searchable(text: searchTextBinding,
@@ -167,6 +168,10 @@ struct ClientsView: View {
                     viewModel = ClientsViewModel(modelContext: modelContext, eventBus: eventBus)
                 }
                 viewModel?.fetchClients()
+                consumePendingSearchFocus()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .focusClientSearch)) { _ in
+                focusSearch()
             }
             .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
                 if let id = note.createdClientID, note.clientCreatePhase == .created {
@@ -418,6 +423,16 @@ struct ClientsView: View {
             get: { viewModel?.searchText ?? "" },
             set: { viewModel?.searchText = $0 }
         )
+    }
+
+    private func consumePendingSearchFocus() {
+        guard UserDefaults.standard.string(forKey: AppMenuCommand.pendingClientSearchFocusKey) != nil else { return }
+        UserDefaults.standard.removeObject(forKey: AppMenuCommand.pendingClientSearchFocusKey)
+        focusSearch()
+    }
+
+    private func focusSearch() {
+        isSearchPresented = true
     }
 
     private var errorBinding: Binding<AppError?> {

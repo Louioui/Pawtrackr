@@ -233,6 +233,9 @@ struct PawtrackrApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
         .windowResizability(.contentMinSize)
+        // Present the primary window even if the menu bar extra kept the
+        // process alive after the user closed every visible window.
+        .defaultLaunchBehavior(.presented)
         .commands {
             CommandGroup(after: .newItem) {
                 Button(NSLocalizedString("menu_bar.new_client", value: "New Client…", comment: "")) {
@@ -245,8 +248,8 @@ struct PawtrackrApp: App {
                 }
                 .keyboardShortcut("i", modifiers: .command)
 
-                Button(NSLocalizedString("mac.command.show_clients", value: "Show Clients", comment: "")) {
-                    requestNavigationFromCommand(.clients)
+                Button(NSLocalizedString("mac.command.find_clients", value: "Find Clients", comment: "")) {
+                    requestFindClientsFromCommand()
                 }
                 .keyboardShortcut("f", modifiers: .command)
             }
@@ -364,6 +367,14 @@ struct PawtrackrApp: App {
             NavigationSelectionKey.resetPath.rawValue: true
         ])
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func requestFindClientsFromCommand() {
+        UserDefaults.standard.set(UUID().uuidString, forKey: AppMenuCommand.pendingClientSearchFocusKey)
+        requestNavigationFromCommand(.clients)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            NotificationCenter.default.post(name: .focusClientSearch, object: nil)
+        }
     }
     #endif
 }

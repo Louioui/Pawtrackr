@@ -25,6 +25,13 @@ final class NewClientViewModel {
         case failed
     }
 
+    enum Field: String, Hashable {
+        case first
+        case last
+        case phone
+        case email
+    }
+
     var first = ""
     var last  = ""
     var phone = ""
@@ -38,6 +45,7 @@ final class NewClientViewModel {
     var isSaving: Bool = false
     var showDuplicateAlert: Bool = false
     var duplicateClientID: PersistentIdentifier? = nil
+    private(set) var fieldErrors: [Field: String] = [:]
 
     @ObservationIgnored private let modelContext: ModelContext
     @ObservationIgnored private let repository: ClientRepositoryProtocol
@@ -78,11 +86,17 @@ final class NewClientViewModel {
                 Logger.newClient.info("createClient: duplicate found")
                 duplicateClientID = existing
                 showDuplicateAlert = true
+                fieldErrors[.phone] = NSLocalizedString(
+                    "new_client.duplicate_phone",
+                    value: "A client with this phone number already exists.",
+                    comment: ""
+                )
                 appError = .validation(.custom(message: NSLocalizedString(
                     "new_client.duplicate_phone",
                     value: "A client with this phone number already exists.",
                     comment: ""
                 )))
+                HapticManager.notify(.error)
                 return .duplicateFound
             }
 
@@ -132,28 +146,43 @@ final class NewClientViewModel {
         } catch let error as ValidationError {
             Logger.newClient.error("createClient: validation failed: \(error.localizedDescription)")
             self.appError = .validation(error)
+            HapticManager.notify(.error)
             return .failed
         } catch {
             Logger.newClient.error("createClient: save/db error: \(String(describing: error))")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "creating client")
             self.appError = .database(error.localizedDescription)
+            HapticManager.notify(.error)
             return .failed
         }
     }
 
     private func validate() throws {
+        fieldErrors.removeAll()
         if first.trimmed.isEmpty {
-            throw ValidationError.custom(message: "First name is required.")
+            fieldErrors[.first] = NSLocalizedString("new_client.validation.first_required", value: "First name is required.", comment: "")
         }
         if last.trimmed.isEmpty {
-            throw ValidationError.custom(message: "Last name is required.")
+            fieldErrors[.last] = NSLocalizedString("new_client.validation.last_required", value: "Last name is required.", comment: "")
         }
         if !phone.trimmed.isEmpty && PhoneUtils.toE164(phone) == nil {
-            throw ValidationError.custom(message: "Please enter a valid phone number.")
+            fieldErrors[.phone] = NSLocalizedString("new_client.validation.phone_invalid", value: "Please enter a valid phone number.", comment: "")
         }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
-            throw ValidationError.custom(message: "Please enter a valid email address.")
+            fieldErrors[.email] = NSLocalizedString("new_client.validation.email_invalid", value: "Please enter a valid email address.", comment: "")
         }
+
+        if let firstError = fieldErrors[.first] ?? fieldErrors[.last] ?? fieldErrors[.phone] ?? fieldErrors[.email] {
+            throw ValidationError.custom(message: firstError)
+        }
+    }
+
+    func validationError(for field: Field) -> String? {
+        fieldErrors[field]
+    }
+
+    func clearValidationError(for field: Field) {
+        fieldErrors[field] = nil
     }
 
     private func isValidEmail(_ raw: String) -> Bool {

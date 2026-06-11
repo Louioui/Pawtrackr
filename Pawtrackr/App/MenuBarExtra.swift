@@ -2,6 +2,7 @@ import Foundation
 
 enum AppMenuCommand {
     static let pendingNewClientRequestKey = "pendingNewClientRequestID"
+    static let pendingClientSearchFocusKey = "pendingClientSearchFocusID"
 }
 
 #if os(macOS)
@@ -101,4 +102,5 @@ struct PawtrackrMenuBarExtra: View {
 
 extension Notification.Name {
     static let showNewClientSheet = Notification.Name("showNewClientSheet")
+    static let focusClientSearch = Notification.Name("focusClientSearch")
 }

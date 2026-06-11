@@ -60,6 +60,19 @@ final class PawtrackrAppDelegate: NSObject, UIApplicationDelegate {
 #elseif canImport(AppKit)
 
 final class PawtrackrAppDelegate: NSObject, NSApplicationDelegate {
+    /// Dock re-open support for the menu-bar-extra lifecycle. If the main
+    /// window has been closed while the app remains alive, a Dock click must
+    /// bring Pawtrackr back onscreen instead of leaving only the menu bar item.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            if let window = sender.windows.first(where: { $0.canBecomeMain }) {
+                window.makeKeyAndOrderFront(self)
+            }
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        return true
+    }
+
     func application(_ application: NSApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         pushLog.info("Registered for remote notifications. Token length: \(deviceToken.count)")

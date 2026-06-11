@@ -41,15 +41,17 @@ struct CloudKitAccountBanner: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
-                Button {
-                    dismissedFingerprint = info.fingerprint
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if info.isDismissible {
+                    Button {
+                        dismissedFingerprint = info.fingerprint
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(NSLocalizedString("common.dismiss", value: "Dismiss", comment: ""))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(NSLocalizedString("common.dismiss", value: "Dismiss", comment: ""))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -72,7 +74,8 @@ struct CloudKitAccountBanner: View {
                 title: NSLocalizedString("cloudkit.banner.signed_out.title", value: "Signed out of iCloud", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.signed_out.message", value: "Your data is only on this device. Sign in to back it up and sync.", comment: ""),
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings
+                action: .settings,
+                isDismissible: true
             )
         case .restricted:
             return BannerInfo(
@@ -82,7 +85,8 @@ struct CloudKitAccountBanner: View {
                 title: NSLocalizedString("cloudkit.banner.restricted.title", value: "iCloud is restricted", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.restricted.message", value: "Restrictions or parental controls are blocking iCloud sync.", comment: ""),
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings
+                action: .settings,
+                isDismissible: true
             )
         case .temporarilyUnavailable:
             return BannerInfo(
@@ -92,7 +96,8 @@ struct CloudKitAccountBanner: View {
                 title: NSLocalizedString("cloudkit.banner.temp_unavailable.title", value: "iCloud unavailable", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.temp_unavailable.message", value: "Sign in again or wait — iCloud is temporarily unavailable.", comment: ""),
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings
+                action: .settings,
+                isDismissible: true
             )
         case .available where monitor.quotaExceeded:
             return BannerInfo(
@@ -100,9 +105,10 @@ struct CloudKitAccountBanner: View {
                 icon: "exclamationmark.icloud.fill",
                 tint: .red,
                 title: NSLocalizedString("cloudkit.banner.quota.title", value: "iCloud storage is full", comment: ""),
-                message: NSLocalizedString("cloudkit.banner.quota.message", value: "Free up space or upgrade so new visits and photos can sync.", comment: ""),
+                message: NSLocalizedString("cloudkit.banner.quota.message", value: "Changes are saving locally until iCloud storage is cleared.", comment: ""),
                 actionTitle: NSLocalizedString("cloudkit.banner.quota.action", value: "Manage Storage", comment: ""),
-                action: .iCloudStorage
+                action: .iCloudStorage,
+                isDismissible: false
             )
         case .available where monitor.iCloudAppAccessMayBeDisabled:
             return BannerInfo(
@@ -112,9 +118,22 @@ struct CloudKitAccountBanner: View {
                 title: NSLocalizedString("cloudkit.banner.app_access.title", value: "Check iCloud access", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.app_access.message", value: "iCloud is signed in, but app access may be disabled in Settings.", comment: ""),
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings
+                action: .settings,
+                isDismissible: true
             )
         case .available:
+            if let pending = monitor.pendingChangesSummary {
+                return BannerInfo(
+                    fingerprint: "pending-\(pending)",
+                    icon: "icloud.and.arrow.up",
+                    tint: .orange,
+                    title: NSLocalizedString("cloudkit.banner.pending.title", value: "iCloud upload pending", comment: ""),
+                    message: NSLocalizedString("cloudkit.banner.pending.message", value: "Changes are saving locally and will upload when iCloud is ready.", comment: ""),
+                    actionTitle: nil,
+                    action: .settings,
+                    isDismissible: false
+                )
+            }
             if let message = monitor.lastErrorMessage, case .error = monitor.syncState {
                 return BannerInfo(
                     fingerprint: "syncError-\(message)",
@@ -123,7 +142,8 @@ struct CloudKitAccountBanner: View {
                     title: NSLocalizedString("cloudkit.banner.sync_error.title", value: "iCloud sync needs attention", comment: ""),
                     message: message,
                     actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                    action: .settings
+                    action: .settings,
+                    isDismissible: true
                 )
             }
             return nil
@@ -163,6 +183,7 @@ struct CloudKitAccountBanner: View {
         let message: String
         let actionTitle: String?
         let action: BannerAction
+        let isDismissible: Bool
     }
 
     private enum BannerAction: Equatable {

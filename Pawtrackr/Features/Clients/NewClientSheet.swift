@@ -18,9 +18,24 @@ import AppKit
 
 @MainActor
 struct NewClientSheet: View {
+    private enum FocusField: Hashable {
+        case firstName
+        case lastName
+        case phone
+        case email
+        case address
+        case contactName(UUID)
+        case contactPhone(UUID)
+        case petName(UUID)
+        case petBreed(UUID)
+        case petColor(UUID)
+    }
+
     @Environment(\.dismiss) private var dismiss
     private let modelContext: ModelContext
     @State private var viewModel: NewClientViewModel?
+    @State private var didFocusInitialField = false
+    @FocusState private var focusedField: FocusField?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -37,10 +52,14 @@ struct NewClientSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: 460, idealWidth: 540, maxWidth: 640, minHeight: 560, idealHeight: 680)
+        #endif
         .onAppear {
             if viewModel == nil {
                 viewModel = NewClientViewModel(modelContext: modelContext)
             }
+            focusInitialFieldIfNeeded()
         }
     }
 
@@ -53,12 +72,54 @@ struct NewClientSheet: View {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(NSLocalizedString("new_client.owner", comment: "")).font(.subheadline.weight(.semibold))
-                        inputField(NSLocalizedString("new_client.first_name", comment: ""), text: $viewModel.first, accessibilityIdentifier: "newClient.firstName")
-                        inputField(NSLocalizedString("new_client.last_name", comment: ""), text: $viewModel.last, accessibilityIdentifier: "newClient.lastName")
-                        inputField(NSLocalizedString("new_client.phone", comment: ""), text: $viewModel.phone, accessibilityIdentifier: "newClient.phone")
+                        inputField(
+                            NSLocalizedString("new_client.first_name", comment: ""),
+                            text: $viewModel.first,
+                            accessibilityIdentifier: "newClient.firstName",
+                            validationError: viewModel.validationError(for: .first),
+                            focus: .firstName,
+                            nextFocus: .lastName
+                        )
+                        .onChange(of: viewModel.first) { _, _ in viewModel.clearValidationError(for: .first) }
+
+                        inputField(
+                            NSLocalizedString("new_client.last_name", comment: ""),
+                            text: $viewModel.last,
+                            accessibilityIdentifier: "newClient.lastName",
+                            validationError: viewModel.validationError(for: .last),
+                            focus: .lastName,
+                            nextFocus: .phone
+                        )
+                        .onChange(of: viewModel.last) { _, _ in viewModel.clearValidationError(for: .last) }
+
+                        inputField(
+                            NSLocalizedString("new_client.phone", comment: ""),
+                            text: $viewModel.phone,
+                            accessibilityIdentifier: "newClient.phone",
+                            validationError: viewModel.validationError(for: .phone),
+                            focus: .phone,
+                            nextFocus: .email
+                        )
                             .phoneFieldFormatting($viewModel.phone)
-                        inputField(NSLocalizedString("new_client.email", comment: ""), text: $viewModel.email, accessibilityIdentifier: "newClient.email")
-                        inputField(NSLocalizedString("new_client.address", comment: ""), text: $viewModel.address, accessibilityIdentifier: "newClient.address")
+                            .onChange(of: viewModel.phone) { _, _ in viewModel.clearValidationError(for: .phone) }
+
+                        inputField(
+                            NSLocalizedString("new_client.email", comment: ""),
+                            text: $viewModel.email,
+                            accessibilityIdentifier: "newClient.email",
+                            validationError: viewModel.validationError(for: .email),
+                            focus: .email,
+                            nextFocus: .address
+                        )
+                        .onChange(of: viewModel.email) { _, _ in viewModel.clearValidationError(for: .email) }
+
+                        inputField(
+                            NSLocalizedString("new_client.address", comment: ""),
+                            text: $viewModel.address,
+                            accessibilityIdentifier: "newClient.address",
+                            focus: .address,
+                            nextFocus: firstPetFocus(in: viewModel)
+                        )
                     }
                 }
                 .padding(.horizontal)
@@ -83,8 +144,18 @@ struct NewClientSheet: View {
                         } else {
                             ForEach($viewModel.contacts) { $contact in
                                 VStack(alignment: .leading, spacing: 8) {
-                                    inputField(NSLocalizedString("new_client.contact_name", comment: ""), text: $contact.name)
-                                    inputField(NSLocalizedString("new_client.contact_phone", comment: ""), text: $contact.phone)
+                                    inputField(
+                                        NSLocalizedString("new_client.contact_name", comment: ""),
+                                        text: $contact.name,
+                                        focus: .contactName(contact.id),
+                                        nextFocus: .contactPhone(contact.id)
+                                    )
+                                    inputField(
+                                        NSLocalizedString("new_client.contact_phone", comment: ""),
+                                        text: $contact.phone,
+                                        focus: .contactPhone(contact.id),
+                                        nextFocus: firstPetFocus(in: viewModel)
+                                    )
                                         .phoneFieldFormatting($contact.phone)
                                 }
                                 .padding()
@@ -135,11 +206,27 @@ struct NewClientSheet: View {
                                         Spacer()
                                     }
 
-                                    inputField(NSLocalizedString("new_client.pet_name", comment: ""), text: $pet.name)
+                                    inputField(
+                                        NSLocalizedString("new_client.pet_name", comment: ""),
+                                        text: $pet.name,
+                                        focus: .petName(pet.id),
+                                        nextFocus: .petBreed(pet.id)
+                                    )
 
                                     HStack(spacing: 12) {
-                                        inputField(NSLocalizedString("add_pet.breed", comment: ""), text: $pet.breed)
-                                        inputField(NSLocalizedString("add_pet.color", comment: ""), text: $pet.color)
+                                        inputField(
+                                            NSLocalizedString("add_pet.breed", comment: ""),
+                                            text: $pet.breed,
+                                            focus: .petBreed(pet.id),
+                                            nextFocus: .petColor(pet.id)
+                                        )
+                                        inputField(
+                                            NSLocalizedString("add_pet.color", comment: ""),
+                                            text: $pet.color,
+                                            focus: .petColor(pet.id),
+                                            nextFocus: nil,
+                                            submitLabel: .done
+                                        )
                                     }
 
                                     Picker(NSLocalizedString("new_client.species", comment: ""), selection: $pet.species) {
@@ -166,6 +253,8 @@ struct NewClientSheet: View {
                 .padding(.horizontal)
             }
             .padding(.vertical)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
         .navigationTitle(NSLocalizedString("new_client.new_client", comment: ""))
         .toolbar {
@@ -182,7 +271,11 @@ struct NewClientSheet: View {
                         if outcome == .created { dismiss() }
                     }
                 } label: {
-                    Label(NSLocalizedString("common.create", comment: ""), systemImage: "checkmark.circle.fill")
+                    if viewModel.isSaving {
+                        ProgressView()
+                    } else {
+                        Label(NSLocalizedString("common.create", comment: ""), systemImage: "checkmark.circle.fill")
+                    }
                 }
                 .disabled(viewModel.isSaving)
                 .accessibilityIdentifier("newClient.create")
@@ -203,13 +296,52 @@ struct NewClientSheet: View {
     }
 
     @ViewBuilder
-    private func inputField(_ title: String, text: Binding<String>, accessibilityIdentifier: String? = nil) -> some View {
-        TextField(title, text: text)
-            .optionalAccessibilityIdentifier(accessibilityIdentifier)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(DS.ColorToken.border, lineWidth: 1))
+    private func inputField(
+        _ title: String,
+        text: Binding<String>,
+        accessibilityIdentifier: String? = nil,
+        validationError: String? = nil,
+        focus: FocusField,
+        nextFocus: FocusField?,
+        submitLabel: SubmitLabel = .next
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField(title, text: text)
+                .optionalAccessibilityIdentifier(accessibilityIdentifier)
+                .focused($focusedField, equals: focus)
+                .submitLabel(submitLabel)
+                .onSubmit {
+                    focusedField = nextFocus
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(validationError == nil ? DS.ColorToken.border : DS.ColorToken.danger, lineWidth: validationError == nil ? 1 : 1.5)
+                )
+
+            if let validationError {
+                Text(validationError)
+                    .font(.caption)
+                    .foregroundStyle(DS.ColorToken.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("\(accessibilityIdentifier ?? "field").error")
+            }
+        }
+    }
+
+    private func focusInitialFieldIfNeeded() {
+        guard !didFocusInitialField else { return }
+        didFocusInitialField = true
+        DispatchQueue.main.async {
+            focusedField = .firstName
+        }
+    }
+
+    private func firstPetFocus(in viewModel: NewClientViewModel) -> FocusField? {
+        guard let pet = viewModel.pets.first else { return nil }
+        return .petName(pet.id)
     }
 }
 

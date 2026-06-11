@@ -60,7 +60,23 @@ final class NewClientViewModelTests: XCTestCase {
 
         XCTAssertEqual(outcome, .failed)
         XCTAssertNotNil(vm.appError, "A validation failure must surface an appError for the alert to show")
+        XCTAssertNotNil(vm.validationError(for: .first))
         XCTAssertFalse(vm.isSaving)
+    }
+
+    func testCreateClient_invalidPhone_marksPhoneField() async throws {
+        let vm = NewClientViewModel(modelContext: context)
+        vm.first = "Ava"
+        vm.last = "Stone"
+        vm.phone = "111"
+
+        let outcome = await vm.createClient()
+
+        XCTAssertEqual(outcome, .failed)
+        XCTAssertNotNil(vm.validationError(for: .phone))
+
+        vm.clearValidationError(for: .phone)
+        XCTAssertNil(vm.validationError(for: .phone))
     }
 
     func testCreateClient_duplicatePhone_failsWithError() async throws {
@@ -78,6 +94,7 @@ final class NewClientViewModelTests: XCTestCase {
 
         XCTAssertEqual(outcome, .duplicateFound)
         XCTAssertNotNil(vm.appError, "Duplicate must surface an appError so the user sees why nothing saved")
+        XCTAssertNotNil(vm.validationError(for: .phone))
         XCTAssertFalse(vm.isSaving)
     }
 }

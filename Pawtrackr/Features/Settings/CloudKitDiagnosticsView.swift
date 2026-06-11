@@ -154,10 +154,10 @@ struct CloudKitDiagnosticsView: View {
                 Button {
                     Task { await monitor.forceSync() }
                 } label: {
-                    Label(NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: ""),
-                          systemImage: "arrow.clockwise.icloud")
+                    Label(manualCheckTitle,
+                          systemImage: monitor.canForceSync ? "arrow.clockwise.icloud" : "timer")
                 }
-                .disabled(false) // Enabled for manual sync
+                .disabled(!monitor.canForceSync)
 
                 Button {
                     Task { await monitor.refreshAccountStatus() }
@@ -321,6 +321,20 @@ struct CloudKitDiagnosticsView: View {
         case .succeeded: return .green
         case .started, .noted: return .secondary
         }
+    }
+
+    private var manualCheckTitle: String {
+        guard !monitor.canForceSync else {
+            return NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: "")
+        }
+        return String(
+            format: NSLocalizedString(
+                "cloudkit.action.check_status_wait_fmt",
+                value: "Check again in %ds",
+                comment: ""
+            ),
+            monitor.manualCheckRemainingSeconds
+        )
     }
 }
 

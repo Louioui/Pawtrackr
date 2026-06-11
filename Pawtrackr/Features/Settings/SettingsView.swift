@@ -282,9 +282,10 @@ private struct ICloudSectionView: View {
                 Button {
                     Task { await monitor.forceSync() }
                 } label: {
-                    Label(settingsLocalized("settings.icloud.check", value: "Check iCloud"), systemImage: "arrow.clockwise.icloud")
+                    Label(manualCheckTitle, systemImage: monitor.canForceSync ? "arrow.clockwise.icloud" : "timer")
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!monitor.canForceSync)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button {
@@ -317,6 +318,16 @@ private struct ICloudSectionView: View {
         case .warning: return .orange
         case .danger: return .red
         }
+    }
+
+    private var manualCheckTitle: String {
+        guard !monitor.canForceSync else {
+            return settingsLocalized("settings.icloud.check", value: "Check iCloud")
+        }
+        return String(
+            format: settingsLocalized("cloudkit.action.check_status_wait_fmt", value: "Check again in %ds"),
+            monitor.manualCheckRemainingSeconds
+        )
     }
 }
 

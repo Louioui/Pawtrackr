@@ -135,15 +135,29 @@ private struct CloudKitStatusPopover: View {
             Button {
                 Task { await monitor.forceSync() }
             } label: {
-                Label(NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: ""),
-                      systemImage: "arrow.clockwise.icloud")
+                Label(manualCheckTitle,
+                      systemImage: monitor.canForceSync ? "arrow.clockwise.icloud" : "timer")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(false) // Enabled for manual sync
+            .disabled(!monitor.canForceSync)
         }
         .padding(14)
+    }
+
+    private var manualCheckTitle: String {
+        guard !monitor.canForceSync else {
+            return NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: "")
+        }
+        return String(
+            format: NSLocalizedString(
+                "cloudkit.action.check_status_wait_fmt",
+                value: "Check again in %ds",
+                comment: ""
+            ),
+            monitor.manualCheckRemainingSeconds
+        )
     }
 
     private var tint: Color {
