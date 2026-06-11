@@ -9,6 +9,9 @@
 
 import SwiftUI
 import SwiftData
+#if os(macOS)
+import AppKit
+#endif
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -30,6 +33,7 @@ struct ClientsView: View {
     @State private var storedNotifications: [NotificationItem] = []
     @State private var clientToDelete: Client?
     @State private var isSearchPresented = false
+    @State private var searchFocusRequest = 0
 
     var body: some View {
         NavigationStack {
@@ -50,16 +54,11 @@ struct ClientsView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 80)
             }
-            #if os(macOS)
-            .searchable(text: searchTextBinding,
-                        isPresented: $isSearchPresented,
-                        prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
-            #else
-            .searchable(text: searchTextBinding,
-                        isPresented: $isSearchPresented,
-                        placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: Text(NSLocalizedString("clients.search_placeholder", comment: "")))
-            #endif
+            .clientsSearchable(
+                text: searchTextBinding,
+                isPresented: $isSearchPresented,
+                prompt: NSLocalizedString("clients.search_placeholder", comment: "")
+            )
             .background(DS.ColorToken.background)
             .alert(item: errorBinding) { error in
                 Alert(
@@ -86,6 +85,8 @@ struct ClientsView: View {
                     showingNewClientSheet = true
                 }
                 .accessibilityIdentifier("clients.fab.addClient")
+                #else
+                EmptyView()
                 #endif
             }
             .toolbar {
@@ -105,33 +106,23 @@ struct ClientsView: View {
                     CloudKitStatusView()
                 }
 
+                #if os(macOS)
+                ToolbarItem(placement: .automatic) {
+                    MacToolbarSearchField(
+                        text: searchTextBinding,
+                        prompt: NSLocalizedString("clients.search_placeholder", comment: ""),
+                        focusRequest: searchFocusRequest
+                    )
+                    .frame(width: 260)
+                }
+                #endif
+
                 ToolbarItem(placement: toolbarTrailingPlacement) {
                     sortingMenu
                 }
 
                 ToolbarItem(placement: toolbarTrailingPlacement) {
-                    Button {
-                        showNotifications = true
-                    } label: {
-                        Image(systemName: "bell.fill")
-                            .overlay(alignment: .topTrailing) {
-                                if notificationsCount > 0 {
-                                    Text("\(min(notificationsCount, 9))")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 14, height: 14)
-                                        .background(Color.red, in: Circle())
-                                        .offset(x: 4, y: -4)
-                                }
-                            }
-                    }
-                    .accessibilityIdentifier("clients.toolbar.notifications")
-                    .accessibilityLabel(
-                        String.localizedStringWithFormat(
-                            NSLocalizedString("clients.notifications_unread_fmt", value: "Notifications, %d unread", comment: ""),
-                            notificationsCount
-                        )
-                    )
+                    notificationsToolbarButton
                 }
             }
             .refreshable {
@@ -417,6 +408,34 @@ struct ClientsView: View {
     }
 
     private var notificationsCount: Int { storedNotifications.count }
+    private var notificationBadgeText: String { "\(min(notificationsCount, 9))" }
+
+    private var notificationsAccessibilityLabel: String {
+        String.localizedStringWithFormat(
+            NSLocalizedString("clients.notifications_unread_fmt", value: "Notifications, %d unread", comment: ""),
+            notificationsCount
+        )
+    }
+
+    private var notificationsToolbarButton: some View {
+        Button {
+            showNotifications = true
+        } label: {
+            Image(systemName: "bell.fill")
+                .overlay(alignment: .topTrailing) {
+                    if notificationsCount > 0 {
+                        Text(notificationBadgeText)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 14, height: 14)
+                            .background(Color.red, in: Circle())
+                            .offset(x: 4, y: -4)
+                    }
+                }
+        }
+        .accessibilityIdentifier("clients.toolbar.notifications")
+        .accessibilityLabel(notificationsAccessibilityLabel)
+    }
 
     private var searchTextBinding: Binding<String> {
         Binding(
@@ -433,6 +452,9 @@ struct ClientsView: View {
 
     private func focusSearch() {
         isSearchPresented = true
+        #if os(macOS)
+        searchFocusRequest += 1
+        #endif
     }
 
     private var errorBinding: Binding<AppError?> {
@@ -541,6 +563,79 @@ struct ClientsView: View {
         }
     }
 }
+
+private extension View {
+    @ViewBuilder
+    func clientsSearchable(
+        text: Binding<String>,
+        isPresented: Binding<Bool>,
+        prompt: String
+    ) -> some View {
+        #if os(macOS)
+        self
+        #else
+        self.searchable(
+            text: text,
+            isPresented: isPresented,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text(prompt)
+        )
+        #endif
+    }
+}
+
+#if os(macOS)
+private struct MacToolbarSearchField: NSViewRepresentable {
+    @Binding var text: String
+    let prompt: String
+    let focusRequest: Int
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let field = NSSearchField()
+        field.placeholderString = prompt
+        field.delegate = context.coordinator
+        field.sendsSearchStringImmediately = true
+        field.sendsWholeSearchString = false
+        field.setAccessibilityIdentifier("clients.search")
+        return field
+    }
+
+    func updateNSView(_ field: NSSearchField, context: Context) {
+        context.coordinator.text = $text
+        field.placeholderString = prompt
+        if field.stringValue != text {
+            field.stringValue = text
+        }
+
+        guard context.coordinator.lastFocusRequest != focusRequest else { return }
+        context.coordinator.lastFocusRequest = focusRequest
+
+        DispatchQueue.main.async {
+            field.window?.makeKeyAndOrderFront(nil)
+            field.window?.makeFirstResponder(field)
+            field.currentEditor()?.selectAll(nil)
+        }
+    }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var text: Binding<String>
+        var lastFocusRequest = 0
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSSearchField else { return }
+            text.wrappedValue = field.stringValue
+        }
+    }
+}
+#endif
 
 private struct QuickStatCard: View {
     let title: String
