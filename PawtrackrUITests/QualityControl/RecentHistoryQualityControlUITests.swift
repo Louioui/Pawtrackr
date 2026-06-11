@@ -6,11 +6,11 @@ final class RecentHistoryQualityControlUITests: QualityControlUITestCase {
         launch(startTab: "dashboard")
         XCTAssertTrue(waitForDashboard(), "Dashboard did not load.")
 
-        let quickAction = app.buttons["dashboard.quickAction.checkOut"].exists
-            ? app.buttons["dashboard.quickAction.checkOut"]
-            : app.otherElements["dashboard.quickAction.checkOut"]
-        XCTAssertTrue(waitUntilHittable(quickAction, timeout: 8), "History quick action should be hittable.")
-        quickAction.tap()
+        let historyLink = app.buttons["dashboard.kpi.completedHistory"].exists
+            ? app.buttons["dashboard.kpi.completedHistory"]
+            : app.buttons["dashboard.kpi.inProgressHistory"]
+        XCTAssertTrue(waitUntilHittable(historyLink, timeout: 8), "Dashboard history KPI should be hittable.")
+        historyLink.tap()
 
         XCTAssertTrue(
             waitForAny([

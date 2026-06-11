@@ -95,6 +95,7 @@ struct SettingsView: View {
                 } label: {
                     Label(section.title, systemImage: section.icon)
                 }
+                .accessibilityIdentifier("settings.section.\(section.rawValue)")
             }
             .navigationTitle(Text("settings.title"))
         }
@@ -179,6 +180,7 @@ private struct DataExportSectionView: View {
             } label: {
                 Label(settingsLocalized("settings.export.clients_csv", value: "Export Clients (CSV)"), systemImage: "person.3.sequence.fill")
             }
+            .accessibilityIdentifier("settings.exportClients")
             .disabled(isExportingClients || isExportingVisits)
             
             Button {
@@ -186,6 +188,7 @@ private struct DataExportSectionView: View {
             } label: {
                 Label(settingsLocalized("settings.export.visits_csv", value: "Export Visits (CSV)"), systemImage: "calendar.badge.clock")
             }
+            .accessibilityIdentifier("settings.exportVisits")
             .disabled(isExportingClients || isExportingVisits)
 
             if isExportingClients || isExportingVisits {
@@ -550,26 +553,31 @@ private struct PreferencesSectionView: View {
 private struct SecuritySectionView: View {
     @Bindable var appSettings: AppSettings
     @Binding var showChangePIN: Bool
+    @State private var showDisableLockConfirm = false
     
     var body: some View {
         CardView {
-            Toggle(isOn: $appSettings.isLockEnabled) {
+            Toggle(isOn: lockEnabledBinding) {
                 Label(settingsLocalized("settings.security.enable_lock", value: "Enable App Lock"), systemImage: "lock.shield.fill")
             }
+            .accessibilityIdentifier("settings.appLockToggle")
 
             Toggle(isOn: $appSettings.isBiometricLockEnabled) {
                 Label(settingsLocalized("settings.security.biometric_unlock", value: "Biometric Unlock"), systemImage: "faceid")
             }
+            .accessibilityIdentifier("settings.biometricLockToggle")
             .disabled(!appSettings.isLockEnabled)
 
             Toggle(isOn: $appSettings.autoLockOnBackground) {
                 Label(settingsLocalized("settings.security.lock_on_background", value: "Lock When App Closes"), systemImage: "rectangle.portrait.and.arrow.right")
             }
+            .accessibilityIdentifier("settings.autoLockOnBackgroundToggle")
             .disabled(!appSettings.isLockEnabled)
 
             Toggle(isOn: $appSettings.autoLockAfterInactivity) {
                 Label(settingsLocalized("settings.security.lock_after_inactivity", value: "Lock After Inactivity"), systemImage: "timer")
             }
+            .accessibilityIdentifier("settings.autoLockAfterInactivityToggle")
             .disabled(!appSettings.isLockEnabled)
 
             Stepper(value: $appSettings.idleLockMinutes, in: 1...60) {
@@ -594,6 +602,33 @@ private struct SecuritySectionView: View {
             if appSettings.isLockEnabled {
                 Button(settingsLocalized("settings.pin.change", value: "Change PIN")) { showChangePIN = true }
                     .buttonStyle(.bordered)
+                    .accessibilityIdentifier("settings.changePIN")
+            }
+        }
+        .alert(
+            settingsLocalized("settings.security.disable_lock_title", value: "Disable App Lock?"),
+            isPresented: $showDisableLockConfirm
+        ) {
+            Button(settingsLocalized("common.cancel", value: "Cancel"), role: .cancel) {}
+            Button(settingsLocalized("settings.security.disable_lock_confirm", value: "Disable"), role: .destructive) {
+                appSettings.isLockEnabled = false
+            }
+        } message: {
+            Text(settingsLocalized(
+                "settings.security.disable_lock_message",
+                value: "Pawtrackr will stop requiring your PIN when the app opens or returns to the foreground."
+            ))
+        }
+    }
+
+    private var lockEnabledBinding: Binding<Bool> {
+        Binding {
+            appSettings.isLockEnabled
+        } set: { isEnabled in
+            if isEnabled {
+                appSettings.isLockEnabled = true
+            } else {
+                showDisableLockConfirm = true
             }
         }
     }

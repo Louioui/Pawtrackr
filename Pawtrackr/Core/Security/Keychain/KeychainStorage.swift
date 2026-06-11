@@ -27,8 +27,7 @@ enum KeychainStorage {
 
         // Try update first; fall back to add.
         let updateAttrs: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecValueData as String: data
         ]
         let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttrs as CFDictionary)
         if updateStatus == errSecSuccess { return true }

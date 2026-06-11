@@ -77,9 +77,8 @@ final class OnboardingUITests: XCTestCase {
         continueBtn.tap()
 
         XCTAssertTrue(
-            app.staticTexts["Regional Info"].waitForExistence(timeout: 5)
-                || app.staticTexts["Currency Symbol"].waitForExistence(timeout: 5),
-            "Should land on Regional step after providing a business name."
+            waitForRegionalStep(),
+            "Should land on contact information step after providing a business name."
         )
     }
 
@@ -97,11 +96,8 @@ final class OnboardingUITests: XCTestCase {
 
         tapOnboardingContinue()
 
-        // Regional — leave defaults, tap Continue
-        XCTAssertTrue(
-            app.staticTexts["Regional Info"].waitForExistence(timeout: 5)
-                || app.staticTexts["Currency Symbol"].waitForExistence(timeout: 5)
-        )
+        // Contact information — leave defaults, tap Continue
+        XCTAssertTrue(waitForRegionalStep())
         tapOnboardingContinue()
 
         // Security — type both PINs
@@ -169,6 +165,18 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(continueBtn.waitForHittable(timeout: 6),
                       "Continue button should be hittable.")
         continueBtn.tap()
+    }
+
+    private func waitForRegionalStep(timeout: TimeInterval = 5) -> Bool {
+        waitForAny([
+            { self.app.staticTexts["Contact Information"].exists },
+            { self.app.staticTexts["Regional Info"].exists },
+            { self.app.staticTexts["Contact Email"].exists },
+            {
+                let title = self.app.staticTexts["onboarding.stepTitle"]
+                return title.exists && ["Contact Information", "Regional Info"].contains(title.label)
+            }
+        ], timeout: timeout)
     }
 
     private func waitForAny(_ conditions: [() -> Bool], timeout: TimeInterval) -> Bool {

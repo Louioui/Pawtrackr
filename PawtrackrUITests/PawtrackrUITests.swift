@@ -106,10 +106,7 @@ final class PawtrackrUITests: XCTestCase {
         tapPrimaryButton(named: "Continue to Notes")
         tapPrimaryButton(named: "Continue to Payment")
 
-        let cardButton = app.buttons["checkout.payment.creditCard"]
-        if cardButton.waitForHittable(timeout: 5) {
-            cardButton.tap()
-        }
+        tapPaymentMethod("creditCard")
 
         let referenceField = app.textFields["checkout.referenceField"]
         XCTAssertTrue(referenceField.waitForHittable(timeout: 5), "Card payments should prompt for the last 4 digits.")
@@ -138,7 +135,8 @@ final class PawtrackrUITests: XCTestCase {
         let amountField = app.textFields["checkout.amountField"]
         if amountField.waitForHittable(timeout: 5) {
             amountField.tap()
-            amountField.clearAndEnterText("120")
+            amountField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12))
+            amountField.typeText("120")
             app.keyboards.buttons["Done"].tapIfExists()
         }
 
@@ -616,7 +614,9 @@ final class PawtrackrUITests: XCTestCase {
         XCTAssertTrue(
             waitForAny([
                 { self.app.staticTexts["Dashboard"].exists },
-                { self.app.navigationBars["Dashboard"].exists }
+                { self.app.navigationBars["Dashboard"].exists },
+                { self.app.scrollViews["dashboard.scroll"].exists },
+                { self.app.tabBars.buttons["Dashboard"].exists }
             ], timeout: 5),
             "Dashboard should remain alive after horizontal swipe."
         )
@@ -692,6 +692,17 @@ final class PawtrackrUITests: XCTestCase {
         let primaryButton = app.buttons["checkout.primaryButton"]
         XCTAssertTrue(primaryButton.waitForHittable(timeout: 8), "\(title) primary button was not hittable.")
         primaryButton.tap()
+    }
+
+    private func tapPaymentMethod(_ rawValue: String) {
+        let button = app.buttons["checkout.payment.\(rawValue)"]
+        XCTAssertTrue(button.waitForExistence(timeout: 8), "\(rawValue) payment method should exist.")
+
+        let scrollView = app.scrollViews.firstMatch
+        if scrollView.exists {
+            scrollView.swipeDown()
+        }
+        button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func openCheckoutFromDashboard() {

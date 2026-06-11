@@ -13,6 +13,8 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
         let sectionsVisible = waitForAny([
             { self.app.staticTexts["Security"].exists },
             { self.app.staticTexts["Data Export"].exists },
+            { self.app.buttons["settings.section.security"].exists },
+            { self.app.buttons["settings.section.dataExport"].exists },
             { self.app.buttons["settings.exportClients"].exists }
         ], timeout: 6)
 
@@ -21,6 +23,7 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
 
     func testDisableAppLockConfirmationCanCancel() throws {
         XCTAssertTrue(waitForSettingsScreen(), "Settings screen did not load.")
+        openSettingsSection(identifier: "security", title: "Security")
 
         let toggle = app.switches["settings.appLockToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 6), "App Lock toggle must be present.")
@@ -42,6 +45,7 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
 
     func testExportButtonsRemainReachableAfterScroll() throws {
         XCTAssertTrue(waitForSettingsScreen(), "Settings screen did not load.")
+        openSettingsSection(identifier: "dataExport", title: "Data Export")
 
         let scroll = app.scrollViews.firstMatch
         for _ in 0..<4 {
@@ -57,5 +61,26 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
 
         XCTAssertTrue(waitUntilHittable(app.buttons["settings.exportClients"], timeout: 6))
         XCTAssertTrue(waitUntilHittable(app.buttons["settings.exportVisits"], timeout: 6))
+    }
+
+    private func openSettingsSection(identifier: String, title: String) {
+        if identifier == "security", app.switches["settings.appLockToggle"].exists {
+            return
+        }
+        if identifier == "dataExport",
+           app.buttons["settings.exportClients"].exists || app.buttons["settings.exportVisits"].exists {
+            return
+        }
+
+        let sectionButton = app.buttons["settings.section.\(identifier)"]
+        if waitUntilHittable(sectionButton, timeout: 4) {
+            sectionButton.tap()
+            return
+        }
+
+        let sectionTitle = app.staticTexts[title]
+        if waitUntilHittable(sectionTitle, timeout: 2) {
+            sectionTitle.tap()
+        }
     }
 }

@@ -18,9 +18,9 @@ final class OnboardingQualityControlUITests: QualityControlUITestCase {
         dismissKeyboardIfPresent()
 
         _ = tapIfHittable(app.buttons["onboarding.continue"], timeout: 4)
-        XCTAssertTrue(app.staticTexts["Regional Info"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForRegionalStep(), "Regional/contact step should appear.")
 
-        _ = tapIfHittable(app.buttons["Back"], timeout: 4)
+        _ = tapIfHittable(app.buttons["onboarding.back"], timeout: 4)
         XCTAssertTrue(app.textFields["onboarding.businessName"].waitForExistence(timeout: 5))
     }
 
@@ -68,9 +68,21 @@ final class OnboardingQualityControlUITests: QualityControlUITestCase {
         dismissKeyboardIfPresent()
 
         _ = tapIfHittable(app.buttons["onboarding.continue"], timeout: 4)
-        XCTAssertTrue(app.staticTexts["Regional Info"].waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForRegionalStep(), "Regional/contact step should appear.")
         _ = tapIfHittable(app.buttons["onboarding.continue"], timeout: 4)
         XCTAssertTrue(app.staticTexts["Set Your App PIN"].waitForExistence(timeout: 5))
+    }
+
+    private func waitForRegionalStep(timeout: TimeInterval = 5) -> Bool {
+        waitForAny([
+            { self.app.staticTexts["Contact Information"].exists },
+            { self.app.staticTexts["Regional Info"].exists },
+            { self.app.staticTexts["Contact Email"].exists },
+            {
+                let title = self.app.staticTexts["onboarding.stepTitle"]
+                return title.exists && ["Contact Information", "Regional Info"].contains(title.label)
+            }
+        ], timeout: timeout)
     }
 
     private func advanceToWarmStartStep() {

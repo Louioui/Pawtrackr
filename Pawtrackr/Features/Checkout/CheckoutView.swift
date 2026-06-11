@@ -1076,14 +1076,16 @@ struct CheckoutView: View {
                     .font(.title2)
                 Text(option.label).font(Font.caption.weight(.bold))
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 72)
             .padding(.vertical, 16)
             .background(RoundedRectangle(cornerRadius: 15).fill(isSelected ? option.tint.opacity(0.1) : Color.gray.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 15).stroke(isSelected ? option.tint : Color.clear, lineWidth: 2))
             .foregroundStyle(isSelected ? option.tint : Color.secondary)
             .scaleEffect(isSelected ? 1.03 : 1.0)
+            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(option.label)
         .accessibilityIdentifier("checkout.payment.\(option.method.rawValue)")
         .accessibilityValue(isSelected

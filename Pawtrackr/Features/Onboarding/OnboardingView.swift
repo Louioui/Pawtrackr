@@ -138,6 +138,7 @@ struct OnboardingView: View {
                     .font(DS.TypeScale.title)
                     .foregroundStyle(.primary)
                     .id(viewModel.currentStep)
+                    .accessibilityIdentifier("onboarding.stepTitle")
                     .transition(.push(from: .top))
 
                 Text(subtitle(for: viewModel.currentStep))
@@ -462,6 +463,7 @@ struct OnboardingView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .disabled(viewModel.isSaving)
+                    .accessibilityIdentifier("onboarding.back")
                 }
                 
                 Spacer()

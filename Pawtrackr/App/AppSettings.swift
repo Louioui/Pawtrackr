@@ -249,6 +249,9 @@ final class AppSettings {
             UserDefaults.standard.set(false, forKey: AppSettingsKeys.autoLockOnBackground)
             UserDefaults.standard.set(false, forKey: AppSettingsKeys.autoLockAfterInactivity)
             UserDefaults.standard.set(Defaults.currencySymbol, forKey: AppSettingsKeys.currencySymbol)
+            UserDefaults.standard.removeObject(forKey: AppSettingsKeys.lastPINChangeDate)
+            KeychainStorage.remove(forKey: AppSettingsKeys.appPINKeychainAccount)
+            KeychainStorage.set(Defaults.pin, forKey: AppSettingsKeys.appPINKeychainAccount)
         }
 
         // Register defaults first

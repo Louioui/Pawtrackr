@@ -37,7 +37,9 @@ final class SettingsUITests: XCTestCase {
         let landed = waitForAny([
             { self.app.staticTexts["Business Profile"].exists },
             { self.app.staticTexts["Security"].exists },
-            { self.app.staticTexts["Data Export"].exists }
+            { self.app.staticTexts["Data Export"].exists },
+            { self.app.buttons["settings.section.security"].exists },
+            { self.app.buttons["settings.section.dataExport"].exists }
         ], timeout: 12)
         XCTAssertTrue(landed, "Settings sections should be visible.")
     }
@@ -47,6 +49,7 @@ final class SettingsUITests: XCTestCase {
     func testDisableAppLockShowsConfirmationAlert() throws {
         waitForDashboard()
         tapTab("Settings")
+        openSettingsSection(identifier: "security", title: "Security")
 
         let toggle = app.switches["settings.appLockToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 8), "App Lock toggle must be present.")
@@ -77,6 +80,7 @@ final class SettingsUITests: XCTestCase {
     func testChangePINSheetOpensWithThreeFields() throws {
         waitForDashboard()
         tapTab("Settings")
+        openSettingsSection(identifier: "security", title: "Security")
 
         // Make sure lock is on so the Change PIN button is visible.
         let toggle = app.switches["settings.appLockToggle"]
@@ -109,6 +113,7 @@ final class SettingsUITests: XCTestCase {
     func testExportClientsButtonOpensSharePreviewSheet() throws {
         waitForDashboard()
         tapTab("Settings")
+        openSettingsSection(identifier: "dataExport", title: "Data Export")
 
         let exportBtn = app.buttons["settings.exportClients"]
         let scroll = app.scrollViews.firstMatch
@@ -134,6 +139,7 @@ final class SettingsUITests: XCTestCase {
     func testExportVisitsButtonExistsAndIsHittable() throws {
         waitForDashboard()
         tapTab("Settings")
+        openSettingsSection(identifier: "dataExport", title: "Data Export")
 
         let exportBtn = app.buttons["settings.exportVisits"]
         let scroll = app.scrollViews.firstMatch
@@ -174,6 +180,27 @@ final class SettingsUITests: XCTestCase {
             _ = app.wait(for: .runningForeground, timeout: 0.5)
             RunLoop.current.run(until: Date().addingTimeInterval(0.6))
             if attempt >= 1 { return }
+        }
+    }
+
+    private func openSettingsSection(identifier: String, title: String) {
+        if identifier == "security", app.switches["settings.appLockToggle"].exists {
+            return
+        }
+        if identifier == "dataExport",
+           app.buttons["settings.exportClients"].exists || app.buttons["settings.exportVisits"].exists {
+            return
+        }
+
+        let sectionButton = app.buttons["settings.section.\(identifier)"]
+        if sectionButton.waitForHittable(timeout: 4) {
+            sectionButton.tap()
+            return
+        }
+
+        let sectionTitle = app.staticTexts[title]
+        if sectionTitle.waitForHittable(timeout: 2) {
+            sectionTitle.tap()
         }
     }
 }

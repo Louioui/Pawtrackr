@@ -467,10 +467,18 @@ struct DashboardView: View {
             Text(NSLocalizedString("dashboard.today", comment: "")).font(.headline)
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
-                    recentHistoryLink(scope: .today) {
+                    recentHistoryLink(
+                        scope: .today,
+                        accessibilityIdentifier: "dashboard.kpi.inProgressHistory",
+                        accessibilityLabel: NSLocalizedString("dashboard.in_progress", comment: "")
+                    ) {
                         kpiCard(title: NSLocalizedString("dashboard.in_progress", comment: ""), value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
                     }
-                    recentHistoryLink(scope: .today) {
+                    recentHistoryLink(
+                        scope: .today,
+                        accessibilityIdentifier: "dashboard.kpi.completedHistory",
+                        accessibilityLabel: NSLocalizedString("dashboard.completed", comment: "")
+                    ) {
                         kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
                     }
                 }
