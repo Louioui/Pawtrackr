@@ -80,6 +80,7 @@ final class DashboardViewModel {
     private var observers: [AnyCancellable] = []
     private var notificationObservers: [NSObjectProtocol] = []
     private var observationTask: Task<Void, Never>?
+    private var completedVisitIDs: [PersistentIdentifier] = []
 
     init(dataStore: DataStoreService, eventBus: GlobalEventBus, repository: DashboardRepositoryProtocol? = nil) {
         dashboardLog.info("DashboardViewModel: Initialized")
@@ -97,11 +98,14 @@ final class DashboardViewModel {
         dashboardLog.info("DashboardViewModel: Setting up observers...")
         // EventBus Stream
         let stream = eventBus.stream
-        observationTask = Task { [weak self] in
+        observationTask = Task { @MainActor [weak self] in
             for await event in stream {
                 guard let self else { return }
                 switch event {
-                case .checkoutCompleted(_), .refreshRequired:
+                case .checkoutCompleted(let completion):
+                    self.markVisitCompleted(completion.visitID)
+                    await self.refresh()
+                case .refreshRequired:
                     await self.refresh()
                 default:
                     break
@@ -121,7 +125,13 @@ final class DashboardViewModel {
             dashboardLog.info("DashboardViewModel: Adding observer for \(name.rawValue)")
             let observer = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notif in
                 dashboardLog.info("DashboardViewModel: Received notification \(notif.name.rawValue)")
-                Task { [weak self] in await self?.refresh() }
+                let completedVisitID = notif.name == .visitDidComplete ? notif.visitID : nil
+                Task { @MainActor [weak self] in
+                    if let completedVisitID {
+                        self?.markVisitCompleted(completedVisitID)
+                    }
+                    await self?.refresh()
+                }
             }
             notificationObservers.append(observer)
         }
@@ -153,6 +163,7 @@ final class DashboardViewModel {
         }
         
         dashboardLog.info("DashboardViewModel: Exited TaskGroup.")
+        kpi.inProgressCount = activeVisits.count
 
         if case .loading = state {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
@@ -247,8 +258,11 @@ final class DashboardViewModel {
         do {
             let ids = try await repository.fetchActiveVisits()
             dashboardLog.info("DashboardViewModel: Repository returned \(ids.count) visit IDs.")
-            
-            let visits = ids.compactMap { dataStore.container.mainContext.model(for: $0) as? Visit }
+
+            let activeIDs = ids.filter { !completedVisitIDs.contains($0) }
+            let visits = activeIDs
+                .compactMap { dataStore.container.mainContext.model(for: $0) as? Visit }
+                .filter { !completedVisitIDs.contains($0.persistentModelID) }
             dashboardLog.info("DashboardViewModel: Resolved \(visits.count) active visits.")
             
             activeVisits = visits
@@ -256,6 +270,13 @@ final class DashboardViewModel {
             setDashboardError(error, source: #function)
             activeVisits = []
         }
+    }
+
+    private func markVisitCompleted(_ visitID: PersistentIdentifier) {
+        if !completedVisitIDs.contains(visitID) {
+            completedVisitIDs.append(visitID)
+        }
+        activeVisits.removeAll { $0.persistentModelID == visitID }
     }
 
     private func fetchRecentClients() async {

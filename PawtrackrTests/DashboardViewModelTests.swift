@@ -115,6 +115,43 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertEqual(vm.kpi.inProgressCount, 1)
     }
 
+    func testVisitDidCompleteFiltersStaleActiveVisitID() async throws {
+        let pet = Pet(name: "Milo", species: .dog)
+        context.insert(pet)
+        let visit = Visit(pet: pet, startedAt: .now)
+        context.insert(visit)
+        try context.save()
+
+        let repository = MockDashboardRepository()
+        repository.activeVisits = [visit.persistentModelID]
+        repository.kpi.inProgressCount = 1
+
+        let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus, repository: repository)
+        try? await Task.sleep(for: .milliseconds(150))
+        await vm.refresh()
+
+        XCTAssertEqual(vm.activeVisits.count, 1)
+        XCTAssertEqual(vm.kpi.inProgressCount, 1)
+
+        NotificationCenter.default.post(
+            name: .visitDidComplete,
+            object: nil,
+            userInfo: [
+                VisitDidCompleteKey.visitID.rawValue: visit.persistentModelID,
+                VisitDidCompleteKey.endedAt.rawValue: Date(),
+                VisitDidCompleteKey.total.rawValue: Decimal(30)
+            ]
+        )
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, !vm.activeVisits.isEmpty {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        XCTAssertTrue(vm.activeVisits.isEmpty)
+        XCTAssertEqual(vm.kpi.inProgressCount, 0)
+    }
+
     func testRefresh_RevenueSeriesIsAlwaysSevenDays() async {
         let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
         await vm.refresh()
