@@ -144,7 +144,9 @@ final class DashboardViewModelTests: XCTestCase {
         )
 
         let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline, !vm.activeVisits.isEmpty {
+        // Wait for BOTH reconciled signals before asserting — KPI can lag the
+        // activeVisits update by a tick, which made this test intermittently flaky.
+        while Date() < deadline, (!vm.activeVisits.isEmpty || vm.kpi.inProgressCount != 0) {
             try? await Task.sleep(for: .milliseconds(50))
         }
 

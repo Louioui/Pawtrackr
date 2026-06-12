@@ -451,6 +451,11 @@ struct ClientsView: View {
     }
 
     private func focusSearch() {
+        // Always consume the pending-focus token here so the `.focusClientSearch`
+        // notification path (which calls focusSearch() directly while the view is
+        // already visible) can't leave a stale token that a later onAppear would
+        // re-trigger focus from.
+        UserDefaults.standard.removeObject(forKey: AppMenuCommand.pendingClientSearchFocusKey)
         isSearchPresented = true
         #if os(macOS)
         searchFocusRequest += 1

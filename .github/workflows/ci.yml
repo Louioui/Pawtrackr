@@ -18,14 +18,48 @@ jobs:
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '16.0'
+        # Use the runner image's latest stable Xcode. Pinning a specific version
+        # (e.g. 16.0) is brittle: GitHub prunes older iOS Simulator runtimes from
+        # the image, which is what broke this job (iOS 18.0 was no longer
+        # installed under Xcode 16.0).
+        xcode-version: latest-stable
+
+    - name: Select iOS Simulator
+      id: sim
+      run: |
+        set -euo pipefail
+        echo "Using: $(xcodebuild -version | tr '\n' ' ')"
+        # Don't hardcode the iOS version — pick the newest available iPhone
+        # simulator on whatever runtime the runner currently ships.
+        DEST_ID=$(xcrun simctl list devices available --json | /usr/bin/python3 -c '
+        import json, sys
+        devices = json.load(sys.stdin).get("devices", {})
+        best = None
+        for runtime, devs in devices.items():
+            if "iOS" not in runtime:
+                continue
+            for d in devs:
+                if d.get("isAvailable") and d.get("name", "").startswith("iPhone"):
+                    key = (runtime, d["name"])
+                    if best is None or key > best[0]:
+                        best = (key, d["udid"])
+        print(best[1] if best else "")
+        ')
+        if [ -z "$DEST_ID" ]; then
+          echo "::error::No available iOS Simulator found on the runner."
+          xcrun simctl list devices
+          exit 1
+        fi
+        echo "Selected simulator UDID: $DEST_ID"
+        echo "dest_id=$DEST_ID" >> "$GITHUB_OUTPUT"
 
     - name: Build and Test
       run: |
+        set -euo pipefail
         xcodebuild test \
           -project Pawtrackr.xcodeproj \
           -scheme Pawtrackr \
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.0' \
+          -destination "id=${{ steps.sim.outputs.dest_id }}" \
           -parallel-testing-enabled YES \
           -resultBundlePath TestResults.xcresult \
           CODE_SIGNING_ALLOWED=NO

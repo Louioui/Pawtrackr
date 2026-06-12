@@ -21,46 +21,56 @@ struct CloudKitAccountBanner: View {
     @State private var dismissedFingerprint: String?
 
     var body: some View {
-        if let info = bannerInfo, info.fingerprint != dismissedFingerprint {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: info.icon)
-                    .font(.title3)
-                    .foregroundStyle(info.tint)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(info.title).font(.subheadline.weight(.semibold))
-                    Text(info.message).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                if let actionTitle = info.actionTitle {
-                    Button {
-                        open(info.action)
-                    } label: {
-                        Text(actionTitle)
-                            .font(.caption.weight(.semibold))
+        Group {
+            if let info = bannerInfo, info.fingerprint != dismissedFingerprint {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: info.icon)
+                        .font(.title3)
+                        .foregroundStyle(info.tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(info.title).font(.subheadline.weight(.semibold))
+                        Text(info.message).font(.caption).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                if info.isDismissible {
-                    Button {
-                        dismissedFingerprint = info.fingerprint
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    if let actionTitle = info.actionTitle {
+                        Button {
+                            open(info.action)
+                        } label: {
+                            Text(actionTitle)
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(NSLocalizedString("common.dismiss", value: "Dismiss", comment: ""))
+                    if info.isDismissible {
+                        Button {
+                            dismissedFingerprint = info.fingerprint
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(NSLocalizedString("common.dismiss", value: "Dismiss", comment: ""))
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(info.tint.opacity(0.12))
+                .overlay(
+                    Rectangle().frame(height: 0.5).foregroundStyle(.separator),
+                    alignment: .bottom
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(info.tint.opacity(0.12))
-            .overlay(
-                Rectangle().frame(height: 0.5).foregroundStyle(.separator),
-                alignment: .bottom
-            )
-            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+        // Re-arm dismissal when the banner's identity changes (or it goes away).
+        // Without this, a banner dismissed once stays hidden even after the same
+        // condition (same fingerprint) recurs later in the session.
+        .onChange(of: bannerInfo?.fingerprint) { oldValue, newValue in
+            if oldValue != newValue {
+                dismissedFingerprint = nil
+            }
         }
     }
 

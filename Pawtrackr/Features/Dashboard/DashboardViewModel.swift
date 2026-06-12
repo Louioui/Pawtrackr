@@ -80,7 +80,11 @@ final class DashboardViewModel {
     private var observers: [AnyCancellable] = []
     private var notificationObservers: [NSObjectProtocol] = []
     private var observationTask: Task<Void, Never>?
-    private var completedVisitIDs: [PersistentIdentifier] = []
+    // Set (not array) so the per-refresh `contains` filters stay O(1) and don't
+    // degrade as completed-visit history grows during a long session. Not pruned:
+    // an entry must persist as long as the store can still return that visit as
+    // active, otherwise a completed visit could momentarily reappear as active.
+    private var completedVisitIDs: Set<PersistentIdentifier> = []
 
     init(dataStore: DataStoreService, eventBus: GlobalEventBus, repository: DashboardRepositoryProtocol? = nil) {
         dashboardLog.info("DashboardViewModel: Initialized")
@@ -273,9 +277,7 @@ final class DashboardViewModel {
     }
 
     private func markVisitCompleted(_ visitID: PersistentIdentifier) {
-        if !completedVisitIDs.contains(visitID) {
-            completedVisitIDs.append(visitID)
-        }
+        completedVisitIDs.insert(visitID)
         activeVisits.removeAll { $0.persistentModelID == visitID }
     }
 
