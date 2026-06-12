@@ -67,6 +67,16 @@ final class Pet {
     var activeVisit: Visit? {
         (visits ?? []).first { $0.endedAt == nil }
     }
+
+    /// True when the pet carries a behavior tag indicating a handling hazard.
+    /// Drives the high-visibility red safety flags shown across the client
+    /// center, pet detail, and pet cards so staff are warned before handling.
+    var isAggressive: Bool {
+        behaviorTags.contains { tag in
+            let key = tag.lowercased()
+            return key.contains("aggressive") || key.contains("bites") || key.contains("dangerous")
+        }
+    }
     
     /// Returns a list of before/after photo pairs from completed visits.
     @Transient

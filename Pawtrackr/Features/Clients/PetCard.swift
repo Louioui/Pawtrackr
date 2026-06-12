@@ -124,10 +124,18 @@ struct PetCard: View {
         if !pet.behaviorTags.isEmpty {
             FlowLayout(spacing: 6) {
                 ForEach(Array(pet.behaviorTags), id: \.self) { tag in
-                    let isHighPriority = tag.lowercased().contains("anxious") || tag.lowercased().contains("extra care")
+                    let key = tag.lowercased()
+                    let isDanger = key.contains("aggressive") || key.contains("bites") || key.contains("dangerous")
+                    let isHighPriority = key.contains("anxious") || key.contains("extra care")
                     let disp = BehaviorTagIcons.display(for: tag)
 
-                    if isHighPriority {
+                    if isDanger {
+                        // Stark, unmistakable safety flag — staff must not miss it.
+                        Chip("⚠️ " + disp.label, style: .filled, size: .xs)
+                            .foregroundStyle(.white)
+                            .background(DS.ColorToken.danger, in: Capsule())
+                            .accessibilityLabel(NSLocalizedString("pet.safety.aggressive_a11y", value: "Warning: this pet is marked aggressive. Handle with care.", comment: ""))
+                    } else if isHighPriority {
                         Chip((disp.emoji != nil ? "\(disp.emoji!) " : "") + disp.label,
                              style: .filled,
                              size: .xs)

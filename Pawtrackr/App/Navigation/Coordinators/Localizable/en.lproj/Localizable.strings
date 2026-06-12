@@ -614,6 +614,14 @@
 "pet.behavior.senior" = "Senior";
 "pet.behavior.puppy_young" = "Puppy / Young";
 
+/* Aggressive-pet safety flags (client center, pet detail, pet/client cards) */
+"client_detail.safety_alert.title" = "Caution: Aggressive Behavior";
+"client_detail.safety_alert.message_fmt" = "%@ is flagged as aggressive. Alert the team and handle with care.";
+"pet.safety_alert.title" = "Caution: Aggressive Behavior";
+"pet.safety_alert.message" = "This pet is flagged as aggressive. Alert the team and handle with care.";
+"pet.safety.aggressive_badge" = "Aggressive — handle with care";
+"pet.safety.aggressive_a11y" = "Warning: this pet is marked aggressive. Handle with care.";
+
 "checkout.step.services" = "Services";
 "checkout.step.details" = "Notes & Photos";
 "checkout.step.payment" = "Payment";

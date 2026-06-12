@@ -12,14 +12,22 @@ import SwiftUI
 import SwiftData
 import OSLog
 
+private final class PDVMObserverToken {
+    private let token: NSObjectProtocol
+    init(_ token: NSObjectProtocol) { self.token = token }
+    deinit { NotificationCenter.default.removeObserver(token) }
+}
+
 // MARK: - ViewModel
 @Observable
 @MainActor
 final class PetDetailViewModel {
     var pet: Pet
     var appError: AppError? = nil
+    private let modelContext: ModelContext
     private let visitRepository: VisitRepositoryProtocol
-    
+    private var visitCompleteObserver: PDVMObserverToken?
+
     // State
     var sheetDestination: SheetDestination?
 
@@ -28,10 +36,16 @@ final class PetDetailViewModel {
     // the parent @Observable's invalidation chain.
     var refreshNonce: Int = 0
 
+    /// Open visit ID derived from a fresh store query rather than the in-memory
+    /// `pet.visits` relationship — which stays stale after the cross-context
+    /// `CheckoutTransactionActor` commit (see ClientDetailViewModel for details).
+    private(set) var activeVisitID: PersistentIdentifier?
+
     // Computed Data
     var activeVisit: Visit? {
         _ = refreshNonce
-        return pet.activeVisit
+        guard let id = activeVisitID else { return nil }
+        return modelContext.model(for: id) as? Visit
     }
     
     var sortedVisits: [Visit] {
@@ -63,7 +77,30 @@ final class PetDetailViewModel {
     
     init(pet: Pet, modelContext: ModelContext, eventBus: GlobalEventBus = GlobalEventBus()) {
         self.pet = pet
+        self.modelContext = modelContext
         self.visitRepository = VisitRepository(modelContext: modelContext, eventBus: eventBus)
+
+        let token = NotificationCenter.default.addObserver(
+            forName: .visitDidComplete, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshActiveVisit()
+                self.refreshNonce &+= 1
+            }
+        }
+        self.visitCompleteObserver = PDVMObserverToken(token)
+        refreshActiveVisit()
+    }
+
+    /// Re-derive the open visit for this pet from the store. Filters at the
+    /// SQLite layer (`endedAt == nil`), so a just-checked-out visit is excluded
+    /// even when the materialized relationship hasn't merged the actor's write.
+    func refreshActiveVisit() {
+        let petID = pet.persistentModelID
+        let descriptor = FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.endedAt == nil })
+        let open = (try? modelContext.fetch(descriptor)) ?? []
+        activeVisitID = open.first { $0.pet?.persistentModelID == petID }?.persistentModelID
     }
 
     // MARK: Intents
@@ -76,6 +113,7 @@ final class PetDetailViewModel {
         Task {
             do {
                 let visit = try await visitRepository.checkIn(pet: pet, date: .now)
+                refreshActiveVisit()
                 refreshNonce &+= 1
                 Logger.petDetail.info("checkIn saved visit \(visit.uuid); pet.activeVisit=\(self.pet.activeVisit?.uuid.uuidString ?? "nil")")
             } catch {
@@ -257,11 +295,37 @@ struct PetDetailView: View {
                         }
                         Spacer()
                     }
+                    if vm.pet.isAggressive { petAggressiveBanner }
                     if vm.activeVisit != nil { sessionStatus(vm) }
                 }
             }
             .padding(.horizontal)
         }
+
+    /// High-visibility safety flag shown beneath the pet's profile header when
+    /// the pet is marked aggressive, so staff are warned before handling.
+    private var petAggressiveBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(NSLocalizedString("pet.safety_alert.title", value: "Caution: Aggressive Behavior", comment: ""))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                Text(NSLocalizedString("pet.safety_alert.message", value: "This pet is flagged as aggressive. Alert the team and handle with care.", comment: ""))
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.95))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.ColorToken.danger, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("petDetail.safetyBanner")
+    }
 
     private func ownerInfo(_ vm: PetDetailViewModel) -> some View {
             Group {

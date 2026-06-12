@@ -602,6 +602,14 @@
 "pet.behavior.senior" = "Sénior";
 "pet.behavior.puppy_young" = "Cachorro / Joven";
 
+/* Indicadores de seguridad para mascotas agresivas */
+"client_detail.safety_alert.title" = "Precaución: Comportamiento agresivo";
+"client_detail.safety_alert.message_fmt" = "%@ está marcado como agresivo. Avise al equipo y manéjelo con cuidado.";
+"pet.safety_alert.title" = "Precaución: Comportamiento agresivo";
+"pet.safety_alert.message" = "Esta mascota está marcada como agresiva. Avise al equipo y manéjela con cuidado.";
+"pet.safety.aggressive_badge" = "Agresivo: manéjelo con cuidado";
+"pet.safety.aggressive_a11y" = "Advertencia: esta mascota está marcada como agresiva. Manéjela con cuidado.";
+
 "checkout.step.services" = "Servicios";
 "checkout.step.details" = "Notas y fotos";
 "checkout.step.payment" = "Pago";

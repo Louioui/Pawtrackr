@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 #if os(iOS)
 import UserNotifications
 import UIKit
@@ -61,6 +62,7 @@ struct SettingsView: View {
     @State private var showChangePIN = false
     @State private var pinChangeError: String? = nil
     @State private var showResetFirstRunConfirm = false
+    @State private var showWipeConfirm = false
     @State private var showDiagnostics = false
 
     var body: some View {
@@ -76,9 +78,10 @@ struct SettingsView: View {
             .listStyle(.sidebar)
         } detail: {
             if let selection {
-                SettingsDetailView(section: selection, 
-                                   showChangePIN: $showChangePIN, 
+                SettingsDetailView(section: selection,
+                                   showChangePIN: $showChangePIN,
                                    showResetFirstRunConfirm: $showResetFirstRunConfirm,
+                                   showWipeConfirm: $showWipeConfirm,
                                    showDiagnostics: $showDiagnostics)
             } else {
                 ContentUnavailableView(LocalizedStringKey("settings.select_setting"), systemImage: "gear")
@@ -91,6 +94,7 @@ struct SettingsView: View {
                     SettingsDetailView(section: section,
                                        showChangePIN: $showChangePIN,
                                        showResetFirstRunConfirm: $showResetFirstRunConfirm,
+                                       showWipeConfirm: $showWipeConfirm,
                                        showDiagnostics: $showDiagnostics)
                 } label: {
                     Label(section.title, systemImage: section.icon)
@@ -108,6 +112,7 @@ private struct SettingsDetailView: View {
     @Environment(AppSettings.self) private var appSettings
     @Binding var showChangePIN: Bool
     @Binding var showResetFirstRunConfirm: Bool
+    @Binding var showWipeConfirm: Bool
     @Binding var showDiagnostics: Bool
     
     var body: some View {
@@ -148,6 +153,34 @@ private struct SettingsDetailView: View {
                 value: "This re-shows the new-user tour and dashboard checklist. Your business settings, clients, and visits are not affected."
             ))
         }
+        .alert(
+            settingsLocalized("settings.wipe.title", value: "Wipe Everything & Start Fresh?"),
+            isPresented: $showWipeConfirm
+        ) {
+            Button(settingsLocalized("common.cancel", value: "Cancel"), role: .cancel) {}
+            Button(settingsLocalized("settings.wipe.confirm", value: "Erase Everything"), role: .destructive) {
+                performWipe()
+            }
+        } message: {
+            Text(settingsLocalized(
+                "settings.wipe.message",
+                value: "This permanently erases every client, pet, visit, payment, inventory item, and report — including the demo data — and cannot be undone. The wipe also syncs to iCloud and your other devices. Your business profile and service menu are kept."
+            ))
+        }
+    }
+
+    /// Erases operational data and re-arms the getting-started checklist. Runs on
+    /// the main context; live lists react to the deletions and empty out.
+    private func performWipe() {
+        do {
+            try DataReset.wipeOperationalData(in: modelContext)
+            appSettings.resetForFreshStart()
+            #if os(iOS)
+            HapticManager.notify(.success)
+            #endif
+        } catch {
+            Logger.database.error("Start Fresh wipe failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     @ViewBuilder
@@ -160,7 +193,7 @@ private struct SettingsDetailView: View {
         case .icloud: ICloudSectionView(showDiagnostics: $showDiagnostics)
         case .help: HelpSectionView(modelContext: modelContext)
         case .devices: DevicesHealthView()
-        case .about: AboutSectionView(showResetFirstRunConfirm: $showResetFirstRunConfirm)
+        case .about: AboutSectionView(showResetFirstRunConfirm: $showResetFirstRunConfirm, showWipeConfirm: $showWipeConfirm)
         }
     }
 }
@@ -539,11 +572,36 @@ private struct PreferencesSectionView: View {
 private struct SecuritySectionView: View {
     @Bindable var appSettings: AppSettings
     @Binding var showChangePIN: Bool
-    
+    /// True while we're routing the user to set a PIN before enabling the lock.
+    @State private var pendingEnableLock = false
+
     var body: some View {
         CardView {
-            Toggle(isOn: $appSettings.isLockEnabled) {
+            // Enabling the lock requires a real PIN. A user who finished setup
+            // passcode-free has never set one (lastPINChangeDate == nil), so we
+            // send them to Change PIN first rather than silently enabling the lock
+            // against the default code.
+            Toggle(isOn: Binding(
+                get: { appSettings.isLockEnabled },
+                set: { wantsOn in
+                    if wantsOn && appSettings.lastPINChangeDate == nil {
+                        pendingEnableLock = true
+                        showChangePIN = true
+                    } else {
+                        appSettings.isLockEnabled = wantsOn
+                    }
+                }
+            )) {
                 Label(settingsLocalized("settings.security.enable_lock", value: "Enable App Lock"), systemImage: "lock.shield.fill")
+            }
+            .onChange(of: showChangePIN) { _, isPresented in
+                // Sheet dismissed after we routed here to set a first PIN: enable
+                // the lock only if a PIN was actually chosen.
+                guard !isPresented, pendingEnableLock else { return }
+                pendingEnableLock = false
+                if appSettings.lastPINChangeDate != nil {
+                    appSettings.isLockEnabled = true
+                }
             }
 
             Toggle(isOn: $appSettings.isBiometricLockEnabled) {
@@ -611,25 +669,50 @@ private struct SettingsLabeledField<Content: View>: View {
 
 private struct AboutSectionView: View {
     @Binding var showResetFirstRunConfirm: Bool
+    @Binding var showWipeConfirm: Bool
 
     var body: some View {
-        CardView {
-            HStack {
-                Text(settingsLocalized("settings.about.version", value: "Version"))
-                Spacer()
-                Text(versionText)
+        VStack(alignment: .leading, spacing: 20) {
+            CardView {
+                HStack {
+                    Text(settingsLocalized("settings.about.version", value: "Version"))
+                    Spacer()
+                    Text(versionText)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                Button {
+                    showResetFirstRunConfirm = true
+                } label: {
+                    Label(settingsLocalized("settings.about.replay_guide", value: "Replay Getting Started"), systemImage: "sparkles")
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // Destructive "Start Fresh": clears the demo (and anything entered
+            // while exploring) so the operator can begin real business clean.
+            CardView {
+                Label(settingsLocalized("settings.wipe.section_title", value: "Start Fresh"), systemImage: "trash")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.red)
+
+                Text(settingsLocalized("settings.wipe.section_caption", value: "Erase all clients, pets, visits, and history (including the demo) and begin with an empty workspace. Your business profile and service menu are kept."))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-            }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            Divider()
-
-            Button {
-                showResetFirstRunConfirm = true
-            } label: {
-                Label(settingsLocalized("settings.about.replay_guide", value: "Replay Getting Started"), systemImage: "sparkles")
+                Button(role: .destructive) {
+                    showWipeConfirm = true
+                } label: {
+                    Label(settingsLocalized("settings.wipe.button", value: "Wipe & Start Fresh"), systemImage: "exclamationmark.triangle.fill")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
             }
-            .buttonStyle(.bordered)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

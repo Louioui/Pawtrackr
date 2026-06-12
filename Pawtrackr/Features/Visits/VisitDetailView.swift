@@ -528,68 +528,60 @@ struct VisitDetailView: View {
     
     private var servicesContentCard: some View {
         Card {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text(NSLocalizedString("visit.services_performed", comment: ""))
                     .font(.subheadline.weight(.semibold))
-                
-                // Chips row (consistent with History/Checkout)
+
+                // A visual ledger of WHAT was performed — names only. Per-service
+                // dollar amounts and a computed services subtotal are intentionally
+                // omitted; the final charge is the operator-entered amount shown on
+                // the Payment card, not a sum of the listed services. Main services
+                // first, then any add-ons under their own heading.
                 servicesChips
-                
-                Divider().opacity(0.08)
-                
-                // Compact price list
-                servicesPriceList
-                
-                Divider().opacity(0.08)
-                
-                HStack {
-                    Text(NSLocalizedString("visit.total", comment: ""))
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text(visit.totalCurrencyString)
-                        .font(.subheadline.weight(.semibold))
-                        .monospacedDigit()
+
+                if !addOnItems.isEmpty {
+                    Text(NSLocalizedString("visit.add_ons", value: "Add-ons", comment: ""))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    addOnChips
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(String(format: NSLocalizedString("visit.total_amount_a11y_fmt", value: "Total amount %@", comment: ""), visit.totalCurrencyString))
             }
         }
-        .accessibilityHint(NSLocalizedString("visit.services_hint", value: "Services performed and prices.", comment: ""))
+        .accessibilityHint(NSLocalizedString("visit.services_hint", value: "Services performed.", comment: ""))
     }
-    
+
+    /// Catalog add-ons snapshot their category as `Service.Category.addOn.rawValue`.
+    /// Everything else — including custom items whose `serviceCategoryRaw` is nil —
+    /// counts as a main service so nothing silently disappears from the ledger.
+    private var mainItems: [VisitItem] {
+        Array(visit.items ?? []).filter { $0.serviceCategoryRaw != Service.Category.addOn.rawValue }
+    }
+
+    private var addOnItems: [VisitItem] {
+        Array(visit.items ?? []).filter { $0.serviceCategoryRaw == Service.Category.addOn.rawValue }
+    }
+
     private var servicesChips: some View {
-        let items: [VisitItem] = Array(visit.items ?? [])
-        return FlowLayout(spacing: 8, rowSpacing: 8) {
-            ForEach(items, id: \.uuid) { (item: VisitItem) in
+        FlowLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(mainItems, id: \.uuid) { (item: VisitItem) in
                 Chip(item.displayName, style: .tinted, size: .sm, tint: .blue)
                     .accessibilityLabel(String(format: NSLocalizedString("visit.service_a11y_fmt", value: "Service %@", comment: ""), item.displayName))
                     .allowsHitTesting(false)
             }
         }
     }
-    
-    private var servicesPriceList: some View {
-        let items: [VisitItem] = Array(visit.items ?? [])
-        return VStack(spacing: 8) {
-            ForEach(items, id: \.uuid) { (item: VisitItem) in
-                HStack(alignment: .firstTextBaseline) {
-                    Text(item.displayName + (item.quantity > 1 ? " ×\(item.quantity)" : ""))
-                        .font(.subheadline)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
-                    Spacer(minLength: 8)
-                    Text(item.lineTotalString)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .layoutPriority(1)
-                }
+
+    private var addOnChips: some View {
+        FlowLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(addOnItems, id: \.uuid) { (item: VisitItem) in
+                Chip(item.displayName, style: .tinted, size: .sm, tint: .purple)
+                    .accessibilityLabel(String(format: NSLocalizedString("visit.add_on_a11y_fmt", value: "Add-on %@", comment: ""), item.displayName))
+                    .allowsHitTesting(false)
             }
         }
     }
-    
+
     // MARK: - Photos (Before / After) 
     
     @State private var showTransformation = false

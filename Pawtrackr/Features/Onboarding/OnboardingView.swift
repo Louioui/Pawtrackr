@@ -20,6 +20,12 @@ struct OnboardingView: View {
     @Namespace private var animation
     @State private var viewModel: OnboardingViewModel
     @State private var showConfetti = false
+    // Welcome-screen entrance/loop animation state. Looping effects are scoped to
+    // the welcome step only (see footer/welcomeStep) and use SwiftUI repeatForever
+    // — never Timer/Combine, which freezes @Observable-driven views.
+    @State private var welcomeAppeared = false
+    @State private var welcomeBreathing = false
+    @State private var ctaPulse = false
     
     // Explicitly define PlatformImage based on platform to ensure availability
     #if canImport(UIKit)
@@ -116,18 +122,22 @@ struct OnboardingView: View {
         .allowsHitTesting(false)
     }
 
-    private func featureRow(icon: String, title: String, subtitle: String) -> some View {
+    private func featureRow(index: Int = 0, icon: String, title: String, subtitle: String) -> some View {
         HStack(spacing: DS.Spacing.md) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(DS.ColorToken.primary)
                 .frame(width: 40)
-            
+
             VStack(alignment: .leading) {
                 Text(title).font(.headline)
                 Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
             }
         }
+        // Staggered slide-up reveal; each bullet trails the previous by 120ms.
+        .opacity(welcomeAppeared ? 1 : 0)
+        .offset(y: welcomeAppeared ? 0 : 16)
+        .animation(.spring(response: 0.4, dampingFraction: 0.78).delay(0.18 + Double(index) * 0.12), value: welcomeAppeared)
         .padding(.horizontal, DS.Spacing.xxl)
     }
 
@@ -221,13 +231,16 @@ struct OnboardingView: View {
                     isOn: $viewModel.autoLockAfterInactivityEnabled
                 )
                 
-                permissionToggle(
-                    title: viewModel.biometricTitle,
-                    subtitle: viewModel.biometricSubtitle,
-                    icon: viewModel.isBiometricsAvailable ? "faceid" : "touchid",
-                    isOn: $viewModel.biometricsEnabled,
-                    isDisabled: !viewModel.isBiometricsAvailable
-                )
+                if viewModel.isBiometricsAvailable {
+                    permissionToggle(
+                        title: viewModel.biometricTitle,
+                        subtitle: viewModel.biometricSubtitle,
+                        icon: "faceid",
+                        isOn: $viewModel.biometricsEnabled
+                    )
+                } else {
+                    biometricUnavailableCard
+                }
             }
             .padding(.horizontal, DS.Spacing.xxl)
         }
@@ -255,11 +268,41 @@ struct OnboardingView: View {
             }
         }
         .padding()
-        .background(DS.ColorToken.surface)
+        // Interactive card: when ON it lifts to an accent tint + border and
+        // settles into a slightly smaller, "pressed-in" footprint for feedback.
+        .background(isOn.wrappedValue ? DS.ColorToken.primary.opacity(0.10) : DS.ColorToken.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .hairlineBorder(DS.ColorToken.border, cornerRadius: 12)
+        .hairlineBorder(isOn.wrappedValue ? DS.ColorToken.primary.opacity(0.55) : DS.ColorToken.border, cornerRadius: 12)
+        .scaleEffect(isOn.wrappedValue ? 0.99 : 1.0)
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.6 : 1)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isOn.wrappedValue)
+    }
+
+    /// Shown in place of the biometric toggle when Face ID / Touch ID isn't
+    /// available — a styled, non-interactive disclosure rather than a dead row.
+    private var biometricUnavailableCard: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "faceid")
+                .font(.title2)
+                .foregroundStyle(DS.ColorToken.warning)
+                .frame(width: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.biometricTitle).font(.headline)
+                Text(NSLocalizedString("onboarding.permissions.biometric_unavailable", value: "Turn on Face ID or Touch ID in your device Settings to speed up checkout unlocks. Your PIN keeps working in the meantime.", comment: ""))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.ColorToken.warning.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .hairlineBorder(DS.ColorToken.warning.opacity(0.4), cornerRadius: 12)
+        .accessibilityElement(children: .combine)
     }
 
     private var businessCardPreview: some View {
@@ -321,17 +364,21 @@ struct OnboardingView: View {
     private var welcomeStep: some View {
         VStack(spacing: DS.Spacing.xxl) {
             ZStack {
+                // Decorative breathing halo (not matched-geometry, so it can loop
+                // freely without disturbing the shared-logo transition).
                 Circle()
                     .fill(DS.ColorToken.primary.opacity(0.1))
                     .frame(width: 120, height: 120)
-                
+                    .scaleEffect(welcomeBreathing ? 1.06 : 0.94)
+
                 Image(systemName: "pawprint.fill")
                     .font(.system(size: 60))
                     .foregroundStyle(DS.ColorToken.primary)
+                    .symbolEffect(.pulse, options: .repeating)
                     .matchedGeometryEffect(id: "businessLogo", in: animation)
             }
             .padding(.top, 40)
-            
+
             VStack(spacing: DS.Spacing.sm) {
                 Text(NSLocalizedString("onboarding.welcome.title", value: "Welcome to Pawtrackr", comment: ""))
                     .font(.largeTitle.bold())
@@ -340,15 +387,31 @@ struct OnboardingView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal)
-            
+            .opacity(welcomeAppeared ? 1 : 0)
+            .offset(y: welcomeAppeared ? 0 : 12)
+            .animation(.spring(response: 0.45, dampingFraction: 0.8).delay(0.05), value: welcomeAppeared)
+
             VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-                featureRow(icon: "cloud.fill", title: NSLocalizedString("onboarding.feature.icloud.title", value: "iCloud Sync", comment: ""), subtitle: NSLocalizedString("onboarding.feature.icloud.subtitle", value: "Your data stays safe and synced across all your devices.", comment: ""))
-                featureRow(icon: "lock.fill", title: NSLocalizedString("onboarding.feature.privacy.title", value: "Privacy First", comment: ""), subtitle: NSLocalizedString("onboarding.feature.privacy.subtitle", value: "End-to-end security with local-first storage and biometric locking.", comment: ""))
-                featureRow(icon: "chart.bar.fill", title: NSLocalizedString("onboarding.feature.insights.title", value: "Business Insights", comment: ""), subtitle: NSLocalizedString("onboarding.feature.insights.subtitle", value: "Track revenue, service trends, and client loyalty effortlessly.", comment: ""))
+                featureRow(index: 0, icon: "cloud.fill", title: NSLocalizedString("onboarding.feature.icloud.title", value: "iCloud Sync", comment: ""), subtitle: NSLocalizedString("onboarding.feature.icloud.subtitle", value: "Your data stays safe and synced across all your devices.", comment: ""))
+                featureRow(index: 1, icon: "lock.fill", title: NSLocalizedString("onboarding.feature.privacy.title", value: "Privacy First", comment: ""), subtitle: NSLocalizedString("onboarding.feature.privacy.subtitle", value: "End-to-end security with local-first storage and biometric locking.", comment: ""))
+                featureRow(index: 2, icon: "chart.bar.fill", title: NSLocalizedString("onboarding.feature.insights.title", value: "Business Insights", comment: ""), subtitle: NSLocalizedString("onboarding.feature.insights.subtitle", value: "Track revenue, service trends, and client loyalty effortlessly.", comment: ""))
             }
             .padding(.top, DS.Spacing.xl)
-            
+
             Spacer()
+        }
+        .onAppear {
+            welcomeAppeared = true
+            if !welcomeBreathing {
+                withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
+                    welcomeBreathing = true
+                }
+            }
+            if !ctaPulse {
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    ctaPulse = true
+                }
+            }
         }
     }
     
@@ -483,6 +546,8 @@ struct OnboardingView: View {
                     }
                     .disabled(!viewModel.canGoNext || viewModel.isSaving)
                     .buttonStyle(.plain)
+                    // Gentle attention pulse on the very first screen's CTA only.
+                    .scaleEffect(viewModel.currentStep == .welcome && ctaPulse ? 1.035 : 1.0)
                     .scaleEffect(viewModel.canGoNext ? 1.0 : 0.98)
                     .animation(.spring(), value: viewModel.canGoNext)
                     .accessibilityIdentifier("onboarding.continue")
@@ -512,6 +577,21 @@ struct OnboardingView: View {
                 pinEntryView(title: NSLocalizedString("onboarding.security.confirm_pin", value: "Confirm PIN", comment: ""), text: $viewModel.confirmPin, field: .confirmPin)
                 // Validation messages render in the shared footer to avoid duplicates.
             }
+
+            // Optional path: let solo groomers run the app passcode-free.
+            Button {
+                focusedField = nil
+                viewModel.skipPIN()
+            } label: {
+                Text(NSLocalizedString("onboarding.security.skip", value: "Skip for now — use without a PIN", comment: ""))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isSaving)
+            .accessibilityIdentifier("onboarding.skipPin")
         }
         .padding(.top, DS.Spacing.xl)
         .onAppear {
@@ -581,15 +661,15 @@ struct OnboardingView: View {
     private var warmStartStep: some View {
         VStack(spacing: DS.Spacing.xxl) {
             VStack(spacing: DS.Spacing.md) {
-                Image(systemName: "sparkles")
+                Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 60))
                     .foregroundStyle(DS.ColorToken.primary)
                     .symbolEffect(.bounce, value: viewModel.currentStep)
-                
-                Text(NSLocalizedString("onboarding.warm_start.title", value: "How would you like to start?", comment: ""))
+
+                Text(NSLocalizedString("onboarding.finish.title", value: "You're all set!", comment: ""))
                     .font(.title2.bold())
-                
-                Text(NSLocalizedString("onboarding.warm_start.message", value: "Choose whether you want to start fresh or explore with some demo data.", comment: ""))
+
+                Text(NSLocalizedString("onboarding.finish.message", value: "We've loaded a sample salon so you can explore hands-on. Tap below and we'll show you around — clear it anytime with “Start Fresh” in Settings.", comment: ""))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, DS.Spacing.xl)
@@ -600,7 +680,11 @@ struct OnboardingView: View {
                     .font(.headline)
                 Label(viewModel.name.trimmed.isEmpty ? NSLocalizedString("onboarding.summary.business_pending", value: "Business name will be added in setup", comment: "") : viewModel.name.trimmed, systemImage: "building.2")
                 Label(String(format: NSLocalizedString("onboarding.summary.currency_fmt", value: "Currency: %@", comment: ""), viewModel.currencySymbol), systemImage: "dollarsign.circle")
-                Label(NSLocalizedString("onboarding.summary.pin_enabled", value: "PIN protection enabled", comment: ""), systemImage: "lock.shield")
+                if viewModel.pinSkipped {
+                    Label(NSLocalizedString("onboarding.summary.pin_disabled", value: "No PIN — open access", comment: ""), systemImage: "lock.open")
+                } else {
+                    Label(NSLocalizedString("onboarding.summary.pin_enabled", value: "PIN protection enabled", comment: ""), systemImage: "lock.shield")
+                }
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -609,27 +693,29 @@ struct OnboardingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .hairlineBorder(DS.ColorToken.border, cornerRadius: 14)
             .padding(.horizontal, DS.Spacing.xxl)
-            
-            VStack(spacing: DS.Spacing.md) {
-                selectionCard(
-                    title: NSLocalizedString("onboarding.warm_start.fresh_title", value: "Start Fresh", comment: ""),
-                    subtitle: NSLocalizedString("onboarding.warm_start.fresh_subtitle", value: "Start with your own services, clients, and first visit workflow.", comment: ""),
-                    icon: "plus.circle.fill",
-                    accessibilityIdentifier: "onboarding.startFresh",
-                    action: { completeWithCelebration(seed: false) }
-                )
-                
-                selectionCard(
-                    title: NSLocalizedString("onboarding.warm_start.demo_title", value: "See Demo Data", comment: ""),
-                    subtitle: NSLocalizedString("onboarding.warm_start.demo_subtitle", value: "Load polished sample clients, pets, visits, and pricing so you can explore every major screen.", comment: ""),
-                    icon: "wand.and.stars",
-                    isPromoted: true,
-                    accessibilityIdentifier: "onboarding.demoData",
-                    action: { completeWithCelebration(seed: true) }
-                )
+
+            // Single, unmistakable call to action — every new user starts in the
+            // demo and is guided from there. (No "fresh vs demo" fork anymore.)
+            Button {
+                completeWithCelebration(seed: true)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.stars")
+                    Text(NSLocalizedString("onboarding.finish.explore", value: "Explore Pawtrackr", comment: ""))
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DS.Spacing.md)
+                .background(DS.ColorToken.primary)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+                .shadow(color: DS.ColorToken.primary.opacity(0.3), radius: 8, x: 0, y: 4)
             }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isSaving)
+            .accessibilityIdentifier("onboarding.explore")
             .padding(.horizontal, DS.Spacing.xxl)
-            
+
             if viewModel.isSaving {
                 ProgressView(NSLocalizedString("onboarding.saving", value: "Setting up your workspace...", comment: ""))
                     #if os(iOS)
@@ -637,30 +723,6 @@ struct OnboardingView: View {
                     #endif
             }
         }
-    }
-
-    private func selectionCard(title: String, subtitle: String, icon: String, isPromoted: Bool = false, accessibilityIdentifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.headline)
-                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(isPromoted ? DS.ColorToken.primary : .secondary)
-            }
-            .padding()
-            .background(DS.ColorToken.surface)
-            .contentShape(Rectangle())
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .hairlineBorder(isPromoted ? DS.ColorToken.primary.opacity(0.5) : DS.ColorToken.border, cornerRadius: 12)
-            .shadow(color: isPromoted ? DS.ColorToken.primary.opacity(0.1) : .clear, radius: 10, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isSaving)
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     

@@ -299,6 +299,7 @@ struct ClientDetailView: View {
         ScrollView {
             VStack(spacing: 16) {
                 ownerHeader(client: vm.client)
+                clientSafetyBanner(client: vm.client)
                 emergencyContactsCard(client: vm.client)
                 notesCard(client: vm.client)
                 petsSection(vm: vm)
@@ -583,23 +584,79 @@ struct ClientDetailView: View {
         showContactEditor = true
     }
 
+    // MARK: - Safety (Aggressive behavior)
+
+    /// Prominent, high-visibility warning shown at the top of the client center
+    /// whenever any of the client's pets is flagged aggressive — so staff see
+    /// the hazard before touching the dog.
+    @ViewBuilder
+    private func clientSafetyBanner(client: Client) -> some View {
+        let aggressivePets = (client.pets ?? []).filter { $0.isAggressive }
+        if !aggressivePets.isEmpty {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(NSLocalizedString("client_detail.safety_alert.title", value: "Caution: Aggressive Behavior", comment: ""))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                    Text(String(
+                        format: NSLocalizedString(
+                            "client_detail.safety_alert.message_fmt",
+                            value: "%@ is flagged as aggressive. Alert the team and handle with care.",
+                            comment: ""
+                        ),
+                        aggressivePets.map(\.name).joined(separator: ", ")
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.95))
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(DS.ColorToken.danger, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("clientDetail.safetyBanner")
+        }
+    }
+
+    /// Compact red flag rendered on an aggressive pet's row in the pet list.
+    private var aggressivePetBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(NSLocalizedString("pet.safety.aggressive_badge", value: "Aggressive — handle with care", comment: ""))
+                .font(.caption2.weight(.bold))
+        }
+        .foregroundStyle(.white)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(DS.ColorToken.danger, in: Capsule())
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel(NSLocalizedString("pet.safety.aggressive_a11y", value: "Warning: this pet is marked aggressive. Handle with care.", comment: ""))
+    }
+
     private func petsSection(vm: ClientDetailViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(String(format: NSLocalizedString("client_detail.pets_count_fmt", comment: ""), vm.pets.count)).font(.headline).padding(.horizontal)
             VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
-                    let activeVisit = pet.activeVisit
+                    let activeVisit = vm.activeVisit(for: pet)
                     Card {
                         HStack(alignment: .top, spacing: 12) {
                             AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md, ringWidth: 3)
                             VStack(alignment: .leading, spacing: 6) {
+                                if pet.isAggressive { aggressivePetBadge }
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(pet.name).font(.headline)
                                         Text(pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
                                     }
                                     Spacer()
-                                    petStatusPill(pet)
+                                    petStatusPill(activeVisit)
                                 }
                                 HStack(spacing: 8) {
                                     actionButton(title: NSLocalizedString("client_detail.check_in", comment: ""), systemImage: "play.fill", tint: .blue) {
@@ -918,8 +975,8 @@ private struct InitialsCircle: View {
     .onTapGesture(perform: onTap)
 }
 
-@ViewBuilder private func petStatusPill(_ pet: Pet) -> some View {
-    if let v = pet.activeVisit {
+@ViewBuilder private func petStatusPill(_ activeVisit: Visit?) -> some View {
+    if let v = activeVisit {
         HStack(spacing: 6) {
             Image(systemName: "clock")
             TimelineView(.periodic(from: .now, by: 1)) { _ in
