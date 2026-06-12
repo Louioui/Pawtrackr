@@ -369,6 +369,17 @@ final class AppSettings {
         isChecklistDismissed = false
     }
 
+    /// Re-arms the dashboard "getting started" checklist for a clean business
+    /// after a Start Fresh wipe. Intentionally leaves `hasSeenAppTour` untouched
+    /// (the user has already been guided once) and does NOT alter business config,
+    /// currency, PIN, or the service catalog — only the first-run progress flags.
+    func resetForFreshStart() {
+        hasConfiguredPrices = false
+        hasAddedFirstClient = false
+        hasCompletedFirstVisit = false
+        isChecklistDismissed = false
+    }
+
     /// Checks if a PIN is valid (exactly 4 numeric digits).
     static func isValidPIN(_ pin: String) -> Bool {
         pin.count == 4 && pin.allSatisfy { $0.isNumber }

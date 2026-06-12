@@ -32,6 +32,16 @@ final class ClientDetailViewModel {
     // MARK: - Outputs
     var pets: [Pet] = []
     var recentVisits: [Visit] = []
+    /// Maps a pet's persistent ID → its currently-open visit's persistent ID.
+    ///
+    /// Sourced from a fresh store query (`endedAt == nil`) rather than the
+    /// in-memory `pet.visits` relationship. After `CheckoutTransactionActor`
+    /// commits on its own `ModelContext`, the main context's materialized
+    /// `Visit.endedAt` can stay stale, leaving `pet.activeVisit` reporting a
+    /// session that has already ended (the lingering "In Session" badge). A
+    /// predicate fetch filters at the store layer against the actor's committed
+    /// write, so a checked-out visit is correctly excluded.
+    private(set) var activeVisitIDByPetID: [PersistentIdentifier: PersistentIdentifier] = [:]
     var historyRange: HistoryRange = .all { didSet { refreshRecentVisits() } }
     private(set) var canLoadMore: Bool = false
     var appError: AppError? = nil
@@ -77,17 +87,42 @@ final class ClientDetailViewModel {
             }
         }
         self.visitCompleteObserver = CDVMObserverToken(token)
+        refreshActiveVisits()
         refreshRecentVisits()
     }
 
     // MARK: - Queries
 
     func activeVisit(for pet: Pet) -> Visit? {
-        (pet.visits ?? []).first(where: { $0.endedAt == nil })
+        guard let visitID = activeVisitIDByPetID[pet.persistentModelID] else { return nil }
+        return modelContext.model(for: visitID) as? Visit
     }
 
     func refreshPets() {
         pets = client.pets ?? []
+        refreshActiveVisits()
+    }
+
+    /// Re-derive which of this client's pets have an open visit by querying the
+    /// store directly. Runs on the main actor (the result set is tiny — only
+    /// in-progress visits) so the UI sees fresh state synchronously after a
+    /// check-in/out or a `.visitDidComplete` event.
+    func refreshActiveVisits() {
+        let petIDs = Set((client.pets ?? []).map { $0.persistentModelID })
+        guard !petIDs.isEmpty else {
+            if !activeVisitIDByPetID.isEmpty { activeVisitIDByPetID = [:] }
+            return
+        }
+
+        var map: [PersistentIdentifier: PersistentIdentifier] = [:]
+        let descriptor = FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.endedAt == nil })
+        if let openVisits = try? modelContext.fetch(descriptor) {
+            for visit in openVisits {
+                guard let petID = visit.pet?.persistentModelID, petIDs.contains(petID) else { continue }
+                map[petID] = visit.persistentModelID
+            }
+        }
+        activeVisitIDByPetID = map
     }
 
     // Non-async entry-point — creates an internal Task for background work.

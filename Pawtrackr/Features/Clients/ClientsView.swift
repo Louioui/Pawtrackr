@@ -259,12 +259,12 @@ struct ClientsView: View {
     private func clientSections(_ viewModel: ClientsViewModel) -> some View {
         if !viewModel.inProgressClients.isEmpty {
             sectionHeader(NSLocalizedString("clients.in_progress", comment: ""), count: viewModel.inProgressCount, topPadding: 0)
-            clientList(for: viewModel.inProgressClients)
+            clientList(for: viewModel.inProgressClients, isInProgress: true)
         }
-        
+
         sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: 16)
         VStack(spacing: 10) {
-            clientList(for: viewModel.otherClients, enableInfiniteScroll: true)
+            clientList(for: viewModel.otherClients, isInProgress: false, enableInfiniteScroll: true)
             if viewModel.canLoadMore {
                 Button(action: { viewModel.loadMore() }) {
                     HStack(spacing: 8) {
@@ -284,11 +284,11 @@ struct ClientsView: View {
     }
 
     @ViewBuilder
-    private func clientList(for clients: [Client], enableInfiniteScroll: Bool = false) -> some View {
+    private func clientList(for clients: [Client], isInProgress: Bool? = nil, enableInfiniteScroll: Bool = false) -> some View {
         LazyVStack(spacing: 12) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { router.navigateToClient(client) }) {
-                    ClientCard(client: client, namespace: namespace)
+                    ClientCard(client: client, namespace: namespace, isInProgressOverride: isInProgress)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")

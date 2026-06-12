@@ -108,6 +108,36 @@ final class ClientDetailViewModelTests: XCTestCase {
         XCTAssertEqual(found?.uuid, active.uuid)
     }
 
+    func testActiveVisit_ClearedAfterCrossContextCheckout() async throws {
+        // Seed an open visit on the main context — pet starts "In Session".
+        let active = Visit(pet: pet)
+        context.insert(active)
+        try context.save()
+
+        let vm = ClientDetailViewModel(client: client, modelContext: context)
+        XCTAssertNotNil(vm.activeVisit(for: pet), "An open visit must register as active.")
+
+        // Reproduce the bug's trigger: end the visit on a SEPARATE context of the
+        // same container, exactly as CheckoutTransactionActor (@ModelActor) does.
+        // The main context's materialized `pet.visits` relationship can stay stale
+        // here — which is what left the "In Session" badge stuck.
+        let bgContext = ModelContext(container)
+        let bgVisit = try XCTUnwrap(bgContext.model(for: active.persistentModelID) as? Visit)
+        bgVisit.markCheckedOut(total: 50, now: .now)
+        try bgContext.save()
+
+        // The completion broadcast posted after checkout.
+        NotificationCenter.default.post(
+            name: .visitDidComplete,
+            object: nil,
+            userInfo: [VisitDidCompleteKey.clientID.rawValue: client.persistentModelID]
+        )
+        try await Task.sleep(for: .milliseconds(150)) // let the main-actor observer refresh
+
+        XCTAssertNil(vm.activeVisit(for: pet),
+            "After checkout commits on the actor's context, the pet must no longer report an active visit — the store-level query excludes the now-ended visit even if the relationship is stale.")
+    }
+
     func testCheckIn_NoOpWhenActiveVisitAlreadyExists() async throws {
         let active = Visit(pet: pet, startedAt: .now)
         context.insert(active)

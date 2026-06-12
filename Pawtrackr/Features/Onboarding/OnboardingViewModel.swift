@@ -41,8 +41,18 @@ final class OnboardingViewModel {
     var phone: String = "" { didSet { saveDraft() } }
     var address: String = "" { didSet { saveDraft() } }
     var logoData: Data? = nil { didSet { saveDraft() } }
-    var pin: String = "" { didSet { saveDraft() } }
+    var pin: String = "" {
+        didSet {
+            // Typing a PIN cancels a prior "skip" choice so finish() doesn't
+            // silently leave the app passcode-free after the user changed their mind.
+            if !pin.isEmpty { pinSkipped = false }
+            saveDraft()
+        }
+    }
     var confirmPin: String = "" { didSet { saveDraft() } }
+    /// User chose to set up the app without a PIN (passcode-free). Defaults false so
+    /// existing validation/tests still require a matching 4-digit PIN by default.
+    var pinSkipped: Bool = false { didSet { saveDraft() } }
     var biometricsEnabled: Bool = false { didSet { saveDraft() } }
     var lockOnBackgroundEnabled: Bool = true { didSet { saveDraft() } }
     var autoLockAfterInactivityEnabled: Bool = false { didSet { saveDraft() } }
@@ -60,7 +70,8 @@ final class OnboardingViewModel {
     private func saveDraft() {
         let draft: [String: Any] = [
             "name": name, "email": email, "phone": phone, "address": address,
-            "pin": pin, "confirmPin": confirmPin, "biometricsEnabled": biometricsEnabled,
+            "pin": pin, "confirmPin": confirmPin, "pinSkipped": pinSkipped,
+            "biometricsEnabled": biometricsEnabled,
             "lockOnBackgroundEnabled": lockOnBackgroundEnabled,
             "autoLockAfterInactivityEnabled": autoLockAfterInactivityEnabled,
             "currency": currentCurrency
@@ -76,6 +87,7 @@ final class OnboardingViewModel {
         address = draft["address"] as? String ?? ""
         pin = draft["pin"] as? String ?? ""
         confirmPin = draft["confirmPin"] as? String ?? ""
+        pinSkipped = draft["pinSkipped"] as? Bool ?? false
         biometricsEnabled = draft["biometricsEnabled"] as? Bool ?? false
         lockOnBackgroundEnabled = draft["lockOnBackgroundEnabled"] as? Bool ?? true
         autoLockAfterInactivityEnabled = draft["autoLockAfterInactivityEnabled"] as? Bool ?? false
@@ -143,6 +155,16 @@ final class OnboardingViewModel {
         }
     }
     
+    /// Skips PIN setup entirely: the app will run passcode-free. Clears any
+    /// partially-entered PIN and advances past the security step.
+    func skipPIN() {
+        pin = ""
+        confirmPin = ""
+        pinSkipped = true
+        HapticManager.impact(.light)
+        nextStep()
+    }
+
     func previousStep() {
         guard let prev = Step(rawValue: currentStep.rawValue - 1) else { return }
         HapticManager.impact(.light)
@@ -168,6 +190,7 @@ final class OnboardingViewModel {
         case .regional:
             return regionalValidationMessage == nil
         case .security:
+            if pinSkipped { return true }
             let normalizedPIN = pin.filter(\.isNumber)
             let normalizedConfirm = confirmPin.filter(\.isNumber)
             return AppSettings.isValidPIN(normalizedPIN) && normalizedPIN == normalizedConfirm
@@ -313,7 +336,8 @@ final class OnboardingViewModel {
             saveError = regionalValidationMessage
             return nil
         }
-        guard AppSettings.isValidPIN(currentPIN), currentPIN == confirmPin.filter(\.isNumber) else {
+        let pinMatches = AppSettings.isValidPIN(currentPIN) && currentPIN == confirmPin.filter(\.isNumber)
+        guard pinSkipped || pinMatches else {
             saveError = NSLocalizedString("onboarding.validation.pin_incomplete", value: "Your PIN is incomplete. Enter the same 4 digits in both fields.", comment: "")
             return nil
         }
@@ -338,10 +362,10 @@ final class OnboardingViewModel {
             // can dismiss onboarding. This save is small and fast.
             try context.save()
 
-            // Apply settings and PIN before kicking off background work so
-            // the user is never left in the app without a PIN set.
-            settings.isLockEnabled = true
-            settings.isBiometricLockEnabled = useBiometrics
+            // Apply settings (and PIN, unless the user opted out) before kicking
+            // off background work. When the PIN is skipped the app runs lock-free.
+            settings.isLockEnabled = !pinSkipped
+            settings.isBiometricLockEnabled = pinSkipped ? false : useBiometrics
             settings.autoLockOnBackground = lockOnBackgroundEnabled
             settings.autoLockAfterInactivity = autoLockAfterInactivityEnabled
             settings.currencySymbol = currentCurrency
@@ -352,9 +376,13 @@ final class OnboardingViewModel {
             settings.hasCompletedFirstVisit = seedSampleData
             settings.hasSeenAppTour = false
 
-            guard settings.changePIN(to: currentPIN) else {
-                throw ValidationError.custom(message: NSLocalizedString("onboarding.error.pin_save_failed", value: "The selected PIN could not be saved.", comment: ""))
+            if !pinSkipped {
+                guard settings.changePIN(to: currentPIN) else {
+                    throw ValidationError.custom(message: NSLocalizedString("onboarding.error.pin_save_failed", value: "The selected PIN could not be saved.", comment: ""))
+                }
             }
+            // Note: when pinSkipped, lock is disabled above so the stored PIN is
+            // never consulted. Enabling App Lock later in Settings prompts for a PIN.
 
             // Catalog seed, demo data, and summary rebuilds are optional and
             // can be slow (multiple DB saves + potential SQLite write contention

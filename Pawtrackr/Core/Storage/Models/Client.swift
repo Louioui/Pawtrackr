@@ -63,6 +63,14 @@ final class Client {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
     }
+
+    /// True when any of this client's pets is flagged aggressive. Single source of
+    /// truth for the staff-safety warning shown on the client list and detail.
+    /// Computed (not stored) so it stays schema/CloudKit-safe and always reflects
+    /// the current behavior tags.
+    var hasAggressivePet: Bool {
+        (pets ?? []).contains { $0.isAggressive }
+    }
     
     var smsURL: URL? {
         guard let p = phone, let urlStr = PhoneUtils.smsURLString(p) else { return nil }

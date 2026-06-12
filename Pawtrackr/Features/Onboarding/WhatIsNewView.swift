@@ -12,10 +12,10 @@ struct WhatIsNewView: View {
     }
     
     let features = [
-        Feature(title: "Inventory Tracking", description: "Monitor your supplies and costs directly in the app.", icon: "shippingbox.fill", color: .blue),
-        Feature(title: "CSV Data Import", description: "Easily migrate your existing clients from other software.", icon: "square.and.arrow.down.fill", color: .green),
-        Feature(title: "Team Management", description: "Assign staff to visits and track performance.", icon: "person.2.fill", color: .purple),
-        Feature(title: "Security Hardening", description: "Enhanced privacy screen and biometric security.", icon: "lock.shield.fill", color: .red)
+        Feature(title: "Guided Hands-On Tour", description: "New here? We spotlight each tool and explain what it does, step by step — right on top of a sample salon.", icon: "hand.tap.fill", color: .blue),
+        Feature(title: "Aggressive-Pet Safety Flag", description: "Pets marked aggressive now show a bold red warning across your client list, so the team handles them with care.", icon: "exclamationmark.triangle.fill", color: .red),
+        Feature(title: "Explore, Then Start Fresh", description: "Play with realistic demo data, then wipe it in one tap from Settings to begin with your real business.", icon: "wand.and.stars", color: .purple),
+        Feature(title: "Faster, Friendlier Setup", description: "A smoother animated welcome — and you can set a PIN or skip it for instant, passcode-free access.", icon: "bolt.fill", color: .orange)
     ]
     
     var body: some View {

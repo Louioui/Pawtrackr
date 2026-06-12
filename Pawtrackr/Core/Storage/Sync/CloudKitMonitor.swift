@@ -1131,17 +1131,13 @@ final class CloudKitMonitor {
             syncEvents.removeLast(syncEvents.count - 25)
         }
         persistEvents()
-        
-                // Show live toast for remote imports (collaboration)
-                if kind == .importFromCloud && status == .noted {
-                    ToastService.shared.show(message: message, icon: "icloud.and.arrow.down.fill", tint: .green)
-                    
-                    // Predictive Warming: If a check-in was part of this import, warm the pet media
-                    if message.contains("checked in") {
-                         // Extract pet name/id would be better, but for now we'll rely on the reconciler
-                         // finding new visits and we can trigger warming there.
-                    }
-                }
+
+        // Routine background sync is silent by design. Import/reconciliation
+        // outcomes are recorded in the sync-event log above (visible in
+        // CloudKit diagnostics) but must NOT surface a toast — the recurring
+        // "Cloud import reconciliation found no issues" banner was flashing on
+        // every settled import. Toasts are reserved for explicit user actions
+        // and critical errors elsewhere.
     }
 
     // MARK: - Safe Mode
