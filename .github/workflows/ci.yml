@@ -10,6 +10,8 @@ jobs:
   test:
     name: Build and Test
     runs-on: macos-latest
+    # Hard cap so a hung/slow test can't burn a 6-hour runner.
+    timeout-minutes: 20
 
     steps:
     - name: Checkout
@@ -70,10 +72,15 @@ jobs:
         DEST_ID: ${{ steps.sim.outputs.dest_id }}
       run: |
         set -euo pipefail
+        # Run the unit-test target only. The UI tests (PawtrackrUITests) drive the
+        # app through PIN/onboarding/sync gates and are slow/flaky in a headless
+        # CI simulator (they hang for 30+ min there), so they aren't part of the
+        # required check — run them locally, or add a dedicated UI-test workflow.
         xcodebuild test \
           -project Pawtrackr.xcodeproj \
           -scheme Pawtrackr \
           -destination "id=$DEST_ID" \
+          -only-testing:PawtrackrTests \
           -parallel-testing-enabled YES \
           -resultBundlePath TestResults.xcresult \
           CODE_SIGNING_ALLOWED=NO
