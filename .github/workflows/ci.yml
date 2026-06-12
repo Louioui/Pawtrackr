@@ -30,17 +30,20 @@ jobs:
         set -euo pipefail
         echo "Using: $(xcodebuild -version | tr '\n' ' ')"
         # Don't hardcode the iOS version — pick the newest available iPhone
-        # simulator on whatever runtime the runner currently ships.
+        # simulator on whatever runtime the runner currently ships. Compare by
+        # numeric components (so iOS-18-10 > iOS-18-6, not lexicographically).
         DEST_ID=$(xcrun simctl list devices available --json | /usr/bin/python3 -c '
-        import json, sys
+        import json, re, sys
         devices = json.load(sys.stdin).get("devices", {})
+        def nums(s): return [int(n) for n in re.findall(r"\d+", s)]
         best = None
         for runtime, devs in devices.items():
             if "iOS" not in runtime:
                 continue
             for d in devs:
-                if d.get("isAvailable") and d.get("name", "").startswith("iPhone"):
-                    key = (runtime, d["name"])
+                name = d.get("name", "")
+                if d.get("isAvailable") and name.startswith("iPhone"):
+                    key = (nums(runtime), nums(name), runtime, name)
                     if best is None or key > best[0]:
                         best = (key, d["udid"])
         print(best[1] if best else "")
@@ -50,16 +53,27 @@ jobs:
           xcrun simctl list devices
           exit 1
         fi
+        # Defense-in-depth: only emit a value that is strictly a UUID, so a
+        # malformed/unexpected string can't be smuggled into later expansion.
+        if ! printf '%s' "$DEST_ID" | grep -qiE '^[0-9A-F]{8}-([0-9A-F]{4}-){3}[0-9A-F]{12}$'; then
+          echo "::error::Unexpected simulator UDID format: $DEST_ID"
+          exit 1
+        fi
         echo "Selected simulator UDID: $DEST_ID"
         echo "dest_id=$DEST_ID" >> "$GITHUB_OUTPUT"
 
     - name: Build and Test
+      # Pass the UDID through the environment instead of interpolating
+      # ${{ ... }} directly into the script, so the value can never be treated
+      # as part of the shell command (avoids the template-injection class).
+      env:
+        DEST_ID: ${{ steps.sim.outputs.dest_id }}
       run: |
         set -euo pipefail
         xcodebuild test \
           -project Pawtrackr.xcodeproj \
           -scheme Pawtrackr \
-          -destination "id=${{ steps.sim.outputs.dest_id }}" \
+          -destination "id=$DEST_ID" \
           -parallel-testing-enabled YES \
           -resultBundlePath TestResults.xcresult \
           CODE_SIGNING_ALLOWED=NO
