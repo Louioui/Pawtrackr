@@ -21,18 +21,10 @@ struct DashboardView: View {
     @State private var showQuickCheckIn = false
     @State private var showQuickCheckOut = false
     @State private var selectedRevenueDate: Date?
-    @State private var walkthrough = WalkthroughController()
     var namespace: Namespace.ID
 
     var body: some View {
         dashboardContent
-            .walkthroughOverlay(walkthrough)
-            .onAppear { scheduleTourIfNeeded() }
-            // Re-fire when "Replay Getting Started" re-arms the tour while the
-            // dashboard tab is already alive (so onAppear won't run again).
-            .onChange(of: appSettings.hasSeenAppTour) { _, seen in
-                if !seen { scheduleTourIfNeeded() }
-            }
             .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
             .sheet(isPresented: $showNewClient) {
                 NewClientSheet(modelContext: modelContext)
@@ -60,20 +52,6 @@ struct DashboardView: View {
                 )
             }
             .toolbar { insightsToolbarItem }
-    }
-
-    /// Starts the first-run guided tour shortly after the dashboard appears — only
-    /// when the new-user tour hasn't been seen and isn't already running. The short
-    /// delay lets the post-onboarding transition settle so the spotlight measures
-    /// the quick-action buttons in their final positions.
-    private func scheduleTourIfNeeded() {
-        guard !appSettings.hasSeenAppTour, !walkthrough.isActive else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(650))
-            guard !appSettings.hasSeenAppTour, !walkthrough.isActive else { return }
-            walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.start(WalkthroughController.dashboardTour())
-        }
     }
 
     @ViewBuilder
@@ -534,7 +512,6 @@ struct DashboardView: View {
                     symbol: "person.crop.circle.badge.plus",
                     accessibilityIdentifier: "dashboard.quickAction.newClient"
                 ) { showNewClient = true }
-                    .walkthroughAnchor(.newClient)
                 actionCard(
                     title: NSLocalizedString("dashboard.quick_check_in", value: "Quick Check-In", comment: ""),
                     symbol: "play.circle",
@@ -544,7 +521,6 @@ struct DashboardView: View {
                     // just navigating to the Clients tab.
                     showQuickCheckIn = true
                 }
-                    .walkthroughAnchor(.checkIn)
                 actionCard(
                     title: NSLocalizedString("dashboard.check_out", comment: ""),
                     symbol: "stop.circle",
@@ -554,7 +530,6 @@ struct DashboardView: View {
                     // full checkout flow, rather than just opening history.
                     showQuickCheckOut = true
                 }
-                    .walkthroughAnchor(.checkOut)
                 actionCard(
                     title: NSLocalizedString("dashboard.reports", comment: ""),
                     symbol: "chart.bar.fill",
@@ -562,7 +537,6 @@ struct DashboardView: View {
                 ) {
                     selectSurface(.insights, resetPath: true)
                 }
-                    .walkthroughAnchor(.reports)
             }
         }
     }

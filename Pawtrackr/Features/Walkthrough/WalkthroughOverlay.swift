@@ -2,10 +2,14 @@
 //  WalkthroughOverlay.swift
 //  Pawtrackr
 //
-//  The visual layer of the guided tour: dims the screen, cuts a glowing hole
-//  around the current step's control, points an arrow at it, and floats a bubble
-//  explaining what to do and why it helps. Touches are blocked except on the
-//  spotlight and the bubble's own buttons.
+//  The visual layer of the guided tour: dims the whole window, cuts a glowing
+//  hole around the current step's control, points an arrow at it, and floats a
+//  bubble explaining what it is and why it helps. Hosted at the navigation root
+//  so it spotlights the sidebar (Mac/iPad) and the tab bar (iPhone) alike.
+//
+//  Bubble placement adapts to where the target lives: a sidebar row on the left
+//  gets a bubble to its trailing side (arrow pointing left); a bottom tab-bar
+//  slot gets a bubble above it (arrow pointing down).
 //
 
 import SwiftUI
@@ -13,15 +17,18 @@ import SwiftUI
 extension View {
     /// Hosts the guided-tour overlay above this view's content. Anchors registered
     /// with `.walkthroughAnchor(_:)` anywhere in the subtree are resolved here, so
-    /// attach this at the screen root that contains the tour's target controls.
+    /// attach this at the navigation root that contains the sidebar / tab bar.
     func walkthroughOverlay(_ controller: WalkthroughController) -> some View {
         overlayPreferenceValue(WalkthroughAnchorPreferenceKey.self) { anchors in
             GeometryReader { proxy in
                 if controller.isActive, let step = controller.currentStep {
-                    let targetRect = anchors[step.anchor].map { proxy[$0] }
+                    // Prefer the live anchor; fall back to a computed rect for
+                    // targets SwiftUI won't anchor (iPhone tab-bar items).
+                    let target = anchors[step.anchor].map { proxy[$0] }
+                        ?? walkthroughFallbackRect(step.fallback, in: proxy)
                     WalkthroughOverlayView(
                         step: step,
-                        targetRect: targetRect,
+                        targetRect: target,
                         containerSize: proxy.size,
                         controller: controller
                     )
@@ -32,25 +39,57 @@ extension View {
     }
 }
 
-/// A simple isosceles triangle used as the bubble's pointer.
-private struct PointerTriangle: Shape {
-    /// When true the apex points up (bubble sits below the target).
-    var pointsUp: Bool
+/// Computes a spotlight rect for targets that can't be anchored. Currently only
+/// the iPhone bottom tab bar, whose `.tabItem` frames SwiftUI does not expose.
+private func walkthroughFallbackRect(_ fallback: SpotlightFallback, in proxy: GeometryProxy) -> CGRect? {
+    switch fallback {
+    case .none:
+        return nil
+    case .tabBarItem(let index, let count):
+        guard count > 0, index >= 0, index < count else { return nil }
+        let tabBarHeight: CGFloat = 49
+        let bottomInset = proxy.safeAreaInsets.bottom
+        let slot = proxy.size.width / CGFloat(count)
+        let centerX = slot * (CGFloat(index) + 0.5)
+        let centerY = proxy.size.height - bottomInset - tabBarHeight / 2
+        let w = min(slot - 16, 60)
+        let h: CGFloat = 44
+        return CGRect(x: centerX - w / 2, y: centerY - h / 2, width: w, height: h)
+    }
+}
+
+private enum ArrowDirection { case up, down, left, right }
+
+/// An isosceles triangle pointing in one of four directions — the bubble's
+/// pointer into the spotlight.
+private struct ArrowTriangle: Shape {
+    var direction: ArrowDirection
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        if pointsUp {
+        switch direction {
+        case .up:
             p.move(to: CGPoint(x: rect.midX, y: rect.minY))
             p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
             p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        } else {
+        case .down:
             p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
             p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
             p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        case .left:
+            p.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        case .right:
+            p.move(to: CGPoint(x: rect.maxX, y: rect.midY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         }
         p.closeSubpath()
         return p
     }
 }
+
+private enum BubblePlacement { case below, above, trailing }
 
 private struct WalkthroughOverlayView: View {
     let step: WalkthroughStep
@@ -58,9 +97,9 @@ private struct WalkthroughOverlayView: View {
     let containerSize: CGSize
     let controller: WalkthroughController
 
-    private let dimOpacity = 0.72
+    private let dimOpacity = 0.74
     private let spotlightPadding: CGFloat = 10
-    private let bubbleMaxWidth: CGFloat = 460
+    private let bubbleMaxWidth: CGFloat = 440
 
     /// Inflated rect we actually cut/ring around the target.
     private var spotlight: CGRect? {
@@ -68,10 +107,14 @@ private struct WalkthroughOverlayView: View {
         return r.insetBy(dx: -spotlightPadding, dy: -spotlightPadding)
     }
 
-    /// Place the bubble in the half of the screen opposite the target so it never
-    /// overlaps the control. Defaults to lower-half placement when unmeasured.
-    private var bubbleBelowTarget: Bool {
-        (spotlight?.midY ?? containerSize.height / 2) < containerSize.height * 0.5
+    /// Where the bubble goes relative to the spotlight, chosen from the target's
+    /// position: bottom tab bar → above; left-column sidebar row → trailing;
+    /// otherwise the opposite vertical half.
+    private var placement: BubblePlacement {
+        guard let s = spotlight else { return .below }
+        if s.midY > containerSize.height * 0.72 { return .above }          // tab bar
+        if s.maxX < containerSize.width * 0.45 { return .trailing }        // sidebar
+        return s.midY < containerSize.height * 0.5 ? .below : .above
     }
 
     var body: some View {
@@ -81,7 +124,10 @@ private struct WalkthroughOverlayView: View {
             spotlightTapTarget
             bubble
         }
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: step.id)
+        // Interpolate the spotlight + bubble both when the step changes and when
+        // the target frame moves (e.g. a macOS window resize mid-tour).
+        .animation(.spring(response: 0.45, dampingFraction: 0.75), value: step.id)
+        .animation(.spring(response: 0.45, dampingFraction: 0.75), value: targetRect)
     }
 
     // MARK: Dim + cutout
@@ -102,7 +148,7 @@ private struct WalkthroughOverlayView: View {
             ctx.fill(region, with: .color(.black.opacity(dimOpacity)), style: FillStyle(eoFill: true))
         }
         .contentShape(Rectangle())
-        .onTapGesture { /* swallow taps on the dimmed area so the app can't be touched */ }
+        .onTapGesture { /* swallow taps/clicks on the dimmed area */ }
     }
 
     // MARK: Glowing ring
@@ -145,16 +191,25 @@ private struct WalkthroughOverlayView: View {
 
     // MARK: Bubble + arrow
 
+    @ViewBuilder
     private var bubble: some View {
-        let below = bubbleBelowTarget
+        switch placement {
+        case .below: verticalBubble(below: true)
+        case .above: verticalBubble(below: false)
+        case .trailing: trailingBubble
+        }
+    }
+
+    /// Bubble above or below the spotlight (tab bar / general case).
+    private func verticalBubble(below: Bool) -> some View {
         let gap: CGFloat = 16
         let topInset = below ? min((spotlight?.maxY ?? 0) + gap, containerSize.height * 0.62) : 0
         let bottomInset = below ? 0 : min(containerSize.height - (spotlight?.minY ?? containerSize.height) + gap, containerSize.height * 0.62)
 
         return VStack(spacing: 0) {
-            if below { arrow(pointsUp: true) }
+            if below { verticalArrow(.up) }
             bubbleCard
-            if !below { arrow(pointsUp: false) }
+            if !below { verticalArrow(.down) }
         }
         .frame(maxWidth: bubbleMaxWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: below ? .top : .bottom)
@@ -164,13 +219,34 @@ private struct WalkthroughOverlayView: View {
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
-    /// Pointer triangle, nudged horizontally toward the target's center.
-    private func arrow(pointsUp: Bool) -> some View {
+    /// Bubble to the trailing side of the spotlight (sidebar row on Mac/iPad).
+    private var trailingBubble: some View {
+        let gap: CGFloat = 12
+        let leadingInset = min((spotlight?.maxX ?? 0) + gap, containerSize.width * 0.55)
+        let topInset = max(12, min((spotlight?.minY ?? 0) - 8, containerSize.height - 260))
+
+        return HStack(alignment: .top, spacing: 0) {
+            ArrowTriangle(direction: .left)
+                .fill(DS.ColorToken.surface)
+                .frame(width: 11, height: 22)
+                .padding(.top, 16)
+            bubbleCard
+        }
+        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.leading, leadingInset)
+        .padding(.top, topInset)
+        .padding(.trailing, 16)
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+    }
+
+    /// Up/down pointer, nudged horizontally toward the target's center.
+    private func verticalArrow(_ dir: ArrowDirection) -> some View {
         let targetX = spotlight?.midX ?? containerSize.width / 2
         let rawOffset = targetX - containerSize.width / 2
         let limit = (min(bubbleMaxWidth, containerSize.width - 40) / 2) - 24
         let offset = max(-limit, min(limit, rawOffset))
-        return PointerTriangle(pointsUp: pointsUp)
+        return ArrowTriangle(direction: dir)
             .fill(DS.ColorToken.surface)
             .frame(width: 22, height: 11)
             .offset(x: offset)

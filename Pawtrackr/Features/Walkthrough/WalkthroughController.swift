@@ -3,21 +3,22 @@
 //  Pawtrackr
 //
 //  Drives the interactive, step-by-step product tour shown to new users on top
-//  of the demo-seeded app. Each step spotlights one real control and explains
-//  what to do, what it does, and why it helps.
+//  of the demo-seeded app. Each step spotlights one real navigation destination
+//  (sidebar row on Mac/iPad, tab-bar slot on iPhone) and explains what it is and
+//  why it helps.
 //
 
 import SwiftUI
 
 /// Identifies an interface element the guided tour can spotlight. A control opts
 /// in by attaching `.walkthroughAnchor(.someCase)`; the overlay resolves its live
-/// on-screen frame at render time. Adding a case here is harmless until a step
-/// references it.
+/// on-screen frame at render time. Tab-bar items (iPhone) can't be anchored in
+/// SwiftUI, so those steps fall back to a computed rect — see `SpotlightFallback`.
 enum WalkthroughAnchorID: String, CaseIterable, Hashable {
-    case checkIn
-    case newClient
-    case checkOut
-    case reports
+    case dashboard
+    case clients
+    case insights
+    case settings
 }
 
 /// The shape of the spotlight cutout around a target.
@@ -26,20 +27,31 @@ enum SpotlightShape: Equatable {
     case roundedRect(cornerRadius: CGFloat)
 }
 
-/// One coaching stop. Three plain-language fields keep every bubble consistent:
-/// the directive (what to tap), and the purpose (what it does / how it helps).
+/// Where to spotlight when no live anchor is registered for a step. SwiftUI does
+/// not expose `TabView` tab-item frames, so on iPhone we approximate the bottom
+/// tab-bar slot. On Mac/iPad the sidebar rows are real anchors and this is unused.
+enum SpotlightFallback: Equatable {
+    case none
+    /// The `index`-th slot of a bottom tab bar with `count` evenly-spaced items.
+    case tabBarItem(index: Int, count: Int)
+}
+
+/// One coaching stop. Plain-language fields keep every bubble consistent: the
+/// directive (what it is / what to tap) and the purpose (why it helps).
 struct WalkthroughStep: Identifiable, Equatable {
     let id: Int
     let anchor: WalkthroughAnchorID
-    /// Short headline, e.g. "Check a pet in".
+    /// Short headline, e.g. "Clients & Pets".
     let title: String
-    /// The action to take, e.g. "Tap here when a pet arrives."
+    /// The action / orientation line, e.g. "Tap Clients to see everyone you groom."
     let directive: String
-    /// The benefit, e.g. "Starts a secure timer that tracks the exact visit length."
+    /// The benefit, e.g. "Aggressive pets show a red warning so your team stays safe."
     let purpose: String
     /// SF Symbol shown in the bubble header.
     var icon: String = "hand.tap.fill"
-    var shape: SpotlightShape = .roundedRect(cornerRadius: 16)
+    var shape: SpotlightShape = .roundedRect(cornerRadius: 12)
+    /// Spotlight target when `anchor` isn't registered live (iPhone tab bar).
+    var fallback: SpotlightFallback = .none
 }
 
 /// Owns tour state. Intentionally UI-framework-light so it can be created once and
@@ -72,25 +84,34 @@ final class WalkthroughController {
         guard !isActive, !steps.isEmpty else { return }
         self.steps = steps
         currentIndex = 0
+        #if os(iOS)
+        HapticManager.impact(.medium)
+        #endif
         withAnimation(.easeInOut(duration: 0.3)) { isActive = true }
     }
 
     /// Advances to the next step, or finishes after the last one.
     func advance() {
         guard isActive else { return }
+        #if os(iOS)
+        HapticManager.impact(.light)
+        #endif
         if isLastStep {
-            finish()
+            finish(completed: true)
         } else {
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
                 currentIndex += 1
             }
         }
     }
 
     /// Ends the tour early.
-    func skip() { finish() }
+    func skip() { finish(completed: false) }
 
-    private func finish() {
+    private func finish(completed: Bool) {
+        #if os(iOS)
+        HapticManager.notify(completed ? .success : .warning)
+        #endif
         withAnimation(.easeOut(duration: 0.25)) { isActive = false }
         let handler = onFinish
         onFinish = nil
@@ -103,41 +124,46 @@ final class WalkthroughController {
 // MARK: - Default flows
 
 extension WalkthroughController {
-    /// The first tour a new user sees, spotlighting the dashboard's primary
-    /// destinations. Copy leads with the action and follows with the payoff.
-    static func dashboardTour() -> [WalkthroughStep] {
+    /// The first tour a new user sees: the four primary destinations, spotlighted
+    /// in the real navigation chrome — the sidebar rows on Mac/iPad and the bottom
+    /// tab bar on iPhone.
+    static func navTour() -> [WalkthroughStep] {
         [
             WalkthroughStep(
                 id: 0,
-                anchor: .checkIn,
-                title: NSLocalizedString("tour.checkin.title", value: "Check a pet in", comment: ""),
-                directive: NSLocalizedString("tour.checkin.directive", value: "Tap Quick Check-In when a pet arrives.", comment: ""),
-                purpose: NSLocalizedString("tour.checkin.purpose", value: "It starts a secure timer for the visit, so the exact appointment length is tracked automatically — no spreadsheets, accurate staff time every time.", comment: ""),
-                icon: "play.circle.fill"
+                anchor: .dashboard,
+                title: NSLocalizedString("tour.nav.dashboard.title", value: "Your Dashboard", comment: ""),
+                directive: NSLocalizedString("tour.nav.dashboard.directive", value: "This is your home base.", comment: ""),
+                purpose: NSLocalizedString("tour.nav.dashboard.purpose", value: "In-progress visits and today's revenue at a glance — tap a card to jump straight into the work.", comment: ""),
+                icon: "square.grid.2x2.fill",
+                fallback: .tabBarItem(index: 0, count: 4)
             ),
             WalkthroughStep(
                 id: 1,
-                anchor: .newClient,
-                title: NSLocalizedString("tour.newclient.title", value: "Add a client", comment: ""),
-                directive: NSLocalizedString("tour.newclient.directive", value: "Tap New Client to add an owner and pet.", comment: ""),
-                purpose: NSLocalizedString("tour.newclient.purpose", value: "Breed, notes, and behavior are saved with each pet. Mark one “aggressive” and the whole team sees a red warning before they handle it — safety first.", comment: ""),
-                icon: "person.crop.circle.badge.plus"
+                anchor: .clients,
+                title: NSLocalizedString("tour.nav.clients.title", value: "Clients & Pets", comment: ""),
+                directive: NSLocalizedString("tour.nav.clients.directive", value: "Open Clients to see everyone you groom.", comment: ""),
+                purpose: NSLocalizedString("tour.nav.clients.purpose", value: "Owners, pets, breeds, and full visit history live here. Aggressive pets show a red warning so your team handles them with care.", comment: ""),
+                icon: "person.3.fill",
+                fallback: .tabBarItem(index: 1, count: 4)
             ),
             WalkthroughStep(
                 id: 2,
-                anchor: .checkOut,
-                title: NSLocalizedString("tour.checkout.title", value: "Check out & get paid", comment: ""),
-                directive: NSLocalizedString("tour.checkout.directive", value: "Tap Check-Out to finish a visit.", comment: ""),
-                purpose: NSLocalizedString("tour.checkout.purpose", value: "Pick the services, take payment, and you're done in a few taps — every sale flows straight into your daily totals.", comment: ""),
-                icon: "stop.circle"
+                anchor: .insights,
+                title: NSLocalizedString("tour.nav.insights.title", value: "Insights", comment: ""),
+                directive: NSLocalizedString("tour.nav.insights.directive", value: "Open Insights for your numbers.", comment: ""),
+                purpose: NSLocalizedString("tour.nav.insights.purpose", value: "Revenue, your top services, and which pets are overdue — all charted for you, no spreadsheets.", comment: ""),
+                icon: "chart.bar.fill",
+                fallback: .tabBarItem(index: 2, count: 4)
             ),
             WalkthroughStep(
                 id: 3,
-                anchor: .reports,
-                title: NSLocalizedString("tour.reports.title", value: "See your numbers", comment: ""),
-                directive: NSLocalizedString("tour.reports.directive", value: "Open Reports anytime.", comment: ""),
-                purpose: NSLocalizedString("tour.reports.purpose", value: "Revenue, your most-popular services, and client loyalty are charted for you. When you're ready for real data, clear this demo with “Wipe & Start Fresh” in Settings.", comment: ""),
-                icon: "chart.bar.fill"
+                anchor: .settings,
+                title: NSLocalizedString("tour.nav.settings.title", value: "Settings & Start Fresh", comment: ""),
+                directive: NSLocalizedString("tour.nav.settings.directive", value: "Settings is where you finish setup.", comment: ""),
+                purpose: NSLocalizedString("tour.nav.settings.purpose", value: "Tune your services, prices, lock, and iCloud sync. When you're done exploring, “Wipe & Start Fresh” clears the demo for your real business.", comment: ""),
+                icon: "gearshape.fill",
+                fallback: .tabBarItem(index: 3, count: 4)
             )
         ]
     }

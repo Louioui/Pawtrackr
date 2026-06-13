@@ -36,7 +36,9 @@ struct ContentView: View {
     @State private var sidebarSelection: NavigationItem? = .dashboard
     @State private var tabSelection: NavigationItem = .dashboard
     @State private var presentedSheet: SheetDestination?
-    @State private var showFeatureTour: Bool = false
+    /// The interactive spotlight tour, hosted at the navigation root so it can
+    /// dim and spotlight the sidebar (Mac/iPad) or tab bar (iPhone).
+    @State private var walkthrough = WalkthroughController()
     /// Last-handled (kind, uuid, timestamp) used to dedupe near-simultaneous
     /// navigation requests coming from both `.onReceive` and `consumePendingNavigation`
     /// at app launch / cold-start time.
@@ -51,6 +53,7 @@ struct ContentView: View {
 
     var body: some View {
         rootContent
+            .walkthroughOverlay(walkthrough)
             .environment(router)
             .onChange(of: appSettings.currencySymbol) { _, newValue in
                 Formatters.updateCurrencySymbol(newValue)
@@ -103,13 +106,6 @@ struct ContentView: View {
                     }
                 }
             }
-            .adaptiveCover(isPresented: $showFeatureTour) {
-                FeatureTourView {
-                    appSettings.hasSeenAppTour = true
-                    showFeatureTour = false
-                }
-                .interactiveDismissDisabled(true)
-            }
             .onAppear {
                 if !hasAppliedDefaultLaunchTab && !AppRuntime.isUITesting,
                    let tab = NavigationItem(rawValue: appSettings.defaultLaunchTab) {
@@ -121,23 +117,29 @@ struct ContentView: View {
                 applyUITestLaunchOverrides()
                 consumePendingNewClientRequest()
                 consumePendingNavigation()
-                evaluateFeatureTourIfReady()
+                startWalkthroughIfReady()
             }
             .onChange(of: appSettings.hasSeenAppTour) { _, seen in
-                // Pick up the OnboardingViewModel arming the tour without
-                // requiring a fresh ContentView appear.
-                if !seen { showFeatureTour = true }
+                // Pick up the OnboardingViewModel (or "Replay Getting Started")
+                // arming the tour without requiring a fresh ContentView appear.
+                if !seen { startWalkthroughIfReady() }
             }
     }
 
-    private func evaluateFeatureTourIfReady() {
+    private func startWalkthroughIfReady() {
         guard !AppRuntime.isUITesting else { return }
-        // Don't try to present the tour cover while another modal is up
-        // (onboarding cover, what's-new sheet, or a presentedSheet) —
-        // SwiftUI only allows one presentation at a time per stack.
+        // Don't start over a modal (onboarding cover, what's-new, a sheet) —
+        // wait until the navigation chrome is the front-most thing so the
+        // spotlight can actually land on the sidebar / tab bar.
         guard presentedSheet == nil else { return }
-        if !appSettings.hasSeenAppTour {
-            showFeatureTour = true
+        guard !appSettings.hasSeenAppTour, !walkthrough.isActive else { return }
+        // Brief delay lets the post-onboarding transition settle so the sidebar /
+        // tab-bar anchors are measured in their final positions before we spotlight.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !appSettings.hasSeenAppTour, !walkthrough.isActive, presentedSheet == nil else { return }
+            walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
+            walkthrough.start(WalkthroughController.navTour())
         }
     }
 

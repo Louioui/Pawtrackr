@@ -30,6 +30,16 @@ enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
         case .settings: return "gear"
         }
     }
+
+    /// The guided-tour spotlight target for this destination's sidebar row.
+    var walkthroughAnchorID: WalkthroughAnchorID {
+        switch self {
+        case .dashboard: return .dashboard
+        case .clients: return .clients
+        case .insights: return .insights
+        case .settings: return .settings
+        }
+    }
 }
 
 struct SidebarView: View {
@@ -110,6 +120,7 @@ private struct SidebarRow: View {
                 #endif
         }
         .buttonStyle(.plain)
+        .walkthroughAnchor(item.walkthroughAnchorID)
         .listRowBackground(selection == item ? Color.accentColor.opacity(0.14) : Color.clear)
         .accessibilityIdentifier("sidebar.row.\(item.rawValue)")
         .accessibilityAddTraits(selection == item ? .isSelected : [])
