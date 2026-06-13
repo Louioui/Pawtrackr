@@ -82,6 +82,9 @@ final class ClientDetailViewModel {
                 // Only refresh if the completed visit belongs to one of this client's pets.
                 // Fall back to refreshing if we can't tell, so we never show stale state.
                 if let visitClientID = notif.clientID, visitClientID != clientID { return }
+                if let completedPetID = notif.petID {
+                    self.activeVisitIDByPetID.removeValue(forKey: completedPetID)
+                }
                 self.refreshPets()
                 self.refreshRecentVisits()
             }
@@ -115,8 +118,9 @@ final class ClientDetailViewModel {
         }
 
         var map: [PersistentIdentifier: PersistentIdentifier] = [:]
+        let freshContext = ModelContext(modelContext.container)
         let descriptor = FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.endedAt == nil })
-        if let openVisits = try? modelContext.fetch(descriptor) {
+        if let openVisits = try? freshContext.fetch(descriptor) {
             for visit in openVisits {
                 guard let petID = visit.pet?.persistentModelID, petIDs.contains(petID) else { continue }
                 map[petID] = visit.persistentModelID

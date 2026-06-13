@@ -110,27 +110,21 @@ struct InsightsView: View {
                 icon: "dollarsign.circle.fill",
                 color: DS.ColorToken.primary,
                 accessibilityIdentifier: "insights.kpi.revenue"
-            ) {
-                showRevenueDrilldown(vm)
-            }
+            )
             kpiTile(
                 title: localized("insights.avg_visit", value: "Avg Visit"),
                 value: vm.averageVisitValue > 0 ? vm.averageVisitValue.moneyString : "—",
                 icon: "chart.line.uptrend.xyaxis",
                 color: DS.ColorToken.success,
                 accessibilityIdentifier: "insights.kpi.avgVisit"
-            ) {
-                showAverageVisitDrilldown(vm)
-            }
+            )
             kpiTile(
                 title: NSLocalizedString("insights.retention", comment: ""),
                 value: "\(Int(vm.retentionRate * 100))%",
                 icon: "person.2.fill",
                 color: DS.ColorToken.warning,
                 accessibilityIdentifier: "insights.kpi.retention"
-            ) {
-                showRetentionDrilldown(vm)
-            }
+            )
         }
     }
 
@@ -139,32 +133,26 @@ struct InsightsView: View {
         value: String,
         icon: String,
         color: Color,
-        accessibilityIdentifier: String,
-        action: @escaping () -> Void
+        accessibilityIdentifier: String
     ) -> some View {
-        Button(action: action) {
-            Card(padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Image(systemName: icon)
-                        .font(.callout)
-                        .foregroundStyle(color)
-                    Text(value)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .contentTransition(.numericText())
-                    Text(title)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-                .contentShape(Rectangle())
+        Card(padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)) {
+            VStack(alignment: .leading, spacing: 5) {
+                Image(systemName: icon)
+                    .font(.callout)
+                    .foregroundStyle(color)
+                Text(value)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .contentTransition(.numericText())
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+            .accessibilityElement(children: .combine)
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
         .accessibilityIdentifier(accessibilityIdentifier)
-        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Data Quality
@@ -246,32 +234,6 @@ struct InsightsView: View {
                         }
                     }
                     .frame(height: 155)
-                    .chartOverlay { proxy in
-                        GeometryReader { geo in
-                            Rectangle()
-                                .fill(.clear)
-                                .contentShape(Rectangle())
-                                .onTapGesture { location in
-                                    if let plotFrame = proxy.plotFrame {
-                                        let frame = geo[plotFrame]
-                                        let x = location.x - frame.origin.x
-                                        let selectedDate: Date? = proxy.value(atX: x)
-                                        if let selectedDate {
-                                            showRevenueDrilldown(for: selectedDate, vm: vm)
-                                        } else {
-                                            showRevenueDrilldown(vm)
-                                        }
-                                    } else {
-                                        let selectedDate: Date? = proxy.value(atX: location.x)
-                                        if let selectedDate {
-                                            showRevenueDrilldown(for: selectedDate, vm: vm)
-                                        } else {
-                                            showRevenueDrilldown(vm)
-                                        }
-                                    }
-                                }
-                        }
-                    }
                     .animation(.spring(), value: vm.revenueSeries.count)
 
                     HStack {
@@ -286,17 +248,6 @@ struct InsightsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-
-                    Button {
-                        showRevenueDrilldown(vm)
-                    } label: {
-                        Label(localized("insights.action.view_visits", value: "View visits behind this number"), systemImage: "list.bullet.rectangle")
-                            .font(.caption.weight(.semibold))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderless)
-                    .contentShape(Rectangle())
-                    .accessibilityIdentifier("insights.revenue.drilldown")
                 }
             }
         }
@@ -403,36 +354,6 @@ struct InsightsView: View {
                     }
                     .chartXAxis(.hidden)
                     .frame(height: CGFloat(top5.count) * 44)
-
-                    if !vm.serviceProfitability.isEmpty {
-                        Divider()
-
-                        VStack(spacing: 0) {
-                            ForEach(Array(vm.serviceProfitability.prefix(5).enumerated()), id: \.element.id) { index, service in
-                                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(service.name)
-                                            .font(.subheadline.weight(.semibold))
-                                        Text(String(format: localized("insights.service_profitability.detail_fmt", value: "%@ • %d sold • avg %@"), service.category, service.count, service.averageTicket.moneyString))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text(service.revenue.moneyString)
-                                            .font(.subheadline.bold())
-                                        Text(percentString(service.trendPercent))
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(service.trendPercent >= 0 ? DS.ColorToken.success : DS.ColorToken.danger)
-                                    }
-                                }
-                                .padding(.vertical, 8)
-                                .accessibilityElement(children: .combine)
-
-                                if index < min(vm.serviceProfitability.count, 5) - 1 { Divider() }
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -454,8 +375,10 @@ struct InsightsView: View {
                             Label(item.method.displayName, systemImage: item.method.systemImage)
                                 .font(.subheadline.weight(.semibold))
                             Spacer()
-                            Text("\(item.count)").font(.caption).foregroundStyle(.secondary)
-                            Text(item.amount.moneyString).font(.subheadline.weight(.bold))
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(item.amount.moneyString).font(.subheadline.weight(.bold))
+                                Text(paymentCountText(item.count)).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -481,7 +404,7 @@ struct InsightsView: View {
                             angularInset: 2
                         )
                         .cornerRadius(4)
-                        .foregroundStyle(by: .value(localized("insights.chart.category", value: "Category"), data.name))
+                        .foregroundStyle(categoryColor(for: data.name))
                     }
                     .frame(height: 155)
                     .chartLegend(.hidden)
@@ -500,14 +423,6 @@ struct InsightsView: View {
                             if index < vm.categoryDistribution.count - 1 { Divider() }
                         }
                     }
-
-                    Button {
-                        showCategoryDrilldown(vm)
-                    } label: {
-                        Label(localized("insights.action.view_category_breakdown", value: "View category explanation"), systemImage: "list.bullet.rectangle")
-                            .font(.caption.weight(.semibold))
-                    }
-                    .buttonStyle(.borderless)
                 }
             }
         }
@@ -559,7 +474,7 @@ struct InsightsView: View {
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: "circle.fill")
                 .font(.caption2)
-                .foregroundStyle(DS.ColorToken.primary)
+                .foregroundStyle(categoryColor(for: item.name))
                 .padding(.top, 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
@@ -574,6 +489,25 @@ struct InsightsView: View {
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
+    }
+
+    private func categoryColor(for name: String) -> Color {
+        switch name {
+        case Service.Category.package.rawValue:
+            return DS.ColorToken.info
+        case Service.Category.addOn.rawValue:
+            return DS.ColorToken.warning
+        case Service.Category.groom.rawValue:
+            return DS.ColorToken.success
+        case Service.Category.care.rawValue:
+            return Color.purple
+        default:
+            return Color.gray
+        }
+    }
+
+    private func paymentCountText(_ count: Int) -> String {
+        count == 1 ? "1 payment" : "\(count) payments"
     }
 
     private func lowerSectionAccessibilityAnchor(identifier: String, label: String) -> some View {

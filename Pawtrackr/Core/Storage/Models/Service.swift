@@ -122,6 +122,14 @@ extension Service: Identifiable {
     var id: UUID { uuid }
 }
 
+extension Service {
+    static let obsoleteCheckoutServiceNames: Set<String> = ["basic groom"]
+
+    var isObsoleteCheckoutService: Bool {
+        Self.obsoleteCheckoutServiceNames.contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+}
+
 // MARK: - Nested Category Enum
 extension Service {
     enum Category: String, Codable, CaseIterable, Identifiable {

@@ -70,6 +70,7 @@ struct PhotoWell: View {
 }
 
 /// Decodes image data asynchronously to keep the UI perfectly fluid.
+@MainActor
 struct LazyImageDataImage: View {
     let data: Data
     let maxDimension: CGFloat
@@ -83,8 +84,8 @@ struct LazyImageDataImage: View {
     
     var body: some View {
         ZStack {
-            if let image = image {
-                image
+            if let displayImage {
+                displayImage
                     .resizable()
                     .scaledToFill()
             } else {
@@ -93,17 +94,27 @@ struct LazyImageDataImage: View {
             }
         }
         .task(id: identity) {
-            // Decode off the main thread
             await loadImage(for: identity)
         }
     }
+
+    private var displayImage: Image? {
+        if loadedIdentity == identity, let image {
+            return image
+        }
+        return ImageDataDecodeCache.shared.image(for: identity)
+    }
     
     private func loadImage(for identity: ImageDataIdentity) async {
-        await MainActor.run {
-            if loadedIdentity != identity {
-                image = nil
-                loadedIdentity = identity
-            }
+        if let cached = ImageDataDecodeCache.shared.image(for: identity) {
+            loadedIdentity = identity
+            image = cached
+            return
+        }
+
+        if loadedIdentity != identity {
+            loadedIdentity = identity
+            image = nil
         }
 
         let decoded = await Task.detached(priority: .userInitiated) { () -> Image? in
@@ -119,10 +130,11 @@ struct LazyImageDataImage: View {
             return nil
         }.value
         
-        await MainActor.run {
-            guard loadedIdentity == identity else { return }
-            self.image = decoded
+        guard loadedIdentity == identity else { return }
+        if let decoded {
+            ImageDataDecodeCache.shared.store(decoded, for: identity)
         }
+        self.image = decoded
     }
 }
 
@@ -145,6 +157,33 @@ private struct ImageDataIdentity: Hashable {
             }
         }
         self.sampleHash = hash
+    }
+}
+
+@MainActor
+private final class ImageDataDecodeCache {
+    static let shared = ImageDataDecodeCache()
+
+    private var images: [ImageDataIdentity: Image] = [:]
+    private var order: [ImageDataIdentity] = []
+    private let countLimit = 200
+
+    private init() {}
+
+    func image(for identity: ImageDataIdentity) -> Image? {
+        images[identity]
+    }
+
+    func store(_ image: Image, for identity: ImageDataIdentity) {
+        if images[identity] == nil {
+            order.append(identity)
+        }
+        images[identity] = image
+
+        while order.count > countLimit {
+            let oldest = order.removeFirst()
+            images.removeValue(forKey: oldest)
+        }
     }
 }
 

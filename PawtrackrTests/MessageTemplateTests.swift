@@ -3,6 +3,14 @@ import SwiftData
 @testable import Pawtrackr
 
 final class MessageTemplateTests: XCTestCase {
+    func testDefaultsIncludeCommonOwnerMessageOptions() {
+        let titles = Set(MessageTemplate.defaults.map(\.title))
+
+        XCTAssertTrue(titles.contains("Ready for Pickup"))
+        XCTAssertTrue(titles.contains("Appointment Reminder"))
+        XCTAssertTrue(titles.contains("Running Late"))
+        XCTAssertTrue(titles.contains("Post-Visit Follow-up"))
+    }
     
     @MainActor
     func testProcessedContent_ReplacesPlaceholders() {

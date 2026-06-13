@@ -27,7 +27,7 @@ final class ServiceRepository: ServiceRepositoryProtocol {
             predicate: #Predicate { $0.isEnabled == true },
             sortBy: [SortDescriptor(\.name)]
         )
-        return try modelContext.fetch(descriptor)
+        return try modelContext.fetch(descriptor).filter { !$0.isObsoleteCheckoutService }
     }
     
     func fetchAllServices() async throws -> [Service] {

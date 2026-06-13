@@ -400,15 +400,6 @@ final class OnboardingViewModel {
                     } catch {
                         Logger.database.error("Demo data seed failed during onboarding: \(error.localizedDescription, privacy: .public)")
                     }
-                } else {
-                    let defaultService = Service(
-                        name: NSLocalizedString("onboarding.default_service.basic_groom", value: "Basic Groom", comment: ""),
-                        category: .groom,
-                        systemIcon: "scissors",
-                        basePrice: Decimal(50),
-                        defaultDurationMinutes: 60
-                    )
-                    bg.insert(defaultService)
                 }
                 if bg.hasChanges {
                     try? bg.save()

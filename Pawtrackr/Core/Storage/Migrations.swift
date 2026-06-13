@@ -247,6 +247,11 @@ enum DataMigrations {
                 }
             }
 
+            for svc in existing where svc.isObsoleteCheckoutService {
+                svc.setEnabled(false)
+                svc.setBasePrice(nil)
+            }
+
             // Persist any updates/inserts.
             if context.hasChanges {
                 try context.save()
@@ -259,10 +264,18 @@ enum DataMigrations {
     static func ensureMessageTemplates(in context: ModelContext) {
         do {
             let existing = try context.fetch(FetchDescriptor<MessageTemplate>())
-            if existing.isEmpty {
-                for template in MessageTemplate.defaults {
+            let existingTitles = Set(
+                existing.map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            )
+            var inserted = false
+            for template in MessageTemplate.defaults {
+                let key = template.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if !existingTitles.contains(key) {
                     context.insert(template)
+                    inserted = true
                 }
+            }
+            if inserted {
                 try context.save()
             }
         } catch {

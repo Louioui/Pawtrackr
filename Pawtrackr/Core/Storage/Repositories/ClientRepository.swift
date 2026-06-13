@@ -92,12 +92,13 @@ final actor ClientRepository: ClientRepositoryProtocol {
     }
 
     private func activeClientIDs() throws -> Set<PersistentIdentifier> {
+        let freshContext = ModelContext(modelContext.container)
         var activeVisitDesc = FetchDescriptor<Visit>(
             predicate: #Predicate { $0.endedAt == nil }
         )
         activeVisitDesc.fetchLimit = 500
         activeVisitDesc.relationshipKeyPathsForPrefetching = [\Visit.pet]
-        let activeVisits = try modelContext.fetch(activeVisitDesc)
+        let activeVisits = try freshContext.fetch(activeVisitDesc)
         return Set(activeVisits.compactMap { $0.pet?.owner?.persistentModelID })
     }
 

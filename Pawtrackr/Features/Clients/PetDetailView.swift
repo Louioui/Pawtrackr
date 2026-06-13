@@ -82,9 +82,11 @@ final class PetDetailViewModel {
 
         let token = NotificationCenter.default.addObserver(
             forName: .visitDidComplete, object: nil, queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] note in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                if let completedPetID = note.petID, completedPetID != self.pet.persistentModelID { return }
+                self.activeVisitID = nil
                 self.refreshActiveVisit()
                 self.refreshNonce &+= 1
             }
@@ -98,8 +100,9 @@ final class PetDetailViewModel {
     /// even when the materialized relationship hasn't merged the actor's write.
     func refreshActiveVisit() {
         let petID = pet.persistentModelID
+        let freshContext = ModelContext(modelContext.container)
         let descriptor = FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.endedAt == nil })
-        let open = (try? modelContext.fetch(descriptor)) ?? []
+        let open = (try? freshContext.fetch(descriptor)) ?? []
         activeVisitID = open.first { $0.pet?.persistentModelID == petID }?.persistentModelID
     }
 
