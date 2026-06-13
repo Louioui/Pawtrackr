@@ -340,6 +340,25 @@ struct ContentView: View {
             .tag(NavigationItem.settings)
         }
         .accessibilityIdentifier("content.tabView")
+        // Invisible anchor cells aligned to the real tab bar so the walkthrough
+        // can spotlight tab items precisely (SwiftUI doesn't expose `.tabItem`
+        // frames). Bottom-aligned and safe-area-respecting → lands on the icons,
+        // resolved through the same `proxy[anchor]` path as the macOS sidebar.
+        .overlay(alignment: .bottom) { tabBarAnchorStrip }
+    }
+
+    /// One clear, evenly-spaced cell per tab, matching the tab bar's layout, each
+    /// registered as a walkthrough anchor. Non-interactive so taps pass through.
+    private var tabBarAnchorStrip: some View {
+        HStack(spacing: 0) {
+            ForEach(NavigationItem.allCases) { item in
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .walkthroughAnchor(item.walkthroughAnchorID)
+            }
+        }
+        .frame(height: 49)
+        .allowsHitTesting(false)
     }
 
     private var splitView: some View {
