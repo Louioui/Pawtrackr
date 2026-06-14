@@ -19,13 +19,13 @@ struct ActiveVisitRow: View {
 
                 // Live-ticking timer
                 Text(timer.formattedElapsed)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.title3.weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.ColorToken.primary)
 
-                if let pet = visit.pet {
+                if visit.pet != nil {
                     Button {
-                        router.navigateToCheckout(pet)
+                        router.navigateToCheckout(visit)
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .font(.title3)

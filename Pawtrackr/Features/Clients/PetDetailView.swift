@@ -40,6 +40,7 @@ final class PetDetailViewModel {
     /// `pet.visits` relationship — which stays stale after the cross-context
     /// `CheckoutTransactionActor` commit (see ClientDetailViewModel for details).
     private(set) var activeVisitID: PersistentIdentifier?
+    private(set) var isCheckingIn = false
 
     // Computed Data
     var activeVisit: Visit? {
@@ -108,12 +109,14 @@ final class PetDetailViewModel {
 
     // MARK: Intents
     func checkIn() {
-        guard activeVisit == nil else {
+        guard activeVisit == nil, !isCheckingIn else {
             Logger.petDetail.info("checkIn skipped: pet \(self.pet.uuid) already has active visit")
             return
         }
         Logger.petDetail.info("checkIn start: pet \(self.pet.uuid)")
+        isCheckingIn = true
         Task {
+            defer { isCheckingIn = false }
             do {
                 let visit = try await visitRepository.checkIn(pet: pet, date: .now)
                 refreshActiveVisit()
@@ -371,7 +374,7 @@ struct PetDetailView: View {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         let secs = max(0, Int(Date().timeIntervalSince(started)))
                         Label(VisitTimer.format(seconds: secs), systemImage: "clock.arrow.circlepath")
-                            .font(.subheadline.weight(.medium))
+                            .font(.headline.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
                             .monospacedDigit()
                             .accessibilityLabel(VisitTimer.spelledOut(seconds: secs))
@@ -386,11 +389,7 @@ struct PetDetailView: View {
             HStack(spacing: 12) {
                 actionTile(title: "Message", systemImage: "message.fill", tint: .indigo) { showCommunication = true }
                 actionTile(title: NSLocalizedString("pet.view_history", comment: ""), systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
-                actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: false) {
-                    // Don't silently disable when there's already an active
-                    // visit — the user sees a blue tile and assumes it works.
-                    // Always respond: surface an inline notice if the pet
-                    // is already in session, otherwise check in directly.
+                actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil || vm.isCheckingIn) {
                     if vm.activeVisit != nil {
                         vm.appError = .validation(.custom(message: NSLocalizedString(
                             "pet.already_in_session",
@@ -403,7 +402,7 @@ struct PetDetailView: View {
                     vm.checkIn()
                     HapticManager.notify(.success)
                 }
-                .opacity(vm.activeVisit != nil ? 0.55 : 1.0)
+                .opacity(vm.activeVisit == nil && !vm.isCheckingIn ? 1.0 : 0.55)
                 actionTile(title: NSLocalizedString("pet.check_out", comment: ""), systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)

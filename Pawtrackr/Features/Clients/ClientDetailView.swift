@@ -423,11 +423,11 @@ struct ClientDetailView: View {
                             }
                         } trailing: {
                             HStack(spacing: 8) {
-                                if let sms = PhoneUtils.smsURLString(client.phone ?? ""), let smsURL = URL(string: sms) {
+                                if PhoneUtils.smsURLString(client.phone ?? "") != nil {
                                     Button {
-                                        viewModel?.recordAttentionOutreach(method: "message")
-                                        URLOpener.open(smsURL)
+                                        showCommunication = true
                                     } label: { Image(systemName: "message.fill") }
+                                    .accessibilityLabel(NSLocalizedString("client_detail.message", value: "Message", comment: ""))
                                 }
                                 if let tel = PhoneUtils.telURLString(client.phone ?? ""), let telURL = URL(string: tel) {
                                     Button {
@@ -645,6 +645,7 @@ struct ClientDetailView: View {
             VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
                     let activeVisit = vm.activeVisit(for: pet)
+                    let isCheckingIn = vm.isCheckingIn(pet)
                     Card {
                         HStack(alignment: .top, spacing: 12) {
                             AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md, ringWidth: 3)
@@ -685,7 +686,8 @@ struct ClientDetailView: View {
                                         }
                                         HapticManager.notify(.success)
                                     }
-                                    .opacity(activeVisit == nil ? 1.0 : 0.55)
+                                    .opacity(activeVisit == nil && !isCheckingIn ? 1.0 : 0.55)
+                                    .disabled(activeVisit != nil || isCheckingIn)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
 
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
@@ -977,16 +979,16 @@ private struct InitialsCircle: View {
 
 @ViewBuilder private func petStatusPill(_ activeVisit: Visit?) -> some View {
     if let v = activeVisit {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: "clock")
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let secs = max(0, Int(Date().timeIntervalSince(v.startedAt)))
                 Text(hms(secs)).monospacedDigit()
             }
         }
-        .font(.caption.weight(.bold))
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .font(.callout.weight(.bold))
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.blue.opacity(0.12)))
         .foregroundStyle(.blue)
     } else {

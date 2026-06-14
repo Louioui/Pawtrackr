@@ -17,7 +17,7 @@ enum AppDestination: Hashable, Sendable {
     case petDetail(PersistentIdentifier)
     case visitDetail(PersistentIdentifier)
     case petHistory(PersistentIdentifier)
-    case checkout(PersistentIdentifier)
+    case checkout(petID: PersistentIdentifier, visitID: PersistentIdentifier?)
 }
 
 enum PendingNavigationCommand {
@@ -72,7 +72,12 @@ final class NavigationRouter {
     }
 
     func navigateToCheckout(_ pet: Pet) {
-        append(AppDestination.checkout(pet.persistentModelID))
+        append(AppDestination.checkout(petID: pet.persistentModelID, visitID: nil))
+    }
+
+    func navigateToCheckout(_ visit: Visit) {
+        guard let pet = visit.pet else { return }
+        append(AppDestination.checkout(petID: pet.persistentModelID, visitID: visit.persistentModelID))
     }
 
     func pop() {
@@ -140,6 +145,35 @@ final class NavigationRouter {
             path.append(destination)
             settingsPath = path
         }
+    }
+}
+
+enum CheckoutRouteResolver {
+    static func activeVisitID(
+        for petID: PersistentIdentifier,
+        preferredVisitID: PersistentIdentifier?,
+        container: ModelContainer
+    ) throws -> PersistentIdentifier? {
+        let context = ModelContext(container)
+
+        guard let pet = context.model(for: petID) as? Pet else {
+            return nil
+        }
+
+        if let preferredVisitID,
+           let visit = context.model(for: preferredVisitID) as? Visit,
+           visit.endedAt == nil,
+           visit.pet?.persistentModelID == petID {
+            return preferredVisitID
+        }
+
+        var descriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { $0.endedAt == nil },
+            sortBy: [SortDescriptor(\.startedAt, order: .forward)]
+        )
+        descriptor.relationshipKeyPathsForPrefetching = [\Visit.pet]
+        let activeVisits = try context.fetch(descriptor)
+        return activeVisits.first { $0.pet?.uuid == pet.uuid }?.persistentModelID
     }
 }
 

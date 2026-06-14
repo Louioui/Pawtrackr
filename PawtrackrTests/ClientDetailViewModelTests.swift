@@ -153,6 +153,18 @@ final class ClientDetailViewModelTests: XCTestCase {
             "Calling checkIn while a visit is already active must not create a second one.")
     }
 
+    func testCheckIn_LocksPetImmediatelyWhileSaveRuns() async throws {
+        let vm = ClientDetailViewModel(client: client, modelContext: context)
+
+        XCTAssertFalse(vm.isCheckingIn(pet))
+        vm.checkIn(pet: pet, at: .now)
+
+        XCTAssertTrue(
+            vm.isCheckingIn(pet) || vm.activeVisit(for: pet) != nil,
+            "Check-in should immediately make the pet unavailable for another check-in tap."
+        )
+    }
+
     func testVisitDidCompleteNotification_TriggersRefresh() async throws {
         let vm = ClientDetailViewModel(client: client, modelContext: context)
         await waitForFetch(vm)

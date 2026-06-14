@@ -493,6 +493,33 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertTrue(activeVisits.isEmpty, "A checked-out visit must not reappear as active after a later main-context save.")
     }
 
+    func testCheckoutRouteResolverUsesOnlyStoreActiveVisit() throws {
+        let activeVisit = Visit(pet: pet, startedAt: .now.addingTimeInterval(-3600))
+        context.insert(activeVisit)
+        try context.save()
+
+        let resolvedID = try CheckoutRouteResolver.activeVisitID(
+            for: pet.persistentModelID,
+            preferredVisitID: activeVisit.persistentModelID,
+            container: container
+        )
+
+        XCTAssertEqual(resolvedID, activeVisit.persistentModelID)
+
+        let checkoutContext = ModelContext(container)
+        let checkoutVisit = try XCTUnwrap(checkoutContext.model(for: activeVisit.persistentModelID) as? Visit)
+        checkoutVisit.markCheckedOut(total: Decimal(30), now: .now)
+        try checkoutContext.save()
+
+        let afterCheckoutID = try CheckoutRouteResolver.activeVisitID(
+            for: pet.persistentModelID,
+            preferredVisitID: activeVisit.persistentModelID,
+            container: container
+        )
+
+        XCTAssertNil(afterCheckoutID, "Completed visits must not route into checkout or create a replacement visit.")
+    }
+
     func testProcessPayment_ManualOverrideReconcilesLineItemsAndSummaryRevenue() async throws {
         let vm = makeVM()
         vm.toggleService(bath)

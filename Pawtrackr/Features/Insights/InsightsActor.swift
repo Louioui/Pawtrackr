@@ -112,11 +112,14 @@ public final actor InsightsActor {
         
         let services = serviceStats
             .map { InsightsViewModel.DistributionData(name: $0.key, count: $0.value.count, revenue: $0.value.revenue) }
-            .sorted { $0.revenue > $1.revenue }
+            .sorted {
+                if $0.revenue != $1.revenue { return $0.revenue > $1.revenue }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
         
         let categoryDist = SummaryUpdater.collapsedCategoryCounts(from: categories)
             .map { InsightsViewModel.DistributionData(name: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
+            .sorted(by: Self.sortCategoryDistribution)
         
         let paymentDist = Dictionary(grouping: payments, by: \.method)
             .map { method, rows in
@@ -126,9 +129,33 @@ public final actor InsightsActor {
                     amount: rows.reduce(.zero) { $0 + $1.amount }
                 )
             }
-            .sorted { $0.amount > $1.amount }
+            .sorted {
+                if $0.amount != $1.amount { return $0.amount > $1.amount }
+                return $0.method.displayName.localizedStandardCompare($1.method.displayName) == .orderedAscending
+            }
             
         return DistributionResult(services: services, categories: categoryDist, payments: paymentDist)
+    }
+
+    private static func sortCategoryDistribution(
+        _ lhs: InsightsViewModel.DistributionData,
+        _ rhs: InsightsViewModel.DistributionData
+    ) -> Bool {
+        if lhs.count != rhs.count { return lhs.count > rhs.count }
+        let lhsRank = categoryRank(lhs.name)
+        let rhsRank = categoryRank(rhs.name)
+        if lhsRank != rhsRank { return lhsRank < rhsRank }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private static func categoryRank(_ name: String) -> Int {
+        switch name {
+        case Service.Category.package.rawValue: return 0
+        case Service.Category.groom.rawValue: return 1
+        case Service.Category.addOn.rawValue: return 2
+        case Service.Category.care.rawValue: return 3
+        default: return 10
+        }
     }
     
     func fetchClientInsights() async throws -> ClientInsightsResult {

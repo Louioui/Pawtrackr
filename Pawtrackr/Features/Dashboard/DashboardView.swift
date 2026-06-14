@@ -32,9 +32,9 @@ struct DashboardView: View {
                 ActivityFeedView()
             }
             .sheet(isPresented: $showQuickCheckOut) {
-                QuickCheckOutSheet(activeVisits: vm?.activeVisits ?? []) { pet in
+                QuickCheckOutSheet(activeVisits: vm?.activeVisits ?? []) { visit in
                     showQuickCheckOut = false
-                    router.navigateToCheckout(pet)
+                    router.navigateToCheckout(visit)
                 }
             }
             .alert(item: appErrorBinding) { error in
@@ -496,7 +496,7 @@ struct DashboardView: View {
         let card = kpiCard(title: label, value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
         if vm.kpi.inProgressCount > 0 {
             Button {
-                showQuickCheckOut = true
+                presentQuickCheckout()
             } label: {
                 card.contentShape(Rectangle())
             }
@@ -533,9 +533,16 @@ struct DashboardView: View {
                 ) {
                     // Present the active sessions so one can be completed via the
                     // full checkout flow, rather than just opening history.
-                    showQuickCheckOut = true
+                    presentQuickCheckout()
                 }
             }
+        }
+    }
+
+    private func presentQuickCheckout() {
+        Task { @MainActor in
+            await vm?.refresh()
+            showQuickCheckOut = true
         }
     }
 
@@ -900,7 +907,7 @@ private extension View {
 /// into the full checkout flow instead of just opening history.
 private struct QuickCheckOutSheet: View {
     let activeVisits: [Visit]
-    let onSelect: (Pet) -> Void
+    let onSelect: (Visit) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -917,7 +924,7 @@ private struct QuickCheckOutSheet: View {
                     List(activeVisits, id: \.uuid) { visit in
                         if let pet = visit.pet {
                             Button {
-                                onSelect(pet)
+                                onSelect(visit)
                             } label: {
                                 HStack(spacing: 12) {
                                     AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
