@@ -36,7 +36,33 @@ final class DashboardRepositoryTests: XCTestCase {
 
         XCTAssertEqual(kpis.inProgressCount, 1)
         XCTAssertEqual(kpis.revenueToday, Decimal(100))
-        XCTAssertEqual(kpis.completedToday, 5)    }
+        XCTAssertEqual(kpis.completedToday, 5)
+    }
+
+    func testActiveSessionQueriesUseFreshStoreAfterCrossContextCheckout() async throws {
+        let pet = Pet(name: "Milo", species: .dog)
+        context.insert(pet)
+        let visit = Visit(pet: pet, startedAt: .now.addingTimeInterval(-3600))
+        context.insert(visit)
+        try context.save()
+
+        let initialActiveVisits = try await repository.fetchActiveVisits()
+        XCTAssertEqual(initialActiveVisits.count, 1)
+
+        let checkoutContext = ModelContext(container)
+        let checkoutVisit = try XCTUnwrap(checkoutContext.model(for: visit.persistentModelID) as? Visit)
+        checkoutVisit.markCheckedOut(total: Decimal(90), now: .now)
+        try checkoutContext.save()
+
+        pet.notes = "Touched after checkout"
+        try context.save()
+
+        let activeVisits = try await repository.fetchActiveVisits()
+        let kpis = try await repository.fetchKPIs()
+
+        XCTAssertTrue(activeVisits.isEmpty, "Dashboard should not keep showing a visit checked out in another context.")
+        XCTAssertEqual(kpis.inProgressCount, 0)
+    }
 
     func testSummaryFetches_CollapseDuplicateCloudKitCacheRows() async throws {
         let cal = Calendar.current

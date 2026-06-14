@@ -466,6 +466,33 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(transactionsAfterRetry.count, 1)
     }
 
+    func testProcessPayment_CheckedInVisitDoesNotReappearActiveAfterMainContextSave() async throws {
+        let activeVisit = Visit(pet: pet, startedAt: .now.addingTimeInterval(-3600))
+        context.insert(activeVisit)
+        try context.save()
+
+        let vm = makeVM(visit: activeVisit)
+        vm.toggleService(bath)
+        try vm.advance()
+        try vm.advance()
+        vm.choosePayment(.cash)
+        try vm.advance()
+
+        await vm.processPayment()
+
+        XCTAssertEqual(vm.state, .confirmed)
+        XCTAssertNotNil(vm.visit.endedAt)
+
+        pet.notes = "Touched after checkout navigation"
+        try context.save()
+
+        let activeDescriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { $0.endedAt == nil }
+        )
+        let activeVisits = try context.fetch(activeDescriptor)
+        XCTAssertTrue(activeVisits.isEmpty, "A checked-out visit must not reappear as active after a later main-context save.")
+    }
+
     func testProcessPayment_ManualOverrideReconcilesLineItemsAndSummaryRevenue() async throws {
         let vm = makeVM()
         vm.toggleService(bath)

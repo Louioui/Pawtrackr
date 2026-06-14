@@ -67,6 +67,24 @@ final class VisitRepositoryTests: XCTestCase {
         XCTAssertEqual(activeVisits.count, 1)
     }
 
+    func testCheckIn_DoesNotReuseVisitCompletedInAnotherContext() async throws {
+        let first = try await repository.checkIn(pet: pet, date: .now.addingTimeInterval(-3600))
+
+        let checkoutContext = ModelContext(container)
+        let checkoutVisit = try XCTUnwrap(checkoutContext.model(for: first.persistentModelID) as? Visit)
+        checkoutVisit.markCheckedOut(total: Decimal(30), now: .now)
+        try checkoutContext.save()
+
+        let second = try await repository.checkIn(pet: pet, date: .now.addingTimeInterval(60))
+
+        XCTAssertNotEqual(first.uuid, second.uuid)
+        let freshContext = ModelContext(container)
+        let activeVisits = try freshContext.fetch(FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { $0.endedAt == nil }
+        ))
+        XCTAssertEqual(activeVisits.filter { $0.pet?.uuid == pet.uuid }.count, 1)
+    }
+
     func testCheckIn_AssignsDeterministicSessionToken() async throws {
         let started = Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 19, hour: 10))!
         let visit = try await repository.checkIn(pet: pet, date: started)

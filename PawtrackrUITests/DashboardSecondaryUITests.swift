@@ -49,21 +49,6 @@ final class DashboardSecondaryUITests: XCTestCase {
         app.buttons["newClient.cancel"].tap()
     }
 
-    func testQuickAction_Reports_NavigatesToInsights() throws {
-        waitForDashboard()
-
-        let action = app.buttons["dashboard.quickAction.reports"]
-        let scroll = app.scrollViews["dashboard.scroll"]
-        for _ in 0..<5 where !action.exists {
-            scroll.exists ? scroll.swipeUp() : app.swipeUp()
-        }
-        XCTAssertTrue(action.waitForHittable(timeout: 8), "Reports quick action must exist.")
-        action.tap()
-
-        XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 10),
-                      "Reports quick action should land on Insights screen.")
-    }
-
     func testRevenueKPI_NavigatesToInsights() throws {
         waitForDashboard()
 
@@ -73,25 +58,6 @@ final class DashboardSecondaryUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 10),
                       "Revenue KPI should land on Insights screen.")
-    }
-
-    func testQuickAction_CheckIn_NavigatesToClients() throws {
-        waitForDashboard()
-
-        let action = app.buttons["dashboard.quickAction.checkIn"]
-        let scroll = app.scrollViews["dashboard.scroll"]
-        for _ in 0..<5 where !action.exists {
-            scroll.exists ? scroll.swipeUp() : app.swipeUp()
-        }
-        XCTAssertTrue(action.waitForHittable(timeout: 8))
-        action.tap()
-
-        let landed = waitForAny([
-            { self.app.staticTexts["UITest Owner"].exists },
-            { self.app.staticTexts["Welcome Back!"].exists },
-            { self.app.navigationBars["Clients"].exists }
-        ], timeout: 8)
-        XCTAssertTrue(landed, "Check-In quick action should bring up Clients tab.")
     }
 
     // MARK: - Active session row

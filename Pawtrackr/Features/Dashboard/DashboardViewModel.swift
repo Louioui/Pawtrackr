@@ -183,24 +183,20 @@ final class DashboardViewModel {
         // that aren't yet in the repository.
         let container = dataStore.container
         do {
-            let (isBrandingComplete, isCatalogConfigured, hasClient, hasVisit) = try await Task.detached {
+            let (isBrandingComplete, hasClient, hasVisit) = try await Task.detached {
                 let context = ModelContext(container)
                 
                 let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
                 let branding = configs.first?.isSetupComplete ?? false
                 
-                let services = try context.fetch(FetchDescriptor<Service>())
-                let catalog = services.contains { ($0.basePrice ?? 0) > 0 }
-                
                 let clientCount = try context.fetchCount(FetchDescriptor<Client>())
                 let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
                 
-                return (branding, catalog, clientCount > 0, visitCount > 0)
+                return (branding, clientCount > 0, visitCount > 0)
             }.value
             
             checklist = [
                 ChecklistItem(title: NSLocalizedString("checklist.branding", value: "Add Business Branding", comment: ""), isCompleted: isBrandingComplete),
-                ChecklistItem(title: NSLocalizedString("checklist.catalog", value: "Configure Service Prices", comment: ""), isCompleted: isCatalogConfigured),
                 ChecklistItem(title: NSLocalizedString("checklist.client", value: "Add Your First Client", comment: ""), isCompleted: hasClient),
                 ChecklistItem(title: NSLocalizedString("checklist.visit", value: "Start Your First Visit", comment: ""), isCompleted: hasVisit)
             ]
@@ -210,8 +206,6 @@ final class DashboardViewModel {
     }
 
     func checkInPet(_ pet: Pet) async {
-        guard pet.activeVisit == nil else { return }
-
         do {
             let visitRepo = VisitRepository(modelContext: dataStore.container.mainContext, eventBus: eventBus)
             _ = try await visitRepo.checkIn(pet: pet, date: Date.now)
