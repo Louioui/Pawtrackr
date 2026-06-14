@@ -31,6 +31,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
     @Environment(AuthenticationViewModel.self) private var authViewModel
+    @Environment(DataStoreService.self) private var dataStore
 
     @State private var router = NavigationRouter()
     @State private var sidebarSelection: NavigationItem? = .dashboard
@@ -462,7 +463,7 @@ struct ContentView: View {
                 if let activeVisitID = try? CheckoutRouteResolver.activeVisitID(
                     for: petID,
                     preferredVisitID: visitID,
-                    container: modelContext.container
+                    dataStore: dataStore
                 ), let visit = modelContext.model(for: activeVisitID) as? Visit {
                     CheckoutView(pet: pet, visit: visit)
                 } else {

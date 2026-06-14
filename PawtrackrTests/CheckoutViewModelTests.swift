@@ -498,10 +498,11 @@ final class CheckoutViewModelTests: XCTestCase {
         context.insert(activeVisit)
         try context.save()
 
+        let store = DataStoreService(container: container)
         let resolvedID = try CheckoutRouteResolver.activeVisitID(
             for: pet.persistentModelID,
             preferredVisitID: activeVisit.persistentModelID,
-            container: container
+            dataStore: store
         )
 
         XCTAssertEqual(resolvedID, activeVisit.persistentModelID)
@@ -514,10 +515,36 @@ final class CheckoutViewModelTests: XCTestCase {
         let afterCheckoutID = try CheckoutRouteResolver.activeVisitID(
             for: pet.persistentModelID,
             preferredVisitID: activeVisit.persistentModelID,
-            container: container
+            dataStore: store
         )
 
         XCTAssertNil(afterCheckoutID, "Completed visits must not route into checkout or create a replacement visit.")
+    }
+
+    func testDataStoreResolvesCheckoutVisitOnlyForRequestedPet() throws {
+        let otherClient = Client(firstName: "Luis", lastName: "Rivera", phone: "5550002222")
+        let otherPet = Pet(name: "Luna", species: .dog)
+        otherPet.owner = otherClient
+        context.insert(otherClient)
+        context.insert(otherPet)
+
+        let completedPreferredVisit = Visit(pet: pet, startedAt: .now.addingTimeInterval(-7200))
+        completedPreferredVisit.markCheckedOut(total: Decimal(40), now: .now.addingTimeInterval(-3600))
+        let requestedPetActiveVisit = Visit(pet: pet, startedAt: .now.addingTimeInterval(-1800))
+        let otherPetActiveVisit = Visit(pet: otherPet, startedAt: .now.addingTimeInterval(-2400))
+        context.insert(completedPreferredVisit)
+        context.insert(requestedPetActiveVisit)
+        context.insert(otherPetActiveVisit)
+        try context.save()
+
+        let store = DataStoreService(container: container)
+        let resolvedID = try store.resolveActiveCheckoutVisitID(
+            for: pet.persistentModelID,
+            preferredVisitID: completedPreferredVisit.persistentModelID
+        )
+
+        XCTAssertEqual(resolvedID, requestedPetActiveVisit.persistentModelID)
+        XCTAssertNotEqual(resolvedID, otherPetActiveVisit.persistentModelID)
     }
 
     func testProcessPayment_ManualOverrideReconcilesLineItemsAndSummaryRevenue() async throws {
