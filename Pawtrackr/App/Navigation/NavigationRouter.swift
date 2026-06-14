@@ -18,7 +18,11 @@ enum AppDestination: Hashable, Sendable {
     case petDetail(PersistentIdentifier)
     case visitDetail(PersistentIdentifier)
     case petHistory(PersistentIdentifier)
-    case checkout(petID: PersistentIdentifier, visitID: PersistentIdentifier?)
+    case checkout(
+        petID: PersistentIdentifier,
+        visitID: PersistentIdentifier?,
+        allowsCompletedPreferredVisit: Bool
+    )
 }
 
 enum PendingNavigationCommand {
@@ -73,7 +77,11 @@ final class NavigationRouter {
     }
 
     func navigateToCheckout(_ pet: Pet) {
-        append(AppDestination.checkout(petID: pet.persistentModelID, visitID: nil))
+        append(AppDestination.checkout(
+            petID: pet.persistentModelID,
+            visitID: nil,
+            allowsCompletedPreferredVisit: false
+        ))
     }
 
     func navigateToCheckout(_ visit: Visit) {
@@ -81,7 +89,11 @@ final class NavigationRouter {
             Logger.database.error("Cannot route checkout: visit \(visit.uuid.uuidString, privacy: .public) has no pet relationship")
             return
         }
-        append(AppDestination.checkout(petID: pet.persistentModelID, visitID: visit.persistentModelID))
+        append(AppDestination.checkout(
+            petID: pet.persistentModelID,
+            visitID: visit.persistentModelID,
+            allowsCompletedPreferredVisit: true
+        ))
     }
 
     func pop() {
@@ -157,9 +169,14 @@ enum CheckoutRouteResolver {
     static func activeVisitID(
         for petID: PersistentIdentifier,
         preferredVisitID: PersistentIdentifier?,
+        allowsCompletedPreferredVisit: Bool = false,
         dataStore: DataStoreService
     ) throws -> PersistentIdentifier? {
-        try dataStore.resolveActiveCheckoutVisitID(for: petID, preferredVisitID: preferredVisitID)
+        try dataStore.resolveActiveCheckoutVisitID(
+            for: petID,
+            preferredVisitID: preferredVisitID,
+            allowsCompletedPreferredVisit: allowsCompletedPreferredVisit
+        )
     }
 }
 

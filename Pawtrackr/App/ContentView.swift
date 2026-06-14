@@ -458,11 +458,12 @@ struct ContentView: View {
                 missingDestinationView
             }
 
-        case .checkout(let petID, let visitID):
+        case .checkout(let petID, let visitID, let allowsCompletedPreferredVisit):
             if let pet = modelContext.model(for: petID) as? Pet {
                 if let activeVisitID = try? CheckoutRouteResolver.activeVisitID(
                     for: petID,
                     preferredVisitID: visitID,
+                    allowsCompletedPreferredVisit: allowsCompletedPreferredVisit,
                     dataStore: dataStore
                 ), let visit = modelContext.model(for: activeVisitID) as? Visit {
                     CheckoutView(pet: pet, visit: visit)

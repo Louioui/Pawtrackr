@@ -91,7 +91,8 @@ public final class DataStoreService {
     @MainActor
     func resolveActiveCheckoutVisitID(
         for petID: PersistentIdentifier,
-        preferredVisitID: PersistentIdentifier?
+        preferredVisitID: PersistentIdentifier?,
+        allowsCompletedPreferredVisit: Bool = false
     ) throws -> PersistentIdentifier? {
         let freshContext = ModelContext(container)
 
@@ -101,9 +102,10 @@ public final class DataStoreService {
 
         if let preferredVisitID,
            let visit = freshContext.model(for: preferredVisitID) as? Visit,
-           visit.endedAt == nil,
            visit.pet?.persistentModelID == petID {
-            return preferredVisitID
+            if visit.endedAt == nil || allowsCompletedPreferredVisit {
+                return preferredVisitID
+            }
         }
 
         let petUUID = pet.uuid

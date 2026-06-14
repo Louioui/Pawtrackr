@@ -547,6 +547,26 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertNotEqual(resolvedID, otherPetActiveVisit.persistentModelID)
     }
 
+    func testDataStoreKeepsCompletedPreferredVisitForOpenCheckoutRoute() throws {
+        let activeVisit = Visit(pet: pet, startedAt: .now.addingTimeInterval(-3600))
+        context.insert(activeVisit)
+        try context.save()
+
+        let checkoutContext = ModelContext(container)
+        let checkoutVisit = try XCTUnwrap(checkoutContext.model(for: activeVisit.persistentModelID) as? Visit)
+        checkoutVisit.markCheckedOut(total: Decimal(30), now: .now)
+        try checkoutContext.save()
+
+        let store = DataStoreService(container: container)
+        let resolvedID = try store.resolveActiveCheckoutVisitID(
+            for: pet.persistentModelID,
+            preferredVisitID: activeVisit.persistentModelID,
+            allowsCompletedPreferredVisit: true
+        )
+
+        XCTAssertEqual(resolvedID, activeVisit.persistentModelID)
+    }
+
     func testProcessPayment_ManualOverrideReconcilesLineItemsAndSummaryRevenue() async throws {
         let vm = makeVM()
         vm.toggleService(bath)
