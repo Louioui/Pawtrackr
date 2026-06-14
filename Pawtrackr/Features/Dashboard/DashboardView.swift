@@ -461,13 +461,8 @@ struct DashboardView: View {
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
                     inProgressKPICard(vm)
-                    recentHistoryLink(
-                        scope: .today,
-                        accessibilityIdentifier: "dashboard.kpi.completedHistory",
-                        accessibilityLabel: NSLocalizedString("dashboard.completed", comment: "")
-                    ) {
-                        kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
-                    }
+                    kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
+                        .accessibilityIdentifier("dashboard.kpi.completedCount")
                 }
                 GridRow {
                     Button {
@@ -493,28 +488,8 @@ struct DashboardView: View {
     @ViewBuilder
     private func inProgressKPICard(_ vm: DashboardViewModel) -> some View {
         let label = NSLocalizedString("dashboard.in_progress", comment: "")
-        let card = kpiCard(title: label, value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
-        if vm.kpi.inProgressCount > 0 {
-            Button {
-                presentQuickCheckout()
-            } label: {
-                card.contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(label))
-            .accessibilityValue(Text("\(vm.kpi.inProgressCount)"))
-            .accessibilityHint(Text(NSLocalizedString("dashboard.active_sessions", comment: "")))
-            .accessibilityIdentifier("dashboard.kpi.inProgressSessions")
-            .accessibilityAddTraits(.isButton)
-        } else {
-            card
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text(label))
-                .accessibilityValue(Text("0"))
-                .accessibilityIdentifier("dashboard.kpi.inProgressSessions")
-        }
+        kpiCard(title: label, value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
+            .accessibilityIdentifier("dashboard.kpi.inProgressCount")
     }
 
     private var quickActionsSection: some View {
@@ -921,27 +896,34 @@ private struct QuickCheckOutSheet: View {
                         description: Text(NSLocalizedString("dashboard.checkout_picker.empty_detail", value: "Check a pet in first to start a session you can check out.", comment: ""))
                     )
                 } else {
-                    List(activeVisits, id: \.uuid) { visit in
-                        if let pet = visit.pet {
-                            Button {
-                                onSelect(visit)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(pet.name).font(.headline)
-                                        if let owner = pet.owner?.fullName, !owner.isEmpty {
-                                            Text(owner).font(.footnote).foregroundStyle(.secondary)
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(activeVisits, id: \.uuid) { visit in
+                                if let pet = visit.pet {
+                                    Button {
+                                        onSelect(visit)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(pet.name).font(.headline)
+                                                if let owner = pet.owner?.fullName, !owner.isEmpty {
+                                                    Text(owner).font(.footnote).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            Spacer()
+                                            Image(systemName: "stop.circle.fill").foregroundStyle(.green)
                                         }
+                                        .padding(12)
+                                        .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .contentShape(Rectangle())
                                     }
-                                    Spacer()
-                                    Image(systemName: "stop.circle.fill").foregroundStyle(.green)
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("dashboard.checkoutPicker.row.\(pet.name)")
                                 }
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("dashboard.checkoutPicker.row.\(pet.name)")
                         }
+                        .padding(16)
                     }
                 }
             }
@@ -955,5 +937,8 @@ private struct QuickCheckOutSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: 440, idealWidth: 500, minHeight: activeVisits.isEmpty ? 240 : 320, idealHeight: 380)
+        #endif
     }
 }

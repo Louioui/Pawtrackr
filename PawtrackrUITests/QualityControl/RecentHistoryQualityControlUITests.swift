@@ -2,22 +2,13 @@ import XCTest
 
 @MainActor
 final class RecentHistoryQualityControlUITests: QualityControlUITestCase {
-    func testRecentHistoryOpensFromDashboardQuickAction() throws {
+    func testDashboardCompletionKPIIsReadOnly() throws {
         launch(startTab: "dashboard")
         XCTAssertTrue(waitForDashboard(), "Dashboard did not load.")
 
-        let historyLink = app.buttons["dashboard.kpi.completedHistory"]
-        XCTAssertTrue(waitUntilHittable(historyLink, timeout: 8), "Dashboard history KPI should be hittable.")
-        historyLink.tap()
-
-        XCTAssertTrue(
-            waitForAny([
-                { self.app.navigationBars["Recent History"].exists },
-                { self.app.textFields["recentHistory.search"].exists },
-                { self.app.otherElements["recentHistory.list"].exists }
-            ], timeout: 8),
-            "Recent History should open from the dashboard quick action."
-        )
+        XCTAssertTrue(app.staticTexts["Completed"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["dashboard.kpi.completedHistory"].exists,
+                       "Completed KPI is a read-only counter now, not a navigation control.")
     }
 
     func testRecentHistorySearchRemainsResponsive() throws {

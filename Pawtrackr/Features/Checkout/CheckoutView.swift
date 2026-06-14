@@ -32,7 +32,7 @@ struct CheckoutView: View {
 
     private let paymentReferenceScrollTarget = "checkout.referenceField.anchor"
 
-    init(pet: Pet, visit: Visit? = nil) {
+    init(pet: Pet, visit: Visit) {
         _viewModel = State(initialValue: CheckoutViewModel(pet: pet, visit: visit, eventBus: GlobalEventBus()))
     }
 

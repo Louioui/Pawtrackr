@@ -51,9 +51,10 @@ final class CheckoutViewModelTests: XCTestCase {
         let tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let logURL = tmpDir.appendingPathComponent("trace.log")
+        let checkoutVisit = visit ?? makeCheckoutVisit()
         let vm = CheckoutViewModel(
             pet: pet,
-            visit: visit,
+            visit: checkoutVisit,
             draftStore: CheckoutDraftStore(directoryURL: tmpDir),
             eventRecorder: CheckoutEventRecorder(logURL: logURL)
         )
@@ -64,13 +65,25 @@ final class CheckoutViewModelTests: XCTestCase {
 
     private func makeVM(root: URL, visit: Visit? = nil) -> CheckoutViewModel {
         let logURL = root.appendingPathComponent("trace.log")
+        let checkoutVisit = visit ?? makeCheckoutVisit()
         let vm = CheckoutViewModel(
             pet: pet,
-            visit: visit,
+            visit: checkoutVisit,
             draftStore: CheckoutDraftStore(directoryURL: root),
             eventRecorder: CheckoutEventRecorder(logURL: logURL)
         )
         return vm
+    }
+
+    private func makeCheckoutVisit() -> Visit {
+        let visit = Visit(pet: pet, startedAt: .now.addingTimeInterval(-1800))
+        context.insert(visit)
+        do {
+            try context.save()
+        } catch {
+            XCTFail("Failed to save checkout visit fixture: \(error)")
+        }
+        return visit
     }
 
     private func waitForServicesToLoad(_ vm: CheckoutViewModel, timeout: TimeInterval = 2.0) async {

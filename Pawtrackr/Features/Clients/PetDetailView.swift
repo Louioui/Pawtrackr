@@ -46,6 +46,11 @@ final class PetDetailViewModel {
     var activeVisit: Visit? {
         _ = refreshNonce
         guard let id = activeVisitID else { return nil }
+        guard isVisitStillOpenInStore(visitID: id) else {
+            activeVisitID = nil
+            refreshNonce &+= 1
+            return nil
+        }
         return modelContext.model(for: id) as? Visit
     }
     
@@ -107,6 +112,13 @@ final class PetDetailViewModel {
         activeVisitID = open.first { $0.pet?.persistentModelID == petID }?.persistentModelID
     }
 
+    private func isVisitStillOpenInStore(visitID: PersistentIdentifier) -> Bool {
+        let petID = pet.persistentModelID
+        let freshContext = ModelContext(modelContext.container)
+        guard let visit = freshContext.model(for: visitID) as? Visit else { return false }
+        return visit.endedAt == nil && visit.pet?.persistentModelID == petID
+    }
+
     // MARK: Intents
     func checkIn() {
         guard activeVisit == nil, !isCheckingIn else {
@@ -131,7 +143,11 @@ final class PetDetailViewModel {
     
     func showCheckout() {
         guard let petForCheckout = pet.modelContext != nil ? pet : nil else { return }
-        sheetDestination = .checkout(petForCheckout)
+        guard let activeVisit else {
+            refreshActiveVisit()
+            return
+        }
+        sheetDestination = .checkout(petForCheckout, activeVisit)
     }
     
     func showHistory() {
@@ -139,12 +155,12 @@ final class PetDetailViewModel {
     }
     
     enum SheetDestination: Identifiable {
-        case checkout(Pet)
+        case checkout(Pet, Visit)
         case history(Pet)
         
         var id: String {
             switch self {
-            case .checkout(let pet): "checkout-\(pet.id)"
+            case .checkout(let pet, let visit): "checkout-\(pet.id)-\(visit.id)"
             case .history(let pet): "history-\(pet.id)"
             }
         }
@@ -193,9 +209,13 @@ struct PetDetailView: View {
                 }
                 .sheet(item: $bvm.sheetDestination) { destination in
                     switch destination {
-                    case .checkout(let petForCheckout):
+                    case .checkout(let petForCheckout, let activeVisit):
                         NavigationStack {
-                            CheckoutView(pet: petForCheckout, visit: vm.activeVisit)
+                            CheckoutView(pet: petForCheckout, visit: activeVisit)
+                                .onDisappear {
+                                    vm.refreshActiveVisit()
+                                    vm.refreshNonce &+= 1
+                                }
                         }
                     case .history(let petForHistory):
                         NavigationStack {

@@ -98,7 +98,12 @@ final class ClientDetailViewModel {
     // MARK: - Queries
 
     func activeVisit(for pet: Pet) -> Visit? {
-        guard let visitID = activeVisitIDByPetID[pet.persistentModelID] else { return nil }
+        let petID = pet.persistentModelID
+        guard let visitID = activeVisitIDByPetID[petID] else { return nil }
+        guard isVisitStillOpenInStore(visitID: visitID, petID: petID) else {
+            activeVisitIDByPetID.removeValue(forKey: petID)
+            return nil
+        }
         return modelContext.model(for: visitID) as? Visit
     }
 
@@ -132,6 +137,12 @@ final class ClientDetailViewModel {
             }
         }
         activeVisitIDByPetID = map
+    }
+
+    private func isVisitStillOpenInStore(visitID: PersistentIdentifier, petID: PersistentIdentifier) -> Bool {
+        let freshContext = ModelContext(modelContext.container)
+        guard let visit = freshContext.model(for: visitID) as? Visit else { return false }
+        return visit.endedAt == nil && visit.pet?.persistentModelID == petID
     }
 
     // Non-async entry-point — creates an internal Task for background work.

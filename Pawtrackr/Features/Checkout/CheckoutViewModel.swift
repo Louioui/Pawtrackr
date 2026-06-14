@@ -258,13 +258,13 @@ final class CheckoutViewModel {
 
     init(
         pet: Pet,
-        visit: Visit?,
+        visit: Visit,
         draftStore: CheckoutDraftStore = .shared,
         eventRecorder: CheckoutEventRecorder = .shared,
         eventBus: GlobalEventBus = GlobalEventBus()
     ) {
         self.pet = pet
-        self.visit = visit ?? Visit(pet: pet)
+        self.visit = visit
         self.checkoutEndsAt = Date()
         self.draftStore = draftStore
         self.eventRecorder = eventRecorder
@@ -274,13 +274,9 @@ final class CheckoutViewModel {
         // a fallback container — that path would route the entire checkout to an orphan
         // in-memory store and silently lose revenue. If neither object is attached to a
         // container, `loadServices(modelContext:)` will wire one up before checkout runs.
-        if let container = pet.modelContext?.container ?? visit?.modelContext?.container {
+        if let container = pet.modelContext?.container ?? visit.modelContext?.container {
             self.transactionActor = CheckoutTransactionActor(modelContainer: container)
         }
-    }
-
-    convenience init(pet: Pet) {
-        self.init(pet: pet, visit: nil, eventBus: GlobalEventBus())
     }
 
     private static let serviceOrder: [String] = [

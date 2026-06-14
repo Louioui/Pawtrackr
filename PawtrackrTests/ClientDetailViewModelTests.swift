@@ -138,6 +138,25 @@ final class ClientDetailViewModelTests: XCTestCase {
             "After checkout commits on the actor's context, the pet must no longer report an active visit — the store-level query excludes the now-ended visit even if the relationship is stale.")
     }
 
+    func testActiveVisit_RevalidatesStaleIDAfterCrossContextCheckoutWithoutNotification() async throws {
+        let active = Visit(pet: pet)
+        context.insert(active)
+        try context.save()
+
+        let vm = ClientDetailViewModel(client: client, modelContext: context)
+        XCTAssertNotNil(vm.activeVisit(for: pet))
+
+        let bgContext = ModelContext(container)
+        let bgVisit = try XCTUnwrap(bgContext.model(for: active.persistentModelID) as? Visit)
+        bgVisit.markCheckedOut(total: 50, now: .now)
+        try bgContext.save()
+
+        XCTAssertNil(
+            vm.activeVisit(for: pet),
+            "Active-session UI must re-check the store when asked, so switching tabs cannot revive a visit that checkout ended in another context."
+        )
+    }
+
     func testCheckIn_NoOpWhenActiveVisitAlreadyExists() async throws {
         let active = Visit(pet: pet, startedAt: .now)
         context.insert(active)

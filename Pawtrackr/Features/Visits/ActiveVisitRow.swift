@@ -19,9 +19,10 @@ struct ActiveVisitRow: View {
 
                 // Live-ticking timer
                 Text(timer.formattedElapsed)
-                    .font(.title3.weight(.bold))
+                    .font(.title2.weight(.heavy))
                     .monospacedDigit()
                     .foregroundStyle(DS.ColorToken.primary)
+                    .frame(minWidth: 92, alignment: .trailing)
 
                 if visit.pet != nil {
                     Button {
