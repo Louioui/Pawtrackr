@@ -13,22 +13,39 @@ final class MessageTemplate {
     // Defaults for CloudKit compatibility.
     var title: String = ""
     var content: String = ""
-    var type: TemplateType = MessageTemplate.TemplateType.custom
-    
+
+    // Persist the enum's String rawValue, NOT the enum itself. Storing a Codable
+    // enum directly makes SwiftData create a "composite attribute" that FATALLY
+    // crashes the *entire* fetch when a CloudKit-synced record can't be decoded
+    // (e.g. after the case set changed — an older "Reminder" value broke macOS).
+    // A plain String is migration- and CloudKit-safe, and any unknown/missing
+    // value falls back to `.custom` instead of crashing.
+    var typeRaw: String = MessageTemplate.TemplateType.custom.rawValue
+
+    /// Non-persisted view over `typeRaw`, preserving the existing `template.type`
+    /// API. `@Transient` is REQUIRED: without it the `@Model` macro still persists
+    /// this as a composite `type` attribute, which is exactly what crashes when an
+    /// old record holds an unknown raw value (e.g. "Reminder").
+    @Transient
+    var type: TemplateType {
+        get { TemplateType(rawValue: typeRaw) ?? .custom }
+        set { typeRaw = newValue.rawValue }
+    }
+
     enum TemplateType: String, Codable, CaseIterable, Identifiable {
         case readyForPickup = "Ready"
         case appointmentReminder = "Appointment Reminder"
         case runningLate = "Running Late"
         case followUp = "Follow-up"
         case custom = "Custom"
-        
+
         var id: String { rawValue }
     }
-    
+
     init(title: String, content: String, type: TemplateType = .custom) {
         self.title = title
         self.content = content
-        self.type = type
+        self.typeRaw = type.rawValue
     }
     
     @MainActor
