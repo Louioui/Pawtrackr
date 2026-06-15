@@ -73,26 +73,14 @@ struct TransformationView: View {
         .shadow(radius: 10)
     }
     
+    // Decode through LazyImageDataImage so the bytes are downsampled and cached
+    // off the main thread. Decoding a full-size UIImage/NSImage directly in
+    // `body` re-runs on every render and is the classic cause of the photo
+    // "load, flash, reload" glitch reported in the before/after view.
     private func photoFrame(data: Data) -> some View {
-        #if canImport(UIKit)
-        if let img = UIImage(data: data) {
-            return AnyView(Image(uiImage: img)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity)
-                .frame(height: 300)
-                .clipped())
-        }
-        #elseif canImport(AppKit)
-        if let img = NSImage(data: data) {
-            return AnyView(Image(nsImage: img)
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity)
-                .frame(height: 300)
-                .clipped())
-        }
-        #endif
-        return AnyView(Color.gray)
+        LazyImageDataImage(data: data, maxDimension: 1024)
+            .frame(maxWidth: .infinity)
+            .frame(height: 300)
+            .clipped()
     }
 }

@@ -50,10 +50,20 @@ final class DashboardViewModel {
         var amountDouble: Double { (amount as NSDecimalNumber).doubleValue }
     }
 
+    /// Where a Getting Started row jumps when tapped. The view owns the actual
+    /// navigation (sheets / tab switches); the view model only declares intent so
+    /// it stays free of SwiftUI view state.
+    enum ChecklistAction: Sendable {
+        case branding      // Business profile lives in Settings
+        case addClient     // Present the New Client sheet
+        case firstVisit    // Present Quick Check-In
+    }
+
     struct ChecklistItem: Identifiable, Sendable {
         let id = UUID()
         let title: String
         let isCompleted: Bool
+        let action: ChecklistAction
     }
 
     // MARK: - Observable state
@@ -185,20 +195,20 @@ final class DashboardViewModel {
         do {
             let (isBrandingComplete, hasClient, hasVisit) = try await Task.detached {
                 let context = ModelContext(container)
-                
+
                 let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
                 let branding = configs.first?.isSetupComplete ?? false
-                
+
                 let clientCount = try context.fetchCount(FetchDescriptor<Client>())
                 let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
-                
+
                 return (branding, clientCount > 0, visitCount > 0)
             }.value
-            
+
             checklist = [
-                ChecklistItem(title: NSLocalizedString("checklist.branding", value: "Add Business Branding", comment: ""), isCompleted: isBrandingComplete),
-                ChecklistItem(title: NSLocalizedString("checklist.client", value: "Add Your First Client", comment: ""), isCompleted: hasClient),
-                ChecklistItem(title: NSLocalizedString("checklist.visit", value: "Start Your First Visit", comment: ""), isCompleted: hasVisit)
+                ChecklistItem(title: NSLocalizedString("checklist.branding", value: "Add Business Branding", comment: ""), isCompleted: isBrandingComplete, action: .branding),
+                ChecklistItem(title: NSLocalizedString("checklist.client", value: "Add Your First Client", comment: ""), isCompleted: hasClient, action: .addClient),
+                ChecklistItem(title: NSLocalizedString("checklist.visit", value: "Start Your First Visit", comment: ""), isCompleted: hasVisit, action: .firstVisit)
             ]
         } catch {
             dashboardLog.error("Checklist fetch failed: \(error)")
