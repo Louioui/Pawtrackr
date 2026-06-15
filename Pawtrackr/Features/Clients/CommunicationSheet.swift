@@ -82,6 +82,11 @@ struct CommunicationSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        // macOS sheets size-to-fit and otherwise render cramped; give the
+        // template picker a comfortable, iOS-like canvas.
+        .frame(minWidth: 440, idealWidth: 460, minHeight: 560, idealHeight: 640)
+        #endif
     }
     
     enum MessageMethod {

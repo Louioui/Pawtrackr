@@ -197,6 +197,11 @@ struct PetDetailView: View {
                         }
                     }
                 }
+                // Presented from the main content (not the nested action row) so the
+                // template picker reliably opens on macOS as well as iOS/iPadOS.
+                .sheet(isPresented: $showCommunication) {
+                    CommunicationSheet(pet: vm.pet, visit: vm.activeVisit)
+                }
                 // Use the modern `.alert(_:isPresented:presenting:actions:message:)`
                 // API instead of the deprecated `.alert(item:)`. Two deprecated
                 // `.alert` modifiers on the same view (along with the check-in
@@ -404,9 +409,6 @@ struct PetDetailView: View {
                 actionTile(title: NSLocalizedString("pet.check_out", comment: ""), systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)
-            .sheet(isPresented: $showCommunication) {
-                CommunicationSheet(pet: vm.pet, visit: vm.activeVisit)
-            }
         }
 
     private func actionTile(title: String, systemImage: String, tint: Color, disabled: Bool = false, action: @escaping () -> Void) -> some View {

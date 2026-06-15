@@ -110,27 +110,21 @@ struct InsightsView: View {
                 icon: "dollarsign.circle.fill",
                 color: DS.ColorToken.primary,
                 accessibilityIdentifier: "insights.kpi.revenue"
-            ) {
-                showRevenueDrilldown(vm)
-            }
+            )
             kpiTile(
                 title: localized("insights.avg_visit", value: "Avg Visit"),
                 value: vm.averageVisitValue > 0 ? vm.averageVisitValue.moneyString : "—",
                 icon: "chart.line.uptrend.xyaxis",
                 color: DS.ColorToken.success,
                 accessibilityIdentifier: "insights.kpi.avgVisit"
-            ) {
-                showAverageVisitDrilldown(vm)
-            }
+            )
             kpiTile(
                 title: NSLocalizedString("insights.retention", comment: ""),
                 value: "\(Int(vm.retentionRate * 100))%",
                 icon: "person.2.fill",
                 color: DS.ColorToken.warning,
                 accessibilityIdentifier: "insights.kpi.retention"
-            ) {
-                showRetentionDrilldown(vm)
-            }
+            )
         }
     }
 
@@ -139,32 +133,28 @@ struct InsightsView: View {
         value: String,
         icon: String,
         color: Color,
-        accessibilityIdentifier: String,
-        action: @escaping () -> Void
+        accessibilityIdentifier: String
     ) -> some View {
-        Button(action: action) {
-            Card(padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Image(systemName: icon)
-                        .font(.callout)
-                        .foregroundStyle(color)
-                    Text(value)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .contentTransition(.numericText())
-                    Text(title)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-                .contentShape(Rectangle())
+        // Read-only summary tile. Intentionally NOT a Button: the KPI strip is a
+        // clean set of visual data points, so there is no tap-to-drill-down here.
+        Card(padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)) {
+            VStack(alignment: .leading, spacing: 5) {
+                Image(systemName: icon)
+                    .font(.callout)
+                    .foregroundStyle(color)
+                Text(value)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .contentTransition(.numericText())
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier(accessibilityIdentifier)
-        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Data Quality
@@ -246,32 +236,9 @@ struct InsightsView: View {
                         }
                     }
                     .frame(height: 155)
-                    .chartOverlay { proxy in
-                        GeometryReader { geo in
-                            Rectangle()
-                                .fill(.clear)
-                                .contentShape(Rectangle())
-                                .onTapGesture { location in
-                                    if let plotFrame = proxy.plotFrame {
-                                        let frame = geo[plotFrame]
-                                        let x = location.x - frame.origin.x
-                                        let selectedDate: Date? = proxy.value(atX: x)
-                                        if let selectedDate {
-                                            showRevenueDrilldown(for: selectedDate, vm: vm)
-                                        } else {
-                                            showRevenueDrilldown(vm)
-                                        }
-                                    } else {
-                                        let selectedDate: Date? = proxy.value(atX: location.x)
-                                        if let selectedDate {
-                                            showRevenueDrilldown(for: selectedDate, vm: vm)
-                                        } else {
-                                            showRevenueDrilldown(vm)
-                                        }
-                                    }
-                                }
-                        }
-                    }
+                    // Read-only chart: the bars are non-interactive. Reconciliation
+                    // is still available via the explicit "View visits behind this
+                    // number" button below.
                     .animation(.spring(), value: vm.revenueSeries.count)
 
                     HStack {
@@ -474,6 +441,13 @@ struct InsightsView: View {
                 if vm.categoryDistribution.isEmpty {
                     emptyState(icon: "square.grid.2x2", message: localized("insights.category.empty", value: "No category data yet"))
                 } else {
+                    // Single source of truth: one color per category name, shared
+                    // by the donut slices AND the breakdown dots below so the user
+                    // can map a slice color back to its category.
+                    let names = vm.categoryDistribution.map(\.name)
+                    let palette = Self.categoryPalette(count: names.count)
+                    let colorMap = Dictionary(zip(names, palette), uniquingKeysWith: { first, _ in first })
+
                     Chart(vm.categoryDistribution) { data in
                         SectorMark(
                             angle: .value(localized("insights.chart.count", value: "Count"), data.count),
@@ -483,6 +457,7 @@ struct InsightsView: View {
                         .cornerRadius(4)
                         .foregroundStyle(by: .value(localized("insights.chart.category", value: "Category"), data.name))
                     }
+                    .chartForegroundStyleScale(domain: names, range: palette)
                     .frame(height: 155)
                     .chartLegend(.hidden)
                     .overlay {
@@ -496,7 +471,7 @@ struct InsightsView: View {
 
                     VStack(spacing: 0) {
                         ForEach(Array(vm.categoryDistribution.enumerated()), id: \.element.id) { index, item in
-                            categoryBreakdownRow(item, total: vm.totalCategoryVisits)
+                            categoryBreakdownRow(item, total: vm.totalCategoryVisits, color: colorMap[item.name] ?? DS.ColorToken.primary)
                             if index < vm.categoryDistribution.count - 1 { Divider() }
                         }
                     }
@@ -554,12 +529,20 @@ struct InsightsView: View {
         }
     }
 
-    private func categoryBreakdownRow(_ item: InsightsViewModel.DistributionData, total: Int) -> some View {
+    /// Stable color palette for category slices. Distinct, color-blind-friendly
+    /// hues; wraps if there are more categories than colors.
+    static func categoryPalette(count: Int) -> [Color] {
+        let base: [Color] = [.blue, .orange, .purple, .green, .pink, .teal, .indigo, .red]
+        guard count > 0 else { return [] }
+        return (0..<count).map { base[$0 % base.count] }
+    }
+
+    private func categoryBreakdownRow(_ item: InsightsViewModel.DistributionData, total: Int, color: Color) -> some View {
         let percent = total > 0 ? Int((Double(item.count) / Double(total) * 100).rounded()) : 0
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: "circle.fill")
                 .font(.caption2)
-                .foregroundStyle(DS.ColorToken.primary)
+                .foregroundStyle(color)
                 .padding(.top, 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
@@ -694,57 +677,6 @@ struct InsightsView: View {
                 value: "This lists the completed visits included in the selected revenue window. Use it to reconcile cash, card, and checkout history."
             ),
             rows: visitDrilldownRows(vm.revenueDrilldown)
-        )
-    }
-
-    private func showRevenueDrilldown(for date: Date, vm: InsightsViewModel) {
-        let rows = vm.revenueDrilldown.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
-        selectedDrilldown = InsightsDrilldown(
-            title: date.formatted(date: .abbreviated, time: .omitted),
-            subtitle: rows.isEmpty
-                ? localized("insights.drilldown.no_visits_for_day", value: "No visits recorded for this day")
-                : localized("insights.drilldown.chart_bar_visits", value: "Visits behind this chart bar"),
-            summary: localized(
-                "insights.drilldown.revenue_day_summary",
-                value: "This view opens the visits behind one chart bar so the team can verify exactly which checkouts created the total."
-            ),
-            rows: visitDrilldownRows(rows.isEmpty ? vm.revenueDrilldown : rows)
-        )
-    }
-
-    private func showAverageVisitDrilldown(_ vm: InsightsViewModel) {
-        selectedDrilldown = InsightsDrilldown(
-            title: localized("insights.drilldown.average_visit_title", value: "Average Visit Detail"),
-            subtitle: localized("insights.drilldown.average_visit_subtitle", value: "Highest-value visits in the selected revenue window"),
-            summary: String(
-                format: localized(
-                    "insights.drilldown.average_visit_summary_fmt",
-                    value: "Average visit is total revenue divided by completed visits. Current average: %@ across %d visits."
-                ),
-                vm.averageVisitValue.moneyString,
-                vm.totalVisitsInPeriod
-            ),
-            rows: visitDrilldownRows(vm.revenueDrilldown.sorted { $0.total > $1.total })
-        )
-    }
-
-    private func showRetentionDrilldown(_ vm: InsightsViewModel) {
-        let explainerRow = InsightsDrilldownRow(
-            title: localized("insights.drilldown.retention_what_title", value: "What this measures"),
-            subtitle: localized(
-                "insights.drilldown.retention_what_message",
-                value: "Share of clients who returned for another visit within the last 90 days. Higher means more repeat customers."
-            ),
-            trailing: "\(Int(vm.retentionRate * 100))%"
-        )
-        selectedDrilldown = InsightsDrilldown(
-            title: localized("insights.drilldown.retention_title", value: "Client Retention"),
-            subtitle: localized("insights.drilldown.retention_subtitle", value: "How retention is calculated"),
-            summary: localized(
-                "insights.drilldown.retention_summary",
-                value: "Retention shows how many clients returned for another visit within the last 90 days. Churn risk is the client count that has not returned on schedule."
-            ),
-            rows: [explainerRow]
         )
     }
 

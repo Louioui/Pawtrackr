@@ -28,6 +28,7 @@ struct ClientDetailView: View {
         case editClient
         case checkout(Pet)
         case history(Pet)
+        case communication(Pet)
 
         var id: String {
             switch self {
@@ -39,6 +40,8 @@ struct ClientDetailView: View {
                 return "checkout_\(String(describing: pet.persistentModelID))"
             case .history(let pet):
                 return "history_\(String(describing: pet.persistentModelID))"
+            case .communication(let pet):
+                return "communication_\(String(describing: pet.persistentModelID))"
             }
         }
     }
@@ -85,7 +88,6 @@ struct ClientDetailView: View {
     @State private var editLast: String = ""
     @State private var editPhone: String = ""
     @State private var editEmail: String = ""
-    @State private var showCommunication = false
 
     @Environment(NavigationRouter.self) private var router
     @Query private var devices: [DeviceMetadata]
@@ -113,13 +115,6 @@ struct ClientDetailView: View {
                 let ctx = client.modelContext ?? modelContext
                 viewModel = ClientDetailViewModel(client: client, modelContext: ctx, eventBus: eventBus)
                 viewModel?.refreshRecentVisits()
-            }
-        }
-        .sheet(isPresented: $showCommunication) {
-            if let firstPet = (client.pets ?? []).first {
-                CommunicationSheet(pet: firstPet, visit: nil)
-            } else {
-                Text("No pets available to message about.")
             }
         }
     }
@@ -209,6 +204,8 @@ struct ClientDetailView: View {
             EmptyView()
         case .history(let pet):
             PetHistoryView(pet: pet)
+        case .communication(let pet):
+            CommunicationSheet(pet: pet, visit: nil)
         }
     }
 
@@ -387,11 +384,17 @@ struct ClientDetailView: View {
                     } else {
                         HStack(spacing: 12) {
                             Button {
+                                guard let firstPet = (client.pets ?? []).first else { return }
                                 viewModel?.recordAttentionOutreach(method: "message")
-                                showCommunication = true
+                                // Route through the single `.sheet(item:)` so the
+                                // template picker presents on macOS too — a separate
+                                // `.sheet(isPresented:)` on the outer Group was being
+                                // silently dropped by SwiftUI on macOS.
+                                sheetDestination = .communication(firstPet)
                             } label: { Image(systemName: "message.circle.fill") }
                                 .font(.title3)
                                 .foregroundStyle(.blue)
+                                .disabled((client.pets ?? []).isEmpty)
                                 .accessibilityIdentifier("clientDetail.message")
                             Button { beginInlineEdit(client) } label: { Image(systemName: "ellipsis.circle") }
                                 .font(.title3)

@@ -281,24 +281,82 @@ struct DashboardView: View {
                 ProgressView(value: Double(vm.checklist.filter({ $0.isCompleted }).count), total: Double(vm.checklist.count))
                     .tint(DS.ColorToken.success)
                 
-                VStack(spacing: 12) {
+                VStack(spacing: 2) {
                     ForEach(vm.checklist) { item in
-                        HStack(spacing: 12) {
-                            Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(item.isCompleted ? DS.ColorToken.success : DS.ColorToken.border)
-                                .font(.title3)
-                            
-                            Text(item.title)
-                                .font(.subheadline)
-                                .foregroundStyle(item.isCompleted ? .secondary : .primary)
-                                .strikethrough(item.isCompleted)
-                            
-                            Spacer()
+                        Button {
+                            handleChecklistTap(item.action)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(item.isCompleted ? DS.ColorToken.success : DS.ColorToken.border)
+                                    .font(.title3)
+
+                                Text(item.title)
+                                    .font(.subheadline)
+                                    .foregroundStyle(item.isCompleted ? .secondary : .primary)
+                                    .strikethrough(item.isCompleted)
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityHint(item.isCompleted
+                            ? NSLocalizedString("checklist.hint.review", value: "Opens this section to review", comment: "")
+                            : NSLocalizedString("checklist.hint.complete", value: "Opens the screen to finish this step", comment: ""))
                     }
                 }
+
+                Divider().opacity(0.4)
+
+                // Sandbox → live transition. The demo data is explorable, then the
+                // user clears it from Settings ("Start Fresh") to begin for real.
+                Button {
+                    selectSurface(.settings, resetPath: true)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "wand.and.stars")
+                            .foregroundStyle(DS.ColorToken.primary)
+                            .font(.title3)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(NSLocalizedString("checklist.start_fresh.title", value: "Done exploring the demo?", comment: ""))
+                                .font(.subheadline.weight(.semibold))
+                            Text(NSLocalizedString("checklist.start_fresh.subtitle", value: "Clear the sample data and start fresh with your real business.", comment: ""))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(NSLocalizedString("checklist.start_fresh.hint", value: "Opens Settings where you can wipe demo data", comment: ""))
             }
             .padding(DS.Spacing.md)
+        }
+    }
+
+    /// Deep-links a Getting Started row to the screen where the step is finished.
+    private func handleChecklistTap(_ action: DashboardViewModel.ChecklistAction) {
+        HapticManager.impact(.light)
+        switch action {
+        case .branding:
+            // Business branding lives under Settings.
+            selectSurface(.settings, resetPath: true)
+        case .addClient:
+            showNewClient = true
+        case .firstVisit:
+            showQuickCheckIn = true
         }
     }
 
@@ -513,15 +571,6 @@ struct DashboardView: View {
                     accessibilityIdentifier: "dashboard.quickAction.newClient"
                 ) { showNewClient = true }
                 actionCard(
-                    title: NSLocalizedString("dashboard.quick_check_in", value: "Quick Check-In", comment: ""),
-                    symbol: "play.circle",
-                    accessibilityIdentifier: "dashboard.quickAction.checkIn"
-                ) {
-                    // Present a pet picker and actually start a visit, rather than
-                    // just navigating to the Clients tab.
-                    showQuickCheckIn = true
-                }
-                actionCard(
                     title: NSLocalizedString("dashboard.check_out", comment: ""),
                     symbol: "stop.circle",
                     accessibilityIdentifier: "dashboard.quickAction.checkOut"
@@ -529,13 +578,6 @@ struct DashboardView: View {
                     // Present the active sessions so one can be completed via the
                     // full checkout flow, rather than just opening history.
                     showQuickCheckOut = true
-                }
-                actionCard(
-                    title: NSLocalizedString("dashboard.reports", comment: ""),
-                    symbol: "chart.bar.fill",
-                    accessibilityIdentifier: "dashboard.quickAction.reports"
-                ) {
-                    selectSurface(.insights, resetPath: true)
                 }
             }
         }

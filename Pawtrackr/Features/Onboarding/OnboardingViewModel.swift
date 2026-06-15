@@ -394,21 +394,19 @@ final class OnboardingViewModel {
                 let bg = ModelContext(container)
                 DataMigrations.ensureServiceCatalog(in: bg)
                 DataMigrations.ensureMessageTemplates(in: bg)
+                // `ensureServiceCatalog` above already seeds the full starter
+                // catalog (Bath, Haircut, packages, add-ons) with no default
+                // price in BOTH paths, so Start-Fresh users are never left
+                // without services. We intentionally do NOT insert an extra
+                // "Basic Groom" service here: it duplicated the catalog and
+                // re-introduced a hard-coded $50 default price, contradicting
+                // the catalog's user-entered-price design.
                 if seedSampleData {
                     do {
                         try DemoDataSeeder.seedIfNeeded(in: bg)
                     } catch {
                         Logger.database.error("Demo data seed failed during onboarding: \(error.localizedDescription, privacy: .public)")
                     }
-                } else {
-                    let defaultService = Service(
-                        name: NSLocalizedString("onboarding.default_service.basic_groom", value: "Basic Groom", comment: ""),
-                        category: .groom,
-                        systemIcon: "scissors",
-                        basePrice: Decimal(50),
-                        defaultDurationMinutes: 60
-                    )
-                    bg.insert(defaultService)
                 }
                 if bg.hasChanges {
                     try? bg.save()
