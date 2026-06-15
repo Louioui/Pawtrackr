@@ -8,6 +8,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 // MARK: - Navigation Destinations
 
@@ -17,7 +18,11 @@ enum AppDestination: Hashable, Sendable {
     case petDetail(PersistentIdentifier)
     case visitDetail(PersistentIdentifier)
     case petHistory(PersistentIdentifier)
-    case checkout(PersistentIdentifier)
+    case checkout(
+        petID: PersistentIdentifier,
+        visitID: PersistentIdentifier?,
+        allowsCompletedPreferredVisit: Bool
+    )
 }
 
 enum PendingNavigationCommand {
@@ -72,7 +77,23 @@ final class NavigationRouter {
     }
 
     func navigateToCheckout(_ pet: Pet) {
-        append(AppDestination.checkout(pet.persistentModelID))
+        append(AppDestination.checkout(
+            petID: pet.persistentModelID,
+            visitID: nil,
+            allowsCompletedPreferredVisit: false
+        ))
+    }
+
+    func navigateToCheckout(_ visit: Visit) {
+        guard let pet = visit.pet else {
+            Logger.database.error("Cannot route checkout: visit \(visit.uuid.uuidString, privacy: .public) has no pet relationship")
+            return
+        }
+        append(AppDestination.checkout(
+            petID: pet.persistentModelID,
+            visitID: visit.persistentModelID,
+            allowsCompletedPreferredVisit: true
+        ))
     }
 
     func pop() {
@@ -140,6 +161,22 @@ final class NavigationRouter {
             path.append(destination)
             settingsPath = path
         }
+    }
+}
+
+enum CheckoutRouteResolver {
+    @MainActor
+    static func activeVisitID(
+        for petID: PersistentIdentifier,
+        preferredVisitID: PersistentIdentifier?,
+        allowsCompletedPreferredVisit: Bool = false,
+        dataStore: DataStoreService
+    ) throws -> PersistentIdentifier? {
+        try dataStore.resolveActiveCheckoutVisitID(
+            for: petID,
+            preferredVisitID: preferredVisitID,
+            allowsCompletedPreferredVisit: allowsCompletedPreferredVisit
+        )
     }
 }
 

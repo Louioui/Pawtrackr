@@ -18,7 +18,6 @@ struct DashboardView: View {
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
     @State private var showActivityFeed = false
-    @State private var showQuickCheckIn = false
     @State private var showQuickCheckOut = false
     @State private var selectedRevenueDate: Date?
     var namespace: Namespace.ID
@@ -32,16 +31,10 @@ struct DashboardView: View {
             .sheet(isPresented: $showActivityFeed) {
                 ActivityFeedView()
             }
-            .sheet(isPresented: $showQuickCheckIn) {
-                QuickCheckInSheet { pet in
-                    showQuickCheckIn = false
-                    Task { await vm?.checkInPet(pet) }
-                }
-            }
             .sheet(isPresented: $showQuickCheckOut) {
-                QuickCheckOutSheet(activeVisits: vm?.activeVisits ?? []) { pet in
+                QuickCheckOutSheet(activeVisits: vm?.activeVisits ?? []) { visit in
                     showQuickCheckOut = false
-                    router.navigateToCheckout(pet)
+                    router.navigateToCheckout(visit)
                 }
             }
             .alert(item: appErrorBinding) { error in
@@ -133,7 +126,7 @@ struct DashboardView: View {
                 HStack(alignment: .top, spacing: 20) {
                     VStack(spacing: 24) {
                         kpiSection(vm)
-                        activeSessionsSection(vm)
+                        if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
                         reengagementSection(vm)
                         revenueSection(vm)
                     }
@@ -467,20 +460,9 @@ struct DashboardView: View {
             Text(NSLocalizedString("dashboard.today", comment: "")).font(.headline)
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow {
-                    recentHistoryLink(
-                        scope: .today,
-                        accessibilityIdentifier: "dashboard.kpi.inProgressHistory",
-                        accessibilityLabel: NSLocalizedString("dashboard.in_progress", comment: "")
-                    ) {
-                        kpiCard(title: NSLocalizedString("dashboard.in_progress", comment: ""), value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
-                    }
-                    recentHistoryLink(
-                        scope: .today,
-                        accessibilityIdentifier: "dashboard.kpi.completedHistory",
-                        accessibilityLabel: NSLocalizedString("dashboard.completed", comment: "")
-                    ) {
-                        kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
-                    }
+                    inProgressKPICard(vm)
+                    kpiCard(title: NSLocalizedString("dashboard.completed", comment: ""), value: "\(vm.kpi.completedToday)", symbol: "checkmark.circle")
+                        .accessibilityIdentifier("dashboard.kpi.completedCount")
                 }
                 GridRow {
                     Button {
@@ -503,6 +485,13 @@ struct DashboardView: View {
         }
     }
 
+    @ViewBuilder
+    private func inProgressKPICard(_ vm: DashboardViewModel) -> some View {
+        let label = NSLocalizedString("dashboard.in_progress", comment: "")
+        kpiCard(title: label, value: "\(vm.kpi.inProgressCount)", symbol: "hourglass")
+            .accessibilityIdentifier("dashboard.kpi.inProgressCount")
+    }
+
     private var quickActionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(NSLocalizedString("dashboard.quick_actions", comment: "")).font(.headline)
@@ -513,31 +502,22 @@ struct DashboardView: View {
                     accessibilityIdentifier: "dashboard.quickAction.newClient"
                 ) { showNewClient = true }
                 actionCard(
-                    title: NSLocalizedString("dashboard.quick_check_in", value: "Quick Check-In", comment: ""),
-                    symbol: "play.circle",
-                    accessibilityIdentifier: "dashboard.quickAction.checkIn"
-                ) {
-                    // Present a pet picker and actually start a visit, rather than
-                    // just navigating to the Clients tab.
-                    showQuickCheckIn = true
-                }
-                actionCard(
                     title: NSLocalizedString("dashboard.check_out", comment: ""),
                     symbol: "stop.circle",
                     accessibilityIdentifier: "dashboard.quickAction.checkOut"
                 ) {
                     // Present the active sessions so one can be completed via the
                     // full checkout flow, rather than just opening history.
-                    showQuickCheckOut = true
-                }
-                actionCard(
-                    title: NSLocalizedString("dashboard.reports", comment: ""),
-                    symbol: "chart.bar.fill",
-                    accessibilityIdentifier: "dashboard.quickAction.reports"
-                ) {
-                    selectSurface(.insights, resetPath: true)
+                    presentQuickCheckout()
                 }
             }
+        }
+    }
+
+    private func presentQuickCheckout() {
+        Task { @MainActor in
+            await vm?.refresh()
+            showQuickCheckOut = true
         }
     }
 
@@ -898,76 +878,11 @@ private extension View {
     }
 }
 
-// MARK: - Quick action pickers
-
-/// Lists pets that are not currently in session so the dashboard "Quick
-/// Check-In" tile can start a visit directly instead of just navigating.
-private struct QuickCheckInSheet: View {
-    let onSelect: (Pet) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Pet.name) private var pets: [Pet]
-    @State private var search = ""
-
-    private var candidates: [Pet] {
-        pets.filter { $0.activeVisit == nil }.filter { pet in
-            search.isEmpty
-                || pet.name.localizedCaseInsensitiveContains(search)
-                || (pet.owner?.fullName.localizedCaseInsensitiveContains(search) ?? false)
-        }
-    }
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if candidates.isEmpty {
-                    ContentUnavailableView(
-                        NSLocalizedString("dashboard.checkin_picker.empty_title", value: "No Pets to Check In", comment: ""),
-                        systemImage: "pawprint",
-                        description: Text(NSLocalizedString("dashboard.checkin_picker.empty_detail", value: "Every pet is already in session, or you haven't added any pets yet.", comment: ""))
-                    )
-                } else {
-                    List(candidates, id: \.uuid) { pet in
-                        Button {
-                            onSelect(pet)
-                        } label: {
-                            HStack(spacing: 12) {
-                                AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(pet.name).font(.headline)
-                                    if let owner = pet.owner?.fullName, !owner.isEmpty {
-                                        Text(owner).font(.footnote).foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                Image(systemName: "play.circle.fill").foregroundStyle(.blue)
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("dashboard.checkinPicker.row.\(pet.name)")
-                    }
-                }
-            }
-            .searchable(text: $search)
-            .navigationTitle(NSLocalizedString("dashboard.checkin_picker.title", value: "Check In", comment: ""))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(NSLocalizedString("common.cancel", value: "Cancel", comment: "")) { dismiss() }
-                }
-            }
-        }
-    }
-}
-
 /// Lists active sessions so the dashboard "Check-Out" tile can route a visit
 /// into the full checkout flow instead of just opening history.
 private struct QuickCheckOutSheet: View {
     let activeVisits: [Visit]
-    let onSelect: (Pet) -> Void
+    let onSelect: (Visit) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -981,27 +896,34 @@ private struct QuickCheckOutSheet: View {
                         description: Text(NSLocalizedString("dashboard.checkout_picker.empty_detail", value: "Check a pet in first to start a session you can check out.", comment: ""))
                     )
                 } else {
-                    List(activeVisits, id: \.uuid) { visit in
-                        if let pet = visit.pet {
-                            Button {
-                                onSelect(pet)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(pet.name).font(.headline)
-                                        if let owner = pet.owner?.fullName, !owner.isEmpty {
-                                            Text(owner).font(.footnote).foregroundStyle(.secondary)
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(activeVisits, id: \.uuid) { visit in
+                                if let pet = visit.pet {
+                                    Button {
+                                        onSelect(visit)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(pet.name).font(.headline)
+                                                if let owner = pet.owner?.fullName, !owner.isEmpty {
+                                                    Text(owner).font(.footnote).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            Spacer()
+                                            Image(systemName: "stop.circle.fill").foregroundStyle(.green)
                                         }
+                                        .padding(12)
+                                        .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .contentShape(Rectangle())
                                     }
-                                    Spacer()
-                                    Image(systemName: "stop.circle.fill").foregroundStyle(.green)
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("dashboard.checkoutPicker.row.\(pet.name)")
                                 }
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("dashboard.checkoutPicker.row.\(pet.name)")
                         }
+                        .padding(16)
                     }
                 }
             }
@@ -1015,5 +937,8 @@ private struct QuickCheckOutSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: 440, idealWidth: 500, minHeight: activeVisits.isEmpty ? 240 : 320, idealHeight: 380)
+        #endif
     }
 }

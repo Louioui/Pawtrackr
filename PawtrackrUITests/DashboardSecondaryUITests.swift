@@ -49,19 +49,32 @@ final class DashboardSecondaryUITests: XCTestCase {
         app.buttons["newClient.cancel"].tap()
     }
 
-    func testQuickAction_Reports_NavigatesToInsights() throws {
+    func testQuickAction_CheckOut_ShowsActiveSessionPicker() throws {
         waitForDashboard()
 
-        let action = app.buttons["dashboard.quickAction.reports"]
+        let action = app.buttons["dashboard.quickAction.checkOut"]
         let scroll = app.scrollViews["dashboard.scroll"]
-        for _ in 0..<5 where !action.exists {
+        for _ in 0..<5 where !(action.exists && action.isHittable) {
             scroll.exists ? scroll.swipeUp() : app.swipeUp()
         }
-        XCTAssertTrue(action.waitForHittable(timeout: 8), "Reports quick action must exist.")
+
+        XCTAssertTrue(action.waitForHittable(timeout: 8), "Quick action Check Out button must be hittable.")
         action.tap()
 
-        XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 10),
-                      "Reports quick action should land on Insights screen.")
+        XCTAssertTrue(
+            app.buttons["dashboard.checkoutPicker.row.UITest Pet"].waitForExistence(timeout: 8),
+            "Quick action Check Out should list the currently active sessions."
+        )
+        app.buttons["Cancel"].tap()
+    }
+
+    func testDashboardProgressKPIsAreReadOnlyCounters() throws {
+        waitForDashboard()
+
+        XCTAssertTrue(app.staticTexts["In Progress"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Completed"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["dashboard.kpi.inProgressSessions"].exists)
+        XCTAssertFalse(app.buttons["dashboard.kpi.completedHistory"].exists)
     }
 
     func testRevenueKPI_NavigatesToInsights() throws {
@@ -73,25 +86,6 @@ final class DashboardSecondaryUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 10),
                       "Revenue KPI should land on Insights screen.")
-    }
-
-    func testQuickAction_CheckIn_NavigatesToClients() throws {
-        waitForDashboard()
-
-        let action = app.buttons["dashboard.quickAction.checkIn"]
-        let scroll = app.scrollViews["dashboard.scroll"]
-        for _ in 0..<5 where !action.exists {
-            scroll.exists ? scroll.swipeUp() : app.swipeUp()
-        }
-        XCTAssertTrue(action.waitForHittable(timeout: 8))
-        action.tap()
-
-        let landed = waitForAny([
-            { self.app.staticTexts["UITest Owner"].exists },
-            { self.app.staticTexts["Welcome Back!"].exists },
-            { self.app.navigationBars["Clients"].exists }
-        ], timeout: 8)
-        XCTAssertTrue(landed, "Check-In quick action should bring up Clients tab.")
     }
 
     // MARK: - Active session row
@@ -239,6 +233,43 @@ final class DashboardSecondaryUITests: XCTestCase {
         )
     }
 
+    func testClientDetailCheckoutDoesNotRecreateActiveSessionAfterNavigation() throws {
+        waitForDashboard()
+        clearSeededActiveSessionFromDashboard()
+        openUITestOwnerDetail()
+
+        let checkInBtn = app.buttons["clientDetail.pet.UITest Pet.checkIn"]
+        scrollUntilHittable(checkInBtn)
+        XCTAssertTrue(checkInBtn.waitForHittable(timeout: 5))
+        checkInBtn.tap()
+
+        let checkOutBtn = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
+        XCTAssertTrue(checkOutBtn.waitForHittable(timeout: 8))
+        checkOutBtn.tap()
+
+        XCTAssertTrue(app.staticTexts["Pick the services"].waitForExistence(timeout: 8))
+        let bath = app.buttons["checkout.service.Bath"]
+        if bath.waitForHittable(timeout: 5) { bath.tap() }
+        tapPrimaryButton(named: "Continue to Notes")
+        tapPrimaryButton(named: "Continue to Payment")
+        tapPrimaryButton(named: "Review Checkout")
+        tapPrimaryButton(named: "Confirm & Pay")
+        XCTAssertTrue(app.staticTexts["Checkout Complete!"].waitForExistence(timeout: 15))
+
+        let doneButton = app.buttons["checkout.doneButton"]
+        XCTAssertTrue(doneButton.waitForHittable(timeout: 5))
+        doneButton.tap()
+
+        tapTab("Insights")
+        tapTab("Dashboard")
+        waitForDashboard()
+
+        let stayedCheckedOut = waitForCondition(timeout: 10) {
+            !self.app.buttons["dashboard.activeSession.checkoutButton"].exists
+        }
+        XCTAssertTrue(stayedCheckedOut, "A completed client-detail checkout must not recreate an active session after navigating away.")
+    }
+
     private func tapPrimaryButton(named title: String) {
         let titledButton = app.buttons[title]
         if titledButton.waitForHittable(timeout: 8) {
@@ -257,6 +288,54 @@ final class DashboardSecondaryUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
         return predicate()
+    }
+
+    private func clearSeededActiveSessionFromDashboard() {
+        let checkoutButton = app.buttons["dashboard.activeSession.checkoutButton"]
+        scrollUntilHittable(checkoutButton)
+        XCTAssertTrue(checkoutButton.waitForHittable(timeout: 5), "Seeded active session row should be hittable on launch.")
+        checkoutButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Pick the services"].waitForExistence(timeout: 8))
+        let bath = app.buttons["checkout.service.Bath"]
+        if bath.waitForHittable(timeout: 5) { bath.tap() }
+        tapPrimaryButton(named: "Continue to Notes")
+        tapPrimaryButton(named: "Continue to Payment")
+        tapPrimaryButton(named: "Review Checkout")
+        tapPrimaryButton(named: "Confirm & Pay")
+        XCTAssertTrue(app.staticTexts["Checkout Complete!"].waitForExistence(timeout: 15))
+
+        let doneButton = app.buttons["checkout.doneButton"]
+        if doneButton.waitForHittable(timeout: 5) { doneButton.tap() }
+        waitForDashboard()
+    }
+
+    private func openUITestOwnerDetail() {
+        tapTab("Clients")
+
+        let row = app.buttons["clients.row.UITest Owner"]
+        let staticRow = app.staticTexts["UITest Owner"]
+        if row.waitForHittable(timeout: 8) {
+            row.tap()
+        } else if staticRow.waitForHittable(timeout: 4) {
+            staticRow.tap()
+        } else {
+            XCTFail("Could not find seeded UITest Owner row.")
+        }
+    }
+
+    private func scrollUntilHittable(_ element: XCUIElement, attempts: Int = 6) {
+        let scroll = app.scrollViews["dashboard.scroll"].exists ? app.scrollViews["dashboard.scroll"] : app.scrollViews.firstMatch
+        for _ in 0..<attempts where !(element.exists && element.isHittable) {
+            if scroll.exists { scroll.swipeUp() } else { app.swipeUp() }
+        }
+    }
+
+    private func tapTab(_ title: String) {
+        let tab = app.tabBars.buttons[title]
+        XCTAssertTrue(tab.waitForHittable(timeout: 8), "\(title) tab was not hittable.")
+        tab.tap()
+        _ = app.wait(for: .runningForeground, timeout: 0.5)
     }
 
     // MARK: - Helpers

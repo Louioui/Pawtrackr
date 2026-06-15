@@ -40,11 +40,17 @@ final class PetDetailViewModel {
     /// `pet.visits` relationship — which stays stale after the cross-context
     /// `CheckoutTransactionActor` commit (see ClientDetailViewModel for details).
     private(set) var activeVisitID: PersistentIdentifier?
+    private(set) var isCheckingIn = false
 
     // Computed Data
     var activeVisit: Visit? {
         _ = refreshNonce
         guard let id = activeVisitID else { return nil }
+        guard isVisitStillOpenInStore(visitID: id) else {
+            activeVisitID = nil
+            refreshNonce &+= 1
+            return nil
+        }
         return modelContext.model(for: id) as? Visit
     }
     
@@ -106,14 +112,23 @@ final class PetDetailViewModel {
         activeVisitID = open.first { $0.pet?.persistentModelID == petID }?.persistentModelID
     }
 
+    private func isVisitStillOpenInStore(visitID: PersistentIdentifier) -> Bool {
+        let petID = pet.persistentModelID
+        let freshContext = ModelContext(modelContext.container)
+        guard let visit = freshContext.model(for: visitID) as? Visit else { return false }
+        return visit.endedAt == nil && visit.pet?.persistentModelID == petID
+    }
+
     // MARK: Intents
     func checkIn() {
-        guard activeVisit == nil else {
+        guard activeVisit == nil, !isCheckingIn else {
             Logger.petDetail.info("checkIn skipped: pet \(self.pet.uuid) already has active visit")
             return
         }
         Logger.petDetail.info("checkIn start: pet \(self.pet.uuid)")
+        isCheckingIn = true
         Task {
+            defer { isCheckingIn = false }
             do {
                 let visit = try await visitRepository.checkIn(pet: pet, date: .now)
                 refreshActiveVisit()
@@ -128,7 +143,11 @@ final class PetDetailViewModel {
     
     func showCheckout() {
         guard let petForCheckout = pet.modelContext != nil ? pet : nil else { return }
-        sheetDestination = .checkout(petForCheckout)
+        guard let activeVisit else {
+            refreshActiveVisit()
+            return
+        }
+        sheetDestination = .checkout(petForCheckout, activeVisit)
     }
     
     func showHistory() {
@@ -136,12 +155,12 @@ final class PetDetailViewModel {
     }
     
     enum SheetDestination: Identifiable {
-        case checkout(Pet)
+        case checkout(Pet, Visit)
         case history(Pet)
         
         var id: String {
             switch self {
-            case .checkout(let pet): "checkout-\(pet.id)"
+            case .checkout(let pet, let visit): "checkout-\(pet.id)-\(visit.id)"
             case .history(let pet): "history-\(pet.id)"
             }
         }
@@ -190,9 +209,13 @@ struct PetDetailView: View {
                 }
                 .sheet(item: $bvm.sheetDestination) { destination in
                     switch destination {
-                    case .checkout(let petForCheckout):
+                    case .checkout(let petForCheckout, let activeVisit):
                         NavigationStack {
-                            CheckoutView(pet: petForCheckout, visit: vm.activeVisit)
+                            CheckoutView(pet: petForCheckout, visit: activeVisit)
+                                .onDisappear {
+                                    vm.refreshActiveVisit()
+                                    vm.refreshNonce &+= 1
+                                }
                         }
                     case .history(let petForHistory):
                         NavigationStack {
@@ -371,7 +394,7 @@ struct PetDetailView: View {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         let secs = max(0, Int(Date().timeIntervalSince(started)))
                         Label(VisitTimer.format(seconds: secs), systemImage: "clock.arrow.circlepath")
-                            .font(.subheadline.weight(.medium))
+                            .font(.headline.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
                             .monospacedDigit()
                             .accessibilityLabel(VisitTimer.spelledOut(seconds: secs))
@@ -386,11 +409,7 @@ struct PetDetailView: View {
             HStack(spacing: 12) {
                 actionTile(title: "Message", systemImage: "message.fill", tint: .indigo) { showCommunication = true }
                 actionTile(title: NSLocalizedString("pet.view_history", comment: ""), systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
-                actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: false) {
-                    // Don't silently disable when there's already an active
-                    // visit — the user sees a blue tile and assumes it works.
-                    // Always respond: surface an inline notice if the pet
-                    // is already in session, otherwise check in directly.
+                actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil || vm.isCheckingIn) {
                     if vm.activeVisit != nil {
                         vm.appError = .validation(.custom(message: NSLocalizedString(
                             "pet.already_in_session",
@@ -403,7 +422,7 @@ struct PetDetailView: View {
                     vm.checkIn()
                     HapticManager.notify(.success)
                 }
-                .opacity(vm.activeVisit != nil ? 0.55 : 1.0)
+                .opacity(vm.activeVisit == nil && !vm.isCheckingIn ? 1.0 : 0.55)
                 actionTile(title: NSLocalizedString("pet.check_out", comment: ""), systemImage: "checkmark.seal.fill", tint: .green, disabled: vm.activeVisit == nil) { vm.showCheckout() }
             }
             .padding(.horizontal)

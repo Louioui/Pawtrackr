@@ -31,6 +31,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
     @Environment(AuthenticationViewModel.self) private var authViewModel
+    @Environment(DataStoreService.self) private var dataStore
 
     @State private var router = NavigationRouter()
     @State private var sidebarSelection: NavigationItem? = .dashboard
@@ -457,13 +458,34 @@ struct ContentView: View {
                 missingDestinationView
             }
 
-        case .checkout(let id):
-            if let pet = modelContext.model(for: id) as? Pet {
-                CheckoutView(pet: pet, visit: pet.activeVisit)
+        case .checkout(let petID, let visitID, let allowsCompletedPreferredVisit):
+            if let pet = modelContext.model(for: petID) as? Pet {
+                if let activeVisitID = try? CheckoutRouteResolver.activeVisitID(
+                    for: petID,
+                    preferredVisitID: visitID,
+                    allowsCompletedPreferredVisit: allowsCompletedPreferredVisit,
+                    dataStore: dataStore
+                ), let visit = modelContext.model(for: activeVisitID) as? Visit {
+                    CheckoutView(pet: pet, visit: visit)
+                } else {
+                    noActiveSessionView
+                }
             } else {
                 missingDestinationView
             }
         }
+    }
+
+    private var noActiveSessionView: some View {
+        ContentUnavailableView(
+            NSLocalizedString("checkout.no_active_session_title", value: "No Active Session", comment: ""),
+            systemImage: "clock.badge.xmark",
+            description: Text(NSLocalizedString(
+                "checkout.no_active_session_message",
+                value: "This pet is not checked in right now. Start a visit before opening checkout.",
+                comment: ""
+            ))
+        )
     }
 
     private var missingDestinationView: some View {

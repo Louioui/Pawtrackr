@@ -75,6 +75,26 @@ final class InsightsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.serviceDistribution.first?.name, "Haircut")
     }
 
+    func testRefresh_CategoryDistributionUsesStableSemanticOrderForTies() async throws {
+        let today = Calendar.current.startOfDay(for: .now)
+        context.insert(CategoryDaySummary(day: today, categoryRaw: Service.Category.addOn.rawValue, count: 1))
+        context.insert(CategoryDaySummary(day: today, categoryRaw: Service.Category.package.rawValue, count: 1))
+        context.insert(CategoryDaySummary(day: today, categoryRaw: Service.Category.groom.rawValue, count: 1))
+        try context.save()
+
+        let vm = InsightsViewModel(dataStore: dataStore, eventBus: eventBus)
+        await vm.refresh()
+
+        XCTAssertEqual(
+            vm.categoryDistribution.map(\.name),
+            [
+                Service.Category.package.rawValue,
+                Service.Category.groom.rawValue,
+                Service.Category.addOn.rawValue
+            ]
+        )
+    }
+
     func testRefresh_GuardsAgainstReentrancy() async throws {
         try seedTwoCompletedVisits()
 

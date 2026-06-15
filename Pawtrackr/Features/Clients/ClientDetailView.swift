@@ -10,6 +10,15 @@ import SwiftUI
 import SwiftData
 import OSLog
 
+private struct ClientCheckoutRoute: Identifiable {
+    let pet: Pet
+    let visit: Visit
+
+    var id: String {
+        "checkout_\(pet.uuid.uuidString)_\(visit.uuid.uuidString)"
+    }
+}
+
 @MainActor
 struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -21,12 +30,11 @@ struct ClientDetailView: View {
 
     // Local sheet routing (do not depend on VM for UI routing)
     @State private var sheetDestination: SheetDestination?
-    @State private var checkoutPet: Pet? = nil
+    @State private var checkoutRoute: ClientCheckoutRoute? = nil
 
     enum SheetDestination: Identifiable {
         case addPet
         case editClient
-        case checkout(Pet)
         case history(Pet)
 
         var id: String {
@@ -35,8 +43,6 @@ struct ClientDetailView: View {
                 return "addPet"
             case .editClient:
                 return "editClient"
-            case .checkout(let pet):
-                return "checkout_\(String(describing: pet.persistentModelID))"
             case .history(let pet):
                 return "history_\(String(describing: pet.persistentModelID))"
             }
@@ -148,7 +154,7 @@ struct ClientDetailView: View {
             .sheet(isPresented: $showContactEditor) {
                 contactEditorSheet
             }
-            .modifier(CheckoutPresentationModifier(checkoutPet: $checkoutPet, vm: vm))
+            .modifier(CheckoutPresentationModifier(checkoutRoute: $checkoutRoute, vm: vm))
             // The deprecated `.alert(item:)` + `Alert(…)` API silently fails to
             // present when stacked under multiple `.sheet(item:)` modifiers
             // — that's why the Check In button looked broken to the user
@@ -205,8 +211,6 @@ struct ClientDetailView: View {
             AddPetSheet(client: vm.client)
         case .editClient:
             EditClientSheet(client: vm.client)
-        case .checkout:
-            EmptyView()
         case .history(let pet):
             PetHistoryView(pet: pet)
         }
@@ -423,11 +427,11 @@ struct ClientDetailView: View {
                             }
                         } trailing: {
                             HStack(spacing: 8) {
-                                if let sms = PhoneUtils.smsURLString(client.phone ?? ""), let smsURL = URL(string: sms) {
+                                if PhoneUtils.smsURLString(client.phone ?? "") != nil {
                                     Button {
-                                        viewModel?.recordAttentionOutreach(method: "message")
-                                        URLOpener.open(smsURL)
+                                        showCommunication = true
                                     } label: { Image(systemName: "message.fill") }
+                                    .accessibilityLabel(NSLocalizedString("client_detail.message", value: "Message", comment: ""))
                                 }
                                 if let tel = PhoneUtils.telURLString(client.phone ?? ""), let telURL = URL(string: tel) {
                                     Button {
@@ -645,6 +649,7 @@ struct ClientDetailView: View {
             VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
                     let activeVisit = vm.activeVisit(for: pet)
+                    let isCheckingIn = vm.isCheckingIn(pet)
                     Card {
                         HStack(alignment: .top, spacing: 12) {
                             AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md, ringWidth: 3)
@@ -685,12 +690,18 @@ struct ClientDetailView: View {
                                         }
                                         HapticManager.notify(.success)
                                     }
-                                    .opacity(activeVisit == nil ? 1.0 : 0.55)
+                                    .opacity(activeVisit == nil && !isCheckingIn ? 1.0 : 0.55)
+                                    .disabled(activeVisit != nil || isCheckingIn)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
 
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
-                                        checkoutPet = pet
-                                        HapticManager.notify(.success)
+                                        if let visit = vm.activeVisit(for: pet) {
+                                            checkoutRoute = ClientCheckoutRoute(pet: pet, visit: visit)
+                                            HapticManager.notify(.success)
+                                        } else {
+                                            vm.refreshPets()
+                                            HapticManager.notify(.warning)
+                                        }
                                     }
                                     .opacity(activeVisit == nil ? 0.3 : 1.0)
                                     .disabled(activeVisit == nil)
@@ -928,19 +939,28 @@ private struct EmptyToolbarContent: ToolbarContent {
 }
 
 private struct CheckoutPresentationModifier: ViewModifier {
-    @Binding var checkoutPet: Pet?
+    @Binding var checkoutRoute: ClientCheckoutRoute?
     let vm: ClientDetailViewModel
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        content.adaptiveCover(item: $checkoutPet) { pet in
-            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
+        content.adaptiveCover(item: $checkoutRoute) { route in
+            checkoutContent(for: route)
         }
         #else
-        content.sheet(item: $checkoutPet) { pet in
-            CheckoutView(pet: pet, visit: vm.activeVisit(for: pet))
+        content.sheet(item: $checkoutRoute) { route in
+            checkoutContent(for: route)
         }
         #endif
+    }
+
+    @ViewBuilder
+    private func checkoutContent(for route: ClientCheckoutRoute) -> some View {
+        CheckoutView(pet: route.pet, visit: route.visit)
+            .onDisappear {
+                vm.refreshPets()
+                vm.refreshRecentVisits()
+            }
     }
 }
 
@@ -977,16 +997,16 @@ private struct InitialsCircle: View {
 
 @ViewBuilder private func petStatusPill(_ activeVisit: Visit?) -> some View {
     if let v = activeVisit {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: "clock")
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let secs = max(0, Int(Date().timeIntervalSince(v.startedAt)))
                 Text(hms(secs)).monospacedDigit()
             }
         }
-        .font(.caption.weight(.bold))
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .font(.callout.weight(.bold))
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.blue.opacity(0.12)))
         .foregroundStyle(.blue)
     } else {

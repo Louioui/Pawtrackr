@@ -56,6 +56,7 @@ final class ClientDetailViewModel {
     private var lastTotalForClient: Int = 0
     private var fetchTask: Task<Void, Never>?
     private var visitCompleteObserver: CDVMObserverToken?
+    private var checkingInPetIDs: Set<PersistentIdentifier> = []
 
     init(
         client: Client,
@@ -97,8 +98,17 @@ final class ClientDetailViewModel {
     // MARK: - Queries
 
     func activeVisit(for pet: Pet) -> Visit? {
-        guard let visitID = activeVisitIDByPetID[pet.persistentModelID] else { return nil }
+        let petID = pet.persistentModelID
+        guard let visitID = activeVisitIDByPetID[petID] else { return nil }
+        guard isVisitStillOpenInStore(visitID: visitID, petID: petID) else {
+            activeVisitIDByPetID.removeValue(forKey: petID)
+            return nil
+        }
         return modelContext.model(for: visitID) as? Visit
+    }
+
+    func isCheckingIn(_ pet: Pet) -> Bool {
+        checkingInPetIDs.contains(pet.persistentModelID)
     }
 
     func refreshPets() {
@@ -127,6 +137,12 @@ final class ClientDetailViewModel {
             }
         }
         activeVisitIDByPetID = map
+    }
+
+    private func isVisitStillOpenInStore(visitID: PersistentIdentifier, petID: PersistentIdentifier) -> Bool {
+        let freshContext = ModelContext(modelContext.container)
+        guard let visit = freshContext.model(for: visitID) as? Visit else { return false }
+        return visit.endedAt == nil && visit.pet?.persistentModelID == petID
     }
 
     // Non-async entry-point — creates an internal Task for background work.
@@ -248,9 +264,12 @@ final class ClientDetailViewModel {
     }
 
     func checkIn(pet: Pet, at date: Date = .now) {
-        if activeVisit(for: pet) != nil { return }
+        let petID = pet.persistentModelID
+        if activeVisit(for: pet) != nil || checkingInPetIDs.contains(petID) { return }
+        checkingInPetIDs.insert(petID)
         Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.checkingInPetIDs.remove(petID) }
             do {
                 _ = try await self.visitRepository.checkIn(pet: pet, date: date)
                 self.refreshPets()

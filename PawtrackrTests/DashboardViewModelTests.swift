@@ -55,7 +55,7 @@ final class DashboardViewModelTests: XCTestCase {
         let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
         await vm.refresh()
 
-        XCTAssertEqual(vm.checklist.count, 4)
+        XCTAssertEqual(vm.checklist.count, 3)
         XCTAssertTrue(vm.checklist.allSatisfy { !$0.isCompleted },
                       "Empty store: every checklist step should be incomplete.")
     }
@@ -74,7 +74,7 @@ final class DashboardViewModelTests: XCTestCase {
         XCTAssertEqual(branding?.isCompleted, true)
     }
 
-    func testRefresh_ChecklistFlipsCatalogWhenServicePriced() async throws {
+    func testRefresh_ChecklistDoesNotIncludeServicePricingStep() async throws {
         let svc = Service(name: "Bath", basePrice: 25)
         context.insert(svc)
         try context.save()
@@ -82,8 +82,10 @@ final class DashboardViewModelTests: XCTestCase {
         let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
         await vm.refresh()
 
-        let catalog = vm.checklist.first(where: { $0.title.contains("Service Prices") })
-        XCTAssertEqual(catalog?.isCompleted, true)
+        XCTAssertFalse(
+            vm.checklist.contains { $0.title.contains("Service Prices") },
+            "Dashboard onboarding should not show the removed service-pricing step."
+        )
     }
 
     func testRefresh_ChecklistFlipsClientWhenAtLeastOneClient() async throws {

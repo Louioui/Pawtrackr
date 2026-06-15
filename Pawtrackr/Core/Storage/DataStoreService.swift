@@ -85,6 +85,40 @@ public final class DataStoreService {
             }
         }
     }
+
+    /// Resolves checkout navigation against a fresh context so a completed visit
+    /// cannot be reopened from stale UI relationships after actor-owned checkout.
+    @MainActor
+    func resolveActiveCheckoutVisitID(
+        for petID: PersistentIdentifier,
+        preferredVisitID: PersistentIdentifier?,
+        allowsCompletedPreferredVisit: Bool = false
+    ) throws -> PersistentIdentifier? {
+        let freshContext = ModelContext(container)
+
+        guard let pet = freshContext.model(for: petID) as? Pet else {
+            return nil
+        }
+
+        if let preferredVisitID,
+           let visit = freshContext.model(for: preferredVisitID) as? Visit,
+           visit.pet?.persistentModelID == petID {
+            if visit.endedAt == nil || allowsCompletedPreferredVisit {
+                return preferredVisitID
+            }
+        }
+
+        let petUUID = pet.uuid
+        var descriptor = FetchDescriptor<Visit>(
+            predicate: #Predicate<Visit> { visit in
+                visit.endedAt == nil && visit.pet?.uuid == petUUID
+            },
+            sortBy: [SortDescriptor(\.startedAt, order: .forward)]
+        )
+        descriptor.fetchLimit = 1
+        descriptor.relationshipKeyPathsForPrefetching = [\Visit.pet]
+        return try freshContext.fetch(descriptor).first?.persistentModelID
+    }
 }
 
 private extension Logger {

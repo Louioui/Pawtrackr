@@ -175,18 +175,22 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
 
     private func activeVisit(for pet: Pet) throws -> Visit? {
+        let freshContext = ModelContext(modelContext.container)
+        let petUUID = pet.uuid
         let activeDescriptor = FetchDescriptor<Visit>(
             predicate: #Predicate { $0.endedAt == nil },
             sortBy: [SortDescriptor(\.startedAt, order: .forward)]
         )
-        let visits = try modelContext.fetch(activeDescriptor)
-        let active = visits.first { $0.pet?.uuid == pet.uuid }
-        if let active = active {
-            Logger.visits.info("VisitRepository: activeVisit found for pet \(pet.name): visitID=\(active.uuid), endedAt=\(String(describing: active.endedAt))")
+        let visits = try freshContext.fetch(activeDescriptor)
+        let active = visits.first { $0.pet?.uuid == petUUID }
+        if let activeID = active?.persistentModelID,
+           let contextActive = modelContext.model(for: activeID) as? Visit {
+            Logger.visits.info("VisitRepository: activeVisit found for pet \(pet.name): visitID=\(contextActive.uuid), petUUID=\(petUUID), endedAt=\(String(describing: contextActive.endedAt))")
+            return contextActive
         } else {
             Logger.visits.info("VisitRepository: No active visit found for pet \(pet.name)")
+            return nil
         }
-        return active
     }
 }
 
