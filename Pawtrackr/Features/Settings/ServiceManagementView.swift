@@ -102,7 +102,7 @@ struct EditServiceView: View {
                 TextField(NSLocalizedString("service.name", comment: ""), text: $viewModel.name)
                 Picker(NSLocalizedString("service.category", comment: ""), selection: $viewModel.category) {
                     ForEach(Service.Category.allCases) { category in
-                        Text(category.rawValue).tag(category)
+                        Text(category.localizedName).tag(category)
                     }
                 }
                 HStack {

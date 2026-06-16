@@ -68,7 +68,7 @@ struct VisitRow: View {
             Spacer()
             Text(visit.totalCurrencyString)
                 .font(.subheadline.weight(.semibold))
-                .accessibilityLabel("Amount \(visit.totalCurrencyString)")
+                .accessibilityLabel(String(format: AppLocalization.localized("a11y.amount_fmt", value: "Amount %@"), visit.totalCurrencyString))
         }
     }
 
@@ -88,13 +88,13 @@ struct VisitRow: View {
         HStack {
             Label(visit.durationString, systemImage: "clock")
             if let note = visit.note, !note.trimmed.isEmpty {
-                Label("Note", systemImage: "note.text")
+                Label(AppLocalization.localized("visit.note", value: "Note"), systemImage: "note.text")
             }
             if visit.beforePhotoData != nil
                 || visit.afterPhotoData != nil
                 || visit.beforeThumbnailData != nil
                 || visit.afterThumbnailData != nil {
-                Label("Photos", systemImage: "photo.on.rectangle")
+                Label(NSLocalizedString("visit.photos", comment: ""), systemImage: "photo.on.rectangle")
             }
             Spacer()
             
@@ -103,12 +103,12 @@ struct VisitRow: View {
                 Image(systemName: "icloud.and.arrow.up")
                     .font(.caption2)
                     .foregroundStyle(.blue)
-                    .accessibilityLabel("Syncing to iCloud")
+                    .accessibilityLabel(AppLocalization.localized("visit.syncing_icloud", value: "Syncing to iCloud"))
             } else {
                 Image(systemName: "checkmark.icloud.fill")
                     .font(.caption2)
                     .foregroundStyle(.green)
-                    .accessibilityLabel("Synced to iCloud")
+                    .accessibilityLabel(AppLocalization.localized("visit.synced_icloud", value: "Synced to iCloud"))
             }
             
             if let paymentMethod = visit.payment?.method {

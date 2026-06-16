@@ -34,7 +34,7 @@ struct ActiveVisitRow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Session options")
+                    .accessibilityLabel(AppLocalization.localized("a11y.session_options", value: "Session options"))
                     .accessibilityIdentifier("dashboard.activeSession.checkoutButton")
                 }
             }

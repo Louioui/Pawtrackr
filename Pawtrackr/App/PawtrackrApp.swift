@@ -34,6 +34,7 @@ struct PawtrackrApp: App {
     let eventBus = GlobalEventBus()
     @State private var appSettings = AppSettings()
     @State private var authViewModel: AuthenticationViewModel
+    @AppStorage(AppSettingsKeys.appLanguageOverride) private var appLanguageOverrideRaw = AppLanguageOverride.system.rawValue
 
     // Platform AppDelegate for silent CloudKit pushes.
     #if canImport(UIKit) && !targetEnvironment(macCatalyst)
@@ -228,6 +229,7 @@ struct PawtrackrApp: App {
         #if os(macOS)
         WindowGroup("Pawtrackr", id: "main") {
             mainWindowContent
+                .environment(\.locale, customLocale)
         }
         .defaultSize(width: 1220, height: 820)
         .windowStyle(.hiddenTitleBar)
@@ -257,6 +259,7 @@ struct PawtrackrApp: App {
         #else
         WindowGroup {
             mainWindowContent
+                .environment(\.locale, customLocale)
         }
         #endif
 
@@ -264,6 +267,7 @@ struct PawtrackrApp: App {
         Settings {
             if let container = container {
                 SettingsView()
+                    .environment(\.locale, customLocale)
                     .environment(appSettings)
                     .environment(authViewModel)
                     .environment(dataStore)
@@ -272,18 +276,21 @@ struct PawtrackrApp: App {
                     .modelContainer(container)
                     .frame(width: 450, height: 500)
             } else {
-                Text(NSLocalizedString("common.database_unavailable", value: "Database unavailable", comment: ""))
+                Text(AppLocalization.localized("common.database_unavailable", value: "Database unavailable"))
+                    .environment(\.locale, customLocale)
                     .frame(width: 450, height: 500)
             }
         }
 
-        MenuBarExtra(NSLocalizedString("menu_bar.title", value: "Pawtrackr Pulse", comment: ""), systemImage: "pawprint.circle.fill") {
+        MenuBarExtra(AppLocalization.localized("menu_bar.title", value: "Pawtrackr Pulse"), systemImage: "pawprint.circle.fill") {
             if let container = container {
                 PawtrackrMenuBarExtra()
+                    .environment(\.locale, customLocale)
                     .environment(dataStore)
                     .modelContainer(container)
             } else {
-                Text(NSLocalizedString("common.database_unavailable", value: "Database unavailable", comment: ""))
+                Text(AppLocalization.localized("common.database_unavailable", value: "Database unavailable"))
+                    .environment(\.locale, customLocale)
             }
         }
         .menuBarExtraStyle(.window)
@@ -311,7 +318,12 @@ struct PawtrackrApp: App {
                 }
         } else {
             DataStoreRecoveryView()
+                .environment(\.locale, customLocale)
         }
+    }
+
+    private var customLocale: Locale {
+        (AppLanguageOverride(rawValue: appLanguageOverrideRaw) ?? .system).locale
     }
 
     // MARK: - Activity Handling

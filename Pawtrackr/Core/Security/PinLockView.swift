@@ -220,10 +220,10 @@ public struct PinLockView: View {
             switch cachedBiometricType {
             case .faceID:
                 KeyButton(systemName: "faceid") { authenticateWithBiometrics() }
-                    .accessibilityLabel("Authenticate with Face ID")
+                    .accessibilityLabel(AppLocalization.localized("pin.face_id_a11y", value: "Authenticate with Face ID"))
             case .touchID:
                 KeyButton(systemName: "touchid") { authenticateWithBiometrics() }
-                    .accessibilityLabel("Authenticate with Touch ID")
+                    .accessibilityLabel(AppLocalization.localized("pin.touch_id_a11y", value: "Authenticate with Touch ID"))
             case .unavailable, .none:
                 // Biometrics either don't exist on this device, or are
                 // temporarily unavailable (lockout/not-enrolled). PIN-only.
@@ -231,7 +231,7 @@ public struct PinLockView: View {
             }
             KeyButton(label: "0") { tapDigit(0) }
             KeyButton(systemName: "delete.left.fill") { deleteDigit() }
-                .accessibilityLabel("Delete")
+                .accessibilityLabel(NSLocalizedString("common.delete", comment: ""))
         }
     }
 

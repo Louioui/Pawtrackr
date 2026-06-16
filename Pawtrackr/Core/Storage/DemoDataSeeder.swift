@@ -72,7 +72,7 @@ enum DemoDataSeeder {
         try addCompletedVisit(
             pet: milo,
             endedAt: now.addingTimeInterval(-2 * 86_400),
-            serviceNames: ["Full Package", "Paw Trim"],
+            serviceNames: localizedServiceNames(["Full Package", "Paw Trim"]),
             paymentMethod: .cash,
             note: "Owner requested a shorter face tidy.",
             servicesByName: byName,
@@ -83,7 +83,7 @@ enum DemoDataSeeder {
         try addCompletedVisit(
             pet: luna,
             endedAt: now.addingTimeInterval(-9 * 86_400),
-            serviceNames: ["Bath", "Face Grooming"],
+            serviceNames: localizedServiceNames(["Bath", "Face Grooming"]),
             paymentMethod: .creditCard,
             note: "Coat detangled well after conditioning treatment.",
             servicesByName: byName,
@@ -94,7 +94,7 @@ enum DemoDataSeeder {
         try addCompletedVisit(
             pet: milo,
             endedAt: now.addingTimeInterval(-24 * 86_400),
-            serviceNames: ["Haircut", "De-shedding"],
+            serviceNames: localizedServiceNames(["Haircut", "De-shedding"]),
             paymentMethod: .zelle,
             note: "First full seasonal reset after winter coat growth.",
             servicesByName: byName,
@@ -157,9 +157,15 @@ enum DemoDataSeeder {
         ]
 
         for service in services {
-            service.setBasePrice(prices[service.name] ?? 25)
+            let englishName = DefaultServiceCatalog.englishName(forKnownName: service.name) ?? service.name
+            service.setBasePrice(prices[englishName] ?? 25)
             service.setEnabled(true)
         }
+    }
+
+    /// Maps built-in English service identities to the active seed language.
+    private static func localizedServiceNames(_ englishNames: [String]) -> [String] {
+        englishNames.map(DefaultServiceCatalog.localizedName(forEnglishName:))
     }
 
     private static func append(_ visit: Visit, to pet: Pet) {

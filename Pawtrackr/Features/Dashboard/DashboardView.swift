@@ -83,7 +83,7 @@ struct DashboardView: View {
             Button {
                 showActivityFeed = true
             } label: {
-                Label("Salon Activity", systemImage: "clock.arrow.2.circlepath")
+                Label(AppLocalization.localized("dashboard.activity.title", value: "Salon Activity"), systemImage: "clock.arrow.2.circlepath")
             }
         }
 
@@ -300,8 +300,8 @@ struct DashboardView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityHint(item.isCompleted
-                            ? NSLocalizedString("checklist.hint.review", value: "Opens this section to review", comment: "")
-                            : NSLocalizedString("checklist.hint.complete", value: "Opens the screen to finish this step", comment: ""))
+                            ? AppLocalization.localized("checklist.hint.review", value: "Opens this section to review")
+                            : AppLocalization.localized("checklist.hint.complete", value: "Opens the screen to finish this step"))
                     }
                 }
 
@@ -317,9 +317,9 @@ struct DashboardView: View {
                             .foregroundStyle(DS.ColorToken.primary)
                             .font(.title3)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(NSLocalizedString("checklist.start_fresh.title", value: "Done exploring the demo?", comment: ""))
+                            Text(AppLocalization.localized("checklist.start_fresh.title", value: "Done exploring the demo?"))
                                 .font(.subheadline.weight(.semibold))
-                            Text(NSLocalizedString("checklist.start_fresh.subtitle", value: "Clear the sample data and start fresh with your real business.", comment: ""))
+                            Text(AppLocalization.localized("checklist.start_fresh.subtitle", value: "Clear the sample data and start fresh with your real business."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -333,7 +333,7 @@ struct DashboardView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityHint(NSLocalizedString("checklist.start_fresh.hint", value: "Opens Settings where you can wipe demo data", comment: ""))
+                .accessibilityHint(AppLocalization.localized("checklist.start_fresh.hint", value: "Opens Settings where you can wipe demo data"))
             }
             .padding(DS.Spacing.md)
         }

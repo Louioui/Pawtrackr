@@ -16,9 +16,13 @@ struct ActivityFeedView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Recent Activity") {
+                Section(AppLocalization.localized("dashboard.activity.section", value: "Recent Activity")) {
                     if monitor.syncEvents.isEmpty {
-                        ContentUnavailableView("No Recent Activity", systemImage: "clock.arrow.2.circlepath", description: Text("Worker actions and sync events will appear here."))
+                        ContentUnavailableView(
+                            AppLocalization.localized("dashboard.activity.empty_title", value: "No Recent Activity"),
+                            systemImage: "clock.arrow.2.circlepath",
+                            description: Text(AppLocalization.localized("dashboard.activity.empty_detail", value: "Worker actions and sync events will appear here."))
+                        )
                     } else {
                         ForEach(monitor.syncEvents) { event in
                             ActivityRow(event: event, devices: devices)
@@ -26,10 +30,10 @@ struct ActivityFeedView: View {
                     }
                 }
             }
-            .navigationTitle("Salon Activity")
+            .navigationTitle(AppLocalization.localized("dashboard.activity.title", value: "Salon Activity"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button(AppLocalization.localized("common.done", value: "Done")) { dismiss() }
                 }
             }
         }
@@ -76,7 +80,7 @@ struct ActivityRow: View {
     }
     
     private var deviceName: String {
-        devices.first { $0.deviceID == event.deviceID }?.name ?? "Unknown Device"
+        devices.first { $0.deviceID == event.deviceID }?.name ?? AppLocalization.localized("common.unknown_device", value: "Unknown Device")
     }
     
     private var icon: String {

@@ -2,22 +2,53 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>visits.count</key>
-    <dict>
-        <key>NSStringLocalizedFormatKey</key>
-        <string>%#@visitas@</string>
-        <key>visitas</key>
-        <dict>
-            <key>NSStringFormatSpecTypeKey</key>
-            <string>NSStringPluralRuleType</string>
-            <key>NSStringFormatValueTypeKey</key>
-            <string>d</string>
-            <key>one</key>
-            <string>%d visita</string>
-            <key>other</key>
-            <string>%d visitas</string>
-        </dict>
-    </dict>
+	<key>visits.count</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@visitas@</string>
+		<key>visitas</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d visita</string>
+			<key>other</key>
+			<string>%d visitas</string>
+		</dict>
+	</dict>
+	<key>recovery.archived_n</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@files@</string>
+		<key>files</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Se archivó %d archivo</string>
+			<key>other</key>
+			<string>Se archivaron %d archivos</string>
+		</dict>
+	</dict>
+	<key>cloudkit.pending.count</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@changes@</string>
+		<key>changes</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d cambio local esperando iCloud</string>
+			<key>other</key>
+			<string>%d cambios locales esperando iCloud</string>
+		</dict>
+	</dict>
 </dict>
 </plist>
-

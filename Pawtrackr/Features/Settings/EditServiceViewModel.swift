@@ -42,15 +42,15 @@ class EditServiceViewModel {
     
     private func validate() throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw ValidationError.custom(message: "Service name cannot be empty.")
+            throw ValidationError.custom(message: AppLocalization.localized("service.validation.name_empty", value: "Service name cannot be empty."))
         }
         
         if let p = price, p < 0 {
-            throw ValidationError.custom(message: "Price cannot be negative.")
+            throw ValidationError.custom(message: AppLocalization.localized("service.validation.price_negative", value: "Price cannot be negative."))
         }
         
         if duration <= 0 {
-            throw ValidationError.custom(message: "Duration must be at least 1 minute.")
+            throw ValidationError.custom(message: AppLocalization.localized("service.validation.duration_min", value: "Duration must be at least 1 minute."))
         }
     }
 
@@ -69,7 +69,7 @@ class EditServiceViewModel {
                 let all = try await repository.fetchAllServices()
                 let editingID = service.persistentModelID
                 if all.contains(where: { $0.persistentModelID != editingID && $0.name.lowercased() == trimmedName.lowercased() }) {
-                    throw ValidationError.custom(message: "A service with this name already exists.")
+                    throw ValidationError.custom(message: AppLocalization.localized("service.validation.duplicate", value: "A service with this name already exists."))
                 }
             }
             serviceToSave = service
@@ -77,7 +77,7 @@ class EditServiceViewModel {
             // New service — straightforward duplicate check.
             let all = try await repository.fetchAllServices()
             if all.contains(where: { $0.name.lowercased() == trimmedName.lowercased() }) {
-                throw ValidationError.custom(message: "A service with this name already exists.")
+                throw ValidationError.custom(message: AppLocalization.localized("service.validation.duplicate", value: "A service with this name already exists."))
             }
             serviceToSave = Service(name: trimmedName)
         }

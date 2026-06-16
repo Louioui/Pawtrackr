@@ -229,8 +229,8 @@ struct ClientDetailView: View {
                 ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { showContactEditor = false } }
                 ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("common.save", comment: "")) { addOrUpdateContact() } }
             }
-            .alert("Validation Error", isPresented: Binding(get: { validationError != nil }, set: { if !$0 { validationError = nil } })) {
-                Button("OK") { validationError = nil }
+            .alert(AppLocalization.localized("common.validation_error", value: "Validation Error"), isPresented: Binding(get: { validationError != nil }, set: { if !$0 { validationError = nil } })) {
+                Button(NSLocalizedString("common.ok", comment: "")) { validationError = nil }
             } message: {
                 if let error = validationError {
                     Text(error)
@@ -524,8 +524,8 @@ struct ClientDetailView: View {
                             #endif
                         }
                         .swipeActions(edge: .trailing) {
-                            Button { beginEditContact(c) } label: { Label("Edit", systemImage: "pencil") }
-                            Button(role: .destructive) { alertDestination = .deleteContact(c) } label: { Label("Delete", systemImage: "trash") }
+                            Button { beginEditContact(c) } label: { Label(AppLocalization.localized("common.edit", value: "Edit"), systemImage: "pencil") }
+                            Button(role: .destructive) { alertDestination = .deleteContact(c) } label: { Label(NSLocalizedString("common.delete", comment: ""), systemImage: "trash") }
                         }
                     }
                 }
@@ -670,10 +670,9 @@ struct ClientDetailView: View {
                                 HStack(spacing: 8) {
                                     actionButton(title: NSLocalizedString("client_detail.check_in", comment: ""), systemImage: "play.fill", tint: .blue) {
                                         if activeVisit != nil {
-                                            sessionStartedToastText = NSLocalizedString(
-                                                "client_detail.pet_already_in_session",
-                                                value: "\(pet.name) is already in session",
-                                                comment: ""
+                                            sessionStartedToastText = String(
+                                                format: AppLocalization.localized("client_detail.pet_already_in_session", value: "%@ is already in session"),
+                                                pet.name
                                             )
                                             withAnimation(Animations.fastEaseOut) { showSessionStartedToast = true }
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {

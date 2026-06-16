@@ -16,7 +16,7 @@ import AppKit
 #endif
 
 private func settingsLocalized(_ key: String, value: String) -> String {
-    NSLocalizedString(key, value: value, comment: "")
+    AppLocalization.localized(key, value: value)
 }
 
 enum SettingSection: String, CaseIterable, Identifiable {
@@ -515,6 +515,14 @@ private struct PreferencesSectionView: View {
 
     var body: some View {
         CardView {
+            Picker(selection: $appSettings.appLanguageOverride) {
+                ForEach(AppLanguageOverride.allCases) { language in
+                    Text(language.displayName).tag(language)
+                }
+            } label: {
+                Label(settingsLocalized("settings.preferences.language", value: "Language"), systemImage: "globe")
+            }
+
             Picker(selection: $appSettings.preferredColorScheme) {
                 ForEach(AppColorScheme.allCases) { scheme in
                     Text(scheme.displayName).tag(scheme)

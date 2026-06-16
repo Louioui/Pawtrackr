@@ -132,36 +132,36 @@ extension WalkthroughController {
             WalkthroughStep(
                 id: 0,
                 anchor: .dashboard,
-                title: NSLocalizedString("tour.nav.dashboard.title", value: "Your Dashboard", comment: ""),
-                directive: NSLocalizedString("tour.nav.dashboard.directive", value: "This is your home base.", comment: ""),
-                purpose: NSLocalizedString("tour.nav.dashboard.purpose", value: "In-progress visits and today's revenue at a glance — tap a card to jump straight into the work.", comment: ""),
+                title: AppLocalization.localized("tour.nav.dashboard.title", value: "Your Dashboard"),
+                directive: AppLocalization.localized("tour.nav.dashboard.directive", value: "This is your home base."),
+                purpose: AppLocalization.localized("tour.nav.dashboard.purpose", value: "In-progress visits and today's revenue at a glance — tap a card to jump straight into the work."),
                 icon: "square.grid.2x2.fill",
                 fallback: .tabBarItem(index: 0, count: 4)
             ),
             WalkthroughStep(
                 id: 1,
                 anchor: .clients,
-                title: NSLocalizedString("tour.nav.clients.title", value: "Clients & Pets", comment: ""),
-                directive: NSLocalizedString("tour.nav.clients.directive", value: "Open Clients to see everyone you groom.", comment: ""),
-                purpose: NSLocalizedString("tour.nav.clients.purpose", value: "Owners, pets, breeds, and full visit history live here. Aggressive pets show a red warning so your team handles them with care.", comment: ""),
+                title: AppLocalization.localized("tour.nav.clients.title", value: "Clients & Pets"),
+                directive: AppLocalization.localized("tour.nav.clients.directive", value: "Open Clients to see everyone you groom."),
+                purpose: AppLocalization.localized("tour.nav.clients.purpose", value: "Owners, pets, breeds, and full visit history live here. Aggressive pets show a red warning so your team handles them with care."),
                 icon: "person.3.fill",
                 fallback: .tabBarItem(index: 1, count: 4)
             ),
             WalkthroughStep(
                 id: 2,
                 anchor: .insights,
-                title: NSLocalizedString("tour.nav.insights.title", value: "Insights", comment: ""),
-                directive: NSLocalizedString("tour.nav.insights.directive", value: "Open Insights for your numbers.", comment: ""),
-                purpose: NSLocalizedString("tour.nav.insights.purpose", value: "Revenue, your top services, and which pets are overdue — all charted for you, no spreadsheets.", comment: ""),
+                title: AppLocalization.localized("tour.nav.insights.title", value: "Insights"),
+                directive: AppLocalization.localized("tour.nav.insights.directive", value: "Open Insights for your numbers."),
+                purpose: AppLocalization.localized("tour.nav.insights.purpose", value: "Revenue, your top services, and which pets are overdue — all charted for you, no spreadsheets."),
                 icon: "chart.bar.fill",
                 fallback: .tabBarItem(index: 2, count: 4)
             ),
             WalkthroughStep(
                 id: 3,
                 anchor: .settings,
-                title: NSLocalizedString("tour.nav.settings.title", value: "Settings & Start Fresh", comment: ""),
-                directive: NSLocalizedString("tour.nav.settings.directive", value: "Settings is where you finish setup.", comment: ""),
-                purpose: NSLocalizedString("tour.nav.settings.purpose", value: "Tune your services, prices, lock, and iCloud sync. When you're done exploring, “Wipe & Start Fresh” clears the demo for your real business.", comment: ""),
+                title: AppLocalization.localized("tour.nav.settings.title", value: "Settings & Start Fresh"),
+                directive: AppLocalization.localized("tour.nav.settings.directive", value: "Settings is where you finish setup."),
+                purpose: AppLocalization.localized("tour.nav.settings.purpose", value: "Tune your services, prices, lock, and iCloud sync. When you're done exploring, “Wipe & Start Fresh” clears the demo for your real business."),
                 icon: "gearshape.fill",
                 fallback: .tabBarItem(index: 3, count: 4)
             )

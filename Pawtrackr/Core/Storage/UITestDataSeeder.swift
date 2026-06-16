@@ -54,10 +54,10 @@ enum UITestDataSeeder {
 
         let byName = Dictionary(uniqueKeysWithValues: services.map { ($0.name, $0) })
         let completedSpecs: [(daysAgo: Int, services: [String], method: Payment.Method)] = [
-            (1, ["Full Package", "Paw Trim"], .cash),
-            (5, ["Bath", "De-shedding"], .creditCard),
-            (14, ["Haircut", "Face Grooming"], .zelle),
-            (35, ["Spa Package"], .debitCard)
+            (1, localizedServiceNames(["Full Package", "Paw Trim"]), .cash),
+            (5, localizedServiceNames(["Bath", "De-shedding"]), .creditCard),
+            (14, localizedServiceNames(["Haircut", "Face Grooming"]), .zelle),
+            (35, localizedServiceNames(["Spa Package"]), .debitCard)
         ]
 
         var summaryDates: [Date] = []
@@ -131,9 +131,15 @@ enum UITestDataSeeder {
         ]
 
         for service in services {
-            service.setBasePrice(prices[service.name] ?? 25)
+            let englishName = DefaultServiceCatalog.englishName(forKnownName: service.name) ?? service.name
+            service.setBasePrice(prices[englishName] ?? 25)
             service.setEnabled(true)
         }
+    }
+
+    /// Maps built-in English service identities to the active seed language.
+    private static func localizedServiceNames(_ englishNames: [String]) -> [String] {
+        englishNames.map(DefaultServiceCatalog.localizedName(forEnglishName:))
     }
 
     private static func append(_ visit: Visit, to pet: Pet) {

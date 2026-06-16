@@ -206,9 +206,9 @@ final class DashboardViewModel {
             }.value
 
             checklist = [
-                ChecklistItem(title: NSLocalizedString("checklist.branding", value: "Add Business Branding", comment: ""), isCompleted: isBrandingComplete, action: .branding),
-                ChecklistItem(title: NSLocalizedString("checklist.client", value: "Add Your First Client", comment: ""), isCompleted: hasClient, action: .addClient),
-                ChecklistItem(title: NSLocalizedString("checklist.visit", value: "Start Your First Visit", comment: ""), isCompleted: hasVisit, action: .firstVisit)
+                ChecklistItem(title: AppLocalization.localized("checklist.branding", value: "Add Business Branding"), isCompleted: isBrandingComplete, action: .branding),
+                ChecklistItem(title: AppLocalization.localized("checklist.client", value: "Add Your First Client"), isCompleted: hasClient, action: .addClient),
+                ChecklistItem(title: AppLocalization.localized("checklist.visit", value: "Start Your First Visit"), isCompleted: hasVisit, action: .firstVisit)
             ]
         } catch {
             dashboardLog.error("Checklist fetch failed: \(error)")

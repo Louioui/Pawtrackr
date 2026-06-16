@@ -8,24 +8,14 @@ private let dataSeederLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "P
 class DataSeeder {
     /// Returns the source of truth for all services that should exist in the app.
     private static func makeDesiredServices() -> [Service] {
-        return [
-            // Packages
-            Service(name: "Full Package", category: .package, systemIcon: "sparkles", isPackage: true),
-            Service(name: "Basic Package", category: .package, systemIcon: "archivebox.fill", isPackage: true),
-            Service(name: "Spa Package", category: .package, systemIcon: "leaf.fill", isPackage: true),
-            // Main Services
-            Service(name: "Bath", category: .groom, systemIcon: "shower.fill"),
-            Service(name: "Haircut", category: .groom, systemIcon: "scissors"),
-            // Add-Ons
-            Service(name: "De-shedding", category: .addOn, systemIcon: "line.3.crossed.swirl.circle.fill"),
-            Service(name: "Anal Glands Expression", category: .addOn, systemIcon: "dot.circle"),
-            Service(name: "Face Grooming", category: .addOn, systemIcon: "mustache.fill"),
-            Service(name: "Paw Trim", category: .addOn, systemIcon: "pawprint.fill"),
-            Service(name: "Hygiene Area Trim", category: .addOn, systemIcon: "person.fill.viewfinder"),
-            Service(name: "Knots and Matting Fee", category: .addOn, systemIcon: "exclamationmark.triangle.fill"),
-            Service(name: "Flea & Ticks Treatment", category: .addOn, systemIcon: "ladybug.fill"),
-            Service(name: "Hair Dye", category: .addOn, systemIcon: "paintpalette.fill")
-        ]
+        DefaultServiceCatalog.definitions.map {
+            Service(
+                name: $0.localizedName,
+                category: $0.category,
+                systemIcon: $0.icon,
+                isPackage: $0.isPackage
+            )
+        }
     }
 
     /// Synchronizes the services in the database with the source of truth.

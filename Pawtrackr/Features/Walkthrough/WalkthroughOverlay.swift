@@ -278,7 +278,7 @@ private struct WalkthroughOverlayView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
-                Button(NSLocalizedString("tour.skip", value: "Skip tour", comment: "")) {
+                Button(AppLocalization.localized("tour.skip", value: "Skip tour")) {
                     controller.skip()
                 }
                 .font(.subheadline)
@@ -292,8 +292,8 @@ private struct WalkthroughOverlayView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(controller.isLastStep
-                             ? NSLocalizedString("tour.done", value: "Done", comment: "")
-                             : NSLocalizedString("tour.next", value: "Next", comment: ""))
+                             ? AppLocalization.localized("tour.done", value: "Done")
+                             : AppLocalization.localized("tour.next", value: "Next"))
                             .fontWeight(.semibold)
                         Image(systemName: controller.isLastStep ? "checkmark" : "arrow.right")
                     }

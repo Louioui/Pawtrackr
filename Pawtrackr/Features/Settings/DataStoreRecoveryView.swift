@@ -36,14 +36,13 @@ struct DataStoreRecoveryView: View {
                     .foregroundStyle(.orange)
                     .padding(.top, 40)
 
-                Text(NSLocalizedString("recovery.title", value: "Couldn't open your data", comment: ""))
+                Text(AppLocalization.localized("recovery.title", value: "Couldn't open your data"))
                     .font(.title2.weight(.semibold))
                     .multilineTextAlignment(.center)
 
-                Text(NSLocalizedString(
+                Text(AppLocalization.localized(
                     "recovery.body",
-                    value: "Pawtrackr's local data store can't be opened. This usually happens after an app update changed the database. Your iCloud data is safe and will re-download once we reset the local copy.",
-                    comment: ""
+                    value: "Pawtrackr's local data store can't be opened. This usually happens after an app update changed the database. Your iCloud data is safe and will re-download once we reset the local copy."
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -51,7 +50,7 @@ struct DataStoreRecoveryView: View {
                 .padding(.horizontal, 24)
 
                 if let detail = lastErrorDetail {
-                    DisclosureGroup(NSLocalizedString("recovery.show_details", value: "Show technical details", comment: "")) {
+                    DisclosureGroup(AppLocalization.localized("recovery.show_details", value: "Show technical details")) {
                         Text(detail)
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
@@ -68,12 +67,11 @@ struct DataStoreRecoveryView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title)
                             .foregroundStyle(.green)
-                        Text(NSLocalizedString("recovery.reset_done.title", value: "Reset complete", comment: ""))
+                        Text(AppLocalization.localized("recovery.reset_done.title", value: "Reset complete"))
                             .font(.headline)
-                        Text(NSLocalizedString(
+                        Text(AppLocalization.localized(
                             "recovery.reset_done.body",
-                            value: "Quit and reopen Pawtrackr. Your data will sync back from iCloud if you have iCloud sync enabled.",
-                            comment: ""
+                            value: "Quit and reopen Pawtrackr. Your data will sync back from iCloud if you have iCloud sync enabled."
                         ))
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
@@ -90,7 +88,7 @@ struct DataStoreRecoveryView: View {
                         Button {
                             repairStore()
                         } label: {
-                            Label(NSLocalizedString("recovery.repair_button", value: "Repair Storage (Safe)", comment: ""),
+                            Label(AppLocalization.localized("recovery.repair_button", value: "Repair Storage (Safe)"),
                                   systemImage: "wrench.adjustable")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 4)
@@ -100,7 +98,7 @@ struct DataStoreRecoveryView: View {
                         Button {
                             resetStore()
                         } label: {
-                            Label(NSLocalizedString("recovery.reset_button", value: "Reset Local Data", comment: ""),
+                            Label(AppLocalization.localized("recovery.reset_button", value: "Reset Local Data"),
                                   systemImage: "arrow.counterclockwise")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 4)
@@ -129,7 +127,7 @@ struct DataStoreRecoveryView: View {
 
     private func repairStore() {
         StoreHealthCheck.clearAuxiliaryCaches()
-        resetDetail = NSLocalizedString("recovery.repair_done", value: "Repair complete. Please try relaunching the app.", comment: "")
+        resetDetail = AppLocalization.localized("recovery.repair_done", value: "Repair complete. Please try relaunching the app.")
         hasReset = true
     }
 
@@ -139,9 +137,9 @@ struct DataStoreRecoveryView: View {
             hasReset = true
             resetError = nil
             resetDetail = archive.movedFiles.isEmpty
-                ? NSLocalizedString("recovery.no_files_found", value: "No store files were present.", comment: "")
-                : String(
-                    format: NSLocalizedString("recovery.archived_n", value: "Archived %d file(s)", comment: ""),
+                ? AppLocalization.localized("recovery.no_files_found", value: "No store files were present.")
+                : String.localizedStringWithFormat(
+                    AppLocalization.localized("recovery.archived_n", value: "Archived %d file(s)"),
                     archive.movedFiles.count
                 ) + "\n" + archive.backupDirectory.path
             UserDefaults.standard.removeObject(forKey: PawtrackrApp.lastInitErrorKey)
@@ -149,7 +147,7 @@ struct DataStoreRecoveryView: View {
             CloudKitMonitor.recordLocalStoreResetArchivedFiles(archive.movedFiles.count)
             log.info("Store reset complete; archived \(archive.movedFiles.count) files.")
         } catch {
-            resetError = String(format: NSLocalizedString("recovery.reset_failed", value: "Couldn't reset: %@", comment: ""), error.localizedDescription)
+            resetError = String(format: AppLocalization.localized("recovery.reset_failed", value: "Couldn't reset: %@"), error.localizedDescription)
             log.error("Store reset failed: \(error.localizedDescription, privacy: .public)")
         }
     }

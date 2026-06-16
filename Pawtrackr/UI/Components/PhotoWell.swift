@@ -62,7 +62,7 @@ struct PhotoWell: View {
                 Button(role: .destructive) {
                     imageData = nil
                 } label: {
-                    Label("Remove Photo", systemImage: "trash")
+                    Label(AppLocalization.localized("photo.remove", value: "Remove Photo"), systemImage: "trash")
                 }
             }
         }

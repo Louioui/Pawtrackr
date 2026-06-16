@@ -33,9 +33,90 @@ enum AppSettingsKeys {
     static let hapticsEnabled = "hapticsEnabled"
     static let brandColorHex = "brandColorHex"
     static let defaultLaunchTab = "defaultLaunchTab"
+    static let appLanguageOverride = "appLanguageOverride"
     static let optimizeMediaForICloud = CloudMediaPolicy.optimizedMediaDefaultsKey
     static let deviceName = "deviceName"
     static let idleLockMinutes = "idleLockMinutes"
+}
+
+/// User-selected app language. `system` defers to the device language.
+enum AppLanguageOverride: String, CaseIterable, Identifiable {
+    case system, en, es
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system:
+            return AppLocalization.localized("settings.language.system", value: "System Default")
+        case .en:
+            return AppLocalization.localized("settings.language.english", value: "English")
+        case .es:
+            return AppLocalization.localized("settings.language.spanish", value: "Español")
+        }
+    }
+
+    var locale: Locale {
+        switch self {
+        case .system: return .autoupdatingCurrent
+        case .en: return Locale(identifier: "en")
+        case .es: return Locale(identifier: "es-419")
+        }
+    }
+
+    var preferredLprojNames: [String] {
+        switch self {
+        case .system:
+            let preferred = Locale.preferredLanguages.first ?? Locale.autoupdatingCurrent.identifier
+            return preferred.lowercased().hasPrefix("es") ? ["es-419", "es"] : ["en"]
+        case .en:
+            return ["en"]
+        case .es:
+            return ["es-419", "es"]
+        }
+    }
+
+    var usesSpanish: Bool {
+        preferredLprojNames.contains { $0.lowercased().hasPrefix("es") }
+    }
+}
+
+enum AppLocalization {
+    static var currentLanguageOverride: AppLanguageOverride {
+        let raw = UserDefaults.standard.string(forKey: AppSettingsKeys.appLanguageOverride)
+            ?? AppLanguageOverride.system.rawValue
+        return AppLanguageOverride(rawValue: raw) ?? .system
+    }
+
+    static var currentLocale: Locale {
+        currentLanguageOverride.locale
+    }
+
+    static var usesSpanish: Bool {
+        currentLanguageOverride.usesSpanish
+    }
+
+    /// Returns a localized string using the app language override when one is set.
+    static func localized(_ key: String, value: String = "", tableName: String? = nil) -> String {
+        let fallback = value.isEmpty ? key : value
+        let override = currentLanguageOverride
+
+        guard override != .system else {
+            return Bundle.main.localizedString(forKey: key, value: fallback, table: tableName)
+        }
+
+        for lprojName in override.preferredLprojNames {
+            guard let url = Bundle.main.url(forResource: lprojName, withExtension: "lproj"),
+                  let bundle = Bundle(url: url)
+            else { continue }
+            let localized = bundle.localizedString(forKey: key, value: nil, table: tableName)
+            if localized != key {
+                return localized
+            }
+        }
+
+        return Bundle.main.localizedString(forKey: key, value: fallback, table: tableName)
+    }
 }
 
 /// User-selectable color scheme preference. `system` defers to the OS.
@@ -46,9 +127,9 @@ enum AppColorScheme: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .system: return NSLocalizedString("settings.appearance.system", value: "Follow System", comment: "")
-        case .light:  return NSLocalizedString("settings.appearance.light",  value: "Light",         comment: "")
-        case .dark:   return NSLocalizedString("settings.appearance.dark",   value: "Dark",          comment: "")
+        case .system: return AppLocalization.localized("settings.appearance.system", value: "Follow System")
+        case .light:  return AppLocalization.localized("settings.appearance.light",  value: "Light")
+        case .dark:   return AppLocalization.localized("settings.appearance.dark",   value: "Dark")
         }
     }
 
@@ -83,6 +164,7 @@ final class AppSettings {
         static let hapticsEnabled = true
         static let brandColorHex = "#6366F1"
         static let defaultLaunchTab = "dashboard"
+        static let appLanguageOverride = AppLanguageOverride.system.rawValue
         static let optimizeMediaForICloud = true
     }
 
@@ -213,6 +295,12 @@ final class AppSettings {
         }
     }
 
+    var appLanguageOverride: AppLanguageOverride {
+        didSet {
+            UserDefaults.standard.set(appLanguageOverride.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        }
+    }
+
     var optimizeMediaForICloud: Bool {
         didSet {
             UserDefaults.standard.set(optimizeMediaForICloud, forKey: AppSettingsKeys.optimizeMediaForICloud)
@@ -273,6 +361,7 @@ final class AppSettings {
             AppSettingsKeys.hapticsEnabled: Defaults.hapticsEnabled,
             AppSettingsKeys.brandColorHex: Defaults.brandColorHex,
             AppSettingsKeys.defaultLaunchTab: Defaults.defaultLaunchTab,
+            AppSettingsKeys.appLanguageOverride: Defaults.appLanguageOverride,
             AppSettingsKeys.optimizeMediaForICloud: Defaults.optimizeMediaForICloud,
             AppSettingsKeys.idleLockMinutes: Defaults.idleLockMinutes
         ])
@@ -302,6 +391,8 @@ final class AppSettings {
         self.hapticsEnabled = UserDefaults.standard.bool(forKey: AppSettingsKeys.hapticsEnabled)
         self.brandColorHex = UserDefaults.standard.string(forKey: AppSettingsKeys.brandColorHex) ?? Defaults.brandColorHex
         self.defaultLaunchTab = UserDefaults.standard.string(forKey: AppSettingsKeys.defaultLaunchTab) ?? Defaults.defaultLaunchTab
+        let storedLanguageRaw = UserDefaults.standard.string(forKey: AppSettingsKeys.appLanguageOverride) ?? Defaults.appLanguageOverride
+        self.appLanguageOverride = AppLanguageOverride(rawValue: storedLanguageRaw) ?? .system
         self.optimizeMediaForICloud = UserDefaults.standard.bool(forKey: AppSettingsKeys.optimizeMediaForICloud)
         
         #if os(iOS)

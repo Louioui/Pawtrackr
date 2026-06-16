@@ -29,7 +29,7 @@ struct ServiceTrendView: View {
                 }
                 .padding()
             } else {
-                Text("Charts are not available on this OS version.")
+                Text(AppLocalization.localized("insights.service_trend.charts_unavailable", value: "Charts are not available on this OS version."))
             }
         }
         .navigationTitle(serviceName)

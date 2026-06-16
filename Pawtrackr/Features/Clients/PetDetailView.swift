@@ -259,7 +259,7 @@ struct PetDetailView: View {
 
         if !history.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Transformations").font(.headline).padding(.horizontal)
+                Text(AppLocalization.localized("pet.transformations", value: "Transformations")).font(.headline).padding(.horizontal)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 16) {
                         ForEach(0..<history.count, id: \.self) { idx in
@@ -412,14 +412,13 @@ struct PetDetailView: View {
 
     private func actionRow(_ vm: PetDetailViewModel) -> some View {
             HStack(spacing: 12) {
-                actionTile(title: "Message", systemImage: "message.fill", tint: .indigo) { showCommunication = true }
+                actionTile(title: AppLocalization.localized("client_detail.message", value: "Message"), systemImage: "message.fill", tint: .indigo) { showCommunication = true }
                 actionTile(title: NSLocalizedString("pet.view_history", comment: ""), systemImage: "clock.arrow.circlepath", tint: .primary) { vm.showHistory() }
                 actionTile(title: NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.fill", tint: .blue, disabled: vm.activeVisit != nil || vm.isCheckingIn) {
                     if vm.activeVisit != nil {
-                        vm.appError = .validation(.custom(message: NSLocalizedString(
-                            "pet.already_in_session",
-                            value: "\(vm.pet.name) is already in session.",
-                            comment: ""
+                        vm.appError = .validation(.custom(message: String(
+                            format: AppLocalization.localized("pet.already_in_session", value: "%@ is already in session."),
+                            vm.pet.name
                         )))
                         HapticManager.notify(.warning)
                         return
@@ -540,7 +539,7 @@ struct PetDetailView: View {
                         .padding(.vertical, 3)
                         .padding(.horizontal, 8)
                         .background(.thinMaterial, in: Capsule())
-                        .accessibilityLabel("Recent visits count \(vm.sortedVisits.count)")
+                        .accessibilityLabel(String(format: AppLocalization.localized("pet.recent_visits_count_fmt", value: "Recent visits count %d"), vm.sortedVisits.count))
                 }
                 .padding(.horizontal)
 
@@ -572,7 +571,7 @@ struct PetDetailView: View {
             Card(showBorder: true) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline) {
-                        Label("In Progress", systemImage: "bolt.fill")
+                        Label(AppLocalization.localized("status.in_progress", value: "In Progress"), systemImage: "bolt.fill")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(DS.ColorToken.success)
                             .padding(.vertical, 4)

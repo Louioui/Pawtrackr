@@ -249,7 +249,7 @@ struct RecentHistoryView: View {
 private struct ScopePicker: View {
     @Binding var scope: RecentHistoryViewModel.Scope
     var body: some View {
-        Picker("Filter Scope", selection: $scope) {
+        Picker(AppLocalization.localized("history.filter_scope", value: "Filter Scope"), selection: $scope) {
             ForEach(RecentHistoryViewModel.Scope.allCases) { s in Text(s.rawValue).tag(s) }
         }
         .pickerStyle(.segmented)

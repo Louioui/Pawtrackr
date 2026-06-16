@@ -39,11 +39,14 @@ struct CommunicationSheet: View {
 
                 sendActions
             }
-            .navigationTitle("Message \(pet.owner?.firstName ?? "Client")")
+            .navigationTitle(String(
+                format: AppLocalization.localized("communication.title_fmt", value: "Message %@"),
+                pet.owner?.firstName ?? AppLocalization.localized("communication.fallback_client", value: "Client")
+            ))
             .frame(minWidth: 420, idealWidth: 520, maxWidth: 620, minHeight: 460, idealHeight: 560)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(NSLocalizedString("common.cancel", comment: "")) { dismiss() }
                 }
             }
             .onAppear {

@@ -1097,7 +1097,7 @@ struct CheckoutView: View {
     }
 
     private func localized(_ key: String, value: String) -> String {
-        NSLocalizedString(key, value: value, comment: "")
+        AppLocalization.localized(key, value: value)
     }
 
     private func stepLabel(_ number: Int) -> String {

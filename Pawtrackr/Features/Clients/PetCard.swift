@@ -103,7 +103,7 @@ struct PetCard: View {
                     .foregroundStyle(.secondary)
                     .padding(6)
                     .background(DS.ColorToken.surface, in: Circle())
-                    .accessibilityLabel("View details")
+                    .accessibilityLabel(AppLocalization.localized("a11y.view_details", value: "View details"))
             }
             .buttonStyle(.plain)
         }
@@ -237,19 +237,19 @@ struct PetCard: View {
         HStack(spacing: 8) {
             if isActive {
                 Button(action: onCheckOut) {
-                    Label("Check Out", systemImage: "creditcard.fill")
+                    Label(NSLocalizedString("pet.check_out", comment: ""), systemImage: "creditcard.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
             } else {
                 Button(action: onCheckIn) {
-                    Label("Check In", systemImage: "play.circle.fill")
+                    Label(NSLocalizedString("pet.check_in", comment: ""), systemImage: "play.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
             }
 
             Button(action: onViewDetails) {
-                Label("View Details", systemImage: "chevron.right")
+                Label(AppLocalization.localized("pet.view_details", value: "View Details"), systemImage: "chevron.right")
             }
             .buttonStyle(.bordered)
         }
@@ -266,7 +266,7 @@ struct PetCard: View {
         .padding(.vertical, 4)
         .background(DS.ColorToken.success.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .foregroundStyle(DS.ColorToken.success)
-        .accessibilityLabel("In session")
+        .accessibilityLabel(AppLocalization.localized("a11y.in_session", value: "In session"))
     }
 
     private var accessibilitySummary: String {

@@ -21,7 +21,7 @@ struct PrivacyScreen: View {
                     .font(.largeTitle.weight(.bold))
                     .foregroundStyle(.primary)
                 
-                Text("Content hidden for security")
+                Text(AppLocalization.localized("privacy.hidden", value: "Content hidden for security"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

@@ -139,6 +139,78 @@ extension Service {
         case package = "Package"
         
         var id: String { rawValue }
+
+        var localizedName: String {
+            switch self {
+            case .groom:
+                return AppLocalization.localized("service.category.groom", value: rawValue)
+            case .addOn:
+                return AppLocalization.localized("service.category.add_on", value: rawValue)
+            case .care:
+                return AppLocalization.localized("service.category.care", value: rawValue)
+            case .package:
+                return AppLocalization.localized("service.category.package", value: rawValue)
+            }
+        }
+    }
+}
+
+enum DefaultServiceCatalog {
+    struct Definition {
+        let englishName: String
+        let localizationKey: String
+        let category: Service.Category?
+        let icon: String?
+        let isPackage: Bool
+
+        var localizedName: String {
+            AppLocalization.localized(localizationKey, value: englishName)
+        }
+    }
+
+    static let definitions: [Definition] = [
+        Definition(englishName: "Full Package", localizationKey: "service.default.full_package", category: .package, icon: "sparkles", isPackage: true),
+        Definition(englishName: "Basic Package", localizationKey: "service.default.basic_package", category: .package, icon: "archivebox.fill", isPackage: true),
+        Definition(englishName: "Spa Package", localizationKey: "service.default.spa_package", category: .package, icon: "leaf.fill", isPackage: true),
+        Definition(englishName: "Bath", localizationKey: "service.default.bath", category: .groom, icon: "shower.fill", isPackage: false),
+        Definition(englishName: "Haircut", localizationKey: "service.default.haircut", category: .groom, icon: "scissors", isPackage: false),
+        Definition(englishName: "De-shedding", localizationKey: "service.default.deshedding", category: .addOn, icon: "line.3.crossed.swirl.circle.fill", isPackage: false),
+        Definition(englishName: "Anal Glands Expression", localizationKey: "service.default.anal_glands", category: .addOn, icon: "dot.circle", isPackage: false),
+        Definition(englishName: "Face Grooming", localizationKey: "service.default.face_grooming", category: .addOn, icon: "mustache.fill", isPackage: false),
+        Definition(englishName: "Paw Trim", localizationKey: "service.default.paw_trim", category: .addOn, icon: "pawprint.fill", isPackage: false),
+        Definition(englishName: "Hygiene Area Trim", localizationKey: "service.default.hygiene_area_trim", category: .addOn, icon: "person.fill.viewfinder", isPackage: false),
+        Definition(englishName: "Knots and Matting Fee", localizationKey: "service.default.matting_fee", category: .addOn, icon: "exclamationmark.triangle.fill", isPackage: false),
+        Definition(englishName: "Flea & Ticks Treatment", localizationKey: "service.default.flea_tick", category: .addOn, icon: "ladybug.fill", isPackage: false),
+        Definition(englishName: "Hair Dye", localizationKey: "service.default.hair_dye", category: .addOn, icon: "paintpalette.fill", isPackage: false)
+    ]
+
+    static var localizedNamesByEnglishName: [String: String] {
+        Dictionary(uniqueKeysWithValues: definitions.map { ($0.englishName, $0.localizedName) })
+    }
+
+    static var allKnownLocalizedNamesByEnglishName: [String: Set<String>] {
+        Dictionary(uniqueKeysWithValues: definitions.map { definition in
+            var names = Set([definition.englishName.lowercased()])
+            for lprojName in ["en", "es", "es-419"] {
+                if let url = Bundle.main.url(forResource: lprojName, withExtension: "lproj"),
+                   let bundle = Bundle(url: url) {
+                    let localized = bundle.localizedString(forKey: definition.localizationKey, value: definition.englishName, table: nil)
+                    names.insert(localized.lowercased())
+                }
+            }
+            return (definition.englishName, names)
+        })
+    }
+
+    /// Returns the current-language display name for one of Pawtrackr's built-in services.
+    static func localizedName(forEnglishName englishName: String) -> String {
+        localizedNamesByEnglishName[englishName] ?? englishName
+    }
+
+    /// Resolves a known localized built-in service name back to its English seed identity.
+    static func englishName(forKnownName serviceName: String) -> String? {
+        let normalized = serviceName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return allKnownLocalizedNamesByEnglishName.first { $0.value.contains(normalized) }?.key
     }
 }
 
@@ -146,21 +218,21 @@ extension Service {
 // MARK: - Seed Data & Previews
 extension Service {
     // Packages
-    static let fullPackage  = Service(name: "Full Package",  category: .package, systemIcon: "sparkles", isPackage: true)
-    static let basicPackage = Service(name: "Basic Package", category: .package, systemIcon: "archivebox.fill", isPackage: true)
-    static let spaPackage   = Service(name: "Spa Package",   category: .package, systemIcon: "leaf.fill", isPackage: true)
+    static let fullPackage  = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Full Package"),  category: .package, systemIcon: "sparkles", isPackage: true)
+    static let basicPackage = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Basic Package"), category: .package, systemIcon: "archivebox.fill", isPackage: true)
+    static let spaPackage   = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Spa Package"),   category: .package, systemIcon: "leaf.fill", isPackage: true)
 
     // Main Services
-    static let bath         = Service(name: "Bath",     category: .groom, systemIcon: "shower.fill")
-    static let haircut      = Service(name: "Haircut",  category: .groom, systemIcon: "scissors")
+    static let bath         = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Bath"),     category: .groom, systemIcon: "shower.fill")
+    static let haircut      = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Haircut"),  category: .groom, systemIcon: "scissors")
 
     // Add-Ons
-    static let deshedding   = Service(name: "De-shedding",          category: .addOn, systemIcon: "line.3.crossed.swirl.circle.fill")
-    static let analGlands   = Service(name: "Anal Glands Expression", category: .addOn, systemIcon: "dot.circle")
-    static let faceGrooming = Service(name: "Face Grooming",        category: .addOn, systemIcon: "mustache.fill")
-    static let pawTrim      = Service(name: "Paw Trim",             category: .addOn, systemIcon: "pawprint.fill")
-    static let hygieneTrim  = Service(name: "Hygiene Area Trim",    category: .addOn, systemIcon: "person.fill.viewfinder")
-    static let knotsFee     = Service(name: "Knots and Matting Fee",  category: .addOn, systemIcon: "exclamationmark.triangle.fill")
-    static let fleaAndTick  = Service(name: "Flea & Ticks Treatment", category: .addOn, systemIcon: "ladybug.fill")
-    static let hairDye      = Service(name: "Hair Dye",             category: .addOn, systemIcon: "paintpalette.fill")
+    static let deshedding   = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "De-shedding"),             category: .addOn, systemIcon: "line.3.crossed.swirl.circle.fill")
+    static let analGlands   = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Anal Glands Expression"), category: .addOn, systemIcon: "dot.circle")
+    static let faceGrooming = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Face Grooming"),           category: .addOn, systemIcon: "mustache.fill")
+    static let pawTrim      = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Paw Trim"),                category: .addOn, systemIcon: "pawprint.fill")
+    static let hygieneTrim  = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Hygiene Area Trim"),       category: .addOn, systemIcon: "person.fill.viewfinder")
+    static let knotsFee     = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Knots and Matting Fee"),   category: .addOn, systemIcon: "exclamationmark.triangle.fill")
+    static let fleaAndTick  = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Flea & Ticks Treatment"),  category: .addOn, systemIcon: "ladybug.fill")
+    static let hairDye      = Service(name: DefaultServiceCatalog.localizedName(forEnglishName: "Hair Dye"),                category: .addOn, systemIcon: "paintpalette.fill")
 }

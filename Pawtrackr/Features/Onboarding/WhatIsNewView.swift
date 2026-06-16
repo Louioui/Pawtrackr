@@ -12,15 +12,15 @@ struct WhatIsNewView: View {
     }
     
     let features = [
-        Feature(title: "Guided Hands-On Tour", description: "New here? We spotlight each tool and explain what it does, step by step — right on top of a sample salon.", icon: "hand.tap.fill", color: .blue),
-        Feature(title: "Aggressive-Pet Safety Flag", description: "Pets marked aggressive now show a bold red warning across your client list, so the team handles them with care.", icon: "exclamationmark.triangle.fill", color: .red),
-        Feature(title: "Explore, Then Start Fresh", description: "Play with realistic demo data, then wipe it in one tap from Settings to begin with your real business.", icon: "wand.and.stars", color: .purple),
-        Feature(title: "Faster, Friendlier Setup", description: "A smoother animated welcome — and you can set a PIN or skip it for instant, passcode-free access.", icon: "bolt.fill", color: .orange)
+        Feature(title: AppLocalization.localized("whats_new.guided_tour.title", value: "Guided Hands-On Tour"), description: AppLocalization.localized("whats_new.guided_tour.description", value: "New here? We spotlight each tool and explain what it does, step by step — right on top of a sample salon."), icon: "hand.tap.fill", color: .blue),
+        Feature(title: AppLocalization.localized("whats_new.safety_flag.title", value: "Aggressive-Pet Safety Flag"), description: AppLocalization.localized("whats_new.safety_flag.description", value: "Pets marked aggressive now show a bold red warning across your client list, so the team handles them with care."), icon: "exclamationmark.triangle.fill", color: .red),
+        Feature(title: AppLocalization.localized("whats_new.start_fresh.title", value: "Explore, Then Start Fresh"), description: AppLocalization.localized("whats_new.start_fresh.description", value: "Play with realistic demo data, then wipe it in one tap from Settings to begin with your real business."), icon: "wand.and.stars", color: .purple),
+        Feature(title: AppLocalization.localized("whats_new.setup.title", value: "Faster, Friendlier Setup"), description: AppLocalization.localized("whats_new.setup.description", value: "A smoother animated welcome — and you can set a PIN or skip it for instant, passcode-free access."), icon: "bolt.fill", color: .orange)
     ]
     
     var body: some View {
         VStack(spacing: 30) {
-            Text("What's New in Pawtrackr")
+            Text(AppLocalization.localized("whats_new.title", value: "What's New in Pawtrackr"))
                 .font(.largeTitle.weight(.bold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 40)
@@ -50,7 +50,7 @@ struct WhatIsNewView: View {
             Button {
                 onDismiss()
             } label: {
-                Text("Continue")
+                Text(AppLocalization.localized("whats_new.continue", value: "Continue"))
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)

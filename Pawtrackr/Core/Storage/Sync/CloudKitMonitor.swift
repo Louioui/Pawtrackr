@@ -963,11 +963,10 @@ final class CloudKitMonitor {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         let relative = pendingLocalChangeDate.map { formatter.localizedString(for: $0, relativeTo: Date()) }
-        let base = String(
-            format: NSLocalizedString(
+        let base = String.localizedStringWithFormat(
+            AppLocalization.localized(
                 "cloudkit.pending.count",
-                value: "%d local change(s) waiting for iCloud",
-                comment: ""
+                value: "%d local change(s) waiting for iCloud"
             ),
             waitingCount
         )

@@ -17,42 +17,42 @@ struct ICloudStorageView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Usage Summary") {
+                Section(AppLocalization.localized("icloud_storage.usage_summary", value: "Usage Summary")) {
                     HStack {
-                        Label("Total Photos", systemImage: "photo.on.rectangle")
+                        Label(AppLocalization.localized("icloud_storage.total_photos", value: "Total Photos"), systemImage: "photo.on.rectangle")
                         Spacer()
                         Text("\(totalPhotos)")
                             .foregroundStyle(.secondary)
                     }
                     
                     HStack {
-                        Label("Database Size", systemImage: "internaldrive")
+                        Label(AppLocalization.localized("icloud_storage.database_size", value: "Database Size"), systemImage: "internaldrive")
                         Spacer()
                         Text(databaseSizeEstimate)
                             .foregroundStyle(.secondary)
                     }
                 }
                 
-                Section("Media Optimization") {
+                Section(AppLocalization.localized("icloud_storage.media_optimization", value: "Media Optimization")) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Photo Sync Strategy")
+                        Text(AppLocalization.localized("icloud_storage.photo_strategy", value: "Photo Sync Strategy"))
                             .font(.headline)
-                        Text("Pawtrackr automatically optimizes photos for iCloud to save space. High-resolution photos are downsampled while maintaining professional quality.")
+                        Text(AppLocalization.localized("icloud_storage.photo_strategy_detail", value: "Pawtrackr automatically optimizes photos for iCloud to save space. High-resolution photos are downsampled while maintaining professional quality."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 4)
                 }
                 
-                Section("Storage Tips") {
-                    Text("• Ensure all devices are on Wi-Fi for faster photo syncing.")
-                    Text("• Older visit photos (>1 year) are prioritized for compression to keep your iCloud lean.")
+                Section(AppLocalization.localized("icloud_storage.tips", value: "Storage Tips")) {
+                    Text("• \(AppLocalization.localized("icloud_storage.tip_wifi", value: "Ensure all devices are on Wi-Fi for faster photo syncing."))")
+                    Text("• \(AppLocalization.localized("icloud_storage.tip_compression", value: "Older visit photos (>1 year) are prioritized for compression to keep your iCloud lean."))")
                 }
             }
-            .navigationTitle("iCloud Storage")
+            .navigationTitle(AppLocalization.localized("icloud_storage.title", value: "iCloud Storage"))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(AppLocalization.localized("common.done", value: "Done")) { dismiss() }
                 }
             }
         }

@@ -67,10 +67,26 @@ final class MessageTemplate {
     
     static var defaults: [MessageTemplate] {
         [
-            MessageTemplate(title: "Ready for Pickup", content: "Hi [OwnerName], [PetName] is all finished and ready for pickup. See you soon!", type: .readyForPickup),
-            MessageTemplate(title: "Appointment Reminder", content: "Hi [OwnerName], this is a quick reminder for [PetName]'s Pawtrackr visit today. Reply if you need to adjust timing.", type: .appointmentReminder),
-            MessageTemplate(title: "Running Late", content: "Hi [OwnerName], [PetName]'s visit is running a little longer than expected. We'll message you as soon as they're ready.", type: .runningLate),
-            MessageTemplate(title: "Post-Visit Follow-up", content: "Hi [OwnerName], thanks for bringing [PetName] to Pawtrackr today! We hope they enjoyed their spa day.", type: .followUp)
+            MessageTemplate(
+                title: AppLocalization.localized("message_template.ready.title", value: "Ready for Pickup"),
+                content: AppLocalization.localized("message_template.ready.content", value: "Hi [OwnerName], [PetName] is all finished and ready for pickup. See you soon!"),
+                type: .readyForPickup
+            ),
+            MessageTemplate(
+                title: AppLocalization.localized("message_template.reminder.title", value: "Appointment Reminder"),
+                content: AppLocalization.localized("message_template.reminder.content", value: "Hi [OwnerName], this is a quick reminder for [PetName]'s Pawtrackr visit today. Reply if you need to adjust timing."),
+                type: .appointmentReminder
+            ),
+            MessageTemplate(
+                title: AppLocalization.localized("message_template.running_late.title", value: "Running Late"),
+                content: AppLocalization.localized("message_template.running_late.content", value: "Hi [OwnerName], [PetName]'s visit is running a little longer than expected. We'll message you as soon as they're ready."),
+                type: .runningLate
+            ),
+            MessageTemplate(
+                title: AppLocalization.localized("message_template.follow_up.title", value: "Post-Visit Follow-up"),
+                content: AppLocalization.localized("message_template.follow_up.content", value: "Hi [OwnerName], thanks for bringing [PetName] to Pawtrackr today! We hope they enjoyed their spa day."),
+                type: .followUp
+            )
         ]
     }
 }

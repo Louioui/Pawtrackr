@@ -62,14 +62,14 @@ public struct ImagePicker<Label: View>: View {
         Button(action: present) {
             label()
         }
-        .confirmationDialog("Choose Photo Source", isPresented: $isPrompting, titleVisibility: .visible) {
+        .confirmationDialog(AppLocalization.localized("image_picker.choose_source", value: "Choose Photo Source"), isPresented: $isPrompting, titleVisibility: .visible) {
             if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                Button("Camera") {
+                Button(AppLocalization.localized("image_picker.camera", value: "Camera")) {
                     resolvedSource = .camera
                     isPresenting = true
                 }
             }
-            Button("Photo Library") {
+            Button(AppLocalization.localized("image_picker.photo_library", value: "Photo Library")) {
                 resolvedSource = .library
                 isPresenting = true
             }
@@ -123,7 +123,7 @@ private struct ImagePickerRepresentable: UIViewControllerRepresentable {
             } else {
                 let vc = UIViewController()
                 let label = UILabel()
-                label.text = "Camera Not Available"
+                label.text = AppLocalization.localized("image_picker.camera_unavailable", value: "Camera Not Available")
                 label.textAlignment = .center
                 vc.view = label
                 return vc

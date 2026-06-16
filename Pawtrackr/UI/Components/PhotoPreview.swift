@@ -57,7 +57,7 @@ struct PhotoPreview: View {
                         .animation(.spring(response: 0.25, dampingFraction: 0.85), value: scale)
                         .animation(.spring(response: 0.25, dampingFraction: 0.85), value: offset)
                         .accessibilityLabel(Text("\(title) photo preview"))
-                        .accessibilityHint(Text("Pinch with two fingers to zoom"))
+                        .accessibilityHint(Text(AppLocalization.localized("photo_preview.zoom_hint", value: "Pinch with two fingers to zoom")))
                 } else {
                     Text(NSLocalizedString("photo_preview.unable_to_load", comment: ""))
                         .foregroundStyle(.white)

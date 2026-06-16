@@ -33,9 +33,9 @@ struct CloudKitDiagnosticsView: View {
                     monitor.networkState.displayLabel)
             }
 
-            Section("Connected Devices") {
+            Section(NSLocalizedString("settings.devices.connected_devices", value: "Connected Devices", comment: "")) {
                 if devices.isEmpty {
-                    Text("No other devices found yet.")
+                    Text(AppLocalization.localized("cloudkit.diagnostics.no_other_devices", value: "No other devices found yet."))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(devices) { device in
@@ -44,7 +44,7 @@ struct CloudKitDiagnosticsView: View {
                                 Text(device.name)
                                     .font(.subheadline.weight(.semibold))
                                 if device.deviceID == DeviceIdentity.currentID {
-                                    Text("(This Device)")
+                                    Text("(\(AppLocalization.localized("settings.devices.current_device", value: "This Device")))")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -169,12 +169,12 @@ struct CloudKitDiagnosticsView: View {
                 Button {
                     Task { await rebuildInsightsCache() }
                 } label: {
-                    Label("Rebuild Insights Cache", systemImage: "chart.bar.doc.horizontal")
+                    Label(AppLocalization.localized("cloudkit.diagnostics.rebuild_insights", value: "Rebuild Insights Cache"), systemImage: "chart.bar.doc.horizontal")
                 }
                 .disabled(isRebuildingInsights)
 
                 if isRebuildingInsights {
-                    ProgressView("Rebuilding insights…")
+                    ProgressView(AppLocalization.localized("cloudkit.diagnostics.rebuilding_insights", value: "Rebuilding insights…"))
                 }
 
                 if let rebuildMessage {

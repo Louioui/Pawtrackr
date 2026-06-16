@@ -194,41 +194,24 @@ enum DataMigrations {
     /// Ensure the service catalog exists with the current set of packages/add-ons,
     /// and strip any default prices so checkout amounts are always user-entered.
     static func ensureServiceCatalog(in context: ModelContext) {
-        struct ServiceDefinition {
-            let name: String
-            let category: Service.Category?
-            let icon: String?
-            let isPackage: Bool
-        }
-
-        let desired: [ServiceDefinition] = [
-            // Core packages / services (no default price)
-            .init(name: "Full Package",  category: .package, icon: "sparkles", isPackage: true),
-            .init(name: "Basic Package", category: .package, icon: "archivebox.fill", isPackage: true),
-            .init(name: "Spa Package",   category: .package, icon: "leaf.fill", isPackage: true),
-            .init(name: "Bath",          category: .groom,   icon: "shower.fill", isPackage: false),
-            .init(name: "Haircut",       category: .groom,   icon: "scissors", isPackage: false),
-
-            // Add-ons (no default price)
-            .init(name: "De-shedding",               category: .addOn, icon: "line.3.crossed.swirl.circle.fill", isPackage: false),
-            .init(name: "Anal Glands Expression",    category: .addOn, icon: "dot.circle", isPackage: false),
-            .init(name: "Face Grooming",             category: .addOn, icon: "mustache.fill", isPackage: false),
-            .init(name: "Paw Trim",                  category: .addOn, icon: "pawprint.fill", isPackage: false),
-            .init(name: "Hygiene Area Trim",         category: .addOn, icon: "person.fill.viewfinder", isPackage: false),
-            .init(name: "Knots and Matting Fee",     category: .addOn, icon: "exclamationmark.triangle.fill", isPackage: false),
-            .init(name: "Flea & Ticks Treatment",    category: .addOn, icon: "ladybug.fill", isPackage: false),
-            .init(name: "Hair Dye",                  category: .addOn, icon: "paintpalette.fill", isPackage: false)
-        ]
+        let desired = DefaultServiceCatalog.definitions
 
         do {
             let existing = try context.fetch(FetchDescriptor<Service>())
             var byName: [String: Service] = [:]
             existing.forEach { byName[$0.name.lowercased()] = $0 }
+            let knownNamesByEnglishName = DefaultServiceCatalog.allKnownLocalizedNamesByEnglishName
 
             for def in desired {
-                let key = def.name.lowercased()
-                if let svc = byName[key] {
+                let targetName = def.localizedName
+                let candidateNames = knownNamesByEnglishName[def.englishName] ?? [def.englishName.lowercased()]
+                let svc = candidateNames.compactMap { byName[$0] }.first
+
+                if let svc {
                     // Normalize attributes and remove any default price.
+                    if svc.name != targetName {
+                        svc.rename(targetName)
+                    }
                     svc.setCategory(def.category)
                     svc.setSystemIcon(def.icon)
                     svc.setBasePrice(nil)
@@ -236,7 +219,7 @@ enum DataMigrations {
                     svc.isPackage = def.isPackage
                 } else {
                     let svc = Service(
-                        name: def.name,
+                        name: targetName,
                         category: def.category,
                         systemIcon: def.icon,
                         basePrice: nil,
