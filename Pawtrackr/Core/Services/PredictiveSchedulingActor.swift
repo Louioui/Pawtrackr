@@ -40,56 +40,58 @@ final actor PredictiveSchedulingActor {
         descriptor.relationshipKeyPathsForPrefetching = [\.visits, \.owner]
         let pets = try context.fetch(descriptor)
         
+        let now = Date.now
         var suggestions: [SmartSuggestion] = []
-        
+
         for pet in pets {
-            guard let visits = pet.visits, visits.count >= 2 else { continue }
-            
-            // Calculate average interval between visits
-            let sortedVisits = visits.filter { $0.isCompleted }.sorted { $0.startedAt < $1.startedAt }
-            guard sortedVisits.count >= 2 else { continue }
-            
-            var intervals: [TimeInterval] = []
-            for i in 1..<sortedVisits.count {
-                let interval = sortedVisits[i].startedAt.timeIntervalSince(sortedVisits[i-1].startedAt)
-                intervals.append(interval)
+            // Re-engage only once the pet is past its grooming cadence — the SAME
+            // signal as `needsAttention`, so the dashboard's two sections stay in
+            // sync. The cadence is species-based (dogs ~monthly, cats ~every 6
+            // months) unless the owner set an explicit preference.
+            guard pet.isOverdue,
+                  let suggested = pet.suggestedNextVisitDate,
+                  let interval = pet.suggestedGroomingInterval, interval > 0,
+                  let lastVisitDate = (pet.visits ?? []).compactMap({ $0.endedAt }).max() else { continue }
+
+            let daysOverdue = max(
+                1,
+                Calendar.current.dateComponents([.day], from: suggested, to: now).day ?? 1
+            )
+            let cadence = Self.cadenceLabel(forInterval: interval)
+
+            let actionType: SmartSuggestion.ActionType
+            if pet.owner?.smsURL != nil {
+                actionType = .text
+            } else if pet.owner?.telURL != nil {
+                actionType = .call
+            } else {
+                actionType = .rebook
             }
-            
-            let avgInterval = intervals.reduce(0, +) / Double(intervals.count)
-            let lastVisitDate = sortedVisits.last?.startedAt ?? .distantPast
-            let daysSinceLastVisit = Date.now.timeIntervalSince(lastVisitDate)
-            
-            // Suggest re-engagement if pet is 20% past their typical schedule
-            if avgInterval > 0, daysSinceLastVisit > (avgInterval * 1.2) {
-                let weeks = max(1, Int(avgInterval / (7 * 24 * 3600)))
-                let weeksWord = weeks == 1 ? "week" : "weeks"
-                let expectedDate = lastVisitDate.addingTimeInterval(avgInterval)
-                let daysOverdue = max(
-                    1,
-                    Calendar.current.dateComponents([.day], from: expectedDate, to: Date.now).day ?? 1
-                )
-                let actionType: SmartSuggestion.ActionType
-                if pet.owner?.smsURL != nil {
-                    actionType = .text
-                } else if pet.owner?.telURL != nil {
-                    actionType = .call
-                } else {
-                    actionType = .rebook
-                }
-                let suggestion = SmartSuggestion(
-                    petID: pet.persistentModelID,
-                    clientID: pet.owner?.persistentModelID,
-                    petName: pet.name,
-                    ownerName: pet.owner?.fullName ?? "Unknown Owner",
-                    message: "\(pet.name) is \(daysOverdue)d past their usual \(weeks) \(weeksWord) cadence. Last visit \(lastVisitDate.formatted(date: .abbreviated, time: .omitted)).",
-                    actionType: actionType,
-                    overdueRatio: daysSinceLastVisit / avgInterval
-                )
-                suggestions.append(suggestion)
-            }
+
+            suggestions.append(SmartSuggestion(
+                petID: pet.persistentModelID,
+                clientID: pet.owner?.persistentModelID,
+                petName: pet.name,
+                ownerName: pet.owner?.fullName ?? "Unknown Owner",
+                message: "\(pet.name) is \(daysOverdue)d past the recommended \(cadence) grooming cadence. Last visit \(lastVisitDate.formatted(date: .abbreviated, time: .omitted)).",
+                actionType: actionType,
+                overdueRatio: now.timeIntervalSince(lastVisitDate) / interval
+            ))
         }
 
         // Most overdue first.
         return suggestions.sorted { $0.overdueRatio > $1.overdueRatio }
+    }
+
+    /// Human label for the cadence used in suggestion copy.
+    private static func cadenceLabel(forInterval interval: TimeInterval) -> String {
+        let days = Int((interval / (24 * 3600)).rounded())
+        switch days {
+        case ..<11: return "weekly"
+        case 11..<21: return "every-2-weeks"
+        case 21..<46: return "monthly"
+        case 46..<135: return "quarterly"
+        default: return "6-month"
+        }
     }
 }

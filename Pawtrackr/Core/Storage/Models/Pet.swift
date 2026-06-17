@@ -72,10 +72,18 @@ final class Pet {
     /// Drives the high-visibility red safety flags shown across the client
     /// center, pet detail, and pet cards so staff are warned before handling.
     var isAggressive: Bool {
-        behaviorTags.contains { tag in
-            let key = tag.lowercased()
-            return key.contains("aggressive") || key.contains("bites") || key.contains("dangerous")
-        }
+        behaviorTags.contains { Pet.isAggressiveTag($0) }
+    }
+
+    /// True when a behavior tag denotes aggression/danger, in English OR Spanish.
+    /// Behavior tags are stored as their localized label (e.g. "Agresivo" on a
+    /// Spanish device), so matching only English keywords misses them — which is
+    /// why the red safety banner failed to appear on iPhone/iPad in Spanish. We
+    /// fold away case and accents and match both languages' stems.
+    static func isAggressiveTag(_ tag: String) -> Bool {
+        let key = tag.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+        let needles = ["aggressive", "agresiv", "bite", "muerde", "muerd", "dangerous", "danger", "peligros"]
+        return needles.contains { key.contains($0) }
     }
     
     /// Returns a list of before/after photo pairs from completed visits.
@@ -143,36 +151,43 @@ final class Pet {
         return totalInterval / TimeInterval(completedVisits.count - 1)
     }
 
-    /// Predicts the next suggested grooming date based on history or preferred frequency.
-    var suggestedNextVisitDate: Date? {
-        // 1. If there's an active visit, we don't need a suggestion
-        if isCheckedIn { return nil }
-        
-        // Ensure at least one completed visit exists to base prediction on
-        guard (visits ?? []).contains(where: { $0.isCompleted }) else { return nil }
-
-        // 2. Get the last visit date
-        guard let lastVisitDate = (visits ?? []).compactMap({ $0.endedAt }).max() else {
-            return nil
+    /// Default re-engagement cadence by species when the owner hasn't set an
+    /// explicit preferred frequency. Dogs are typically groomed about once a
+    /// month; cats far less often (they self-groom), so we wait ~6 months before
+    /// nudging the owner.
+    var defaultGroomingInterval: TimeInterval {
+        switch species {
+        case .dog: return 30 * 24 * 3600      // ~1 month
+        case .cat: return 182 * 24 * 3600     // ~6 months
         }
+    }
 
-        // 3. Determine the interval to use
-        let interval: TimeInterval
-        if let avg = averageVisitInterval {
-            interval = avg
-        } else if let preferred = preferredGroomingFrequency {
+    /// Interval used to schedule the next-visit suggestion: an explicit owner
+    /// preference wins, otherwise the species default. `nil` for `.asNeeded`.
+    ///
+    /// We intentionally do NOT key off `averageVisitInterval` here: a couple of
+    /// closely-spaced visits (common during setup/testing) would otherwise flag
+    /// the pet as overdue almost immediately and nag the owner far too soon.
+    var suggestedGroomingInterval: TimeInterval? {
+        if let preferred = preferredGroomingFrequency {
             switch preferred {
-            case .weekly: interval = 7 * 24 * 3600
-            case .biWeekly: interval = 14 * 24 * 3600
-            case .monthly: interval = 30 * 24 * 3600
-            case .quarterly: interval = 90 * 24 * 3600
+            case .weekly: return 7 * 24 * 3600
+            case .biWeekly: return 14 * 24 * 3600
+            case .monthly: return 30 * 24 * 3600
+            case .quarterly: return 90 * 24 * 3600
             case .asNeeded: return nil
             }
-        } else {
-            // Default to 6 weeks if no history or preference
-            interval = 42 * 24 * 3600
         }
+        return defaultGroomingInterval
+    }
 
+    /// Predicts the next suggested grooming date from the last completed visit
+    /// and the species/preferred cadence.
+    var suggestedNextVisitDate: Date? {
+        if isCheckedIn { return nil }
+        guard (visits ?? []).contains(where: { $0.isCompleted }) else { return nil }
+        guard let lastVisitDate = (visits ?? []).compactMap({ $0.endedAt }).max() else { return nil }
+        guard let interval = suggestedGroomingInterval else { return nil }
         return lastVisitDate.addingTimeInterval(interval)
     }
 

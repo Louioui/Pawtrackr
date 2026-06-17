@@ -13,42 +13,63 @@ final class PredictiveSchedulingTests: XCTestCase {
         context = ModelContext(container)
     }
 
-    func testGenerateSuggestions_IdentifiesOverduePet() async throws {
+    func testGenerateSuggestions_DogOverdueAfterOneMonth() async throws {
         let owner = Client(firstName: "Alice", lastName: "Smith")
         context.insert(owner)
         let pet = Pet(name: "Charlie", species: .dog)
         pet.owner = owner
         context.insert(pet)
-        
-        // Create a history of visits every 4 weeks (28 days)
+
         let cal = Calendar.current
-        let date1 = cal.date(byAdding: .day, value: -60, to: Date())!
-        let date2 = cal.date(byAdding: .day, value: -32, to: Date())! // 28 days interval
-        
-        let v1 = Visit(pet: pet, startedAt: date1)
-        v1.endedAt = date1.addingTimeInterval(3600)
-        
-        let v2 = Visit(pet: pet, startedAt: date2)
-        v2.endedAt = date2.addingTimeInterval(3600)
-        
+        // A single completed visit 20 days ago — under the ~30-day dog cadence.
+        let d1 = cal.date(byAdding: .day, value: -20, to: Date())!
+        let visit = Visit(pet: pet, startedAt: d1)
+        visit.endedAt = d1.addingTimeInterval(3600)
+        context.insert(visit)
         try context.save()
-        
+
         let actor = PredictiveSchedulingActor(modelContainer: container)
-        let suggestions = try await actor.generateSuggestions()
-        
-        // It has been 32 days since last visit. 
-        // Interval is 28 days. 1.2 * 28 = 33.6 days.
-        // If it's been 32 days, it's NOT yet 20% past.
-        XCTAssertEqual(suggestions.count, 0)
-        
-        // Now make it 40 days since last visit
-        let date3 = cal.date(byAdding: .day, value: -40, to: Date())!
-        v2.startedAt = date3
-        v2.endedAt = date3.addingTimeInterval(3600)
+        let none = try await actor.generateSuggestions()
+        XCTAssertEqual(none.count, 0, "A dog under the 1-month cadence should not be flagged.")
+
+        // Move the last visit to 40 days ago — past the dog cadence.
+        let d2 = cal.date(byAdding: .day, value: -40, to: Date())!
+        visit.startedAt = d2
+        visit.endedAt = d2.addingTimeInterval(3600)
         try context.save()
-        
-        let newSuggestions = try await actor.generateSuggestions()
-        XCTAssertEqual(newSuggestions.count, 1)
-        XCTAssertEqual(newSuggestions.first?.petName, "Charlie")
+
+        let flagged = try await actor.generateSuggestions()
+        XCTAssertEqual(flagged.count, 1, "A dog past the 1-month cadence should be flagged.")
+        XCTAssertEqual(flagged.first?.petName, "Charlie")
+    }
+
+    func testGenerateSuggestions_CatWaitsSixMonths() async throws {
+        let owner = Client(firstName: "Bob", lastName: "Jones")
+        context.insert(owner)
+        let pet = Pet(name: "Whiskers", species: .cat)
+        pet.owner = owner
+        context.insert(pet)
+
+        let cal = Calendar.current
+        // 60 days since last visit — a dog would be overdue, but a cat should NOT.
+        let d1 = cal.date(byAdding: .day, value: -60, to: Date())!
+        let visit = Visit(pet: pet, startedAt: d1)
+        visit.endedAt = d1.addingTimeInterval(3600)
+        context.insert(visit)
+        try context.save()
+
+        let actor = PredictiveSchedulingActor(modelContainer: container)
+        let none = try await actor.generateSuggestions()
+        XCTAssertEqual(none.count, 0, "A cat under the 6-month cadence should not be flagged.")
+
+        // 200 days since last visit — past the 6-month cat cadence.
+        let d2 = cal.date(byAdding: .day, value: -200, to: Date())!
+        visit.startedAt = d2
+        visit.endedAt = d2.addingTimeInterval(3600)
+        try context.save()
+
+        let flagged = try await actor.generateSuggestions()
+        XCTAssertEqual(flagged.count, 1, "A cat past the 6-month cadence should be flagged.")
+        XCTAssertEqual(flagged.first?.petName, "Whiskers")
     }
 }

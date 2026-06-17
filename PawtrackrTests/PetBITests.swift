@@ -29,6 +29,48 @@ final class PetBITests: XCTestCase {
         XCTAssertEqual(pet.completedVisitCount, 2)
     }
 
+    func testIsAggressive_DetectsEnglishAndSpanishTags() {
+        let pet = Pet(name: "Rex", species: .dog)
+        XCTAssertFalse(pet.isAggressive)
+
+        pet.setBehaviorTags(["Calm"])
+        XCTAssertFalse(pet.isAggressive)
+
+        pet.setBehaviorTags(["Aggressive"])
+        XCTAssertTrue(pet.isAggressive)
+
+        // Tags are stored as their localized display string, so a Spanish device
+        // stores "Agresivo" — the red safety banner must still trigger (the
+        // iPhone/iPad bug).
+        pet.setBehaviorTags(["Agresivo"])
+        XCTAssertTrue(pet.isAggressive, "Spanish 'Agresivo' tag must be detected as aggressive.")
+
+        XCTAssertTrue(Pet.isAggressiveTag("Muerde"))
+        XCTAssertTrue(Pet.isAggressiveTag("Peligroso"))
+        XCTAssertFalse(Pet.isAggressiveTag("Necesidades Especiales"))
+        XCTAssertFalse(Pet.isAggressiveTag("Tranquilo"))
+    }
+
+    func testSuggestedCadence_DogMonthly_CatSixMonths() throws {
+        let cal = Calendar.current
+        func makePet(_ species: Species, lastVisitDaysAgo days: Int) throws -> Pet {
+            let p = Pet(name: "P", species: species)
+            context.insert(p)
+            let d = cal.date(byAdding: .day, value: -days, to: .now)!
+            let v = Visit(pet: p, startedAt: d)
+            v.endedAt = d.addingTimeInterval(3600)
+            context.insert(v)
+            try context.save()
+            return p
+        }
+        // Dog cadence ~1 month.
+        XCTAssertFalse(try makePet(.dog, lastVisitDaysAgo: 20).isOverdue)
+        XCTAssertTrue(try makePet(.dog, lastVisitDaysAgo: 40).isOverdue)
+        // Cat cadence ~6 months — a 60-day-old visit must NOT be overdue.
+        XCTAssertFalse(try makePet(.cat, lastVisitDaysAgo: 60).isOverdue)
+        XCTAssertTrue(try makePet(.cat, lastVisitDaysAgo: 200).isOverdue)
+    }
+
     func testEngagementScore_WithNoHistory_ReturnsDefault() {
         let pet = Pet(name: "Max", species: .dog)
         XCTAssertEqual(pet.engagementScore, 0.5)

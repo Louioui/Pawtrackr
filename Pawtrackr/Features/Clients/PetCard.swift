@@ -124,9 +124,9 @@ struct PetCard: View {
         if !pet.behaviorTags.isEmpty {
             FlowLayout(spacing: 6) {
                 ForEach(Array(pet.behaviorTags), id: \.self) { tag in
-                    let key = tag.lowercased()
-                    let isDanger = key.contains("aggressive") || key.contains("bites") || key.contains("dangerous")
-                    let isHighPriority = key.contains("anxious") || key.contains("extra care")
+                    let key = tag.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+                    let isDanger = Pet.isAggressiveTag(tag)
+                    let isHighPriority = key.contains("anxious") || key.contains("ansios") || key.contains("extra care")
                     let disp = BehaviorTagIcons.display(for: tag)
 
                     if isDanger {
