@@ -18,28 +18,38 @@ struct ClientCard: View {
     /// so prefer the caller's query-derived value when available.
     var isInProgressOverride: Bool? = nil
 
-    // IMPROVEMENT: Logic is self-contained within the card.
-    private var isInProgress: Bool { isInProgressOverride ?? client.hasActiveVisit }
-    private var isAggressive: Bool { client.hasAggressivePet }
-    private var needsAttention: Bool { (client.pets ?? []).contains { $0.needsAttention } }
+    private var visualState: VisualState {
+        VisualState(client: client, isInProgressOverride: isInProgressOverride)
+    }
+    private var isInProgress: Bool { visualState.isInProgress }
+    private var isAggressive: Bool { visualState.showsAggressiveWarning }
+    private var needsAttention: Bool { visualState.needsAttention }
     private var hasMissingInfo: Bool { client.phone == nil || client.email == nil }
     
     @State private var pulse: Bool = false
 
     var body: some View {
-        // FIX: Use the correct Card initializer with a Card.Accent struct.
-        // Aggressive wins the accent — staff safety outranks status coloring.
-        let accentColor: Color? = isAggressive
-            ? DS.ColorToken.danger
-            : (isInProgress ? DS.ColorToken.success : (needsAttention ? Color.orange : nil))
+        let state = visualState
+        let accentColor: Color? = switch state.accentKind {
+        case .safety:
+            DS.ColorToken.danger
+        case .inProgress:
+            DS.ColorToken.success
+        case .attention:
+            Color.orange
+        case .none:
+            nil
+        }
+
         Card(elevation: .regular, accent: accentColor != nil ? .leading(.color(accentColor!), thickness: 4) : nil) {
             VStack(alignment: .leading, spacing: 10) {
-                if isAggressive { aggressiveBanner }
+                if state.showsAggressiveWarning { aggressiveBanner }
                 header
                 phoneInfo
                 petsInfo
             }
         }
+        .id(state.identityKey)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }
@@ -123,4 +133,54 @@ struct ClientCard: View {
     }
 
 
+}
+
+extension ClientCard {
+    struct VisualState: Equatable {
+        enum AccentKind: String, Equatable {
+            case safety
+            case inProgress
+            case attention
+        }
+
+        let showsAggressiveWarning: Bool
+        let isInProgress: Bool
+        let needsAttention: Bool
+        let accentKind: AccentKind?
+        let identityKey: String
+
+        init(client: Client, isInProgressOverride: Bool?) {
+            let pets = client.pets ?? []
+            showsAggressiveWarning = pets.contains { $0.isAggressive }
+            isInProgress = isInProgressOverride ?? client.hasActiveVisit
+            needsAttention = pets.contains { $0.needsAttention }
+
+            if showsAggressiveWarning {
+                accentKind = .safety
+            } else if isInProgress {
+                accentKind = .inProgress
+            } else if needsAttention {
+                accentKind = .attention
+            } else {
+                accentKind = nil
+            }
+
+            let behaviorSignature = pets
+                .sorted { $0.uuid.uuidString < $1.uuid.uuidString }
+                .map { pet in
+                    let tags = pet.behaviorTags
+                        .map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil) }
+                        .joined(separator: ",")
+                    return "\(pet.uuid.uuidString):\(tags)"
+                }
+                .joined(separator: "|")
+
+            identityKey = [
+                client.uuid.uuidString,
+                "safety:\(showsAggressiveWarning)",
+                "accent:\(accentKind?.rawValue ?? "none")",
+                "behaviors:\(behaviorSignature)"
+            ].joined(separator: "|")
+        }
+    }
 }

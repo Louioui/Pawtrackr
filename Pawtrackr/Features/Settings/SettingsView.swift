@@ -53,6 +53,37 @@ enum SettingSection: String, CaseIterable, Identifiable {
     }
 }
 
+enum SettingsAdaptiveLayout {
+    static let maxReadableContentWidth: CGFloat = 940
+    static let compactNavigatorThreshold: CGFloat = 700
+    static let macSidebarMinWidth: CGFloat = 132
+    static let macSidebarIdealWidth: CGFloat = 158
+    static let macSidebarMaxWidth: CGFloat = 188
+
+    static func usesCompactSettingsNavigator(availableWidth: CGFloat) -> Bool {
+        availableWidth < compactNavigatorThreshold
+    }
+
+    static func detailHorizontalPadding(for availableWidth: CGFloat) -> CGFloat {
+        if availableWidth < 520 {
+            return 16
+        }
+        if availableWidth < 820 {
+            return 20
+        }
+        return 30
+    }
+
+    static func detailVerticalPadding(for availableWidth: CGFloat) -> CGFloat {
+        availableWidth < 520 ? 18 : 30
+    }
+
+    static func contentMaxWidth(for availableWidth: CGFloat) -> CGFloat {
+        let usableWidth = max(0, availableWidth - detailHorizontalPadding(for: availableWidth) * 2)
+        return min(maxReadableContentWidth, usableWidth)
+    }
+}
+
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
@@ -67,24 +98,11 @@ struct SettingsView: View {
 
     var body: some View {
         #if os(macOS)
-        NavigationSplitView {
-            List(SettingSection.allCases, selection: $selection) { section in
-                NavigationLink(value: section) {
-                    Label(section.title, systemImage: section.icon)
-                        .font(.system(.body, design: .rounded).weight(.medium))
-                }
-            }
-            .navigationTitle(Text("settings.title"))
-            .listStyle(.sidebar)
-        } detail: {
-            if let selection {
-                SettingsDetailView(section: selection,
-                                   showChangePIN: $showChangePIN,
-                                   showResetFirstRunConfirm: $showResetFirstRunConfirm,
-                                   showWipeConfirm: $showWipeConfirm,
-                                   showDiagnostics: $showDiagnostics)
+        GeometryReader { proxy in
+            if SettingsAdaptiveLayout.usesCompactSettingsNavigator(availableWidth: proxy.size.width) {
+                compactMacSettings
             } else {
-                ContentUnavailableView(LocalizedStringKey("settings.select_setting"), systemImage: "gear")
+                regularMacSettings
             }
         }
         #else
@@ -105,6 +123,74 @@ struct SettingsView: View {
         }
         #endif
     }
+
+    #if os(macOS)
+    private var selectedSectionBinding: Binding<SettingSection> {
+        Binding {
+            selection ?? .business
+        } set: { newValue in
+            selection = newValue
+        }
+    }
+
+    private var regularMacSettings: some View {
+        NavigationSplitView {
+            settingsSectionList
+                .navigationTitle(Text("settings.title"))
+                .navigationSplitViewColumnWidth(
+                    min: SettingsAdaptiveLayout.macSidebarMinWidth,
+                    ideal: SettingsAdaptiveLayout.macSidebarIdealWidth,
+                    max: SettingsAdaptiveLayout.macSidebarMaxWidth
+                )
+        } detail: {
+            settingsDetail
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
+    private var compactMacSettings: some View {
+        VStack(spacing: 0) {
+            Picker(settingsLocalized("settings.title", value: "Settings"), selection: selectedSectionBinding) {
+                ForEach(SettingSection.allCases) { section in
+                    Label(section.title, systemImage: section.icon)
+                        .tag(section)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider()
+            settingsDetail
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var settingsSectionList: some View {
+        List(SettingSection.allCases, selection: $selection) { section in
+            NavigationLink(value: section) {
+                Label(section.title, systemImage: section.icon)
+                    .font(.system(.body, design: .rounded).weight(.medium))
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
+    @ViewBuilder
+    private var settingsDetail: some View {
+        if let selection {
+            SettingsDetailView(section: selection,
+                               showChangePIN: $showChangePIN,
+                               showResetFirstRunConfirm: $showResetFirstRunConfirm,
+                               showWipeConfirm: $showWipeConfirm,
+                               showDiagnostics: $showDiagnostics)
+        } else {
+            ContentUnavailableView(LocalizedStringKey("settings.select_setting"), systemImage: "gear")
+        }
+    }
+    #endif
 }
 
 private struct SettingsDetailView: View {
@@ -117,14 +203,21 @@ private struct SettingsDetailView: View {
     @Binding var showDiagnostics: Bool
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text(section.title)
-                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                
-                content
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text(section.title)
+                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    content
+                }
+                .frame(maxWidth: SettingsAdaptiveLayout.contentMaxWidth(for: proxy.size.width), alignment: .leading)
+                .padding(.horizontal, SettingsAdaptiveLayout.detailHorizontalPadding(for: proxy.size.width))
+                .padding(.vertical, SettingsAdaptiveLayout.detailVerticalPadding(for: proxy.size.width))
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(30)
         }
         .sheet(isPresented: $showChangePIN) {
             ChangePINSheet(isPresented: $showChangePIN)

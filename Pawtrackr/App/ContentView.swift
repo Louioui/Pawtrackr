@@ -368,7 +368,7 @@ struct ContentView: View {
             SidebarView(selection: $sidebarSelection) { item in
                 selectSurface(item, resetPath: true)
             }
-                .navigationSplitViewColumnWidth(min: 220, ideal: 245, max: 300)
+                .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 270)
         } detail: {
             splitViewDetail
         }
@@ -376,7 +376,7 @@ struct ContentView: View {
             MacTranslucentBackground()
                 .ignoresSafeArea()
         }
-        .frame(minWidth: 980, minHeight: 650)
+        .frame(minWidth: 820, minHeight: 560)
         #else
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(selection: $sidebarSelection) { item in
