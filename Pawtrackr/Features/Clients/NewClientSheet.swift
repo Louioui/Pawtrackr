@@ -32,6 +32,7 @@ struct NewClientSheet: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     private let modelContext: ModelContext
     @State private var viewModel: NewClientViewModel?
     @State private var didFocusInitialField = false
@@ -42,6 +43,29 @@ struct NewClientSheet: View {
     }
 
     var body: some View {
+        sheetContent
+        #if os(macOS)
+        .frame(minWidth: 460, idealWidth: 540, maxWidth: 640, minHeight: 560, idealHeight: 680)
+        #endif
+        .onAppear {
+            if viewModel == nil {
+                viewModel = NewClientViewModel(modelContext: modelContext)
+            }
+            focusInitialFieldIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private var sheetContent: some View {
+        if let walkthrough {
+            navigationContent
+                .walkthroughOverlay(walkthrough)
+        } else {
+            navigationContent
+        }
+    }
+
+    private var navigationContent: some View {
         NavigationStack {
             Group {
                 if let viewModel {
@@ -51,15 +75,6 @@ struct NewClientSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-        }
-        #if os(macOS)
-        .frame(minWidth: 460, idealWidth: 540, maxWidth: 640, minHeight: 560, idealHeight: 680)
-        #endif
-        .onAppear {
-            if viewModel == nil {
-                viewModel = NewClientViewModel(modelContext: modelContext)
-            }
-            focusInitialFieldIfNeeded()
         }
     }
 
@@ -122,6 +137,7 @@ struct NewClientSheet: View {
                         )
                     }
                 }
+                .walkthroughTarget(.ncOwner)
                 .padding(.horizontal)
 
                 // Emergency Contacts Card
@@ -250,6 +266,7 @@ struct NewClientSheet: View {
                         }
                     }
                 }
+                .walkthroughTarget(.ncPets)
                 .padding(.horizontal)
             }
             .padding(.vertical)
@@ -279,6 +296,7 @@ struct NewClientSheet: View {
                 }
                 .disabled(viewModel.isSaving)
                 .accessibilityIdentifier("newClient.create")
+                .walkthroughAnchor(.ncSave)
             }
         }
         .alert(
@@ -333,6 +351,7 @@ struct NewClientSheet: View {
 
     private func focusInitialFieldIfNeeded() {
         guard !didFocusInitialField else { return }
+        guard walkthrough?.currentStep?.presents != .newClient else { return }
         didFocusInitialField = true
         DispatchQueue.main.async {
             focusedField = .firstName

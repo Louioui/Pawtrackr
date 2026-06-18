@@ -55,6 +55,13 @@ private func walkthroughFallbackRect(_ fallback: SpotlightFallback, in proxy: Ge
         let w = min(slot - 16, 60)
         let h: CGFloat = 44
         return CGRect(x: centerX - w / 2, y: centerY - h / 2, width: w, height: h)
+    case .topTrailingAction:
+        let width: CGFloat = 118
+        let height: CGFloat = 44
+        let margin: CGFloat = 16
+        let x = proxy.size.width - proxy.safeAreaInsets.trailing - margin - width
+        let y = proxy.safeAreaInsets.top + margin
+        return CGRect(x: max(margin, x), y: y, width: width, height: height)
     }
 }
 
@@ -111,7 +118,7 @@ private struct WalkthroughOverlayView: View {
     /// position: bottom tab bar → above; left-column sidebar row → trailing;
     /// otherwise the opposite vertical half.
     private var placement: BubblePlacement {
-        guard let s = spotlight else { return .below }
+        guard let s = spotlight else { return .center }
         if s.midY > containerSize.height * 0.72 { return .above }          // tab bar
         if s.maxX < containerSize.width * 0.45 { return .trailing }        // sidebar
         return s.midY < containerSize.height * 0.5 ? .below : .above
@@ -197,6 +204,7 @@ private struct WalkthroughOverlayView: View {
         case .below: verticalBubble(below: true)
         case .above: verticalBubble(below: false)
         case .trailing: trailingBubble
+        case .center: centerBubble
         }
     }
 
@@ -240,6 +248,17 @@ private struct WalkthroughOverlayView: View {
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
+    /// Centered fallback when a step is informational or the target hasn't
+    /// appeared yet. This keeps the tour readable instead of silently dropping
+    /// the bubble.
+    private var centerBubble: some View {
+        bubbleCard
+            .frame(maxWidth: bubbleMaxWidth)
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+    }
+
     /// Up/down pointer, nudged horizontally toward the target's center.
     private func verticalArrow(_ dir: ArrowDirection) -> some View {
         let targetX = spotlight?.midX ?? containerSize.width / 2
@@ -255,16 +274,28 @@ private struct WalkthroughOverlayView: View {
     private var bubbleCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: step.icon)
-                    .font(.headline)
+                Label(step.lesson.title, systemImage: step.lesson.icon)
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
                     .foregroundStyle(DS.ColorToken.primary)
-                Text(step.title)
-                    .font(.headline)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(DS.ColorToken.primary.opacity(0.12), in: Capsule())
                 Spacer(minLength: 8)
                 Text("\(controller.stepNumber) / \(controller.stepCount)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: step.icon)
+                    .font(.headline)
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .frame(width: 24)
+                Text(step.title)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(step.directive)
@@ -276,6 +307,22 @@ private struct WalkthroughOverlayView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let coachTip = step.coachTip {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundStyle(DS.ColorToken.primary)
+                        .font(.caption)
+                        .padding(.top, 1)
+                    Text(coachTip)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(DS.ColorToken.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
 
             HStack {
                 Button(AppLocalization.localized("tour.skip", value: "Skip tour")) {

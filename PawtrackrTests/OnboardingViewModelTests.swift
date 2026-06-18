@@ -209,6 +209,35 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.primaryActionTitle, "Continue")
     }
 
+    func testFullWalkthroughTeachesCompleteNewUserCurriculum() {
+        let steps = WalkthroughController.fullTour()
+        let lessons = Set(steps.map(\.lesson))
+
+        XCTAssertGreaterThanOrEqual(steps.count, 24)
+        XCTAssertTrue(lessons.isSuperset(of: [
+            .appMap,
+            .dailyWorkflow,
+            .clientRecords,
+            .checkoutAndMoney,
+            .businessInsights,
+            .settingsAndSafety,
+            .dataOwnership
+        ]))
+        XCTAssertEqual(
+            steps.filter { $0.presents == .newClient }.map(\.anchor),
+            [.ncOwner, .ncPets, .ncSave],
+            "The create-client lesson should open one coherent New Client mini-flow."
+        )
+        XCTAssertGreaterThanOrEqual(steps.compactMap(\.coachTip).count, 8)
+        XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("check in") })
+        XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("checkout") })
+        XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("receipt") })
+        XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("history") })
+        XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("iCloud") })
+        XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("Start Fresh") })
+        XCTAssertFalse(steps.contains { $0.title.trimmed.isEmpty || $0.directive.trimmed.isEmpty || $0.purpose.trimmed.isEmpty })
+    }
+
     func testFinish_RejectsBlankBusinessName() async {
         let settings = AppSettings()
         let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)

@@ -51,6 +51,23 @@ enum SettingSection: String, CaseIterable, Identifiable {
         case .about: return "info.circle.fill"
         }
     }
+
+    var walkthroughAnchorID: WalkthroughAnchorID? {
+        switch self {
+        case .business:
+            return .setBusiness
+        case .security:
+            return .setSecurity
+        case .dataExport:
+            return .setData
+        case .icloud:
+            return .setICloud
+        case .about:
+            return .setAbout
+        case .preferences, .help, .devices:
+            return nil
+        }
+    }
 }
 
 enum SettingsAdaptiveLayout {
@@ -117,6 +134,7 @@ struct SettingsView: View {
                 } label: {
                     Label(section.title, systemImage: section.icon)
                 }
+                .optionalWalkthroughAnchor(section.walkthroughAnchorID)
                 .accessibilityIdentifier("settings.section.\(section.rawValue)")
             }
             .navigationTitle(Text("settings.title"))
@@ -174,6 +192,7 @@ struct SettingsView: View {
                 Label(section.title, systemImage: section.icon)
                     .font(.system(.body, design: .rounded).weight(.medium))
             }
+            .optionalWalkthroughAnchor(section.walkthroughAnchorID)
         }
         .listStyle(.sidebar)
     }
@@ -878,6 +897,17 @@ private struct CardView<Content: View>: View {
             .scaleEffect(isHovering ? 1.01 : 1.0)
             .onHover { isHovering = $0 }
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovering)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func optionalWalkthroughAnchor(_ id: WalkthroughAnchorID?) -> some View {
+        if let id {
+            walkthroughAnchor(id)
+        } else {
+            self
+        }
     }
 }
 

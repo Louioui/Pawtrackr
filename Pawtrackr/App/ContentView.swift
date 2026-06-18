@@ -37,6 +37,7 @@ struct ContentView: View {
     @State private var sidebarSelection: NavigationItem? = .dashboard
     @State private var tabSelection: NavigationItem = .dashboard
     @State private var presentedSheet: SheetDestination?
+    @State private var isWalkthroughDrivingSheet = false
     /// The interactive spotlight tour, hosted at the navigation root so it can
     /// dim and spotlight the sidebar (Mac/iPad) or tab bar (iPhone).
     @State private var walkthrough = WalkthroughController()
@@ -60,6 +61,14 @@ struct ContentView: View {
             // screen, switch to it before the step shows so its anchor exists.
             .onChange(of: walkthrough.currentStep?.surface) { _, surface in
                 if let surface { selectSurface(surface) }
+            }
+            .onChange(of: walkthrough.currentStep?.presents) { _, presentation in
+                synchronizeWalkthroughPresentation(presentation)
+            }
+            .onChange(of: walkthrough.isActive) { _, isActive in
+                if !isActive {
+                    closeWalkthroughPresentationIfNeeded()
+                }
             }
             .environment(router)
             .onChange(of: appSettings.currencySymbol) { _, newValue in
@@ -148,6 +157,27 @@ struct ContentView: View {
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
             walkthrough.start(WalkthroughController.fullTour())
         }
+    }
+
+    private func synchronizeWalkthroughPresentation(_ presentation: WalkthroughPresentation?) {
+        guard walkthrough.isActive else {
+            closeWalkthroughPresentationIfNeeded()
+            return
+        }
+
+        switch presentation {
+        case .newClient:
+            presentedSheet = .newClient
+            isWalkthroughDrivingSheet = true
+        case .none:
+            closeWalkthroughPresentationIfNeeded()
+        }
+    }
+
+    private func closeWalkthroughPresentationIfNeeded() {
+        guard isWalkthroughDrivingSheet else { return }
+        presentedSheet = nil
+        isWalkthroughDrivingSheet = false
     }
 
     private enum NavigationType { case pet, client }
