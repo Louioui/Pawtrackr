@@ -999,7 +999,7 @@ struct CheckoutView: View {
         Pet.BehaviorTag.allCases.filter { tag in
             switch tag {
             case .aggressive, .specialNeeds:
-                return viewModel.tags.contains(tag.displayName)
+                return viewModel.tags.contains { Pet.behaviorTagKind(for: $0) == tag }
             default:
                 return false
             }
@@ -1053,14 +1053,20 @@ struct CheckoutView: View {
     }
 
     private func behaviorTagTint(for raw: String) -> Color {
-        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if normalized == Pet.BehaviorTag.aggressive.displayName.lowercased() {
+        switch Pet.behaviorTagKind(for: raw) {
+        case .calm, .cooperative:
+            return DS.ColorToken.success
+        case .anxious:
+            return DS.ColorToken.warning
+        case .nervous:
+            return DS.ColorToken.info
+        case .aggressive:
             return DS.ColorToken.danger
-        }
-        if normalized == Pet.BehaviorTag.specialNeeds.displayName.lowercased() {
+        case .specialNeeds:
+            return DS.ColorToken.primary
+        case nil:
             return DS.ColorToken.warning
         }
-        return Color.orange
     }
 
     func paymentCard(for option: PaymentOption) -> some View {

@@ -329,6 +329,37 @@ final class Pet {
         didUpdate()
     }
 
+    /// Reconciles the pet-level behavior tags from completed visit history after checkout.
+    ///
+    /// Aggressive handling is intentionally sticky for staff safety: a non-aggressive visit
+    /// cannot clear the pet warning until the three most recent completed visits all contain
+    /// calm/cooperative evidence and no aggressive/bite/danger evidence.
+    func reconcileBehaviorTagsFromCompletedVisits(requiredClearVisitCount: Int = 3) {
+        let completedVisitTags = Self.recentCompletedBehaviorTagSnapshots(from: visits ?? [])
+        guard let latestVisitTags = completedVisitTags.first else { return }
+
+        let latestTags = Self.cleanedBehaviorTags(latestVisitTags.tags)
+        if Self.containsAggressiveBehavior(in: latestTags) {
+            setBehaviorTags(latestTags)
+            return
+        }
+
+        guard isAggressive else {
+            setBehaviorTags(latestTags)
+            return
+        }
+
+        let recentClearanceWindow = Array(completedVisitTags.prefix(requiredClearVisitCount))
+        let hasClearanceStreak = recentClearanceWindow.count == requiredClearVisitCount
+            && recentClearanceWindow.allSatisfy { Self.isAggressionClearanceVisit(tags: $0.tags) }
+
+        if hasClearanceStreak {
+            setBehaviorTags(Self.tagsAfterAggressionClearance(latestTags: latestTags, streak: recentClearanceWindow))
+        } else {
+            setBehaviorTags(Self.tagsRetainingAggressiveWarning(existingTags: behaviorTags, latestTags: latestTags))
+        }
+    }
+
     func addBehaviorTag(_ tag: String) {
         let t = tag.trimmed
         guard !t.isEmpty else { return }
@@ -479,5 +510,122 @@ extension Pet {
                 return NSLocalizedString("pet.behavior.special_needs", value: "Special Needs", comment: "")
             }
         }
+    }
+
+    /// Returns the standardized behavior kind represented by a raw user-facing tag.
+    ///
+    /// Tags may be persisted in the user's current language, so this recognizes the
+    /// English and Spanish labels used by the app in addition to enum raw values.
+    static func behaviorTagKind(for tag: String) -> BehaviorTag? {
+        let key = behaviorTagLookupKey(tag)
+        switch key {
+        case "calm", "tranquilo", "tranquila":
+            return .calm
+        case "cooperative", "cooperativo", "cooperativa":
+            return .cooperative
+        case "anxious", "ansioso", "ansiosa":
+            return .anxious
+        case "nervous", "nervioso", "nerviosa":
+            return .nervous
+        case "specialneeds", "necesidadesespeciales", "necesidadespeciales", "necesidadespecial":
+            return .specialNeeds
+        default:
+            return isAggressiveTag(tag) ? .aggressive : nil
+        }
+    }
+
+    /// Returns true when a visit tag counts as positive de-escalation evidence.
+    static func isCalmOrCooperativeTag(_ tag: String) -> Bool {
+        guard let kind = behaviorTagKind(for: tag) else { return false }
+        return kind == .calm || kind == .cooperative
+    }
+
+    /// Returns true when any supplied tag denotes aggressive, bite, or danger behavior.
+    static func containsAggressiveBehavior(in tags: [String]) -> Bool {
+        tags.contains { isAggressiveTag($0) }
+    }
+
+    /// Trims behavior tags and removes duplicates while preserving first-seen order.
+    static func cleanedBehaviorTags(_ tags: [String]) -> [String] {
+        var seen: Set<String> = []
+        var cleaned: [String] = []
+
+        for tag in tags {
+            let trimmed = tag.trimmed
+            guard !trimmed.isEmpty else { continue }
+            let key = tagUniquenessKey(trimmed)
+            if seen.insert(key).inserted {
+                cleaned.append(trimmed)
+            }
+        }
+
+        return cleaned
+    }
+
+    private struct BehaviorVisitSnapshot {
+        let uuid: UUID
+        let sortDate: Date
+        let createdAt: Date
+        let tags: [String]
+    }
+
+    private static func recentCompletedBehaviorTagSnapshots(from visits: [Visit]) -> [BehaviorVisitSnapshot] {
+        visits
+            .filter(\.isCompleted)
+            .map {
+                BehaviorVisitSnapshot(
+                    uuid: $0.uuid,
+                    sortDate: $0.endedAt ?? $0.startedAt,
+                    createdAt: $0.createdAt,
+                    tags: cleanedBehaviorTags($0.behaviorTags)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.sortDate != rhs.sortDate { return lhs.sortDate > rhs.sortDate }
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+                return lhs.uuid.uuidString > rhs.uuid.uuidString
+            }
+    }
+
+    private static func isAggressionClearanceVisit(tags: [String]) -> Bool {
+        let cleaned = cleanedBehaviorTags(tags)
+        return !containsAggressiveBehavior(in: cleaned) && cleaned.contains { isCalmOrCooperativeTag($0) }
+    }
+
+    private static func tagsAfterAggressionClearance(
+        latestTags: [String],
+        streak: [BehaviorVisitSnapshot]
+    ) -> [String] {
+        var result = cleanedBehaviorTags(latestTags.filter { !isAggressiveTag($0) })
+        var seenKinds = Set(result.compactMap { behaviorTagKind(for: $0) })
+
+        for snapshot in streak {
+            for tag in snapshot.tags where isCalmOrCooperativeTag(tag) {
+                guard let kind = behaviorTagKind(for: tag), !seenKinds.contains(kind) else { continue }
+                result.append(tag)
+                seenKinds.insert(kind)
+            }
+        }
+
+        return cleanedBehaviorTags(result)
+    }
+
+    private static func tagsRetainingAggressiveWarning(existingTags: [String], latestTags: [String]) -> [String] {
+        let aggressiveTag = existingTags.first(where: { isAggressiveTag($0) }) ?? BehaviorTag.aggressive.displayName
+        let nonAggressiveLatestTags = latestTags.filter { !isAggressiveTag($0) }
+        return cleanedBehaviorTags([aggressiveTag] + nonAggressiveLatestTags)
+    }
+
+    private static func behaviorTagLookupKey(_ tag: String) -> String {
+        let folded = tag.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).lowercased()
+        let allowed = CharacterSet.alphanumerics
+        let scalars = folded.unicodeScalars.filter { allowed.contains($0) }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
+    private static func tagUniquenessKey(_ tag: String) -> String {
+        tag.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 }

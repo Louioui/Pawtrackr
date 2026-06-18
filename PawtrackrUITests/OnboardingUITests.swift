@@ -126,14 +126,14 @@ final class OnboardingUITests: XCTestCase {
         )
         tapOnboardingContinue()
 
-        // Warm Start — tap Start Fresh
+        // Finish — tap Explore Pawtrackr
         XCTAssertTrue(
-            app.staticTexts["How would you like to start?"].waitForExistence(timeout: 5)
+            app.staticTexts["You're all set!"].waitForExistence(timeout: 5)
                 || app.staticTexts["Finish"].waitForExistence(timeout: 5)
         )
-        let startFresh = app.buttons["onboarding.startFresh"]
-        XCTAssertTrue(startFresh.waitForHittable(timeout: 5))
-        startFresh.tap()
+        let explore = app.buttons["onboarding.explore"]
+        XCTAssertTrue(explore.waitForHittable(timeout: 5))
+        explore.tap()
 
         // After finish, the dashboard or PIN gate should appear (not the welcome step).
         let landed = waitForAny([

@@ -22,9 +22,12 @@ struct ChangePINSheet: View {
                         : NSLocalizedString("settings.pin.change", value: "Change PIN", comment: "")) {
                     if !isInitialSetup {
                         SecureField(NSLocalizedString("settings.pin.current", value: "Current PIN", comment: ""), text: $currentPIN)
+                            .accessibilityIdentifier("settings.pin.current")
                     }
                     SecureField(NSLocalizedString("settings.pin.new", value: "New PIN", comment: ""), text: $newPIN)
+                        .accessibilityIdentifier("settings.pin.new")
                     SecureField(NSLocalizedString("settings.pin.confirm", value: "Confirm PIN", comment: ""), text: $confirmPIN)
+                        .accessibilityIdentifier("settings.pin.confirm")
                 }
             }
             .navigationTitle(isInitialSetup
@@ -32,7 +35,9 @@ struct ChangePINSheet: View {
                              : NSLocalizedString("settings.pin.change", value: "Change PIN", comment: ""))
             .toolbar {
                 Button(NSLocalizedString("common.save", value: "Save", comment: "")) { updatePIN() }
+                    .accessibilityIdentifier("settings.pin.save")
                 Button(NSLocalizedString("common.cancel", value: "Cancel", comment: "")) { isPresented = false }
+                    .accessibilityIdentifier("settings.pin.cancel")
             }
             .alert(NSLocalizedString("common.error", value: "Error", comment: ""), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button(NSLocalizedString("common.ok", value: "OK", comment: "")) { }

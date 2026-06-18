@@ -75,7 +75,6 @@ final actor CheckoutTransactionActor {
             // 4. Sync State
             visit.note = request.sessionNotes
             visit.behaviorTags = request.behaviorTags
-            pet.setBehaviorTags(request.behaviorTags)
             
             visit.applyPhotos(
                 before: pBefore, beforeThumb: pBeforeThumb,
@@ -92,6 +91,7 @@ final actor CheckoutTransactionActor {
             
             // 7. Finalize Visit
             visit.markCheckedOut(total: request.amount, now: endedAt)
+            pet.reconcileBehaviorTagsFromCompletedVisits()
             
             // 8. Commit
             transaction.markSucceeded(completedAt: endedAt)

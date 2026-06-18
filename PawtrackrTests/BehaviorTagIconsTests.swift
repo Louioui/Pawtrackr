@@ -16,6 +16,20 @@ final class BehaviorTagIconsTests: XCTestCase {
         XCTAssertEqual(puppy.emoji, "🐶")
         XCTAssertEqual(puppy.label, "Puppy / Young")
     }
+
+    func testDisplay_RecognizesLocalizedSpanishStandardTags() {
+        let calm = BehaviorTagIcons.display(for: "Tranquilo")
+        XCTAssertEqual(calm.emoji, "🧘")
+        XCTAssertEqual(calm.label, "Calm")
+
+        let cooperative = BehaviorTagIcons.display(for: "Cooperativo")
+        XCTAssertEqual(cooperative.emoji, "🤝")
+        XCTAssertEqual(cooperative.label, "Cooperative")
+
+        let specialNeeds = BehaviorTagIcons.display(for: "Necesidades especiales")
+        XCTAssertEqual(specialNeeds.emoji, "❤️‍🩹")
+        XCTAssertEqual(specialNeeds.label, "Special Needs")
+    }
     
     func testDisplay_Fallback_ReturnsTitleCase() {
         let unknown = BehaviorTagIcons.display(for: "likes belly rubs")

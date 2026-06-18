@@ -20,4 +20,13 @@ final class PhoneUtilsTests: XCTestCase {
         XCTAssertEqual(PhoneUtils.smsURLString(raw), "sms:+13125550148")
         XCTAssertEqual(PhoneUtils.whatsappURLString(raw), "https://wa.me/13125550148")
     }
+
+    func testFormatForEditing_PreservesPartialInputUntilNumberIsComplete() {
+        XCTAssertEqual(PhoneUtils.formatForEditing("312555019", includeExtension: false), "312555019")
+        XCTAssertEqual(PhoneUtils.formatForEditing("3125550199", includeExtension: false), "(312) 555-0199")
+    }
+
+    func testFormatAsYouType_HandlesPastedUSNumberWithCountryCode() {
+        XCTAssertEqual(PhoneUtils.formatAsYouType("+1 312 555 0199", includeExtension: false), "(312) 555-0199")
+    }
 }

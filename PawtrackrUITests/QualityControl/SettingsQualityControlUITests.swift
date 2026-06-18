@@ -28,9 +28,7 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
         let toggle = app.switches["settings.appLockToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 6), "App Lock toggle must be present.")
 
-        if toggle.value as? String == "0" {
-            toggle.tap()
-        }
+        ensureAppLockEnabledWithPIN()
         toggle.tap()
 
         let alertVisible = waitForAny([
@@ -82,5 +80,36 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
         if waitUntilHittable(sectionTitle, timeout: 2) {
             sectionTitle.tap()
         }
+    }
+
+    private func ensureAppLockEnabledWithPIN() {
+        let toggle = app.switches["settings.appLockToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 6), "App Lock toggle must be present.")
+        if toggle.value as? String == "1" { return }
+
+        toggle.tap()
+        XCTAssertTrue(waitForAny([
+            { self.app.navigationBars["Set PIN"].exists },
+            { self.app.staticTexts["Set PIN"].exists },
+            { self.app.secureTextFields["settings.pin.new"].exists }
+        ], timeout: 6), "Enabling App Lock without a saved PIN should ask for an initial PIN.")
+
+        let newPIN = app.secureTextFields["settings.pin.new"]
+        let confirmPIN = app.secureTextFields["settings.pin.confirm"]
+        XCTAssertTrue(waitUntilHittable(newPIN, timeout: 4), "New PIN field should be hittable.")
+        newPIN.tap()
+        newPIN.typeText("2468")
+        XCTAssertTrue(waitUntilHittable(confirmPIN, timeout: 4), "Confirm PIN field should be hittable.")
+        confirmPIN.tap()
+        confirmPIN.typeText("2468")
+
+        let save = app.buttons["settings.pin.save"].exists ? app.buttons["settings.pin.save"] : app.buttons["Save"]
+        XCTAssertTrue(waitUntilHittable(save, timeout: 4), "PIN save button should be hittable.")
+        save.tap()
+
+        XCTAssertTrue(waitForAny([
+            { toggle.value as? String == "1" },
+            { self.app.buttons["settings.changePIN"].exists }
+        ], timeout: 8), "Saving the initial PIN should enable App Lock.")
     }
 }

@@ -92,7 +92,13 @@ public enum PhoneUtils {
     ///   - includeExtension: When true, digits beyond 10 are appended as an "x123" extension.
     ///                        When false, the formatted output is clamped to the core 10 digits only.
     public static func formatAsYouType(_ input: String, includeExtension: Bool = true) -> String {
-        let digits = normalize(input)
+        let normalizedDigits = normalize(input)
+        let digits: String
+        if normalizedDigits.count >= 11, normalizedDigits.first == "1" {
+            digits = String(normalizedDigits.dropFirst())
+        } else {
+            digits = normalizedDigits
+        }
         if digits.isEmpty { return "" }
         
         let ten = String(digits.prefix(10))
@@ -112,6 +118,21 @@ public enum PhoneUtils {
         }
 
         return formatted
+    }
+
+    /// Formats complete phone numbers for text-field editing while leaving
+    /// partial input untouched. SwiftUI can move the insertion point when the
+    /// bound text is rewritten on every keystroke; waiting for a complete number
+    /// avoids dropped/reordered digits during fast typing and paste operations.
+    /// - Parameters:
+    ///   - input: Raw user input to format for text-field editing.
+    ///   - includeExtension: When true, digits beyond 10 are appended as an "x123" extension.
+    /// - Returns: A formatted string suitable for text-field editing.
+    public static func formatForEditing(_ input: String, includeExtension: Bool = true) -> String {
+        let digits = normalize(input)
+        let minimumCompleteDigitCount = digits.first == "1" ? 11 : 10
+        guard digits.count >= minimumCompleteDigitCount else { return input }
+        return formatAsYouType(input, includeExtension: includeExtension)
     }
 
     /// Masks a phone number for privacy, showing only the last 4 digits.

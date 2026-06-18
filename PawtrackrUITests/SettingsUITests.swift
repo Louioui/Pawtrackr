@@ -54,11 +54,7 @@ final class SettingsUITests: XCTestCase {
         let toggle = app.switches["settings.appLockToggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 8), "App Lock toggle must be present.")
 
-        // In UI test mode AppSettings init disables the lock by default. So we first
-        // turn it on (no confirmation) and then attempt to flip off (confirmation).
-        if toggle.value as? String == "0" {
-            toggle.tap()
-        }
+        ensureAppLockEnabledWithPIN()
 
         // Now turning it off should pop a confirmation alert.
         toggle.tap()
@@ -82,11 +78,7 @@ final class SettingsUITests: XCTestCase {
         tapTab("Settings")
         openSettingsSection(identifier: "security", title: "Security")
 
-        // Make sure lock is on so the Change PIN button is visible.
-        let toggle = app.switches["settings.appLockToggle"]
-        if toggle.waitForExistence(timeout: 6), toggle.value as? String == "0" {
-            toggle.tap()
-        }
+        ensureAppLockEnabledWithPIN()
 
         let changePINBtn = app.buttons["settings.changePIN"]
         let scroll = app.scrollViews.firstMatch
@@ -102,9 +94,12 @@ final class SettingsUITests: XCTestCase {
             { self.app.staticTexts["Change PIN"].exists }
         ], timeout: 6)
         XCTAssertTrue(sheetUp, "Change PIN sheet must open.")
+        XCTAssertTrue(app.secureTextFields["settings.pin.current"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.secureTextFields["settings.pin.new"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.secureTextFields["settings.pin.confirm"].waitForExistence(timeout: 3))
 
         // Cancel out cleanly.
-        let cancelBtn = app.buttons["Cancel"]
+        let cancelBtn = app.buttons["settings.pin.cancel"].exists ? app.buttons["settings.pin.cancel"] : app.buttons["Cancel"]
         if cancelBtn.waitForHittable(timeout: 3) { cancelBtn.tap() }
     }
 
@@ -202,6 +197,42 @@ final class SettingsUITests: XCTestCase {
         if sectionTitle.waitForHittable(timeout: 2) {
             sectionTitle.tap()
         }
+    }
+
+    private func ensureAppLockEnabledWithPIN() {
+        let toggle = app.switches["settings.appLockToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 8), "App Lock toggle must be present.")
+        if toggle.value as? String == "1" { return }
+
+        toggle.tap()
+        let pinSheetUp = waitForAny([
+            { self.app.navigationBars["Set PIN"].exists },
+            { self.app.staticTexts["Set PIN"].exists },
+            { self.app.secureTextFields["settings.pin.new"].exists }
+        ], timeout: 6)
+        XCTAssertTrue(pinSheetUp, "Enabling App Lock without a saved PIN should ask for an initial PIN.")
+
+        enterInitialPIN("2468")
+
+        XCTAssertTrue(waitForAny([
+            { toggle.value as? String == "1" },
+            { self.app.buttons["settings.changePIN"].exists }
+        ], timeout: 8), "Saving the initial PIN should enable App Lock.")
+    }
+
+    private func enterInitialPIN(_ pin: String) {
+        let newPIN = app.secureTextFields["settings.pin.new"]
+        let confirmPIN = app.secureTextFields["settings.pin.confirm"]
+        XCTAssertTrue(newPIN.waitForHittable(timeout: 4), "New PIN field should be hittable.")
+        newPIN.tap()
+        newPIN.typeText(pin)
+        XCTAssertTrue(confirmPIN.waitForHittable(timeout: 4), "Confirm PIN field should be hittable.")
+        confirmPIN.tap()
+        confirmPIN.typeText(pin)
+
+        let save = app.buttons["settings.pin.save"].exists ? app.buttons["settings.pin.save"] : app.buttons["Save"]
+        XCTAssertTrue(save.waitForHittable(timeout: 4), "PIN save button should be hittable.")
+        save.tap()
     }
 }
 
