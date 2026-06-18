@@ -24,6 +24,7 @@ struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(GlobalEventBus.self) private var eventBus
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
 
     // Lazy-initialized ViewModel to avoid context crashes
     @State private var viewModel: ClientDetailViewModel? = nil
@@ -98,6 +99,7 @@ struct ClientDetailView: View {
     @Environment(NavigationRouter.self) private var router
     @Query private var devices: [DeviceMetadata]
     private var namespace: Namespace.ID
+    private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [.cdOwner, .cdEmergency, .cdPets, .cdHistory]
 
     // MARK: - Init
     private let client: Client
@@ -297,17 +299,29 @@ struct ClientDetailView: View {
     }
 
     private func content(vm: ClientDetailViewModel) -> some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                ownerHeader(client: vm.client)
-                clientSafetyBanner(client: vm.client)
-                emergencyContactsCard(client: vm.client)
-                notesCard(client: vm.client)
-                petsSection(vm: vm)
-                recentHistorySection(vm: vm)
-                syncMetadataFooter(client: vm.client)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    ownerHeader(client: vm.client)
+                        .walkthroughTarget(.cdOwner)
+                    clientSafetyBanner(client: vm.client)
+                    emergencyContactsCard(client: vm.client)
+                        .walkthroughTarget(.cdEmergency)
+                    notesCard(client: vm.client)
+                    petsSection(vm: vm)
+                        .walkthroughTarget(.cdPets)
+                    recentHistorySection(vm: vm)
+                        .walkthroughTarget(.cdHistory)
+                    syncMetadataFooter(client: vm.client)
+                }
+                .padding(.vertical, 8)
             }
-            .padding(.vertical, 8)
+            .onAppear {
+                scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: proxy)
+            }
+            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+                scrollToWalkthroughAnchorIfNeeded(anchor, proxy: proxy)
+            }
         }
         // Toasts must overlay the full scroll area so they appear at the top of
         // the screen regardless of scroll position. Previously this overlay was
@@ -339,6 +353,16 @@ struct ClientDetailView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     withAnimation(Animations.fastEaseOut) { showSavedToast = false }
                 }
+            }
+        }
+    }
+
+    private func scrollToWalkthroughAnchorIfNeeded(_ anchor: WalkthroughAnchorID?, proxy: ScrollViewProxy) {
+        guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(anchor, anchor: .center)
             }
         }
     }

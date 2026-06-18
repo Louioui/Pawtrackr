@@ -30,6 +30,7 @@ extension View {
                         step: step,
                         targetRect: target,
                         containerSize: proxy.size,
+                        containerInsets: proxy.safeAreaInsets,
                         controller: controller
                     )
                 }
@@ -102,11 +103,52 @@ private struct WalkthroughOverlayView: View {
     let step: WalkthroughStep
     let targetRect: CGRect?
     let containerSize: CGSize
+    let containerInsets: EdgeInsets
     let controller: WalkthroughController
 
     private let dimOpacity = 0.74
     private let spotlightPadding: CGFloat = 10
     private let bubbleMaxWidth: CGFloat = 440
+    private let bubbleMinHeight: CGFloat = 170
+    private let arrowExtent: CGFloat = 11
+
+    private var isCompactViewport: Bool {
+        containerSize.width < 430 || containerSize.height < 760
+    }
+
+    private var bubbleHorizontalPadding: CGFloat {
+        isCompactViewport ? 16 : 20
+    }
+
+    private var bubbleWidth: CGFloat {
+        min(bubbleMaxWidth, max(260, containerSize.width - bubbleHorizontalPadding * 2))
+    }
+
+    private var safeTopPadding: CGFloat {
+        max(containerInsets.top + 8, 16)
+    }
+
+    private var safeBottomPadding: CGFloat {
+        max(containerInsets.bottom + 8, 16)
+    }
+
+    private var bubbleGap: CGFloat {
+        isCompactViewport ? 10 : 16
+    }
+
+    private var readableBubbleMaxHeight: CGFloat {
+        min(isCompactViewport ? 330 : 430, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
+    }
+
+    private var availableAboveSpotlight: CGFloat {
+        guard let s = spotlight else { return readableBubbleMaxHeight }
+        return s.minY - bubbleGap - arrowExtent - safeTopPadding
+    }
+
+    private var availableBelowSpotlight: CGFloat {
+        guard let s = spotlight else { return readableBubbleMaxHeight }
+        return containerSize.height - s.maxY - bubbleGap - arrowExtent - safeBottomPadding
+    }
 
     /// Inflated rect we actually cut/ring around the target.
     private var spotlight: CGRect? {
@@ -120,8 +162,13 @@ private struct WalkthroughOverlayView: View {
     private var placement: BubblePlacement {
         guard let s = spotlight else { return .center }
         if s.midY > containerSize.height * 0.72 { return .above }          // tab bar
-        if s.maxX < containerSize.width * 0.45 { return .trailing }        // sidebar
-        return s.midY < containerSize.height * 0.5 ? .below : .above
+        if containerSize.width >= 620, s.maxX < containerSize.width * 0.45 { return .trailing } // sidebar
+
+        let preferredMinimum = isCompactViewport ? 280.0 : 320.0
+        if availableBelowSpotlight >= preferredMinimum || availableBelowSpotlight >= availableAboveSpotlight {
+            return .below
+        }
+        return .above
     }
 
     var body: some View {
@@ -210,18 +257,19 @@ private struct WalkthroughOverlayView: View {
 
     /// Bubble above or below the spotlight (tab bar / general case).
     private func verticalBubble(below: Bool) -> some View {
-        let gap: CGFloat = 16
-        let topInset = below ? min((spotlight?.maxY ?? 0) + gap, containerSize.height * 0.62) : 0
-        let bottomInset = below ? 0 : min(containerSize.height - (spotlight?.minY ?? containerSize.height) + gap, containerSize.height * 0.62)
+        let availableHeight = below ? availableBelowSpotlight : availableAboveSpotlight
+        let cardMaxHeight = boundedBubbleHeight(for: availableHeight)
+        let topInset = below ? min((spotlight?.maxY ?? 0) + bubbleGap, containerSize.height - safeBottomPadding - cardMaxHeight - arrowExtent) : 0
+        let bottomInset = below ? 0 : min(containerSize.height - (spotlight?.minY ?? containerSize.height) + bubbleGap, containerSize.height - safeTopPadding - cardMaxHeight - arrowExtent)
 
         return VStack(spacing: 0) {
             if below { verticalArrow(.up) }
-            bubbleCard
+            bubbleCard(maxHeight: cardMaxHeight)
             if !below { verticalArrow(.down) }
         }
-        .frame(maxWidth: bubbleMaxWidth)
+        .frame(maxWidth: bubbleWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: below ? .top : .bottom)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, bubbleHorizontalPadding)
         .padding(.top, topInset)
         .padding(.bottom, bottomInset)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -231,16 +279,17 @@ private struct WalkthroughOverlayView: View {
     private var trailingBubble: some View {
         let gap: CGFloat = 12
         let leadingInset = min((spotlight?.maxX ?? 0) + gap, containerSize.width * 0.55)
-        let topInset = max(12, min((spotlight?.minY ?? 0) - 8, containerSize.height - 260))
+        let cardMaxHeight = boundedBubbleHeight(for: containerSize.height - safeTopPadding - safeBottomPadding)
+        let topInset = max(safeTopPadding, min((spotlight?.minY ?? 0) - 8, containerSize.height - safeBottomPadding - cardMaxHeight))
 
         return HStack(alignment: .top, spacing: 0) {
             ArrowTriangle(direction: .left)
                 .fill(DS.ColorToken.surface)
                 .frame(width: 11, height: 22)
                 .padding(.top, 16)
-            bubbleCard
+            bubbleCard(maxHeight: cardMaxHeight)
         }
-        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        .frame(maxWidth: bubbleWidth, alignment: .leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.leading, leadingInset)
         .padding(.top, topInset)
@@ -252,18 +301,22 @@ private struct WalkthroughOverlayView: View {
     /// appeared yet. This keeps the tour readable instead of silently dropping
     /// the bubble.
     private var centerBubble: some View {
-        bubbleCard
-            .frame(maxWidth: bubbleMaxWidth)
-            .padding(.horizontal, 20)
+        bubbleCard(maxHeight: boundedBubbleHeight(for: containerSize.height - safeTopPadding - safeBottomPadding))
+            .frame(maxWidth: bubbleWidth)
+            .padding(.horizontal, bubbleHorizontalPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
+    }
+
+    private func boundedBubbleHeight(for availableHeight: CGFloat) -> CGFloat {
+        min(readableBubbleMaxHeight, max(bubbleMinHeight, availableHeight))
     }
 
     /// Up/down pointer, nudged horizontally toward the target's center.
     private func verticalArrow(_ dir: ArrowDirection) -> some View {
         let targetX = spotlight?.midX ?? containerSize.width / 2
         let rawOffset = targetX - containerSize.width / 2
-        let limit = (min(bubbleMaxWidth, containerSize.width - 40) / 2) - 24
+        let limit = (bubbleWidth / 2) - 24
         let offset = max(-limit, min(limit, rawOffset))
         return ArrowTriangle(direction: dir)
             .fill(DS.ColorToken.surface)
@@ -271,13 +324,16 @@ private struct WalkthroughOverlayView: View {
             .offset(x: offset)
     }
 
-    private var bubbleCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func bubbleCard(maxHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: isCompactViewport ? 8 : 10) {
             HStack(spacing: 8) {
                 Label(step.lesson.title, systemImage: step.lesson.icon)
                     .font(.caption2.weight(.bold))
                     .textCase(.uppercase)
                     .foregroundStyle(DS.ColorToken.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                    .layoutPriority(1)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(DS.ColorToken.primary.opacity(0.12), in: Capsule())
@@ -288,40 +344,13 @@ private struct WalkthroughOverlayView: View {
                     .monospacedDigit()
             }
 
-            HStack(spacing: 8) {
-                Image(systemName: step.icon)
-                    .font(.headline)
-                    .foregroundStyle(DS.ColorToken.primary)
-                    .frame(width: 24)
-                Text(step.title)
-                    .font(.headline)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            ViewThatFits(in: .vertical) {
+                bubbleBody
 
-            Text(step.directive)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(DS.ColorToken.primary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(step.purpose)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let coachTip = step.coachTip {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "lightbulb.fill")
-                        .foregroundStyle(DS.ColorToken.primary)
-                        .font(.caption)
-                        .padding(.top, 1)
-                    Text(coachTip)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    bubbleBody
                 }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(DS.ColorToken.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .scrollIndicators(.visible)
             }
 
             HStack {
@@ -354,8 +383,50 @@ private struct WalkthroughOverlayView: View {
             }
             .padding(.top, 2)
         }
-        .padding(16)
+        .padding(isCompactViewport ? 13 : 16)
+        .frame(maxWidth: bubbleWidth, maxHeight: maxHeight, alignment: .top)
         .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 8)
+    }
+
+    private var bubbleBody: some View {
+        VStack(alignment: .leading, spacing: isCompactViewport ? 8 : 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: step.icon)
+                    .font(.headline)
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .frame(width: 24)
+                Text(step.title)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text(step.directive)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DS.ColorToken.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(step.purpose)
+                .font(isCompactViewport ? .footnote : .callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let coachTip = step.coachTip {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundStyle(DS.ColorToken.primary)
+                        .font(.caption)
+                        .padding(.top, 1)
+                    Text(coachTip)
+                        .font(isCompactViewport ? .caption2 : .caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(isCompactViewport ? 9 : 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(DS.ColorToken.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

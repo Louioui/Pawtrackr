@@ -65,6 +65,9 @@ struct ContentView: View {
             .onChange(of: walkthrough.currentStep?.presents) { _, presentation in
                 synchronizeWalkthroughPresentation(presentation)
             }
+            .onChange(of: walkthrough.currentStep?.route) { _, route in
+                synchronizeWalkthroughRoute(route)
+            }
             .onChange(of: walkthrough.isActive) { _, isActive in
                 if !isActive {
                     closeWalkthroughPresentationIfNeeded()
@@ -178,6 +181,34 @@ struct ContentView: View {
         guard isWalkthroughDrivingSheet else { return }
         presentedSheet = nil
         isWalkthroughDrivingSheet = false
+    }
+
+    private func synchronizeWalkthroughRoute(_ route: WalkthroughRoute?) {
+        guard walkthrough.isActive, let route else { return }
+
+        switch route {
+        case .demoClientDetail:
+            openWalkthroughDemoClientDetail()
+        }
+    }
+
+    private func openWalkthroughDemoClientDetail() {
+        selectClientsSurface()
+        router.popClientsToRoot()
+
+        var descriptor = FetchDescriptor<Client>(sortBy: [
+            SortDescriptor(\.lastVisitDate, order: .reverse),
+            SortDescriptor(\.createdAt, order: .forward)
+        ])
+        descriptor.fetchLimit = 20
+
+        do {
+            let clients = try modelContext.fetch(descriptor)
+            guard let client = clients.first(where: { !($0.pets ?? []).isEmpty }) ?? clients.first else { return }
+            router.navigateToClient(client)
+        } catch {
+            Logger.contentNav.error("Walkthrough demo client fetch failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private enum NavigationType { case pet, client }

@@ -68,6 +68,12 @@ enum SettingSection: String, CaseIterable, Identifiable {
             return nil
         }
     }
+
+    static func walkthroughSection(for anchor: WalkthroughAnchorID?) -> SettingSection? {
+        guard let anchor else { return nil }
+        if anchor == .setStartFresh { return .about }
+        return allCases.first { $0.walkthroughAnchorID == anchor }
+    }
 }
 
 enum SettingsAdaptiveLayout {
@@ -104,7 +110,9 @@ enum SettingsAdaptiveLayout {
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @State private var selection: SettingSection? = .business
+    @State private var compactPath: [SettingSection] = []
     
     // State needed for sub-views
     @State private var showChangePIN = false
@@ -122,22 +130,44 @@ struct SettingsView: View {
                 regularMacSettings
             }
         }
+        .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+            synchronizeWalkthroughSection(anchor)
+        }
         #else
-        NavigationStack {
+        NavigationStack(path: $compactPath) {
             List(SettingSection.allCases) { section in
-                NavigationLink {
-                    SettingsDetailView(section: section,
-                                       showChangePIN: $showChangePIN,
-                                       showResetFirstRunConfirm: $showResetFirstRunConfirm,
-                                       showWipeConfirm: $showWipeConfirm,
-                                       showDiagnostics: $showDiagnostics)
-                } label: {
+                NavigationLink(value: section) {
                     Label(section.title, systemImage: section.icon)
                 }
-                .optionalWalkthroughAnchor(section.walkthroughAnchorID)
                 .accessibilityIdentifier("settings.section.\(section.rawValue)")
             }
             .navigationTitle(Text("settings.title"))
+            .navigationDestination(for: SettingSection.self) { section in
+                SettingsDetailView(section: section,
+                                   showChangePIN: $showChangePIN,
+                                   showResetFirstRunConfirm: $showResetFirstRunConfirm,
+                                   showWipeConfirm: $showWipeConfirm,
+                                   showDiagnostics: $showDiagnostics)
+            }
+        }
+        .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+            synchronizeWalkthroughSection(anchor)
+        }
+        #endif
+    }
+
+    private func synchronizeWalkthroughSection(_ anchor: WalkthroughAnchorID?) {
+        guard walkthrough?.currentStep?.surface == .settings else { return }
+
+        #if os(macOS)
+        if let section = SettingSection.walkthroughSection(for: anchor) {
+            selection = section
+        }
+        #else
+        if anchor == .settings {
+            compactPath = []
+        } else if let section = SettingSection.walkthroughSection(for: anchor), compactPath.last != section {
+            compactPath = [section]
         }
         #endif
     }
@@ -192,7 +222,6 @@ struct SettingsView: View {
                 Label(section.title, systemImage: section.icon)
                     .font(.system(.body, design: .rounded).weight(.medium))
             }
-            .optionalWalkthroughAnchor(section.walkthroughAnchorID)
         }
         .listStyle(.sidebar)
     }
@@ -216,26 +245,45 @@ private struct SettingsDetailView: View {
     let section: SettingSection
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @Binding var showChangePIN: Bool
     @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
     @Binding var showDiagnostics: Bool
+
+    private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
+        .setBusiness,
+        .setSecurity,
+        .setData,
+        .setICloud,
+        .setAbout,
+        .setStartFresh
+    ]
     
     var body: some View {
         GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text(section.title)
-                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text(section.title)
+                            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
 
-                    content
+                        content
+                            .optionalWalkthroughTarget(section == .about ? nil : section.walkthroughAnchorID)
+                    }
+                    .frame(maxWidth: SettingsAdaptiveLayout.contentMaxWidth(for: proxy.size.width), alignment: .leading)
+                    .padding(.horizontal, SettingsAdaptiveLayout.detailHorizontalPadding(for: proxy.size.width))
+                    .padding(.vertical, SettingsAdaptiveLayout.detailVerticalPadding(for: proxy.size.width))
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                .frame(maxWidth: SettingsAdaptiveLayout.contentMaxWidth(for: proxy.size.width), alignment: .leading)
-                .padding(.horizontal, SettingsAdaptiveLayout.detailHorizontalPadding(for: proxy.size.width))
-                .padding(.vertical, SettingsAdaptiveLayout.detailVerticalPadding(for: proxy.size.width))
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .onAppear {
+                    scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: scrollProxy)
+                }
+                .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+                    scrollToWalkthroughAnchorIfNeeded(anchor, proxy: scrollProxy)
+                }
             }
         }
         .sheet(isPresented: $showChangePIN) {
@@ -279,6 +327,16 @@ private struct SettingsDetailView: View {
                 "settings.wipe.message",
                 value: "This permanently erases every client, pet, visit, payment, inventory item, and report — including the demo data — and cannot be undone. The wipe also syncs to iCloud and your other devices. Your business profile and service menu are kept."
             ))
+        }
+    }
+
+    private func scrollToWalkthroughAnchorIfNeeded(_ anchor: WalkthroughAnchorID?, proxy: ScrollViewProxy) {
+        guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(anchor, anchor: .center)
+            }
         }
     }
 
@@ -850,6 +908,7 @@ private struct AboutSectionView: View {
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .walkthroughTarget(.setAbout)
 
             // Destructive "Start Fresh": clears the demo (and anything entered
             // while exploring) so the operator can begin real business clean.
@@ -871,6 +930,7 @@ private struct AboutSectionView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.red)
+                .walkthroughTarget(.setStartFresh)
             }
         }
     }
@@ -905,6 +965,15 @@ private extension View {
     func optionalWalkthroughAnchor(_ id: WalkthroughAnchorID?) -> some View {
         if let id {
             walkthroughAnchor(id)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func optionalWalkthroughTarget(_ id: WalkthroughAnchorID?) -> some View {
+        if let id {
+            walkthroughTarget(id)
         } else {
             self
         }

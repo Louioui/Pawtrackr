@@ -129,10 +129,16 @@ struct OnboardingView: View {
                 .foregroundStyle(DS.ColorToken.primary)
                 .frame(width: 40)
 
-            VStack(alignment: .leading) {
-                Text(title).font(.headline)
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         // Staggered slide-up reveal; each bullet trails the previous by 120ms.
         .opacity(welcomeAppeared ? 1 : 0)
@@ -363,44 +369,51 @@ struct OnboardingView: View {
     }
     
     private var welcomeStep: some View {
-        VStack(spacing: DS.Spacing.xxl) {
-            ZStack {
-                // Decorative breathing halo (not matched-geometry, so it can loop
-                // freely without disturbing the shared-logo transition).
-                Circle()
-                    .fill(DS.ColorToken.primary.opacity(0.1))
-                    .frame(width: 120, height: 120)
-                    .scaleEffect(welcomeBreathing ? 1.06 : 0.94)
+        ScrollView {
+            VStack(spacing: DS.Spacing.xl) {
+                ZStack {
+                    // Decorative breathing halo (not matched-geometry, so it can loop
+                    // freely without disturbing the shared-logo transition).
+                    Circle()
+                        .fill(DS.ColorToken.primary.opacity(0.1))
+                        .frame(width: 120, height: 120)
+                        .scaleEffect(welcomeBreathing ? 1.06 : 0.94)
 
-                Image(systemName: "pawprint.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(DS.ColorToken.primary)
-                    .symbolEffect(.pulse, options: .repeating)
-                    .matchedGeometryEffect(id: "businessLogo", in: animation)
+                    Image(systemName: "pawprint.fill")
+                        .font(.system(size: 60))
+                        .foregroundStyle(DS.ColorToken.primary)
+                        .symbolEffect(.pulse, options: .repeating)
+                        .matchedGeometryEffect(id: "businessLogo", in: animation)
+                }
+                .padding(.top, DS.Spacing.xl)
+
+                VStack(spacing: DS.Spacing.sm) {
+                    Text(NSLocalizedString("onboarding.welcome.title", value: "Welcome to Pawtrackr", comment: ""))
+                        .font(.title.bold())
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(NSLocalizedString("onboarding.welcome.message", value: "The modern workspace for pet groomers.\nLet's get your business set up in minutes.", comment: ""))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, DS.Spacing.xxl)
+                .opacity(welcomeAppeared ? 1 : 0)
+                .offset(y: welcomeAppeared ? 0 : 12)
+                .animation(.spring(response: 0.45, dampingFraction: 0.8).delay(0.05), value: welcomeAppeared)
+
+                VStack(alignment: .leading, spacing: DS.Spacing.lg) {
+                    featureRow(index: 0, icon: "cloud.fill", title: NSLocalizedString("onboarding.feature.icloud.title", value: "iCloud Sync", comment: ""), subtitle: NSLocalizedString("onboarding.feature.icloud.subtitle", value: "Your data stays safe and synced across all your devices.", comment: ""))
+                    featureRow(index: 1, icon: "lock.fill", title: NSLocalizedString("onboarding.feature.privacy.title", value: "Privacy First", comment: ""), subtitle: NSLocalizedString("onboarding.feature.privacy.subtitle", value: "End-to-end security with local-first storage and biometric locking.", comment: ""))
+                    featureRow(index: 2, icon: "chart.bar.fill", title: NSLocalizedString("onboarding.feature.insights.title", value: "Business Insights", comment: ""), subtitle: NSLocalizedString("onboarding.feature.insights.subtitle", value: "Track revenue, service trends, and client loyalty effortlessly.", comment: ""))
+                }
+                .padding(.top, DS.Spacing.md)
             }
-            .padding(.top, 40)
-
-            VStack(spacing: DS.Spacing.sm) {
-                Text(NSLocalizedString("onboarding.welcome.title", value: "Welcome to Pawtrackr", comment: ""))
-                    .font(.largeTitle.bold())
-                Text(NSLocalizedString("onboarding.welcome.message", value: "The modern workspace for pet groomers.\nLet's get your business set up in minutes.", comment: ""))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal)
-            .opacity(welcomeAppeared ? 1 : 0)
-            .offset(y: welcomeAppeared ? 0 : 12)
-            .animation(.spring(response: 0.45, dampingFraction: 0.8).delay(0.05), value: welcomeAppeared)
-
-            VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-                featureRow(index: 0, icon: "cloud.fill", title: NSLocalizedString("onboarding.feature.icloud.title", value: "iCloud Sync", comment: ""), subtitle: NSLocalizedString("onboarding.feature.icloud.subtitle", value: "Your data stays safe and synced across all your devices.", comment: ""))
-                featureRow(index: 1, icon: "lock.fill", title: NSLocalizedString("onboarding.feature.privacy.title", value: "Privacy First", comment: ""), subtitle: NSLocalizedString("onboarding.feature.privacy.subtitle", value: "End-to-end security with local-first storage and biometric locking.", comment: ""))
-                featureRow(index: 2, icon: "chart.bar.fill", title: NSLocalizedString("onboarding.feature.insights.title", value: "Business Insights", comment: ""), subtitle: NSLocalizedString("onboarding.feature.insights.subtitle", value: "Track revenue, service trends, and client loyalty effortlessly.", comment: ""))
-            }
-            .padding(.top, DS.Spacing.xl)
-
-            Spacer()
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, DS.Spacing.xl)
         }
+        .scrollIndicators(.hidden)
         .onAppear {
             welcomeAppeared = true
             if !welcomeBreathing {

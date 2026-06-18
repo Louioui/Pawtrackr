@@ -238,6 +238,32 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertFalse(steps.contains { $0.title.trimmed.isEmpty || $0.directive.trimmed.isEmpty || $0.purpose.trimmed.isEmpty })
     }
 
+    func testFullWalkthroughIncludesClientDetailsAndEndsAtStartFresh() throws {
+        let steps = WalkthroughController.fullTour()
+
+        XCTAssertTrue(
+            steps.contains { $0.title.localizedCaseInsensitiveContains("Client Details") },
+            "The walkthrough should open and explain an actual client profile."
+        )
+        XCTAssertTrue(
+            steps.contains { $0.title.localizedCaseInsensitiveContains("Emergency Contacts") },
+            "Client Details should teach emergency contacts because they are not obvious from the Clients list."
+        )
+        XCTAssertTrue(
+            steps.contains {
+                $0.title.localizedCaseInsensitiveContains("Pet Actions")
+                    && $0.purpose.localizedCaseInsensitiveContains("check in")
+                    && $0.purpose.localizedCaseInsensitiveContains("history")
+            },
+            "Client Details should teach the pet action row: check in, checkout, and history."
+        )
+
+        let finalStep = try XCTUnwrap(steps.last)
+        XCTAssertTrue(finalStep.title.localizedCaseInsensitiveContains("Wipe"))
+        XCTAssertTrue(finalStep.purpose.localizedCaseInsensitiveContains("empty workspace"))
+        XCTAssertTrue(finalStep.purpose.localizedCaseInsensitiveContains("real business"))
+    }
+
     func testFinish_RejectsBlankBusinessName() async {
         let settings = AppSettings()
         let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)

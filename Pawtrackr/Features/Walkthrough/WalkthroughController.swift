@@ -37,18 +37,29 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case ncOwner
     case ncPets
     case ncSave
+    // Client-detail sections
+    case cdOwner
+    case cdEmergency
+    case cdPets
+    case cdHistory
     // Settings sections
     case setBusiness
     case setSecurity
     case setData
     case setICloud
     case setAbout
+    case setStartFresh
 }
 
 /// A modal the deep-dive tour opens to walk through its contents. The host
 /// presents/dismisses it as the relevant steps come and go.
 enum WalkthroughPresentation: Equatable {
     case newClient
+}
+
+/// A real in-app route the walkthrough can open before showing a step.
+enum WalkthroughRoute: Equatable {
+    case demoClientDetail
 }
 
 /// High-level curriculum buckets shown in every walkthrough bubble. The tour is
@@ -121,6 +132,8 @@ struct WalkthroughStep: Identifiable, Equatable {
     /// step shows, and the screen scrolls `anchor` into view. `nil` for steps whose
     /// target is always on screen (e.g. the nav chrome itself).
     var surface: NavigationItem? = nil
+    /// Optional deeper navigation inside a primary screen.
+    var route: WalkthroughRoute? = nil
     /// Short headline, e.g. "Clients & Pets".
     let title: String
     /// The action / orientation line, e.g. "Tap Clients to see everyone you groom."
@@ -323,6 +336,41 @@ extension WalkthroughController {
                 fallback: .topTrailingAction,
                 presents: .newClient
             ),
+            // MARK: Client details
+            WalkthroughStep(
+                id: next(), anchor: .cdOwner, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.owner.title", value: "Client Details"),
+                directive: AppLocalization.localized("tour.cd.owner.directive", value: "This is the profile you open from the Clients list."),
+                purpose: AppLocalization.localized("tour.cd.owner.purpose", value: "The top card keeps the owner’s phone, email, address, messaging, and quick edit actions together so you can confirm details during booking or pickup."),
+                lesson: .clientRecords,
+                coachTip: AppLocalization.localized("tour.cd.owner.tip", value: "Use this screen before every appointment when you need contact info, pet notes, or history in one place."),
+                icon: "person.crop.rectangle.stack.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .cdEmergency, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.emergency.title", value: "Emergency Contacts"),
+                directive: AppLocalization.localized("tour.cd.emergency.directive", value: "Keep backup contacts close."),
+                purpose: AppLocalization.localized("tour.cd.emergency.purpose", value: "If the owner cannot answer, emergency contacts give your team another safe way to reach someone responsible for the pet."),
+                lesson: .clientRecords,
+                icon: "phone.badge.plus"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .cdPets, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.pets.title", value: "Pet Actions"),
+                directive: AppLocalization.localized("tour.cd.pets.directive", value: "Run the visit from the pet card."),
+                purpose: AppLocalization.localized("tour.cd.pets.purpose", value: "Check In starts the grooming session, Check Out collects payment when a visit is active, and History opens past services, notes, and payments for that pet."),
+                lesson: .dailyWorkflow,
+                coachTip: AppLocalization.localized("tour.cd.pets.tip", value: "Each owner can have multiple pets, and every pet keeps its own status and visit history."),
+                icon: "pawprint.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .cdHistory, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.history.title", value: "Recent History"),
+                directive: AppLocalization.localized("tour.cd.history.directive", value: "Review what happened last time."),
+                purpose: AppLocalization.localized("tour.cd.history.purpose", value: "Completed visits roll into this timeline so you can answer pricing questions, repeat the same services, or check notes before the next groom."),
+                lesson: .checkoutAndMoney,
+                icon: "clock.arrow.circlepath"
+            ),
             // MARK: Insights
             WalkthroughStep(
                 id: next(), anchor: .insights, surface: .insights,
@@ -429,11 +477,19 @@ extension WalkthroughController {
             WalkthroughStep(
                 id: next(), anchor: .setAbout, surface: .settings,
                 title: AppLocalization.localized("tour.set.about.title", value: "Replay & Start Fresh"),
-                directive: AppLocalization.localized("tour.set.about.directive", value: "Use the demo until you are comfortable."),
-                purpose: AppLocalization.localized("tour.set.about.purpose", value: "Replay this walkthrough anytime. When you are ready to stop practicing, “Wipe & Start Fresh” clears the sample clients, pets, visits, and history so you can begin with real business data."),
+                directive: AppLocalization.localized("tour.set.about.directive", value: "Replay this walkthrough whenever someone needs training."),
+                purpose: AppLocalization.localized("tour.set.about.purpose", value: "The replay button brings this guided tour back without changing clients, pets, visits, settings, or reports."),
                 lesson: .dataOwnership,
-                coachTip: AppLocalization.localized("tour.set.about.tip", value: "Start Fresh keeps your business profile and service menu, then clears only operational data."),
                 icon: "sparkles"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setStartFresh, surface: .settings,
+                title: AppLocalization.localized("tour.set.start_fresh.title", value: "Wipe & Start Fresh"),
+                directive: AppLocalization.localized("tour.set.start_fresh.directive", value: "Use this when you are done practicing."),
+                purpose: AppLocalization.localized("tour.set.start_fresh.purpose", value: "After you know your way around, Wipe & Start Fresh clears the demo clients, pets, visits, payments, and history so you can begin with an empty workspace for real business."),
+                lesson: .dataOwnership,
+                coachTip: AppLocalization.localized("tour.set.start_fresh.tip", value: "Your business profile and service menu stay in place; only operational records are removed."),
+                icon: "trash.fill"
             )
         ]
     }
