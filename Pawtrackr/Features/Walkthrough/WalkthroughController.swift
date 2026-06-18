@@ -33,6 +33,22 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case insServices
     case insPaymentMix
     case insCategory
+    // New-client form sections
+    case ncOwner
+    case ncPets
+    case ncSave
+    // Settings sections
+    case setBusiness
+    case setSecurity
+    case setData
+    case setICloud
+    case setAbout
+}
+
+/// A modal the deep-dive tour opens to walk through its contents. The host
+/// presents/dismisses it as the relevant steps come and go.
+enum WalkthroughPresentation: Equatable {
+    case newClient
 }
 
 /// The shape of the spotlight cutout around a target.
@@ -70,6 +86,9 @@ struct WalkthroughStep: Identifiable, Equatable {
     var shape: SpotlightShape = .roundedRect(cornerRadius: 12)
     /// Spotlight target when `anchor` isn't registered live (iPhone tab bar).
     var fallback: SpotlightFallback = .none
+    /// A modal this step lives inside. The host opens it before the step shows
+    /// and closes it once the steps that need it are done. `nil` = main UI.
+    var presents: WalkthroughPresentation? = nil
 }
 
 /// Owns tour state. Intentionally UI-framework-light so it can be created once and
@@ -202,6 +221,28 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.nav.clients.purpose", value: "Owners, pets, breeds, and full visit history. Use “New Client” to add someone and their pet — set a behavior tag like “aggressive” and the whole team sees a red warning before they handle it."),
                 icon: "person.3.fill", fallback: .tabBarItem(index: 1, count: 4)
             ),
+            // MARK: Create a client (opens the New Client sheet)
+            WalkthroughStep(
+                id: next(), anchor: .ncOwner, surface: .clients, presents: .newClient,
+                title: AppLocalization.localized("tour.nc.owner.title", value: "Add the owner"),
+                directive: AppLocalization.localized("tour.nc.owner.directive", value: "Start with their details."),
+                purpose: AppLocalization.localized("tour.nc.owner.purpose", value: "Name, phone, email, and address — phone and email are how you'll reach them to confirm and rebook. Only a name is required; add the rest anytime."),
+                icon: "person.text.rectangle"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .ncPets, surface: .clients, presents: .newClient,
+                title: AppLocalization.localized("tour.nc.pets.title", value: "Add their pets"),
+                directive: AppLocalization.localized("tour.nc.pets.directive", value: "One client, many pets."),
+                purpose: AppLocalization.localized("tour.nc.pets.purpose", value: "Add each pet's name, species, breed, and gender. Tag behavior like “aggressive” here and the whole team gets a red warning before they ever handle the pet — safety first."),
+                icon: "pawprint.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .ncSave, surface: .clients, presents: .newClient,
+                title: AppLocalization.localized("tour.nc.save.title", value: "Save the client"),
+                directive: AppLocalization.localized("tour.nc.save.directive", value: "That's it — tap Save."),
+                purpose: AppLocalization.localized("tour.nc.save.purpose", value: "They're added instantly and ready to check in. We'll close this without saving so you can keep exploring."),
+                icon: "checkmark.circle.fill"
+            ),
             // MARK: Insights
             WalkthroughStep(
                 id: next(), anchor: .insights, surface: .insights,
@@ -259,6 +300,41 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.nav.settings.directive", value: "Make the app yours."),
                 purpose: AppLocalization.localized("tour.nav.settings.purpose", value: "Tune your services, prices, currency, lock, and iCloud sync here. When you're done exploring, “Wipe & Start Fresh” clears the demo so you can begin with your real business."),
                 icon: "gearshape.fill", fallback: .tabBarItem(index: 3, count: 4)
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setBusiness, surface: .settings,
+                title: AppLocalization.localized("tour.set.business.title", value: "Business profile"),
+                directive: AppLocalization.localized("tour.set.business.directive", value: "Your name and brand."),
+                purpose: AppLocalization.localized("tour.set.business.purpose", value: "Set your business name, logo, and brand color — they appear on receipts and reports. Preferences nearby control haptics, language, theme, and your default opening tab."),
+                icon: "building.2.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setSecurity, surface: .settings,
+                title: AppLocalization.localized("tour.set.security.title", value: "Security"),
+                directive: AppLocalization.localized("tour.set.security.directive", value: "Lock down client data."),
+                purpose: AppLocalization.localized("tour.set.security.purpose", value: "Turn on App Lock (you'll choose a PIN), add Face ID / Touch ID, auto-lock when the app closes or after idle time, and change your PIN — all here."),
+                icon: "lock.shield.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setData, surface: .settings,
+                title: AppLocalization.localized("tour.set.data.title", value: "Export your data"),
+                directive: AppLocalization.localized("tour.set.data.directive", value: "It's yours to take."),
+                purpose: AppLocalization.localized("tour.set.data.purpose", value: "Export clients and visits to CSV anytime — for your accountant, a backup, or moving between devices."),
+                icon: "square.and.arrow.up"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setICloud, surface: .settings,
+                title: AppLocalization.localized("tour.set.icloud.title", value: "iCloud sync"),
+                directive: AppLocalization.localized("tour.set.icloud.directive", value: "Same data, every device."),
+                purpose: AppLocalization.localized("tour.set.icloud.purpose", value: "Sign in to iCloud and your clients, pets, and visits sync automatically across iPhone, iPad, and Mac — and back up safely. Run diagnostics here if sync ever looks off."),
+                icon: "icloud.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setAbout, surface: .settings,
+                title: AppLocalization.localized("tour.set.about.title", value: "Replay & Start Fresh"),
+                directive: AppLocalization.localized("tour.set.about.directive", value: "This tour lives here too."),
+                purpose: AppLocalization.localized("tour.set.about.purpose", value: "Replay this walkthrough anytime, and when you're ready to drop the demo, “Wipe & Start Fresh” clears the sample data so you can begin with your real business."),
+                icon: "sparkles"
             )
         ]
     }

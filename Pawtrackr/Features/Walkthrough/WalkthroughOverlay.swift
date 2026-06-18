@@ -89,7 +89,7 @@ private struct ArrowTriangle: Shape {
     }
 }
 
-private enum BubblePlacement { case below, above, trailing }
+private enum BubblePlacement { case below, above, trailing, center }
 
 private struct WalkthroughOverlayView: View {
     let step: WalkthroughStep
