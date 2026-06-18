@@ -27,6 +27,9 @@ struct InsightsView: View {
     @Environment(DataStoreService.self) private var dataStore
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(\.modelContext) private var modelContext
+    /// Present only while a guided tour is running; used to scroll deep-dive
+    /// targets into view. Optional so previews / non-tour contexts don't require it.
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @State private var viewModel: InsightsViewModel?
     @State private var reportPDFData: Data?
     @State private var reportCSVDocument: ExportDocument?
@@ -80,24 +83,37 @@ struct InsightsView: View {
 
     // MARK: - Main content
 
+    /// Insights cards the deep-dive tour can scroll to and spotlight.
+    private static let walkthroughAnchors: Set<WalkthroughAnchorID> =
+        [.insKpis, .insRevenue, .insMonthly, .insServices, .insPaymentMix, .insCategory]
+
     private func mainContent(_ vm: InsightsViewModel) -> some View {
-        ScrollView {
-            VStack(spacing: DS.Spacing.xl) {
-                kpiSummaryRow(vm)
-                revenueCard(vm)
-                if !vm.dataQualityIssues.isEmpty {
-                    dataQualityCard(vm)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: DS.Spacing.xl) {
+                    kpiSummaryRow(vm).walkthroughTarget(.insKpis)
+                    revenueCard(vm).walkthroughTarget(.insRevenue)
+                    if !vm.dataQualityIssues.isEmpty {
+                        dataQualityCard(vm)
+                    }
+                    monthlyPerformanceCard(vm).walkthroughTarget(.insMonthly)
+                    serviceRevenueCard(vm).walkthroughTarget(.insServices)
+                    paymentMixCard(vm).walkthroughTarget(.insPaymentMix)
+                    categoryCard(vm).walkthroughTarget(.insCategory)
+                    retentionCard(vm)
                 }
-                monthlyPerformanceCard(vm)
-                serviceRevenueCard(vm)
-                paymentMixCard(vm)
-                categoryCard(vm)
-                retentionCard(vm)
+                .padding(DS.Spacing.lg)
+                .accessibilityIdentifier("insights.mainScroll.content")
             }
-            .padding(DS.Spacing.lg)
-            .accessibilityIdentifier("insights.mainScroll.content")
+            .accessibilityIdentifier("insights.mainScroll")
+            // Scroll the current deep-dive target into view as the tour advances.
+            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+                guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                    proxy.scrollTo(anchor, anchor: .center)
+                }
+            }
         }
-        .accessibilityIdentifier("insights.mainScroll")
     }
 
     // MARK: - KPI summary strip

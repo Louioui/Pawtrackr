@@ -30,4 +30,11 @@ extension View {
             [id: anchor]
         }
     }
+
+    /// Registers this view as BOTH a spotlight anchor and a scroll target, so the
+    /// deep-dive tour can highlight it AND scroll it into view (via the screen's
+    /// `ScrollViewReader`). Use on content sections inside a scroll view.
+    func walkthroughTarget(_ id: WalkthroughAnchorID) -> some View {
+        self.id(id).walkthroughAnchor(id)
+    }
 }

@@ -15,6 +15,9 @@ struct DashboardView: View {
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(NavigationRouter.self) private var router
     @Environment(\.modelContext) private var modelContext
+    /// Present only while a guided tour is running; used to scroll deep-dive
+    /// targets into view. Optional so previews / non-tour contexts don't require it.
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
     @State private var showActivityFeed = false
@@ -112,53 +115,66 @@ struct DashboardView: View {
         #endif
     }
 
+    /// Dashboard sections the deep-dive tour can scroll to and spotlight.
+    private static let walkthroughAnchors: Set<WalkthroughAnchorID> =
+        [.dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients, .dashRevenue]
+
     @ViewBuilder
     private func content(_ vm: DashboardViewModel) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 24) {
-                smartSummary(vm)
-                
-                if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
-                    checklistSection(vm)
-                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 24) {
+                    smartSummary(vm)
 
-                #if os(macOS)
-                HStack(alignment: .top, spacing: 20) {
+                    if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
+                        checklistSection(vm)
+                    }
+
+                    #if os(macOS)
+                    HStack(alignment: .top, spacing: 20) {
+                        VStack(spacing: 24) {
+                            kpiSection(vm).walkthroughTarget(.dashKpis)
+                            if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
+                            reengagementSection(vm)
+                            revenueSection(vm).walkthroughTarget(.dashRevenue)
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        VStack(spacing: 24) {
+                            quickActionsSection.walkthroughTarget(.dashQuickActions)
+                            overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention)
+                            recentClientsSection(vm).walkthroughTarget(.dashRecentClients)
+                        }
+                        .frame(maxWidth: 350)
+                    }
+                    #else
                     VStack(spacing: 24) {
-                        kpiSection(vm)
+                        kpiSection(vm).walkthroughTarget(.dashKpis)
+                        quickActionsSection.walkthroughTarget(.dashQuickActions)
                         if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
                         reengagementSection(vm)
-                        revenueSection(vm)
+                        if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
+                        if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
+                        revenueSection(vm).walkthroughTarget(.dashRevenue)
                     }
-                    .frame(maxWidth: .infinity)
-
-                    VStack(spacing: 24) {
-                        quickActionsSection
-                        overduePetsSection(vm)
-                        recentClientsSection(vm)
-                    }
-                    .frame(maxWidth: 350)
+                    #endif
                 }
-                #else
-                VStack(spacing: 24) {
-                    kpiSection(vm)
-                    quickActionsSection
-                    if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
-                    reengagementSection(vm)
-                    if !vm.overduePets.isEmpty { overduePetsSection(vm) }
-                    if !vm.recentClients.isEmpty { recentClientsSection(vm) }
-                    revenueSection(vm)
-                }
-                #endif
+                .padding(.horizontal, 16)
+                .padding(.vertical, 24)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 24)
-        }
-        .accessibilityIdentifier("dashboard.scroll")
-        .refreshable {
-            async let local: Void = vm.refresh()
-            async let cloud: Void = CloudKitMonitor.shared.forceSync()
-            _ = await (local, cloud)
+            .accessibilityIdentifier("dashboard.scroll")
+            .refreshable {
+                async let local: Void = vm.refresh()
+                async let cloud: Void = CloudKitMonitor.shared.forceSync()
+                _ = await (local, cloud)
+            }
+            // Scroll the current deep-dive target into view as the tour advances.
+            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+                guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                    proxy.scrollTo(anchor, anchor: .center)
+                }
+            }
         }
     }
 

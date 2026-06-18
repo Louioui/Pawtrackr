@@ -15,10 +15,24 @@ import SwiftUI
 /// on-screen frame at render time. Tab-bar items (iPhone) can't be anchored in
 /// SwiftUI, so those steps fall back to a computed rect — see `SpotlightFallback`.
 enum WalkthroughAnchorID: String, CaseIterable, Hashable {
+    // Primary navigation (sidebar rows / tab-bar slots)
     case dashboard
     case clients
     case insights
     case settings
+    // Dashboard content sections
+    case dashKpis
+    case dashQuickActions
+    case dashNeedsAttention
+    case dashRecentClients
+    case dashRevenue
+    // Insights content cards
+    case insKpis
+    case insRevenue
+    case insMonthly
+    case insServices
+    case insPaymentMix
+    case insCategory
 }
 
 /// The shape of the spotlight cutout around a target.
@@ -41,6 +55,10 @@ enum SpotlightFallback: Equatable {
 struct WalkthroughStep: Identifiable, Equatable {
     let id: Int
     let anchor: WalkthroughAnchorID
+    /// Which primary screen this step lives on. The host navigates here before the
+    /// step shows, and the screen scrolls `anchor` into view. `nil` for steps whose
+    /// target is always on screen (e.g. the nav chrome itself).
+    var surface: NavigationItem? = nil
     /// Short headline, e.g. "Clients & Pets".
     let title: String
     /// The action / orientation line, e.g. "Tap Clients to see everyone you groom."
@@ -124,46 +142,123 @@ final class WalkthroughController {
 // MARK: - Default flows
 
 extension WalkthroughController {
-    /// The first tour a new user sees: the four primary destinations, spotlighted
-    /// in the real navigation chrome — the sidebar rows on Mac/iPad and the bottom
-    /// tab bar on iPhone.
-    static func navTour() -> [WalkthroughStep] {
-        [
+    /// The full guided deep-dive a new user sees: it walks the four primary
+    /// screens AND every key section inside the Dashboard and Insights, driving
+    /// navigation and scrolling each target into view. Section-level steps keep
+    /// the copy rich without an exhausting number of stops.
+    static func fullTour() -> [WalkthroughStep] {
+        var id = 0
+        func next() -> Int { defer { id += 1 }; return id }
+
+        return [
+            // MARK: Dashboard
             WalkthroughStep(
-                id: 0,
-                anchor: .dashboard,
+                id: next(), anchor: .dashboard, surface: .dashboard,
                 title: AppLocalization.localized("tour.nav.dashboard.title", value: "Your Dashboard"),
                 directive: AppLocalization.localized("tour.nav.dashboard.directive", value: "This is your home base."),
                 purpose: AppLocalization.localized("tour.nav.dashboard.purpose", value: "In-progress visits and today's revenue at a glance — tap a card to jump straight into the work."),
-                icon: "square.grid.2x2.fill",
-                fallback: .tabBarItem(index: 0, count: 4)
+                icon: "square.grid.2x2.fill", fallback: .tabBarItem(index: 0, count: 4)
             ),
             WalkthroughStep(
-                id: 1,
-                anchor: .clients,
+                id: next(), anchor: .dashKpis, surface: .dashboard,
+                title: AppLocalization.localized("tour.dash.kpis.title", value: "Today at a glance"),
+                directive: AppLocalization.localized("tour.dash.kpis.directive", value: "Your live numbers for today."),
+                purpose: AppLocalization.localized("tour.dash.kpis.purpose", value: "“In Progress” is pets currently being groomed, “Completed” is how many you've finished today, and “Revenue” is what you've earned so far — all updating automatically as you work."),
+                icon: "clock.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .dashQuickActions, surface: .dashboard,
+                title: AppLocalization.localized("tour.dash.quick.title", value: "Quick Actions"),
+                directive: AppLocalization.localized("tour.dash.quick.directive", value: "One-tap shortcuts."),
+                purpose: AppLocalization.localized("tour.dash.quick.purpose", value: "Add a new client, check a pet in (starts the visit timer), check out to take payment, or open Reports — without hunting through menus."),
+                icon: "bolt.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .dashNeedsAttention, surface: .dashboard,
+                title: AppLocalization.localized("tour.dash.attention.title", value: "Needs Attention"),
+                directive: AppLocalization.localized("tour.dash.attention.directive", value: "Who's overdue for a visit."),
+                purpose: AppLocalization.localized("tour.dash.attention.purpose", value: "Pets that are due for their next groom surface here, so you can reach out and rebook them before they drift away."),
+                icon: "exclamationmark.circle.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .dashRecentClients, surface: .dashboard,
+                title: AppLocalization.localized("tour.dash.recent.title", value: "Recent Clients"),
+                directive: AppLocalization.localized("tour.dash.recent.directive", value: "Pick up where you left off."),
+                purpose: AppLocalization.localized("tour.dash.recent.purpose", value: "Your most recent clients for fast rebooking. Tap one to open their full profile — and any aggressive pet is flagged in red so the team stays safe."),
+                icon: "person.2.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .dashRevenue, surface: .dashboard,
+                title: AppLocalization.localized("tour.dash.revenue.title", value: "Revenue (7 Days)"),
+                directive: AppLocalization.localized("tour.dash.revenue.directive", value: "Your week at a glance."),
+                purpose: AppLocalization.localized("tour.dash.revenue.purpose", value: "Every checkout flows into this chart automatically — so you can tell a strong week from a slow one without touching a spreadsheet."),
+                icon: "chart.bar.fill"
+            ),
+            // MARK: Clients
+            WalkthroughStep(
+                id: next(), anchor: .clients, surface: .clients,
                 title: AppLocalization.localized("tour.nav.clients.title", value: "Clients & Pets"),
-                directive: AppLocalization.localized("tour.nav.clients.directive", value: "Open Clients to see everyone you groom."),
-                purpose: AppLocalization.localized("tour.nav.clients.purpose", value: "Owners, pets, breeds, and full visit history live here. Aggressive pets show a red warning so your team handles them with care."),
-                icon: "person.3.fill",
-                fallback: .tabBarItem(index: 1, count: 4)
+                directive: AppLocalization.localized("tour.nav.clients.directive", value: "Everyone you groom lives here."),
+                purpose: AppLocalization.localized("tour.nav.clients.purpose", value: "Owners, pets, breeds, and full visit history. Use “New Client” to add someone and their pet — set a behavior tag like “aggressive” and the whole team sees a red warning before they handle it."),
+                icon: "person.3.fill", fallback: .tabBarItem(index: 1, count: 4)
             ),
+            // MARK: Insights
             WalkthroughStep(
-                id: 2,
-                anchor: .insights,
+                id: next(), anchor: .insights, surface: .insights,
                 title: AppLocalization.localized("tour.nav.insights.title", value: "Insights"),
-                directive: AppLocalization.localized("tour.nav.insights.directive", value: "Open Insights for your numbers."),
-                purpose: AppLocalization.localized("tour.nav.insights.purpose", value: "Revenue, your top services, and which pets are overdue — all charted for you, no spreadsheets."),
-                icon: "chart.bar.fill",
-                fallback: .tabBarItem(index: 2, count: 4)
+                directive: AppLocalization.localized("tour.nav.insights.directive", value: "Your numbers, charted for you."),
+                purpose: AppLocalization.localized("tour.nav.insights.purpose", value: "Revenue, top services, payment mix and more — all calculated automatically. Let's look at each piece."),
+                icon: "chart.bar.fill", fallback: .tabBarItem(index: 2, count: 4)
             ),
             WalkthroughStep(
-                id: 3,
-                anchor: .settings,
+                id: next(), anchor: .insKpis, surface: .insights,
+                title: AppLocalization.localized("tour.ins.kpis.title", value: "Headline numbers"),
+                directive: AppLocalization.localized("tour.ins.kpis.directive", value: "The three that matter most."),
+                purpose: AppLocalization.localized("tour.ins.kpis.purpose", value: "Total revenue, what an average visit is worth, and how many clients come back (retention) — your business health in one row."),
+                icon: "number"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .insRevenue, surface: .insights,
+                title: AppLocalization.localized("tour.ins.revenue.title", value: "Revenue over time"),
+                directive: AppLocalization.localized("tour.ins.revenue.directive", value: "Spot your trend."),
+                purpose: AppLocalization.localized("tour.ins.revenue.purpose", value: "Switch between 7, 30, and 90 days to tell a good stretch from a slow one and see where you're heading."),
+                icon: "dollarsign.circle.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .insMonthly, surface: .insights,
+                title: AppLocalization.localized("tour.ins.monthly.title", value: "Monthly Performance"),
+                directive: AppLocalization.localized("tour.ins.monthly.directive", value: "Month by month."),
+                purpose: AppLocalization.localized("tour.ins.monthly.purpose", value: "Compare months to find your busy season and plan staffing and promotions around it."),
+                icon: "calendar"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .insServices, surface: .insights,
+                title: AppLocalization.localized("tour.ins.services.title", value: "Service Profitability"),
+                directive: AppLocalization.localized("tour.ins.services.directive", value: "What earns the most."),
+                purpose: AppLocalization.localized("tour.ins.services.purpose", value: "See which services drive your revenue so you can promote the winners and rethink the rest."),
+                icon: "scissors"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .insPaymentMix, surface: .insights,
+                title: AppLocalization.localized("tour.ins.payment.title", value: "Payment Mix"),
+                directive: AppLocalization.localized("tour.ins.payment.directive", value: "How clients pay."),
+                purpose: AppLocalization.localized("tour.ins.payment.purpose", value: "Cash, card, or transfer — knowing your mix helps you plan deposits and spot processing fees."),
+                icon: "creditcard.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .insCategory, surface: .insights,
+                title: AppLocalization.localized("tour.ins.category.title", value: "Visits by Category"),
+                directive: AppLocalization.localized("tour.ins.category.directive", value: "Where your time goes."),
+                purpose: AppLocalization.localized("tour.ins.category.purpose", value: "A breakdown of grooms, add-ons, and special care so you can see what you do most."),
+                icon: "square.grid.2x2"
+            ),
+            // MARK: Settings
+            WalkthroughStep(
+                id: next(), anchor: .settings, surface: .settings,
                 title: AppLocalization.localized("tour.nav.settings.title", value: "Settings & Start Fresh"),
-                directive: AppLocalization.localized("tour.nav.settings.directive", value: "Settings is where you finish setup."),
-                purpose: AppLocalization.localized("tour.nav.settings.purpose", value: "Tune your services, prices, lock, and iCloud sync. When you're done exploring, “Wipe & Start Fresh” clears the demo for your real business."),
-                icon: "gearshape.fill",
-                fallback: .tabBarItem(index: 3, count: 4)
+                directive: AppLocalization.localized("tour.nav.settings.directive", value: "Make the app yours."),
+                purpose: AppLocalization.localized("tour.nav.settings.purpose", value: "Tune your services, prices, currency, lock, and iCloud sync here. When you're done exploring, “Wipe & Start Fresh” clears the demo so you can begin with your real business."),
+                icon: "gearshape.fill", fallback: .tabBarItem(index: 3, count: 4)
             )
         ]
     }

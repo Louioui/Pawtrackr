@@ -55,6 +55,12 @@ struct ContentView: View {
     var body: some View {
         rootContent
             .walkthroughOverlay(walkthrough)
+            .environment(walkthrough)
+            // The deep-dive tour drives navigation: when a step lives on another
+            // screen, switch to it before the step shows so its anchor exists.
+            .onChange(of: walkthrough.currentStep?.surface) { _, surface in
+                if let surface { selectSurface(surface) }
+            }
             .environment(router)
             .onChange(of: appSettings.currencySymbol) { _, newValue in
                 Formatters.updateCurrencySymbol(newValue)
@@ -140,7 +146,7 @@ struct ContentView: View {
             try? await Task.sleep(for: .milliseconds(600))
             guard !appSettings.hasSeenAppTour, !walkthrough.isActive, presentedSheet == nil else { return }
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.start(WalkthroughController.navTour())
+            walkthrough.start(WalkthroughController.fullTour())
         }
     }
 
