@@ -175,6 +175,8 @@ struct ContentView: View {
         case .newClient:
             presentedSheet = .newClient
             isWalkthroughDrivingSheet = true
+        case .checkout:
+            break
         case .none:
             closeWalkthroughPresentationIfNeeded()
         }

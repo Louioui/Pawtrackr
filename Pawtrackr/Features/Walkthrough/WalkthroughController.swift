@@ -44,9 +44,14 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case cdPets
     case cdCheckIn
     case cdCheckOut
-    case cdCheckoutFlow
     case cdPetHistory
     case cdHistory
+    // Checkout flow sections
+    case coServices
+    case coDetails
+    case coPayment
+    case coReview
+    case coConfirm
     // Settings sections
     case setBusiness
     case setSecurity
@@ -60,6 +65,7 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
 /// presents/dismisses it as the relevant steps come and go.
 enum WalkthroughPresentation: Equatable {
     case newClient
+    case checkout
 }
 
 /// A real in-app route the walkthrough can open before showing a step.
@@ -161,6 +167,9 @@ struct WalkthroughStep: Identifiable, Equatable {
     /// this so the walkthrough can teach a real workflow instead of intercepting
     /// the user's tap.
     var allowsTargetInteraction = false
+    /// Whether the bubble's Next button should pause until the user taps the
+    /// highlighted control. Used for handoffs that must execute real app state.
+    var requiresTargetAction = false
 }
 
 /// Owns tour state. Intentionally UI-framework-light so it can be created once and
@@ -422,7 +431,9 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.cd.checkin.purpose", value: "Check In creates an active visit, starts the timer, changes the pet status to in session, and makes checkout available when the groom is finished."),
                 lesson: .dailyWorkflow,
                 coachTip: AppLocalization.localized("tour.cd.checkin.tip", value: "Use it when the pet is physically in your care so duration and dashboard counts stay accurate."),
-                icon: "play.fill"
+                icon: "play.fill",
+                allowsTargetInteraction: true,
+                requiresTargetAction: true
             ),
             WalkthroughStep(
                 id: next(), anchor: .cdCheckOut, surface: .clients, route: .demoClientDetail,
@@ -431,16 +442,59 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.cd.checkout.purpose", value: "Check Out opens after a pet is checked in. That checkout process records services, notes, photos, payment method, tips, receipt details, and a final review before saving."),
                 lesson: .checkoutAndMoney,
                 coachTip: AppLocalization.localized("tour.cd.checkout.tip", value: "If this button is dimmed, the pet has not been checked in yet."),
-                icon: "stop.fill"
+                icon: "stop.fill",
+                allowsTargetInteraction: true,
+                requiresTargetAction: true
             ),
             WalkthroughStep(
-                id: next(), anchor: .cdCheckoutFlow, surface: .clients, route: .demoClientDetail,
-                title: AppLocalization.localized("tour.cd.checkout_flow.title", value: "Checkout Flow"),
-                directive: AppLocalization.localized("tour.cd.checkout_flow.directive", value: "Four screens keep checkout organized."),
-                purpose: AppLocalization.localized("tour.cd.checkout_flow.purpose", value: "The checkout screen walks through Services, Notes & Photos, Payment, and Review. Services build the subtotal, notes and photos document the groom, payment captures method and reference, and Review confirms what saves to history and insights."),
+                id: next(), anchor: .coServices, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.co.services.title", value: "Checkout: Services"),
+                directive: AppLocalization.localized("tour.co.services.directive", value: "Build the ticket from the real service menu."),
+                purpose: AppLocalization.localized("tour.co.services.purpose", value: "Services is where you choose the main groom and add-ons. Those selections build the subtotal with exact Decimal money math before the visit moves to notes, payment, and review."),
                 lesson: .checkoutAndMoney,
-                coachTip: AppLocalization.localized("tour.cd.checkout_flow.tip", value: "Drafts are saved as you move through checkout, so leaving midway can recover the work."),
-                icon: "creditcard.fill"
+                coachTip: AppLocalization.localized("tour.co.services.tip", value: "Main services and add-ons come from Settings, so your checkout stays consistent with your shop menu."),
+                icon: "list.bullet.rectangle.portrait.fill",
+                presents: .checkout
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .coDetails, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.co.details.title", value: "Checkout: Notes & Photos"),
+                directive: AppLocalization.localized("tour.co.details.directive", value: "Document what happened during the groom."),
+                purpose: AppLocalization.localized("tour.co.details.purpose", value: "Notes, behavior tags, and before/after photos stay attached to this visit so history tells the full story later, not just the price."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.co.details.tip", value: "Use behavior tags for safety patterns the team should remember next time."),
+                icon: "note.text.badge.plus",
+                presents: .checkout
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .coPayment, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.co.payment.title", value: "Checkout: Payment"),
+                directive: AppLocalization.localized("tour.co.payment.directive", value: "Confirm the amount and how the client paid."),
+                purpose: AppLocalization.localized("tour.co.payment.purpose", value: "Payment captures the final amount, payment method, tip, and any required card or transfer reference so receipts and bookkeeping match the real transaction."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.co.payment.tip", value: "You can override the amount when needed; tips and totals still stay separated for reporting."),
+                icon: "creditcard.fill",
+                presents: .checkout
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .coReview, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.co.review.title", value: "Checkout: Review"),
+                directive: AppLocalization.localized("tour.co.review.directive", value: "Check the record before saving it."),
+                purpose: AppLocalization.localized("tour.co.review.purpose", value: "Review shows the pet, duration, services, notes, photos, payment details, and what will save to history before anything updates insights."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.co.review.tip", value: "This is the final pause to catch a missing add-on, note, or payment reference."),
+                icon: "checklist.checked",
+                presents: .checkout
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .coConfirm, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.co.confirm.title", value: "Confirm & Save"),
+                directive: AppLocalization.localized("tour.co.confirm.directive", value: "This is the real checkout finish line."),
+                purpose: AppLocalization.localized("tour.co.confirm.purpose", value: "Confirm & Pay completes the visit, saves the payment, updates the client and pet history, refreshes insights, and prepares receipt details. The walkthrough moves on without charging or saving a demo checkout."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.co.confirm.tip", value: "During real use, only press this once the client has paid and the visit details are right."),
+                icon: "checkmark.seal.fill",
+                presents: .checkout
             ),
             WalkthroughStep(
                 id: next(), anchor: .cdPetHistory, surface: .clients, route: .demoClientDetail,

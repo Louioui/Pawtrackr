@@ -11,6 +11,7 @@ struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(GlobalEventBus.self) private var eventBus
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @State private var viewModel: CheckoutViewModel
     @State private var receiptPDFData: Data?
     @State private var receiptFailed = false
@@ -92,6 +93,7 @@ struct CheckoutView: View {
             notesEditorText = viewModel.sessionNotes
             amountEditorText = viewModel.amountString
             referenceEditorText = viewModel.externalReference
+            synchronizeWalkthroughCheckoutStep(walkthrough?.currentStep?.anchor)
         }
         .onDisappear {
             notesSyncTask?.cancel()
@@ -113,12 +115,16 @@ struct CheckoutView: View {
                 referenceEditorText = newValue
             }
         }
+        .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+            synchronizeWalkthroughCheckoutStep(anchor)
+        }
         .overlay {
             if shouldShowOverlay {
                 overlayContent
                     .transition(.opacity)
             }
         }
+        .modifier(CheckoutWalkthroughOverlayModifier(walkthrough: walkthrough))
         .animation(Animations.responsiveSpringSoft, value: shouldShowOverlay)
         #if os(macOS)
         .onChange(of: viewModel.currentStep) { _, newStep in
@@ -225,6 +231,7 @@ struct CheckoutView: View {
                     title: localized("checkout.hero.services_title", value: "Pick the services"),
                     message: localized("checkout.hero.services_message", value: "Choose the main service and any add-ons before you move to notes and photos.")
                 )
+                .walkthroughTarget(.coServices)
 
                 if viewModel.isLoadingServices {
                     servicesLoadingSkeleton
@@ -273,6 +280,7 @@ struct CheckoutView: View {
                     title: localized("checkout.hero.details_title", value: "Add notes and photos"),
                     message: localized("checkout.hero.details_message", value: "Capture behavior, grooming notes, and before/after photos without leaving checkout.")
                 )
+                .walkthroughTarget(.coDetails)
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text(NSLocalizedString("checkout.notes_and_tags", comment: "")).font(.headline).padding(.horizontal)
@@ -351,6 +359,7 @@ struct CheckoutView: View {
                         title: localized("checkout.hero.payment_title", value: "Confirm payment"),
                         message: localized("checkout.hero.payment_message", value: "Set the total and payment method before the final review.")
                     )
+                    .walkthroughTarget(.coPayment)
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text(NSLocalizedString("checkout.payment_method", comment: "")).font(.headline).padding(.horizontal)
@@ -511,6 +520,7 @@ struct CheckoutView: View {
                     title: localized("checkout.hero.review_title", value: "Review everything"),
                     message: localized("checkout.hero.review_message", value: "Confirm exactly what will be saved to history and insights.")
                 )
+                .walkthroughTarget(.coReview)
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text(localized("checkout.visit_summary", value: "Visit Summary")).font(.headline).padding(.horizontal)
@@ -642,6 +652,7 @@ struct CheckoutView: View {
                 }
                 .disabled(!viewModel.isAdvanceEnabled)
                 .accessibilityIdentifier("checkout.primaryButton")
+                .walkthroughTarget(.coConfirm)
                 .animation(Animations.responsiveSpring, value: viewModel.isAdvanceEnabled)
                 #if os(macOS)
                 .keyboardShortcut(.return)
@@ -710,6 +721,32 @@ struct CheckoutView: View {
         viewModel.setAmountDirectly(amountEditorText)
         viewModel.formatAmountInput()
         amountEditorText = viewModel.amountString
+    }
+
+    private func synchronizeWalkthroughCheckoutStep(_ anchor: WalkthroughAnchorID?) {
+        guard walkthrough?.isActive == true,
+              walkthrough?.currentStep?.presents == .checkout,
+              let anchor
+        else { return }
+
+        let targetStep: CheckoutViewModel.CheckoutFlowStep?
+        switch anchor {
+        case .coServices:
+            targetStep = .services
+        case .coDetails:
+            targetStep = .details
+        case .coPayment:
+            targetStep = .payment
+        case .coReview, .coConfirm:
+            targetStep = .review
+        default:
+            targetStep = nil
+        }
+
+        guard let targetStep, viewModel.currentStep != targetStep else { return }
+        focusedField = nil
+        isGoingBack = false
+        viewModel.currentStep = targetStep
     }
 
     private func stepHero(eyebrow: String, title: String, message: String) -> some View {
@@ -1203,4 +1240,17 @@ struct CheckoutView: View {
         PaymentOption(method: .zelle,      icon: "dollarsign.circle",  tint: .yellow),
         PaymentOption(method: .other,      icon: "ellipsis.circle",    tint: .gray),
     ]
+}
+
+private struct CheckoutWalkthroughOverlayModifier: ViewModifier {
+    let walkthrough: WalkthroughController?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let walkthrough {
+            content.walkthroughOverlay(walkthrough, presenting: .checkout)
+        } else {
+            content
+        }
+    }
 }

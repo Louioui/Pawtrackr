@@ -142,7 +142,15 @@ private struct WalkthroughOverlayView: View {
     }
 
     private var readableBubbleMaxHeight: CGFloat {
-        min(isCompactViewport ? 330 : 430, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
+        min(isCompactViewport ? 300 : 380, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
+    }
+
+    private var bubbleCardPadding: CGFloat {
+        isCompactViewport ? 13 : 16
+    }
+
+    private var bubbleChromeHeightEstimate: CGFloat {
+        isCompactViewport ? 124 : 140
     }
 
     private var availableAboveSpotlight: CGFloat {
@@ -271,6 +279,7 @@ private struct WalkthroughOverlayView: View {
         return VStack(spacing: 0) {
             if below { verticalArrow(.up) }
             bubbleCard(maxHeight: cardMaxHeight)
+                .frame(maxHeight: cardMaxHeight, alignment: .top)
             if !below { verticalArrow(.down) }
         }
         .frame(maxWidth: bubbleWidth)
@@ -294,6 +303,7 @@ private struct WalkthroughOverlayView: View {
                 .frame(width: 11, height: 22)
                 .padding(.top, 16)
             bubbleCard(maxHeight: cardMaxHeight)
+                .frame(maxHeight: cardMaxHeight, alignment: .top)
         }
         .frame(maxWidth: bubbleWidth, alignment: .leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -308,6 +318,7 @@ private struct WalkthroughOverlayView: View {
     /// the bubble.
     private var centerBubble: some View {
         bubbleCard(maxHeight: boundedBubbleHeight(for: containerSize.height - safeTopPadding - safeBottomPadding))
+            .frame(maxHeight: boundedBubbleHeight(for: containerSize.height - safeTopPadding - safeBottomPadding), alignment: .center)
             .frame(maxWidth: bubbleWidth)
             .padding(.horizontal, bubbleHorizontalPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -331,7 +342,9 @@ private struct WalkthroughOverlayView: View {
     }
 
     private func bubbleCard(maxHeight: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: isCompactViewport ? 8 : 10) {
+        let bodyMaxHeight = max(72, maxHeight - bubbleChromeHeightEstimate)
+
+        return VStack(alignment: .leading, spacing: isCompactViewport ? 8 : 10) {
             HStack(spacing: 8) {
                 Label(step.lesson.title, systemImage: step.lesson.icon)
                     .font(.caption2.weight(.bold))
@@ -357,9 +370,23 @@ private struct WalkthroughOverlayView: View {
                     bubbleBody
                 }
                 .scrollIndicators(.visible)
+                .frame(maxHeight: bodyMaxHeight)
             }
 
-            HStack {
+            footerControls
+                .padding(.top, 2)
+        }
+        .padding(bubbleCardPadding)
+        .frame(maxWidth: bubbleWidth, alignment: .top)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 8)
+    }
+
+    @ViewBuilder
+    private var footerControls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
                 Button(AppLocalization.localized("tour.skip", value: "Skip tour")) {
                     controller.skip()
                 }
@@ -367,32 +394,56 @@ private struct WalkthroughOverlayView: View {
                 .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
 
-                Spacer()
+                Spacer(minLength: 12)
 
-                Button {
-                    controller.advance()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(controller.isLastStep
-                             ? AppLocalization.localized("tour.done", value: "Done")
-                             : AppLocalization.localized("tour.next", value: "Next"))
-                            .fontWeight(.semibold)
-                        Image(systemName: controller.isLastStep ? "checkmark" : "arrow.right")
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .background(DS.ColorToken.primary)
-                    .foregroundStyle(.white)
-                    .clipShape(Capsule())
+                footerPrimaryControl
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                footerPrimaryControl
+                Button(AppLocalization.localized("tour.skip", value: "Skip tour")) {
+                    controller.skip()
                 }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
             }
-            .padding(.top, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(isCompactViewport ? 13 : 16)
-        .frame(maxWidth: bubbleWidth, maxHeight: maxHeight, alignment: .top)
-        .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 8)
+    }
+
+    @ViewBuilder
+    private var footerPrimaryControl: some View {
+        if step.requiresTargetAction {
+            Label(AppLocalization.localized("tour.tap_highlighted", value: "Tap highlighted button"), systemImage: "hand.tap.fill")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .foregroundStyle(DS.ColorToken.primary)
+                .padding(.horizontal, isCompactViewport ? 12 : 14)
+                .padding(.vertical, isCompactViewport ? 8 : 9)
+                .background(DS.ColorToken.primary.opacity(0.12), in: Capsule())
+        } else {
+            Button {
+                controller.advance()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(controller.isLastStep
+                         ? AppLocalization.localized("tour.done", value: "Done")
+                         : AppLocalization.localized("tour.next", value: "Next"))
+                        .fontWeight(.semibold)
+                    Image(systemName: controller.isLastStep ? "checkmark" : "arrow.right")
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .background(DS.ColorToken.primary)
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private var bubbleBody: some View {

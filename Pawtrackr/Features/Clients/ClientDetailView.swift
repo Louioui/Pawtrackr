@@ -32,6 +32,7 @@ struct ClientDetailView: View {
     // Local sheet routing (do not depend on VM for UI routing)
     @State private var sheetDestination: SheetDestination?
     @State private var checkoutRoute: ClientCheckoutRoute? = nil
+    @State private var isWalkthroughDrivingCheckout = false
 
     enum SheetDestination: Identifiable {
         case addPet
@@ -105,7 +106,6 @@ struct ClientDetailView: View {
         .cdPets,
         .cdCheckIn,
         .cdCheckOut,
-        .cdCheckoutFlow,
         .cdPetHistory,
         .cdHistory
     ]
@@ -161,6 +161,19 @@ struct ClientDetailView: View {
                 contactEditorSheet
             }
             .modifier(CheckoutPresentationModifier(checkoutRoute: $checkoutRoute, vm: vm))
+            .onAppear {
+                synchronizeWalkthroughCheckoutPresentation(walkthrough?.currentStep?.presents, vm: vm)
+                advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
+            }
+            .onChange(of: walkthrough?.currentStep?.presents) { _, presentation in
+                synchronizeWalkthroughCheckoutPresentation(presentation, vm: vm)
+            }
+            .onChange(of: walkthrough?.currentStep?.anchor) { _, _ in
+                advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .visitDidStart)) { notification in
+                continueWalkthroughAfterVisitStart(notification, vm: vm)
+            }
             // The deprecated `.alert(item:)` + `Alert(…)` API silently fails to
             // present when stacked under multiple `.sheet(item:)` modifiers
             // — that's why the Check In button looked broken to the user
@@ -734,6 +747,7 @@ struct ClientDetailView: View {
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
                                         if let visit = vm.activeVisit(for: pet) {
                                             checkoutRoute = ClientCheckoutRoute(pet: pet, visit: visit)
+                                            advanceWalkthroughIntoCheckoutIfNeeded()
                                             HapticManager.notify(.success)
                                         } else {
                                             vm.refreshPets()
@@ -744,7 +758,6 @@ struct ClientDetailView: View {
                                     .disabled(activeVisit == nil)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
                                     .walkthroughTarget(.cdCheckOut)
-                                    .background(Color.clear.walkthroughTarget(.cdCheckoutFlow))
 
                                     actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {
                                         sheetDestination = .history(pet)
@@ -934,6 +947,84 @@ struct ClientDetailView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             withAnimation(Animations.fastEaseOut) { showSavedToast = false }
         }
+    }
+
+    private func continueWalkthroughAfterVisitStart(_ notification: Notification, vm: ClientDetailViewModel) {
+        guard walkthrough?.isActive == true,
+              walkthrough?.currentStep?.anchor == .cdCheckIn
+        else { return }
+
+        guard let visit = notification.object as? Visit,
+              let petID = visit.pet?.persistentModelID,
+              vm.pets.contains(where: { $0.persistentModelID == petID })
+        else { return }
+
+        vm.refreshPets()
+        vm.refreshRecentVisits()
+        walkthrough?.advance()
+    }
+
+    private func advanceWalkthroughIfCheckInAlreadySatisfied(vm: ClientDetailViewModel) {
+        guard walkthrough?.isActive == true,
+              walkthrough?.currentStep?.anchor == .cdCheckIn
+        else { return }
+
+        vm.refreshPets()
+        guard firstActiveCheckoutRoute(vm: vm) != nil else { return }
+
+        Task { @MainActor in
+            guard walkthrough?.currentStep?.anchor == .cdCheckIn else { return }
+            walkthrough?.advance()
+        }
+    }
+
+    private func advanceWalkthroughIntoCheckoutIfNeeded() {
+        guard walkthrough?.isActive == true,
+              walkthrough?.currentStep?.anchor == .cdCheckOut
+        else { return }
+
+        isWalkthroughDrivingCheckout = true
+        walkthrough?.advance()
+    }
+
+    private func synchronizeWalkthroughCheckoutPresentation(_ presentation: WalkthroughPresentation?, vm: ClientDetailViewModel) {
+        guard walkthrough?.isActive == true else {
+            closeWalkthroughCheckoutIfNeeded()
+            return
+        }
+
+        if presentation == .checkout {
+            openWalkthroughCheckoutIfPossible(vm: vm)
+        } else {
+            closeWalkthroughCheckoutIfNeeded()
+        }
+    }
+
+    private func openWalkthroughCheckoutIfPossible(vm: ClientDetailViewModel) {
+        if checkoutRoute != nil {
+            isWalkthroughDrivingCheckout = true
+            return
+        }
+
+        vm.refreshPets()
+        guard let route = firstActiveCheckoutRoute(vm: vm) else { return }
+        checkoutRoute = route
+        isWalkthroughDrivingCheckout = true
+    }
+
+    private func closeWalkthroughCheckoutIfNeeded() {
+        guard isWalkthroughDrivingCheckout else { return }
+        checkoutRoute = nil
+        isWalkthroughDrivingCheckout = false
+    }
+
+    private func firstActiveCheckoutRoute(vm: ClientDetailViewModel) -> ClientCheckoutRoute? {
+        for pet in vm.pets {
+            if let visit = vm.activeVisit(for: pet) {
+                return ClientCheckoutRoute(pet: pet, visit: visit)
+            }
+        }
+        return nil
     }
 
     @State private var showSavedToast = false
