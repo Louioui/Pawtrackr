@@ -310,7 +310,7 @@ private struct SettingsDetailView: View {
         ) {
             Button(settingsLocalized("common.cancel", value: "Cancel"), role: .cancel) {}
             Button(settingsLocalized("settings.reset_guide.confirm", value: "Replay")) {
-                appSettings.replayGettingStarted()
+                replayGettingStarted()
             }
         } message: {
             Text(settingsLocalized(
@@ -369,6 +369,17 @@ private struct SettingsDetailView: View {
         case .help: HelpSectionView(modelContext: modelContext)
         case .devices: DevicesHealthView()
         case .about: AboutSectionView(showResetFirstRunConfirm: $showResetFirstRunConfirm, showWipeConfirm: $showWipeConfirm)
+        }
+    }
+
+    private func replayGettingStarted() {
+        appSettings.replayGettingStarted()
+
+        guard !AppRuntime.isUITesting else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            walkthrough?.onFinish = { appSettings.hasSeenAppTour = true }
+            walkthrough?.restart(WalkthroughController.fullTour())
         }
     }
 }

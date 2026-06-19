@@ -95,6 +95,9 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .navigateToClient)) { notification in
                 handleNavigation(notification, type: .client)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { notification in
+                continueWalkthroughAfterClientCreate(notification)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .clientOpenRequested)) { notification in
                 guard let id = notification.requestedClientID,
                       let client = modelContext.model(for: id) as? Client else { return }
@@ -196,6 +199,11 @@ struct ContentView: View {
         selectClientsSurface()
         router.popClientsToRoot()
 
+        if let client = preferredWalkthroughClient() {
+            router.navigateToClient(client)
+            return
+        }
+
         var descriptor = FetchDescriptor<Client>(sortBy: [
             SortDescriptor(\.lastVisitDate, order: .reverse),
             SortDescriptor(\.createdAt, order: .forward)
@@ -209,6 +217,32 @@ struct ContentView: View {
         } catch {
             Logger.contentNav.error("Walkthrough demo client fetch failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    private func preferredWalkthroughClient() -> Client? {
+        guard let id = walkthrough.preferredClientDetailID else { return nil }
+        if let client = modelContext.model(for: id) as? Client {
+            return client
+        }
+
+        do {
+            let clients = try modelContext.fetch(FetchDescriptor<Client>())
+            return clients.first { $0.persistentModelID == id }
+        } catch {
+            Logger.contentNav.error("Walkthrough preferred client fetch failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    private func continueWalkthroughAfterClientCreate(_ notification: Notification) {
+        guard walkthrough.isActive,
+              walkthrough.currentStep?.presents == .newClient,
+              notification.clientCreatePhase == .created,
+              let clientID = notification.createdClientID
+        else { return }
+
+        walkthrough.focusClientDetail(clientID)
+        walkthrough.completePresentation(.newClient)
     }
 
     private enum NavigationType { case pet, client }

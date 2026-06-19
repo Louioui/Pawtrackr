@@ -45,6 +45,7 @@ final class NewClientViewModel {
     var isSaving: Bool = false
     var showDuplicateAlert: Bool = false
     var duplicateClientID: PersistentIdentifier? = nil
+    private(set) var createdClientID: PersistentIdentifier? = nil
     private(set) var fieldErrors: [Field: String] = [:]
 
     @ObservationIgnored private let modelContext: ModelContext
@@ -73,6 +74,7 @@ final class NewClientViewModel {
         }
         isSaving = true
         appError = nil
+        createdClientID = nil
 
         defer { isSaving = false }
 
@@ -134,6 +136,7 @@ final class NewClientViewModel {
                 contacts: newContacts
             )
             Logger.newClient.info("createClient: saved client through repository")
+            createdClientID = clientID
 
             NotificationCenter.default.post(name: .clientDidCreate, object: nil, userInfo: [
                 ClientDidCreateKey.clientID.rawValue: clientID,

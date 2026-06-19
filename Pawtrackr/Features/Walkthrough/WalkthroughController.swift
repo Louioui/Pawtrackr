@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 /// Identifies an interface element the guided tour can spotlight. A control opts
 /// in by attaching `.walkthroughAnchor(.someCase)`; the overlay resolves its live
@@ -41,6 +42,10 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case cdOwner
     case cdEmergency
     case cdPets
+    case cdCheckIn
+    case cdCheckOut
+    case cdCheckoutFlow
+    case cdPetHistory
     case cdHistory
     // Settings sections
     case setBusiness
@@ -152,6 +157,10 @@ struct WalkthroughStep: Identifiable, Equatable {
     /// A modal this step lives inside. The host opens it before the step shows
     /// and closes it once the steps that need it are done. `nil` = main UI.
     var presents: WalkthroughPresentation? = nil
+    /// Whether the highlighted UI should remain usable. Form and save steps use
+    /// this so the walkthrough can teach a real workflow instead of intercepting
+    /// the user's tap.
+    var allowsTargetInteraction = false
 }
 
 /// Owns tour state. Intentionally UI-framework-light so it can be created once and
@@ -163,6 +172,7 @@ final class WalkthroughController {
     private(set) var steps: [WalkthroughStep] = []
     private(set) var currentIndex: Int = 0
     private(set) var isActive: Bool = false
+    private(set) var preferredClientDetailID: PersistentIdentifier?
 
     /// Invoked exactly once when the tour ends — whether the user finished or
     /// skipped. The host persists the "tour seen" flag here so it never auto-shows
@@ -184,10 +194,29 @@ final class WalkthroughController {
         guard !isActive, !steps.isEmpty else { return }
         self.steps = steps
         currentIndex = 0
+        preferredClientDetailID = nil
         #if os(iOS)
         HapticManager.impact(.medium)
         #endif
         withAnimation(.easeInOut(duration: 0.3)) { isActive = true }
+    }
+
+    /// Replays the tour from the beginning even if a previous run is active or
+    /// the "seen" flag has already been cleared. Used by Settings so replay is
+    /// an explicit command instead of depending only on a UserDefaults edge.
+    func restart(_ steps: [WalkthroughStep]) {
+        guard !steps.isEmpty else { return }
+        self.steps = steps
+        currentIndex = 0
+        preferredClientDetailID = nil
+        #if os(iOS)
+        HapticManager.impact(.medium)
+        #endif
+        withAnimation(.easeInOut(duration: 0.3)) { isActive = true }
+    }
+
+    func focusClientDetail(_ clientID: PersistentIdentifier) {
+        preferredClientDetailID = clientID
     }
 
     /// Advances to the next step, or finishes after the last one.
@@ -205,6 +234,25 @@ final class WalkthroughController {
         }
     }
 
+    /// Moves past the current modal-backed lesson when the user completes the
+    /// real modal action, e.g. creating a client from the New Client sheet.
+    func completePresentation(_ presentation: WalkthroughPresentation) {
+        guard isActive, currentStep?.presents == presentation else { return }
+        #if os(iOS)
+        HapticManager.impact(.light)
+        #endif
+
+        let remainingIndices = steps.indices.drop(while: { $0 <= currentIndex })
+        guard let nextIndex = remainingIndices.first(where: { steps[$0].presents != presentation }) else {
+            finish(completed: true)
+            return
+        }
+
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+            currentIndex = nextIndex
+        }
+    }
+
     /// Ends the tour early.
     func skip() { finish(completed: false) }
 
@@ -217,6 +265,7 @@ final class WalkthroughController {
         onFinish = nil
         steps = []
         currentIndex = 0
+        preferredClientDetailID = nil
         handler?()
     }
 }
@@ -314,7 +363,8 @@ extension WalkthroughController {
                 lesson: .clientRecords,
                 coachTip: AppLocalization.localized("tour.nc.owner.tip", value: "Only a name is required; add the rest now or fill it in later."),
                 icon: "person.text.rectangle",
-                presents: .newClient
+                presents: .newClient,
+                allowsTargetInteraction: true
             ),
             WalkthroughStep(
                 id: next(), anchor: .ncPets, surface: .clients,
@@ -324,17 +374,19 @@ extension WalkthroughController {
                 lesson: .clientRecords,
                 coachTip: AppLocalization.localized("tour.nc.pets.tip", value: "A good pet profile turns the next visit into a quick check-in instead of a memory test."),
                 icon: "pawprint.fill",
-                presents: .newClient
+                presents: .newClient,
+                allowsTargetInteraction: true
             ),
             WalkthroughStep(
                 id: next(), anchor: .ncSave, surface: .clients,
                 title: AppLocalization.localized("tour.nc.save.title", value: "Save the client"),
                 directive: AppLocalization.localized("tour.nc.save.directive", value: "Create once, reuse every visit."),
-                purpose: AppLocalization.localized("tour.nc.save.purpose", value: "After saving, the client is ready for check in, services, checkout, receipts, and future history. We close this demo sheet without saving."),
+                purpose: AppLocalization.localized("tour.nc.save.purpose", value: "Tap Create when you are adding a real client, or use Next to keep practicing. Once saved, the client is ready for check in, services, checkout, receipts, and future history."),
                 lesson: .clientRecords,
                 icon: "checkmark.circle.fill",
                 fallback: .topTrailingAction,
-                presents: .newClient
+                presents: .newClient,
+                allowsTargetInteraction: true
             ),
             // MARK: Client details
             WalkthroughStep(
@@ -357,17 +409,52 @@ extension WalkthroughController {
             WalkthroughStep(
                 id: next(), anchor: .cdPets, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.pets.title", value: "Pet Actions"),
-                directive: AppLocalization.localized("tour.cd.pets.directive", value: "Run the visit from the pet card."),
-                purpose: AppLocalization.localized("tour.cd.pets.purpose", value: "Check In starts the grooming session, Check Out collects payment when a visit is active, and History opens past services, notes, and payments for that pet."),
+                directive: AppLocalization.localized("tour.cd.pets.directive", value: "This row is where the visit work starts."),
+                purpose: AppLocalization.localized("tour.cd.pets.purpose", value: "Each pet has its own status and actions. The next stops break down check-in, checkout, and history so the workflow is clear before you use it with real clients."),
                 lesson: .dailyWorkflow,
                 coachTip: AppLocalization.localized("tour.cd.pets.tip", value: "Each owner can have multiple pets, and every pet keeps its own status and visit history."),
                 icon: "pawprint.fill"
             ),
             WalkthroughStep(
+                id: next(), anchor: .cdCheckIn, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.checkin.title", value: "Check In"),
+                directive: AppLocalization.localized("tour.cd.checkin.directive", value: "Start the grooming session."),
+                purpose: AppLocalization.localized("tour.cd.checkin.purpose", value: "Check In creates an active visit, starts the timer, changes the pet status to in session, and makes checkout available when the groom is finished."),
+                lesson: .dailyWorkflow,
+                coachTip: AppLocalization.localized("tour.cd.checkin.tip", value: "Use it when the pet is physically in your care so duration and dashboard counts stay accurate."),
+                icon: "play.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .cdCheckOut, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.checkout.title", value: "Check Out"),
+                directive: AppLocalization.localized("tour.cd.checkout.directive", value: "Finish the visit and collect payment."),
+                purpose: AppLocalization.localized("tour.cd.checkout.purpose", value: "Check Out opens after a pet is checked in. That checkout process records services, notes, photos, payment method, tips, receipt details, and a final review before saving."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.cd.checkout.tip", value: "If this button is dimmed, the pet has not been checked in yet."),
+                icon: "stop.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .cdCheckoutFlow, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.checkout_flow.title", value: "Checkout Flow"),
+                directive: AppLocalization.localized("tour.cd.checkout_flow.directive", value: "Four screens keep checkout organized."),
+                purpose: AppLocalization.localized("tour.cd.checkout_flow.purpose", value: "The checkout screen walks through Services, Notes & Photos, Payment, and Review. Services build the subtotal, notes and photos document the groom, payment captures method and reference, and Review confirms what saves to history and insights."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.cd.checkout_flow.tip", value: "Drafts are saved as you move through checkout, so leaving midway can recover the work."),
+                icon: "creditcard.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .cdPetHistory, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.pet_history.title", value: "Pet History"),
+                directive: AppLocalization.localized("tour.cd.pet_history.directive", value: "Open the pet’s full timeline."),
+                purpose: AppLocalization.localized("tour.cd.pet_history.purpose", value: "History shows past visits for this pet with services, notes, payment details, photos, search, date filters, and export tools when you need records outside the app."),
+                lesson: .checkoutAndMoney,
+                icon: "clock.arrow.circlepath"
+            ),
+            WalkthroughStep(
                 id: next(), anchor: .cdHistory, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.history.title", value: "Recent History"),
                 directive: AppLocalization.localized("tour.cd.history.directive", value: "Review what happened last time."),
-                purpose: AppLocalization.localized("tour.cd.history.purpose", value: "Completed visits roll into this timeline so you can answer pricing questions, repeat the same services, or check notes before the next groom."),
+                purpose: AppLocalization.localized("tour.cd.history.purpose", value: "Completed checkouts roll into this client timeline automatically. Use All or Last 90d to answer pricing questions, repeat services, verify notes, and open a saved visit record."),
                 lesson: .checkoutAndMoney,
                 icon: "clock.arrow.circlepath"
             ),

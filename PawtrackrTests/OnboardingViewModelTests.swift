@@ -209,7 +209,7 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.primaryActionTitle, "Continue")
     }
 
-    func testFullWalkthroughTeachesCompleteNewUserCurriculum() {
+    func testFullWalkthroughTeachesCompleteNewUserCurriculum() throws {
         let steps = WalkthroughController.fullTour()
         let lessons = Set(steps.map(\.lesson))
 
@@ -228,6 +228,13 @@ final class OnboardingViewModelTests: XCTestCase {
             [.ncOwner, .ncPets, .ncSave],
             "The create-client lesson should open one coherent New Client mini-flow."
         )
+        XCTAssertTrue(
+            steps.filter { $0.presents == .newClient }.allSatisfy(\.allowsTargetInteraction),
+            "The New Client lesson must let the user type into the form and tap Create instead of the overlay swallowing the action."
+        )
+        let saveStep = try XCTUnwrap(steps.first { $0.anchor == .ncSave })
+        XCTAssertTrue(saveStep.purpose.localizedCaseInsensitiveContains("Create"))
+        XCTAssertFalse(saveStep.purpose.localizedCaseInsensitiveContains("without saving"))
         XCTAssertGreaterThanOrEqual(steps.compactMap(\.coachTip).count, 8)
         XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("check in") })
         XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("checkout") })
@@ -252,16 +259,93 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(
             steps.contains {
                 $0.title.localizedCaseInsensitiveContains("Pet Actions")
-                    && $0.purpose.localizedCaseInsensitiveContains("check in")
-                    && $0.purpose.localizedCaseInsensitiveContains("history")
+                    && $0.purpose.localizedCaseInsensitiveContains("next stops")
             },
-            "Client Details should teach the pet action row: check in, checkout, and history."
+            "Client Details should introduce the pet action row before the dedicated check-in, checkout, and history stops."
         )
 
         let finalStep = try XCTUnwrap(steps.last)
         XCTAssertTrue(finalStep.title.localizedCaseInsensitiveContains("Wipe"))
         XCTAssertTrue(finalStep.purpose.localizedCaseInsensitiveContains("empty workspace"))
         XCTAssertTrue(finalStep.purpose.localizedCaseInsensitiveContains("real business"))
+    }
+
+    func testFullWalkthroughTeachesCheckoutAndHistoryAsDedicatedProcess() throws {
+        let steps = WalkthroughController.fullTour()
+        let anchors = steps.map(\.anchor)
+
+        XCTAssertTrue(anchors.contains(.cdCheckIn), "Check In should have its own stop, not only a grouped pet-actions explanation.")
+        XCTAssertTrue(anchors.contains(.cdCheckOut), "Check Out should have its own stop so the user understands when checkout becomes available.")
+        XCTAssertTrue(anchors.contains(.cdCheckoutFlow), "The tour should explain the four-step checkout flow before users handle real money.")
+        XCTAssertTrue(anchors.contains(.cdPetHistory), "Pet History should have its own stop because it opens a deeper history view.")
+        XCTAssertTrue(anchors.contains(.cdHistory), "Recent History should remain part of the client-detail chapter.")
+
+        let checkOutStep = try XCTUnwrap(steps.first { $0.anchor == .cdCheckOut })
+        XCTAssertTrue(checkOutStep.purpose.localizedCaseInsensitiveContains("services"))
+        XCTAssertTrue(checkOutStep.purpose.localizedCaseInsensitiveContains("payment"))
+        XCTAssertTrue(checkOutStep.purpose.localizedCaseInsensitiveContains("review"))
+
+        let checkoutFlowStep = try XCTUnwrap(steps.first { $0.anchor == .cdCheckoutFlow })
+        XCTAssertTrue(checkoutFlowStep.purpose.localizedCaseInsensitiveContains("Services"))
+        XCTAssertTrue(checkoutFlowStep.purpose.localizedCaseInsensitiveContains("Notes"))
+        XCTAssertTrue(checkoutFlowStep.purpose.localizedCaseInsensitiveContains("Payment"))
+        XCTAssertTrue(checkoutFlowStep.purpose.localizedCaseInsensitiveContains("Review"))
+
+        let petHistoryStep = try XCTUnwrap(steps.first { $0.anchor == .cdPetHistory })
+        XCTAssertTrue(petHistoryStep.purpose.localizedCaseInsensitiveContains("search"))
+        XCTAssertTrue(petHistoryStep.purpose.localizedCaseInsensitiveContains("export"))
+    }
+
+    func testWalkthroughReplayRestartsFromFirstStepEvenWhenAlreadyActive() throws {
+        let controller = WalkthroughController()
+        let steps = WalkthroughController.fullTour()
+        controller.start(steps)
+        controller.advance()
+        controller.advance()
+
+        XCTAssertGreaterThan(controller.currentIndex, 0)
+
+        controller.restart(WalkthroughController.fullTour())
+
+        XCTAssertTrue(controller.isActive)
+        XCTAssertEqual(controller.currentIndex, 0)
+        XCTAssertEqual(controller.currentStep?.anchor, .dashboard)
+    }
+
+    func testWalkthroughCompletesNewClientChapterAfterUserCreatesClient() throws {
+        let controller = WalkthroughController()
+        let steps = WalkthroughController.fullTour()
+        let newClientIndex = try XCTUnwrap(steps.firstIndex { $0.presents == .newClient })
+        controller.start(steps)
+
+        while controller.currentIndex < newClientIndex {
+            controller.advance()
+        }
+
+        XCTAssertEqual(controller.currentStep?.anchor, .ncOwner)
+        XCTAssertEqual(controller.currentStep?.presents, .newClient)
+
+        controller.completePresentation(.newClient)
+
+        XCTAssertTrue(controller.isActive)
+        XCTAssertNil(controller.currentStep?.presents)
+        XCTAssertEqual(controller.currentStep?.anchor, .cdOwner)
+        XCTAssertEqual(controller.currentStep?.route, .demoClientDetail)
+    }
+
+    func testWalkthroughRemembersCreatedClientForDetailsChapter() throws {
+        let controller = WalkthroughController()
+        let client = Client(firstName: "Tour", lastName: "Client")
+        context.insert(client)
+        try context.save()
+
+        controller.focusClientDetail(client.persistentModelID)
+
+        XCTAssertEqual(controller.preferredClientDetailID, client.persistentModelID)
+
+        controller.restart(WalkthroughController.fullTour())
+
+        XCTAssertNil(controller.preferredClientDetailID)
     }
 
     func testFinish_RejectsBlankBusinessName() async {

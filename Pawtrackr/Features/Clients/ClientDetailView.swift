@@ -99,7 +99,16 @@ struct ClientDetailView: View {
     @Environment(NavigationRouter.self) private var router
     @Query private var devices: [DeviceMetadata]
     private var namespace: Namespace.ID
-    private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [.cdOwner, .cdEmergency, .cdPets, .cdHistory]
+    private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
+        .cdOwner,
+        .cdEmergency,
+        .cdPets,
+        .cdCheckIn,
+        .cdCheckOut,
+        .cdCheckoutFlow,
+        .cdPetHistory,
+        .cdHistory
+    ]
 
     // MARK: - Init
     private let client: Client
@@ -720,6 +729,7 @@ struct ClientDetailView: View {
                                     .opacity(activeVisit == nil && !isCheckingIn ? 1.0 : 0.55)
                                     .disabled(activeVisit != nil || isCheckingIn)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
+                                    .walkthroughTarget(.cdCheckIn)
 
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
                                         if let visit = vm.activeVisit(for: pet) {
@@ -733,11 +743,14 @@ struct ClientDetailView: View {
                                     .opacity(activeVisit == nil ? 0.3 : 1.0)
                                     .disabled(activeVisit == nil)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
+                                    .walkthroughTarget(.cdCheckOut)
+                                    .background(Color.clear.walkthroughTarget(.cdCheckoutFlow))
 
                                     actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {
                                         sheetDestination = .history(pet)
                                     }
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).history")
+                                    .walkthroughTarget(.cdPetHistory)
                                 }
                             }
                         }

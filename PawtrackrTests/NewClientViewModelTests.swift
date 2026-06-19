@@ -32,11 +32,13 @@ final class NewClientViewModelTests: XCTestCase {
         XCTAssertEqual(outcome, .created)
         XCTAssertNil(vm.appError)
         XCTAssertFalse(vm.isSaving, "isSaving must reset so the Create button re-enables")
+        XCTAssertNotNil(vm.createdClientID, "The walkthrough needs the exact saved client ID to continue into Client Details.")
 
         let clients = try context.fetch(FetchDescriptor<Client>())
         XCTAssertEqual(clients.count, 1)
         XCTAssertEqual(clients.first?.firstName, "John")
         XCTAssertEqual(clients.first?.lastName, "Doe")
+        XCTAssertEqual(vm.createdClientID, clients.first?.persistentModelID)
     }
 
     func testCreateClient_withPhone_createsWhenNoDuplicate() async throws {

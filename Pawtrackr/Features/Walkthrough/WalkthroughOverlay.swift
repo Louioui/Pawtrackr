@@ -208,6 +208,7 @@ private struct WalkthroughOverlayView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { /* swallow taps/clicks on the dimmed area */ }
+        .allowsHitTesting(!step.allowsTargetInteraction)
     }
 
     // MARK: Glowing ring
@@ -239,7 +240,7 @@ private struct WalkthroughOverlayView: View {
     /// the tour feels like "tap the thing" without risking real navigation.
     @ViewBuilder
     private var spotlightTapTarget: some View {
-        if let s = spotlight {
+        if let s = spotlight, !step.allowsTargetInteraction {
             Color.white.opacity(0.001)
                 .frame(width: s.width, height: s.height)
                 .contentShape(Rectangle())
