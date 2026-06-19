@@ -18,10 +18,15 @@ extension View {
     /// Hosts the guided-tour overlay above this view's content. Anchors registered
     /// with `.walkthroughAnchor(_:)` anywhere in the subtree are resolved here, so
     /// attach this at the navigation root that contains the sidebar / tab bar.
-    func walkthroughOverlay(_ controller: WalkthroughController) -> some View {
+    /// - Parameter presenting: which modal this overlay belongs to. The root
+    ///   overlay passes `nil` and renders only main-UI steps; a sheet passes its
+    ///   own presentation and renders only that sheet's steps. Without this, the
+    ///   root overlay also rendered sheet steps and pointed its `.topTrailingAction`
+    ///   fallback at nothing on the main window.
+    func walkthroughOverlay(_ controller: WalkthroughController, presenting: WalkthroughPresentation? = nil) -> some View {
         overlayPreferenceValue(WalkthroughAnchorPreferenceKey.self) { anchors in
             GeometryReader { proxy in
-                if controller.isActive, let step = controller.currentStep {
+                if controller.isActive, let step = controller.currentStep, step.presents == presenting {
                     // Prefer the live anchor; fall back to a computed rect for
                     // targets SwiftUI won't anchor (iPhone tab-bar items).
                     let target = anchors[step.anchor].map { proxy[$0] }

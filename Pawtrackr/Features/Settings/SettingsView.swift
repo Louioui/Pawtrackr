@@ -111,8 +111,8 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) private var appSettings
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
+    @Environment(NavigationRouter.self) private var router
     @State private var selection: SettingSection? = .business
-    @State private var compactPath: [SettingSection] = []
     
     // State needed for sub-views
     @State private var showChangePIN = false
@@ -134,21 +134,25 @@ struct SettingsView: View {
             synchronizeWalkthroughSection(anchor)
         }
         #else
-        NavigationStack(path: $compactPath) {
-            List(SettingSection.allCases) { section in
-                NavigationLink(value: section) {
-                    Label(section.title, systemImage: section.icon)
-                }
-                .accessibilityIdentifier("settings.section.\(section.rawValue)")
+        // No inner NavigationStack — SettingsView already lives inside ContentView's
+        // settings NavigationStack. Nesting one here made NavigationLink(value:)
+        // resolve to the wrong stack, so rows went grey and never opened. The
+        // value links + this navigationDestination register on the ambient stack
+        // (router.settingsPath, a type-erased NavigationPath), and the tour drives
+        // that same path to step into a section.
+        List(SettingSection.allCases) { section in
+            NavigationLink(value: section) {
+                Label(section.title, systemImage: section.icon)
             }
-            .navigationTitle(Text("settings.title"))
-            .navigationDestination(for: SettingSection.self) { section in
-                SettingsDetailView(section: section,
-                                   showChangePIN: $showChangePIN,
-                                   showResetFirstRunConfirm: $showResetFirstRunConfirm,
-                                   showWipeConfirm: $showWipeConfirm,
-                                   showDiagnostics: $showDiagnostics)
-            }
+            .accessibilityIdentifier("settings.section.\(section.rawValue)")
+        }
+        .navigationTitle(Text("settings.title"))
+        .navigationDestination(for: SettingSection.self) { section in
+            SettingsDetailView(section: section,
+                               showChangePIN: $showChangePIN,
+                               showResetFirstRunConfirm: $showResetFirstRunConfirm,
+                               showWipeConfirm: $showWipeConfirm,
+                               showDiagnostics: $showDiagnostics)
         }
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughSection(anchor)
@@ -165,9 +169,9 @@ struct SettingsView: View {
         }
         #else
         if anchor == .settings {
-            compactPath = []
-        } else if let section = SettingSection.walkthroughSection(for: anchor), compactPath.last != section {
-            compactPath = [section]
+            if !router.settingsPath.isEmpty { router.settingsPath = NavigationPath() }
+        } else if let section = SettingSection.walkthroughSection(for: anchor) {
+            router.settingsPath = NavigationPath([section])
         }
         #endif
     }

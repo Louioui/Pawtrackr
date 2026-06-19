@@ -59,7 +59,7 @@ struct NewClientSheet: View {
     private var sheetContent: some View {
         if let walkthrough {
             navigationContent
-                .walkthroughOverlay(walkthrough)
+                .walkthroughOverlay(walkthrough, presenting: .newClient)
         } else {
             navigationContent
         }
