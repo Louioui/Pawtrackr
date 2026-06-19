@@ -42,6 +42,7 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case cdOwner
     case cdEmergency
     case cdPets
+    case cdAddPet
     case cdCheckIn
     case cdCheckOut
     case cdPetHistory
@@ -132,6 +133,12 @@ enum SpotlightFallback: Equatable {
     case tabBarItem(index: Int, count: Int)
     /// Top-trailing action in a navigation bar or full-screen cover toolbar.
     case topTrailingAction
+    /// Bottom-trailing confirmation action in a macOS sheet footer.
+    case bottomTrailingAction
+    /// A single compact top-trailing icon button (e.g. a macOS toolbar "+"),
+    /// narrower than `.topTrailingAction` so the spotlight lands on just that
+    /// control and not a neighbor (like an adjacent delete button).
+    case topTrailingIcon
 }
 
 /// One coaching stop. Plain-language fields keep every bubble consistent: the
@@ -196,6 +203,9 @@ final class WalkthroughController {
     var stepNumber: Int { currentIndex + 1 }
     var stepCount: Int { steps.count }
     var isLastStep: Bool { currentIndex >= steps.count - 1 }
+    /// Whether an earlier step exists to return to. Drives the Back control so a
+    /// user who advanced too quickly can step back and re-read what they missed.
+    var canGoBack: Bool { isActive && currentIndex > 0 }
 
     /// Begins the tour with the given ordered steps. No-op if already running or
     /// the list is empty.
@@ -243,6 +253,20 @@ final class WalkthroughController {
         }
     }
 
+    /// Returns to the previous step so a user who moved too fast can re-read what
+    /// they missed. Navigation, sheets, and scrolling re-drive symmetrically off
+    /// the host's `surface`/`route`/`presents`/`anchor` onChange handlers, so a
+    /// simple index decrement is enough to reverse the tour.
+    func goBack() {
+        guard isActive, currentIndex > 0 else { return }
+        #if os(iOS)
+        HapticManager.impact(.light)
+        #endif
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+            currentIndex -= 1
+        }
+    }
+
     /// Moves past the current modal-backed lesson when the user completes the
     /// real modal action, e.g. creating a client from the New Client sheet.
     func completePresentation(_ presentation: WalkthroughPresentation) {
@@ -282,6 +306,35 @@ final class WalkthroughController {
 // MARK: - Default flows
 
 extension WalkthroughController {
+    /// The add-pet control differs by platform: iPhone and iPad show a circular
+    /// paw FAB that anchors directly, while Mac shows a compact "+" toolbar button
+    /// that SwiftUI won't anchor — so it falls back to a narrow top-trailing rect.
+    static var addPetSpotlightShape: SpotlightShape {
+        #if os(iOS)
+        .circle
+        #else
+        .roundedRect(cornerRadius: 10)
+        #endif
+    }
+
+    static var addPetSpotlightFallback: SpotlightFallback {
+        #if os(iOS)
+        .none
+        #else
+        .topTrailingIcon
+        #endif
+    }
+
+    /// The New Client confirmation action is top-trailing in iOS full-screen
+    /// covers, but bottom-trailing in the macOS sheet footer.
+    static var newClientSaveSpotlightFallback: SpotlightFallback {
+        #if os(iOS)
+        .topTrailingAction
+        #else
+        .bottomTrailingAction
+        #endif
+    }
+
     /// The full guided deep-dive a new user sees: it walks the four primary
     /// screens AND every key section inside the Dashboard and Insights, driving
     /// navigation and scrolling each target into view. Section-level steps keep
@@ -393,7 +446,7 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.nc.save.purpose", value: "Tap Create when you are adding a real client, or use Next to keep practicing. Once saved, the client is ready for check in, services, checkout, receipts, and future history."),
                 lesson: .clientRecords,
                 icon: "checkmark.circle.fill",
-                fallback: .topTrailingAction,
+                fallback: newClientSaveSpotlightFallback,
                 presents: .newClient,
                 allowsTargetInteraction: true
             ),
@@ -423,6 +476,17 @@ extension WalkthroughController {
                 lesson: .dailyWorkflow,
                 coachTip: AppLocalization.localized("tour.cd.pets.tip", value: "Each owner can have multiple pets, and every pet keeps its own status and visit history."),
                 icon: "pawprint.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .cdAddPet, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.addpet.title", value: "Add a New Pet"),
+                directive: AppLocalization.localized("tour.cd.addpet.directive", value: "Tap the paw button to add another pet to this owner."),
+                purpose: AppLocalization.localized("tour.cd.addpet.purpose", value: "When a client adopts or brings in a new dog or cat, add it here. Every pet keeps its own profile, photo, breed, health notes, behavior tags, and visit history under the same owner — no need to create a second client."),
+                lesson: .clientRecords,
+                coachTip: AppLocalization.localized("tour.cd.addpet.tip", value: "One owner can have any number of pets. Add them anytime as the family grows."),
+                icon: "pawprint.badge.plus",
+                shape: addPetSpotlightShape,
+                fallback: addPetSpotlightFallback
             ),
             WalkthroughStep(
                 id: next(), anchor: .cdCheckIn, surface: .clients, route: .demoClientDetail,

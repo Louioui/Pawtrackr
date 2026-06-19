@@ -62,12 +62,32 @@ private func walkthroughFallbackRect(_ fallback: SpotlightFallback, in proxy: Ge
         let h: CGFloat = 44
         return CGRect(x: centerX - w / 2, y: centerY - h / 2, width: w, height: h)
     case .topTrailingAction:
+        let isCompactPhone = proxy.size.width < 430
+        let width: CGFloat = isCompactPhone ? 64 : 118
+        let height: CGFloat = isCompactPhone ? 48 : 44
+        let margin: CGFloat = isCompactPhone ? 10 : 16
+        let x = proxy.size.width - proxy.safeAreaInsets.trailing - margin - width
+        // The overlay ignores safe areas, so `safeAreaInsets.top` can be zero on
+        // iPhone. Keep compact highlights down in the navigation bar where the
+        // blue Create check lives, instead of circling the status icons.
+        let minimumTop: CGFloat = isCompactPhone ? 66 : 44
+        let y = max(proxy.safeAreaInsets.top + margin, minimumTop)
+        return CGRect(x: max(margin, x), y: y, width: width, height: height)
+    case .bottomTrailingAction:
         let width: CGFloat = 118
         let height: CGFloat = 44
         let margin: CGFloat = 16
         let x = proxy.size.width - proxy.safeAreaInsets.trailing - margin - width
+        let y = proxy.size.height - proxy.safeAreaInsets.bottom - margin - height
+        return CGRect(x: max(margin, x), y: max(margin, y), width: width, height: height)
+    case .topTrailingIcon:
+        // A single compact toolbar icon (macOS "+"). Keep it narrow so the
+        // spotlight lands on just that button, not the neighboring delete action.
+        let size: CGFloat = 48
+        let margin: CGFloat = 14
+        let x = proxy.size.width - proxy.safeAreaInsets.trailing - margin - size
         let y = proxy.safeAreaInsets.top + margin
-        return CGRect(x: max(margin, x), y: y, width: width, height: height)
+        return CGRect(x: max(margin, x), y: y, width: size, height: size)
     }
 }
 
@@ -111,11 +131,26 @@ private struct WalkthroughOverlayView: View {
     let containerInsets: EdgeInsets
     let controller: WalkthroughController
 
-    private let dimOpacity = 0.74
     private let spotlightPadding: CGFloat = 10
-    private let bubbleMaxWidth: CGFloat = 440
-    private let bubbleMinHeight: CGFloat = 170
     private let arrowExtent: CGFloat = 11
+
+    private var dimOpacity: Double {
+        #if os(macOS)
+        return 0.58
+        #else
+        return isCompactViewport ? 0.62 : 0.54
+        #endif
+    }
+
+    private var bubbleMaxWidth: CGFloat {
+        if containerSize.width >= 900 { return 500 }
+        if containerSize.width >= 620 { return 460 }
+        return 370
+    }
+
+    private var bubbleMinHeight: CGFloat {
+        isCompactViewport ? 150 : 164
+    }
 
     private var isCompactViewport: Bool {
         containerSize.width < 430 || containerSize.height < 760
@@ -166,7 +201,15 @@ private struct WalkthroughOverlayView: View {
     /// Inflated rect we actually cut/ring around the target.
     private var spotlight: CGRect? {
         guard let r = targetRect, r.width > 0, r.height > 0 else { return nil }
-        return r.insetBy(dx: -spotlightPadding, dy: -spotlightPadding)
+        let padded = r.insetBy(dx: -spotlightPadding, dy: -spotlightPadding)
+        let bounds = CGRect(
+            x: max(6, containerInsets.leading + 6),
+            y: max(6, containerInsets.top + 6),
+            width: max(1, containerSize.width - containerInsets.leading - containerInsets.trailing - 12),
+            height: max(1, containerSize.height - containerInsets.top - containerInsets.bottom - 12)
+        )
+        let clamped = padded.intersection(bounds)
+        return clamped.isNull || clamped.isEmpty ? padded : clamped
     }
 
     /// Where the bubble goes relative to the spotlight, chosen from the target's
@@ -380,6 +423,10 @@ private struct WalkthroughOverlayView: View {
         .frame(maxWidth: bubbleWidth, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
         .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        }
         .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 8)
     }
 
@@ -387,12 +434,8 @@ private struct WalkthroughOverlayView: View {
     private var footerControls: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
-                Button(AppLocalization.localized("tour.skip", value: "Skip tour")) {
-                    controller.skip()
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
+                backButton
+                skipButton
 
                 Spacer(minLength: 12)
 
@@ -401,15 +444,41 @@ private struct WalkthroughOverlayView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 footerPrimaryControl
-                Button(AppLocalization.localized("tour.skip", value: "Skip tour")) {
-                    controller.skip()
+                HStack(spacing: 18) {
+                    backButton
+                    skipButton
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Step backward so a user who advanced too fast can re-read the prior stop.
+    /// Shown on every step that has a predecessor — including the "tap the
+    /// highlighted control" steps, where it's otherwise the only way back.
+    @ViewBuilder
+    private var backButton: some View {
+        if controller.canGoBack {
+            Button {
+                controller.goBack()
+            } label: {
+                Label(AppLocalization.localized("tour.back", value: "Back"), systemImage: "chevron.left")
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(DS.ColorToken.primary)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("walkthrough.back")
+        }
+    }
+
+    private var skipButton: some View {
+        Button(AppLocalization.localized("tour.skip", value: "Skip tour")) {
+            controller.skip()
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

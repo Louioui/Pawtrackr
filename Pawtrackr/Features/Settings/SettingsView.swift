@@ -373,14 +373,7 @@ private struct SettingsDetailView: View {
     }
 
     private func replayGettingStarted() {
-        appSettings.replayGettingStarted()
-
-        guard !AppRuntime.isUITesting else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(250))
-            walkthrough?.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough?.restart(WalkthroughController.fullTour())
-        }
+        NotificationCenter.default.post(name: .replayGettingStartedRequested, object: nil)
     }
 }
 

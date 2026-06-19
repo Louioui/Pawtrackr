@@ -412,6 +412,7 @@
 "client_detail.delete_contact_title" = "Delete Contact?";
 "client_detail.delete_contact_message" = "This cannot be undone.";
 "client_detail.pets_count_fmt" = "Pets (%d)";
+"client_detail.add_pet" = "Add Pet";
 "client_detail.check_in" = "Check In";
 "client_detail.check_out" = "Check Out";
 "client_detail.history" = "History";
@@ -1078,6 +1079,11 @@
 "settings.wipe.section_title" = "Start Fresh";
 "settings.wipe.title" = "Wipe Everything & Start Fresh?";
 "tour.done" = "Done";
+"tour.back" = "Back";
+"tour.cd.addpet.title" = "Add a New Pet";
+"tour.cd.addpet.directive" = "Tap Add Pet to add another pet to this owner.";
+"tour.cd.addpet.purpose" = "When a client adopts or brings in a new dog or cat, add it here. Every pet keeps its own profile, photo, breed, health notes, behavior tags, and visit history under the same owner - no need to create a second client.";
+"tour.cd.addpet.tip" = "One owner can have any number of pets. Add them anytime as the family grows.";
 "tour.nav.clients.directive" = "Open Clients to see everyone you groom.";
 "tour.nav.clients.purpose" = "Owners, pets, breeds, and full visit history live here. Aggressive pets show a red warning so your team handles them with care.";
 "tour.nav.clients.title" = "Clients & Pets";

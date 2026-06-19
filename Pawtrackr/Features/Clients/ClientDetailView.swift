@@ -23,6 +23,7 @@ private struct ClientCheckoutRoute: Identifiable {
 struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
 
@@ -104,6 +105,7 @@ struct ClientDetailView: View {
         .cdOwner,
         .cdEmergency,
         .cdPets,
+        .cdAddPet,
         .cdCheckIn,
         .cdCheckOut,
         .cdPetHistory,
@@ -160,7 +162,7 @@ struct ClientDetailView: View {
             .sheet(isPresented: $showContactEditor) {
                 contactEditorSheet
             }
-            .modifier(CheckoutPresentationModifier(checkoutRoute: $checkoutRoute, vm: vm))
+            .modifier(CheckoutPresentationModifier(checkoutRoute: $checkoutRoute, vm: vm, walkthrough: walkthrough))
             .onAppear {
                 synchronizeWalkthroughCheckoutPresentation(walkthrough?.currentStep?.presents, vm: vm)
                 advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
@@ -216,12 +218,37 @@ struct ClientDetailView: View {
     #endif
 
     #if os(iOS)
+    private var usesFloatingAddPetAction: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    /// The FAB lives in a `.fabOverlay` that ignores the bottom safe area, so it
+    /// renders ABOVE the guided-tour spotlight dim and pokes through as a bright
+    /// distraction on every step. Hide it during the tour EXCEPT on its own
+    /// `cdAddPet` step, where it is the spotlight target. Opacity (not removal)
+    /// keeps its anchor registered so the spotlight still resolves.
+    private var isAddPetFabHiddenForWalkthrough: Bool {
+        !usesFloatingAddPetAction || (walkthrough?.isActive == true && walkthrough?.currentStep?.anchor != .cdAddPet)
+    }
+
     private var addPetFab: some View {
         FAB(systemImage: "pawprint.fill", accessibilityLabel: NSLocalizedString("a11y.add_new_pet", comment: "")) {
             sheetDestination = .addPet
         }
+        .walkthroughAnchor(.cdAddPet)
+        .opacity(isAddPetFabHiddenForWalkthrough ? 0 : 1)
+        .allowsHitTesting(!isAddPetFabHiddenForWalkthrough)
+        .animation(.easeInOut(duration: 0.2), value: isAddPetFabHiddenForWalkthrough)
     }
     #endif
+
+    private var showsInlineAddPetAction: Bool {
+        #if os(iOS)
+        !usesFloatingAddPetAction
+        #else
+        true
+        #endif
+    }
 
     @ViewBuilder
     private func destinationSheet(_ destination: SheetDestination, vm: ClientDetailViewModel) -> some View {
@@ -695,7 +722,23 @@ struct ClientDetailView: View {
 
     private func petsSection(vm: ClientDetailViewModel) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(String(format: NSLocalizedString("client_detail.pets_count_fmt", comment: ""), vm.pets.count)).font(.headline).padding(.horizontal)
+            HStack(spacing: 12) {
+                Text(String(format: NSLocalizedString("client_detail.pets_count_fmt", comment: ""), vm.pets.count))
+                    .font(.headline)
+                Spacer(minLength: 12)
+                if showsInlineAddPetAction {
+                    Button {
+                        sheetDestination = .addPet
+                    } label: {
+                        Label(NSLocalizedString("client_detail.add_pet", value: "Add Pet", comment: ""), systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .walkthroughTarget(.cdAddPet)
+                    .accessibilityIdentifier("clientDetail.addPet.inline")
+                }
+            }
+            .padding(.horizontal)
             VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
                     let activeVisit = vm.activeVisit(for: pet)
@@ -1072,6 +1115,10 @@ private struct EmptyToolbarContent: ToolbarContent {
 private struct CheckoutPresentationModifier: ViewModifier {
     @Binding var checkoutRoute: ClientCheckoutRoute?
     let vm: ClientDetailViewModel
+    /// Forwarded so the in-checkout guided-tour overlay renders: SwiftUI does not
+    /// reliably propagate `.environment(walkthrough)` into a cover/sheet, so we
+    /// re-inject it onto the presented `CheckoutView` below.
+    let walkthrough: WalkthroughController?
 
     func body(content: Content) -> some View {
         #if os(iOS)
@@ -1088,6 +1135,7 @@ private struct CheckoutPresentationModifier: ViewModifier {
     @ViewBuilder
     private func checkoutContent(for route: ClientCheckoutRoute) -> some View {
         CheckoutView(pet: route.pet, visit: route.visit)
+            .environment(walkthrough)
             .onDisappear {
                 vm.refreshPets()
                 vm.refreshRecentVisits()

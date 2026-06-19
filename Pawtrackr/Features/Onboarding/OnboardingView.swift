@@ -38,7 +38,12 @@ struct OnboardingView: View {
         case pin, confirmPin
     }
     @FocusState private var focusedField: FocusField?
-    
+
+    /// Onboarding reads best as a centered, readable-width column on wide screens
+    /// (iPad / Mac) instead of stretching its cards and text edge-to-edge. On
+    /// iPhone the screen is already narrower than this, so the cap is a no-op.
+    private let readableContentWidth: CGFloat = 600
+
     var onComplete: () -> Void
     
     init(onComplete: @escaping () -> Void) {
@@ -80,6 +85,11 @@ struct OnboardingView: View {
                 // Footer / Navigation
                 onboardingFooter
             }
+            // Cap the whole column to a readable width and center it so the cards
+            // don't stretch awkwardly on iPad / Mac. The background layer below
+            // still fills the window, so the sides stay seamless.
+            .frame(maxWidth: readableContentWidth)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .task {
             viewModel.bindIfNeeded(modelContext: modelContext, appSettings: appSettings)
@@ -414,6 +424,7 @@ struct OnboardingView: View {
             .padding(.bottom, DS.Spacing.xl)
         }
         .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
         .onAppear {
             welcomeAppeared = true
             if !welcomeBreathing {
@@ -464,8 +475,9 @@ struct OnboardingView: View {
             }
             .padding(.top, DS.Spacing.xl)
         }
+        .scrollBounceBehavior(.basedOnSize)
     }
-    
+
     private var regionalStep: some View {
         ScrollView {
             VStack(spacing: DS.Spacing.xl) {
@@ -488,6 +500,7 @@ struct OnboardingView: View {
             }
             .padding(.top, DS.Spacing.xl)
         }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     private func onboardingTextField(title: String, text: Binding<String>, icon: String, axis: Axis = .horizontal, contentType: PlatformContentType? = nil) -> some View {

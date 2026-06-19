@@ -304,7 +304,11 @@ struct NewClientSheet: View {
                 }
                 .disabled(viewModel.isSaving)
                 .accessibilityIdentifier("newClient.create")
-                .walkthroughAnchor(.ncSave)
+                // NOTE: deliberately NOT `.walkthroughAnchor(.ncSave)`. Toolbar items
+                // live in a UINavigationBar and report bogus anchor bounds, which made
+                // the spotlight cut a large/mis-placed hole (form looked un-dimmed and
+                // the bubble arrow pointed at nothing). The `.ncSave` step falls back to
+                // a deterministic platform-specific action rect instead.
             }
         }
         .alert(

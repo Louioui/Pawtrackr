@@ -23,6 +23,8 @@ extension Notification.Name {
     static let clientOpenRequested = Notification.Name("clientOpenRequested")
     /// Request to select a top-level navigation surface.
     static let selectNavigationItem = Notification.Name("selectNavigationItem")
+    /// Request for the root app shell to replay the guided getting-started tour.
+    static let replayGettingStartedRequested = Notification.Name("replayGettingStartedRequested")
     /// Posted by CloudKitMonitor when sync state changes (idle/syncing/error/account).
     static let cloudKitStateDidChange = Notification.Name("cloudKitStateDidChange")
     /// Posted when the user changes the human-readable name of the current device.

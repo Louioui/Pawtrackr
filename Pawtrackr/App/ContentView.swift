@@ -41,6 +41,8 @@ struct ContentView: View {
     /// The interactive spotlight tour, hosted at the navigation root so it can
     /// dim and spotlight the sidebar (Mac/iPad) or tab bar (iPhone).
     @State private var walkthrough = WalkthroughController()
+    @State private var walkthroughStartTask: Task<Void, Never>?
+    @State private var isExplicitWalkthroughReplayPending = false
     /// Last-handled (kind, uuid, timestamp) used to dedupe near-simultaneous
     /// navigation requests coming from both `.onReceive` and `consumePendingNavigation`
     /// at app launch / cold-start time.
@@ -60,7 +62,10 @@ struct ContentView: View {
             // The deep-dive tour drives navigation: when a step lives on another
             // screen, switch to it before the step shows so its anchor exists.
             .onChange(of: walkthrough.currentStep?.surface) { _, surface in
-                if let surface { selectSurface(surface) }
+                if let surface {
+                    selectSurface(surface)
+                    revealSplitSidebarForWalkthroughIfNeeded()
+                }
             }
             .onChange(of: walkthrough.currentStep?.presents) { _, presentation in
                 synchronizeWalkthroughPresentation(presentation)
@@ -118,10 +123,19 @@ struct ContentView: View {
                 guard let item = notification.requestedNavigationItem else { return }
                 selectSurface(item, resetPath: notification.shouldResetNavigationPath)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .replayGettingStartedRequested)) { _ in
+                replayGettingStartedFromRoot()
+            }
             .adaptiveCover(item: $presentedSheet) { destination in
                 switch destination {
                 case .newClient:
+                    // SwiftUI does not reliably forward the `.environment(walkthrough)`
+                    // injected on the root into a fullScreenCover/sheet, so the in-sheet
+                    // guided-tour overlay never saw the controller (it read nil and
+                    // silently skipped the spotlight). Re-inject it explicitly here so
+                    // the New Client tour steps render inside the cover on iOS and macOS.
                     NewClientSheet(modelContext: modelContext)
+                        .environment(walkthrough)
                 case .recentHistory(let scope):
                     NavigationStack {
                         RecentHistoryView(initialScope: scope)
@@ -144,7 +158,9 @@ struct ContentView: View {
             .onChange(of: appSettings.hasSeenAppTour) { _, seen in
                 // Pick up the OnboardingViewModel (or "Replay Getting Started")
                 // arming the tour without requiring a fresh ContentView appear.
-                if !seen { startWalkthroughIfReady() }
+                if !seen, !isExplicitWalkthroughReplayPending {
+                    startWalkthroughIfReady()
+                }
             }
     }
 
@@ -157,11 +173,36 @@ struct ContentView: View {
         guard !appSettings.hasSeenAppTour, !walkthrough.isActive else { return }
         // Brief delay lets the post-onboarding transition settle so the sidebar /
         // tab-bar anchors are measured in their final positions before we spotlight.
-        Task { @MainActor in
+        walkthroughStartTask?.cancel()
+        walkthroughStartTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
             guard !appSettings.hasSeenAppTour, !walkthrough.isActive, presentedSheet == nil else { return }
+            selectSurface(.dashboard, resetPath: true)
+            revealSplitSidebarForWalkthroughIfNeeded()
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
             walkthrough.start(WalkthroughController.fullTour())
+        }
+    }
+
+    private func replayGettingStartedFromRoot() {
+        guard !AppRuntime.isUITesting else { return }
+
+        isExplicitWalkthroughReplayPending = true
+        appSettings.replayGettingStarted()
+        walkthroughStartTask?.cancel()
+        closeWalkthroughPresentationIfNeeded()
+        presentedSheet = nil
+        selectSurface(.dashboard, resetPath: true)
+        revealSplitSidebarForWalkthroughIfNeeded()
+
+        walkthroughStartTask = Task { @MainActor in
+            defer { isExplicitWalkthroughReplayPending = false }
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            guard presentedSheet == nil else { return }
+            walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
+            walkthrough.restart(WalkthroughController.fullTour())
         }
     }
 
@@ -323,6 +364,13 @@ struct ContentView: View {
         if resetPath {
             router.popToRoot()
         }
+    }
+
+    private func revealSplitSidebarForWalkthroughIfNeeded() {
+        #if os(iOS)
+        guard horizontalSizeClass != .compact else { return }
+        #endif
+        columnVisibility = .all
     }
 
     private func consumePendingNewClientRequest() {
