@@ -14,6 +14,40 @@
 
 import SwiftUI
 
+enum WalkthroughTargetFrame {
+    /// Returns a visible, non-trivial target rect in the overlay's local
+    /// coordinate space, or nil when SwiftUI handed us a stale/offscreen anchor.
+    /// iPad split view and Stage Manager can temporarily report anchors from a
+    /// transitioning host; dropping them lets the tour fall back to a centered
+    /// bubble instead of drawing a misleading spotlight.
+    static func validated(_ rect: CGRect?, in containerSize: CGSize, safeAreaInsets: EdgeInsets) -> CGRect? {
+        guard var rect, rect.isFinite, rect.width >= 2, rect.height >= 2,
+              containerSize.width >= 2, containerSize.height >= 2
+        else { return nil }
+
+        let visibleBounds = CGRect(
+            x: max(0, safeAreaInsets.leading) + 8,
+            y: max(0, safeAreaInsets.top) + 8,
+            width: max(1, containerSize.width - max(0, safeAreaInsets.leading) - max(0, safeAreaInsets.trailing) - 16),
+            height: max(1, containerSize.height - max(0, safeAreaInsets.top) - max(0, safeAreaInsets.bottom) - 16)
+        )
+
+        rect = rect.standardized
+        let intersection = rect.intersection(visibleBounds)
+        guard !intersection.isNull, !intersection.isEmpty,
+              intersection.width >= 2, intersection.height >= 2
+        else { return nil }
+
+        return intersection
+    }
+}
+
+private extension CGRect {
+    var isFinite: Bool {
+        [origin.x, origin.y, size.width, size.height].allSatisfy(\.isFinite)
+    }
+}
+
 /// Which slice of the tour an overlay is responsible for. On iPhone (and iPad
 /// split-screen compact) one overlay owns everything. On a `NavigationSplitView`
 /// (iPad regular / Mac) the sidebar and detail are separate hosting contexts, and
@@ -62,8 +96,17 @@ extension View {
                    step.presents == presenting, scope.handles(step) {
                     // Prefer the live anchor; fall back to a computed rect for
                     // targets SwiftUI won't anchor (iPhone tab-bar items).
-                    let target = anchors[step.anchor].map { proxy[$0] }
-                        ?? walkthroughFallbackRect(step.fallback, in: proxy)
+                    let liveTarget = WalkthroughTargetFrame.validated(
+                        anchors[step.anchor].map { proxy[$0] },
+                        in: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets
+                    )
+                    let fallbackTarget = WalkthroughTargetFrame.validated(
+                        walkthroughFallbackRect(step.fallback, in: proxy),
+                        in: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets
+                    )
+                    let target = liveTarget ?? fallbackTarget
                     WalkthroughOverlayView(
                         step: step,
                         targetRect: target,
@@ -181,8 +224,8 @@ private struct WalkthroughOverlayView: View {
     }
 
     private var bubbleMaxWidth: CGFloat {
-        if containerSize.width >= 900 { return 500 }
-        if containerSize.width >= 620 { return 460 }
+        if containerSize.width >= 900 { return 520 }
+        if containerSize.width >= 620 { return 480 }
         return 370
     }
 
@@ -215,7 +258,7 @@ private struct WalkthroughOverlayView: View {
     }
 
     private var readableBubbleMaxHeight: CGFloat {
-        min(isCompactViewport ? 300 : 380, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
+        min(isCompactViewport ? 300 : 348, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
     }
 
     private var bubbleCardPadding: CGFloat {
@@ -256,7 +299,12 @@ private struct WalkthroughOverlayView: View {
     private var placement: BubblePlacement {
         guard let s = spotlight else { return .center }
         if s.midY > containerSize.height * 0.72 { return .above }          // tab bar
-        if containerSize.width >= 620, s.maxX < containerSize.width * 0.45 { return .trailing } // sidebar
+        let availableTrailingWidth = containerSize.width - s.maxX - bubbleHorizontalPadding
+        if containerSize.width >= 620,
+           s.maxX < containerSize.width * 0.45,
+           availableTrailingWidth >= bubbleWidth + 20 {
+            return .trailing
+        }
 
         let preferredMinimum = isCompactViewport ? 280.0 : 320.0
         if availableBelowSpotlight >= preferredMinimum || availableBelowSpotlight >= availableAboveSpotlight {
@@ -271,11 +319,24 @@ private struct WalkthroughOverlayView: View {
             spotlightRing
             spotlightTapTarget
             bubble
+            accessibilityProbe
         }
         // Interpolate the spotlight + bubble both when the step changes and when
         // the target frame moves (e.g. a macOS window resize mid-tour).
-        .animation(.spring(response: 0.45, dampingFraction: 0.75), value: step.id)
-        .animation(.spring(response: 0.45, dampingFraction: 0.75), value: targetRect)
+        .motionAnimation(MotionSystem.fluid, value: step.id)
+        .motionAnimation(MotionSystem.fluid, value: targetRect)
+    }
+
+    private var accessibilityProbe: some View {
+        Color.clear
+            .frame(width: 2, height: 2)
+            .position(x: 1, y: 1)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("walkthrough.card")
+            .accessibilityLabel(Text(step.title))
+            .accessibilityValue(Text("\(controller.stepNumber) of \(controller.stepCount)"))
+            .accessibilityHidden(true)
     }
 
     // MARK: Dim + cutout
@@ -324,7 +385,7 @@ private struct WalkthroughOverlayView: View {
             .scaleEffect(ringPulse ? 1.035 : 1.0)
             .allowsHitTesting(false)
             .onAppear {
-                guard !reduceMotion else { return }
+                guard MotionGovernor.shouldAnimate(reduceMotion: reduceMotion) else { return }
                 withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                     ringPulse = true
                 }
@@ -467,6 +528,7 @@ private struct WalkthroughOverlayView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .accessibilityIdentifier("walkthrough.stepCounter")
             }
 
             ViewThatFits(in: .vertical) {
@@ -491,6 +553,9 @@ private struct WalkthroughOverlayView: View {
                 .stroke(.white.opacity(0.10), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(step.title))
+        .accessibilityValue(Text("\(controller.stepNumber) of \(controller.stepCount)"))
     }
 
     @ViewBuilder
@@ -542,6 +607,7 @@ private struct WalkthroughOverlayView: View {
         .font(.subheadline)
         .foregroundStyle(.secondary)
         .buttonStyle(.plain)
+        .accessibilityIdentifier("walkthrough.skip")
     }
 
     @ViewBuilder
@@ -555,6 +621,7 @@ private struct WalkthroughOverlayView: View {
                 .padding(.horizontal, isCompactViewport ? 12 : 14)
                 .padding(.vertical, isCompactViewport ? 8 : 9)
                 .background(DS.ColorToken.primary.opacity(0.12), in: Capsule())
+                .accessibilityIdentifier("walkthrough.tapHighlighted")
         } else {
             Button {
                 controller.advance()
@@ -575,6 +642,8 @@ private struct WalkthroughOverlayView: View {
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .pressScaleStyle(hapticsEnabled: true)
+            .accessibilityIdentifier("walkthrough.primary")
         }
     }
 

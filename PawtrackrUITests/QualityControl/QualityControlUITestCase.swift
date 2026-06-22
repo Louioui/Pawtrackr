@@ -12,7 +12,7 @@ class QualityControlUITestCase: XCTestCase {
         app = nil
     }
 
-    func launch(startTab: String? = nil, onboarding: Bool = false) {
+    func launch(startTab: String? = nil, onboarding: Bool = false, startWalkthrough: Bool = false) {
         app = XCUIApplication()
         app.launchArguments = [
             "-pawtrackr-ui-testing",
@@ -25,6 +25,9 @@ class QualityControlUITestCase: XCTestCase {
         app.launchEnvironment["PAWTRACKR_UI_TESTING"] = "1"
         if let startTab {
             app.launchEnvironment["PAWTRACKR_UI_START_TAB"] = startTab
+        }
+        if startWalkthrough {
+            app.launchEnvironment["PAWTRACKR_UI_START_WALKTHROUGH"] = "1"
         }
         app.launch()
     }

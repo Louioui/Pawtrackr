@@ -374,6 +374,8 @@ struct ClientDetailView: View {
                     syncMetadataFooter(client: vm.client)
                 }
                 .padding(.vertical, 8)
+                .frame(maxWidth: clientDetailContentMaxWidth)
+                .frame(maxWidth: .infinity)
             }
             .onAppear {
                 scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: proxy)
@@ -414,6 +416,14 @@ struct ClientDetailView: View {
                 }
             }
         }
+    }
+
+    private var clientDetailContentMaxWidth: CGFloat {
+        #if os(macOS)
+        return 1180
+        #else
+        return horizontalSizeClass == .compact ? 640 : 1100
+        #endif
     }
 
     private func scrollToWalkthroughAnchorIfNeeded(_ anchor: WalkthroughAnchorID?, proxy: ScrollViewProxy) {
@@ -1219,6 +1229,7 @@ private struct InitialsCircle: View {
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
+        .frame(minHeight: 58)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
     }

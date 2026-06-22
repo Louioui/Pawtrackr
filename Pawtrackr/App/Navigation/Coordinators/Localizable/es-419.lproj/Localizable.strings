@@ -1299,7 +1299,7 @@
 "tour.co.review.tip" = "Esta es la pausa final para detectar un complemento, nota o referencia de pago faltante.";
 "tour.co.confirm.title" = "Confirmar y guardar";
 "tour.co.confirm.directive" = "Esta es la meta real del cobro.";
-"tour.co.confirm.purpose" = "Confirmar y pagar completa la visita, guarda el pago, actualiza el historial del cliente y la mascota, refresca estadísticas y prepara detalles del recibo. El walkthrough sigue sin cobrar ni guardar un cobro de demo.";
+"tour.co.confirm.purpose" = "Confirmar y pagar completa la visita, guarda el pago, actualiza el historial del cliente y la mascota, refresca estadísticas y prepara detalles del recibo. El recorrido sigue sin cobrar ni guardar un cobro de demo.";
 "tour.co.confirm.tip" = "En uso real, presiona esto solo cuando el cliente ya pagó y los detalles de la visita estén correctos.";
 "tour.cd.pet_history.title" = "Historial de mascota";
 "tour.cd.pet_history.directive" = "Abre la línea de tiempo completa de la mascota.";
@@ -1309,7 +1309,7 @@
 "tour.cd.history.purpose" = "Los cobros completados entran automáticamente en esta línea de tiempo del cliente. Usa Todo o Últimos 90 días para responder dudas de precios, repetir servicios, verificar notas y abrir un registro guardado.";
 "tour.nav.insights.tip" = "Usa Estadísticas después de un día ocupado para detectar oportunidades de precios, personal y reagendado.";
 "tour.ins.services.tip" = "Mantén ordenado tu menú de servicios en Ajustes para que estas gráficas sigan siendo útiles.";
-"tour.nav.settings.tip" = "Ajustes también es donde repites este walkthrough después de capacitar a alguien nuevo.";
+"tour.nav.settings.tip" = "Ajustes también es donde repites este recorrido después de capacitar a alguien nuevo.";
 "tour.set.business.title" = "Perfil del negocio";
 "tour.set.business.directive" = "Personaliza el espacio de trabajo.";
 "tour.set.business.purpose" = "Configura nombre del negocio, moneda, logo, color de marca, idioma, tema, háptica y pestaña inicial para que recibos y reportes se sientan tuyos.";
@@ -1325,7 +1325,7 @@
 "tour.set.icloud.purpose" = "Con iCloud activo, clientes, mascotas, visitas, fotos, ajustes e historial de cobros se sincronizan entre iPhone, iPad y Mac con diagnósticos cuando algo necesita atención.";
 "tour.set.icloud.tip" = "El banner superior de cuenta te dice si iCloud necesita inicio de sesión o atención de red.";
 "tour.set.about.title" = "Repetir y empezar desde cero";
-"tour.set.about.directive" = "Repite este walkthrough cuando alguien necesite capacitación.";
+"tour.set.about.directive" = "Repite este recorrido cuando alguien necesite capacitación.";
 "tour.set.about.purpose" = "El botón de repetir trae de vuelta este tour guiado sin cambiar clientes, mascotas, visitas, ajustes ni reportes.";
 "tour.set.start_fresh.title" = "Borrar y empezar desde cero";
 "tour.set.start_fresh.directive" = "Úsalo cuando termines de practicar.";

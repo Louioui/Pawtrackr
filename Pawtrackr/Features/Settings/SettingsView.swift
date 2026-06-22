@@ -914,6 +914,7 @@ private struct AboutSectionView: View {
                     Label(settingsLocalized("settings.about.replay_guide", value: "Replay Getting Started"), systemImage: "sparkles")
                 }
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier("settings.replayGettingStarted")
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .walkthroughTarget(.setAbout)

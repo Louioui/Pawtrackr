@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import SwiftUI
 @testable import Pawtrackr
 
 @MainActor
@@ -21,6 +22,8 @@ final class OnboardingViewModelTests: XCTestCase {
         container = nil
         context = nil
         resetAppSettingsDefaults()
+        unsetenv("PAWTRACKR_UI_TESTING")
+        unsetenv("PAWTRACKR_UI_START_WALKTHROUGH")
         try super.tearDownWithError()
     }
 
@@ -310,6 +313,16 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(petHistoryStep.purpose.localizedCaseInsensitiveContains("export"))
     }
 
+    func testSpanishWalkthroughCopyDoesNotLeaveWalkthroughInEnglish() {
+        UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+
+        let leakedCopy = WalkthroughController.fullTour().flatMap { step in
+            [step.title, step.directive, step.purpose, step.coachTip].compactMap(\.self)
+        }.filter { $0.localizedCaseInsensitiveContains("walkthrough") }
+
+        XCTAssertTrue(leakedCopy.isEmpty, "Spanish walkthrough copy should use recorrido instead of leaving walkthrough in English: \(leakedCopy)")
+    }
+
     func testWalkthroughReplayRestartsFromFirstStepEvenWhenAlreadyActive() throws {
         let controller = WalkthroughController()
         let steps = WalkthroughController.fullTour()
@@ -345,6 +358,64 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertNil(controller.currentStep?.presents)
         XCTAssertEqual(controller.currentStep?.anchor, .cdOwner)
         XCTAssertEqual(controller.currentStep?.route, .demoClientDetail)
+    }
+
+    func testWalkthroughCompletionKeepsCreatedClientPreferenceForDetailsChapter() throws {
+        let controller = WalkthroughController()
+        let client = Client(firstName: "Tour", lastName: "Client")
+        context.insert(client)
+        try context.save()
+
+        let steps = WalkthroughController.fullTour()
+        let newClientIndex = try XCTUnwrap(steps.firstIndex { $0.presents == .newClient })
+        controller.start(steps)
+
+        while controller.currentIndex < newClientIndex {
+            controller.advance()
+        }
+
+        controller.focusClientDetail(client.persistentModelID)
+        controller.completePresentation(.newClient)
+
+        XCTAssertEqual(controller.currentStep?.anchor, .cdOwner)
+        XCTAssertEqual(controller.preferredClientDetailID, client.persistentModelID)
+    }
+
+    func testUITestWalkthroughLaunchFlagIsNarrowAndExplicit() {
+        unsetenv("PAWTRACKR_UI_TESTING")
+        unsetenv("PAWTRACKR_UI_START_WALKTHROUGH")
+        XCTAssertFalse(AppRuntime.shouldStartWalkthroughForUITesting)
+
+        setenv("PAWTRACKR_UI_TESTING", "1", 1)
+        setenv("PAWTRACKR_UI_START_WALKTHROUGH", "0", 1)
+        XCTAssertFalse(AppRuntime.shouldStartWalkthroughForUITesting)
+
+        setenv("PAWTRACKR_UI_START_WALKTHROUGH", "1", 1)
+        XCTAssertTrue(AppRuntime.shouldStartWalkthroughForUITesting)
+
+        unsetenv("PAWTRACKR_UI_TESTING")
+        setenv("PAWTRACKR_UI_START_WALKTHROUGH", "1", 1)
+        XCTAssertFalse(AppRuntime.shouldStartWalkthroughForUITesting)
+    }
+
+
+    func testWalkthroughTargetFrameRejectsOffscreenAndTinyRects() {
+        let container = CGSize(width: 1024, height: 768)
+        let insets = EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)
+
+        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: -800, y: -200, width: 40, height: 40), in: container, safeAreaInsets: insets))
+        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: 200, y: 200, width: 0.5, height: 24), in: container, safeAreaInsets: insets))
+
+        // Also reject non-finite values
+        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: .nan, y: 0, width: 40, height: 40), in: container, safeAreaInsets: insets))
+        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: 0, y: 0, width: .infinity, height: 40), in: container, safeAreaInsets: insets))
+
+        // WalkthroughTargetFrame.validated should clamp rects to safe bounds with an 8pt buffer:
+        // maxX: 1024 - 8 = 1016
+        // maxY: (768 - 20 bottom inset) - 8 = 740
+        let visible = WalkthroughTargetFrame.validated(CGRect(x: 980, y: 720, width: 80, height: 80), in: container, safeAreaInsets: insets))
+        XCTAssertEqual(visible?.maxX, 1016)
+        XCTAssertEqual(visible?.maxY, 740)
     }
 
     func testWalkthroughRemembersCreatedClientForDetailsChapter() throws {
@@ -422,7 +493,8 @@ final class OnboardingViewModelTests: XCTestCase {
             AppSettingsKeys.hasAddedFirstClient,
             AppSettingsKeys.hasCompletedFirstVisit,
             AppSettingsKeys.isChecklistDismissed,
-            AppSettingsKeys.hasSeenAppTour
+            AppSettingsKeys.hasSeenAppTour,
+            AppSettingsKeys.appLanguageOverride
         ].forEach { key in
             defaults.removeObject(forKey: key)
         }

@@ -10,6 +10,7 @@ import CoreTransferable
 struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @State private var viewModel: CheckoutViewModel
@@ -47,7 +48,8 @@ struct CheckoutView: View {
             }
 
             stepContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: checkoutContentMaxWidth, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, alignment: .top)
 
             bottomBar
         }
@@ -157,11 +159,26 @@ struct CheckoutView: View {
         #endif
     }
 
+    private let compactMaxWidth: CGFloat = 640
+    private let macOSCheckoutMaxWidth: CGFloat = 820
+    private let regularCheckoutMaxWidth: CGFloat = 860
+
+    private var checkoutContentMaxWidth: CGFloat {
+        #if os(macOS)
+        return macOSCheckoutMaxWidth
+        #else
+        return horizontalSizeClass == .compact ? compactMaxWidth : regularCheckoutMaxWidth
+        #endif
+    }
+
     private var paymentGridColumns: [GridItem] {
         #if os(macOS)
         return [GridItem(.adaptive(minimum: 120, maximum: 160))]
         #else
-        return [GridItem(.flexible()), GridItem(.flexible())]
+        if horizontalSizeClass == .compact {
+            return [GridItem(.flexible()), GridItem(.flexible())]
+        }
+        return [GridItem(.adaptive(minimum: 132, maximum: 180), spacing: 12)]
         #endif
     }
 
