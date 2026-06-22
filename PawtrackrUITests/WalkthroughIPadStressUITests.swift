@@ -87,23 +87,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         XCTAssertTrue(app.otherElements["walkthrough.card"].waitForExistence(timeout: 12))
         let stepCounter = app.staticTexts["walkthrough.stepCounter"]
         XCTAssertTrue(stepCounter.waitForExistence(timeout: 6), "Step counter should appear after replay")
-        XCTAssertTrue(stepCounter.label.contains("1"), "Step counter should show step 1 after replay")
-    }
-
-    private func advanceWalkthrough(untilStepPrefix expectedStepPrefix: String, maxTaps: Int = 16) {
-        for _ in 0..<maxTaps {
-            let counter = app.staticTexts["walkthrough.stepCounter"]
-            if counter.exists, counter.label.hasPrefix(expectedStepPrefix) { return }
-
-            let next = app.buttons["walkthrough.primary"]
-            XCTAssertTrue(waitUntilHittable(next, timeout: 8), "Walkthrough primary button should remain hittable.")
-            next.tap()
-            
-            // Wait for UI to update after tap to avoid race condition in next iteration
-            _ = counter.waitForExistence(timeout: 2)
-            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
-        }
-        XCTFail("Walkthrough did not reach step prefix \(expectedStepPrefix).")
+        XCTAssertTrue(stepCounter.label.hasPrefix("Step 1") || stepCounter.label.contains("1/") || stepCounter.label.contains("1 of"), "Step counter should show step 1 after replay")
     }
 
     private func advanceWalkthroughUntilNewClientOwnerForm(maxTaps: Int = 14) {
