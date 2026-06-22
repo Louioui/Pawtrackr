@@ -15,6 +15,7 @@ struct DashboardView: View {
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(NavigationRouter.self) private var router
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Present only while a guided tour is running; used to scroll deep-dive
     /// targets into view. Optional so previews / non-tour contexts don't require it.
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
@@ -130,37 +131,39 @@ struct DashboardView: View {
                         checklistSection(vm)
                     }
 
-                    #if os(macOS)
-                    HStack(alignment: .top, spacing: 20) {
-                        VStack(spacing: 24) {
-                            kpiSection(vm).walkthroughTarget(.dashKpis)
-                            if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
-                            reengagementSection(vm)
-                            revenueSection(vm).walkthroughTarget(.dashRevenue)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: dashboardColumnSpacing) {
+                            VStack(spacing: 24) {
+                                kpiSection(vm).walkthroughTarget(.dashKpis)
+                                if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
+                                reengagementSection(vm)
+                                revenueSection(vm).walkthroughTarget(.dashRevenue)
+                            }
+                            .frame(maxWidth: .infinity)
+
+                            VStack(spacing: 24) {
+                                quickActionsSection.walkthroughTarget(.dashQuickActions)
+                                if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
+                                if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
+                            }
+                            .frame(width: dashboardSideColumnWidth)
                         }
-                        .frame(maxWidth: .infinity)
 
                         VStack(spacing: 24) {
+                            kpiSection(vm).walkthroughTarget(.dashKpis)
                             quickActionsSection.walkthroughTarget(.dashQuickActions)
-                            overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention)
-                            recentClientsSection(vm).walkthroughTarget(.dashRecentClients)
+                            if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
+                            reengagementSection(vm)
+                            if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
+                            if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
+                            revenueSection(vm).walkthroughTarget(.dashRevenue)
                         }
-                        .frame(maxWidth: 350)
                     }
-                    #else
-                    VStack(spacing: 24) {
-                        kpiSection(vm).walkthroughTarget(.dashKpis)
-                        quickActionsSection.walkthroughTarget(.dashQuickActions)
-                        if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
-                        reengagementSection(vm)
-                        if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
-                        if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
-                        revenueSection(vm).walkthroughTarget(.dashRevenue)
-                    }
-                    #endif
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 24)
+                .frame(maxWidth: dashboardContentMaxWidth, alignment: .top)
+                .padding(.horizontal, dashboardHorizontalPadding)
+                .padding(.vertical, dashboardVerticalPadding)
+                .frame(maxWidth: .infinity)
             }
             .accessibilityIdentifier("dashboard.scroll")
             .refreshable {
@@ -219,6 +222,46 @@ struct DashboardView: View {
             }
             .padding(16)
         }
+    }
+
+    private var dashboardVerticalPadding: CGFloat {
+        #if os(macOS)
+        return 24
+        #else
+        return horizontalSizeClass == .compact ? 16 : 24
+        #endif
+    }
+
+    private var dashboardContentMaxWidth: CGFloat {
+        #if os(macOS)
+        return 1260
+        #else
+        return horizontalSizeClass == .compact ? 640 : 1180
+        #endif
+    }
+
+    private var dashboardHorizontalPadding: CGFloat {
+        #if os(macOS)
+        return 24
+        #else
+        return horizontalSizeClass == .compact ? 16 : 24
+        #endif
+    }
+
+    private var dashboardColumnSpacing: CGFloat {
+        #if os(macOS)
+        return 20
+        #else
+        return 24
+        #endif
+    }
+
+    private var dashboardSideColumnWidth: CGFloat {
+        #if os(macOS)
+        return 350
+        #else
+        return 360
+        #endif
     }
 
     // MARK: - Sections (unchanged logic, just ensuring they use the VM)
@@ -570,7 +613,7 @@ struct DashboardView: View {
     private var quickActionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(NSLocalizedString("dashboard.quick_actions", comment: "")).font(.headline)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: quickActionColumns, spacing: 12) {
                 actionCard(
                     title: NSLocalizedString("dashboard.new_client", comment: ""),
                     symbol: "person.crop.circle.badge.plus",
@@ -587,6 +630,17 @@ struct DashboardView: View {
                 }
             }
         }
+    }
+
+    private var quickActionColumns: [GridItem] {
+        #if os(macOS)
+        return [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 12)]
+        #else
+        if horizontalSizeClass == .compact {
+            return [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        }
+        return [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 12)]
+        #endif
     }
 
     private func presentQuickCheckout() {

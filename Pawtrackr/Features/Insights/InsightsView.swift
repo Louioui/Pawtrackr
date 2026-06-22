@@ -27,6 +27,7 @@ struct InsightsView: View {
     @Environment(DataStoreService.self) private var dataStore
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Present only while a guided tour is running; used to scroll deep-dive
     /// targets into view. Optional so previews / non-tour contexts don't require it.
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
@@ -102,7 +103,9 @@ struct InsightsView: View {
                     categoryCard(vm).walkthroughTarget(.insCategory)
                     retentionCard(vm)
                 }
+                .frame(maxWidth: insightsContentMaxWidth)
                 .padding(DS.Spacing.lg)
+                .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("insights.mainScroll.content")
             }
             .accessibilityIdentifier("insights.mainScroll")
@@ -114,6 +117,18 @@ struct InsightsView: View {
                 }
             }
         }
+    }
+
+    private let compactMaxWidth: CGFloat = 640
+    private let regularInsightsMaxWidth: CGFloat = 1040
+    private let macOSInsightsMaxWidth: CGFloat = 1180
+
+    private var insightsContentMaxWidth: CGFloat {
+        #if os(macOS)
+        return macOSInsightsMaxWidth
+        #else
+        return horizontalSizeClass == .compact ? compactMaxWidth : regularInsightsMaxWidth
+        #endif
     }
 
     // MARK: - KPI summary strip

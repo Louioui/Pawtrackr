@@ -286,12 +286,6 @@ struct NewClientSheet: View {
                         let outcome = await viewModel.createClient()
                         Logger.newClient.info("Create button outcome: \(String(describing: outcome))")
                         if outcome == .created {
-                            if let createdClientID = viewModel.createdClientID {
-                                walkthrough?.focusClientDetail(createdClientID)
-                            }
-                            if walkthrough?.currentStep?.presents == .newClient {
-                                walkthrough?.completePresentation(.newClient)
-                            }
                             dismiss()
                         }
                     }

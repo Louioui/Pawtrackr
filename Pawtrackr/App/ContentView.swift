@@ -181,19 +181,23 @@ struct ContentView: View {
     }
 
     private func startWalkthroughIfReady() {
-        guard !AppRuntime.isUITesting else { return }
+        guard canStartWalkthroughInCurrentRuntime else { return }
         // Don't start over a modal (onboarding cover, what's-new, a sheet) —
         // wait until the navigation chrome is the front-most thing so the
         // spotlight can actually land on the sidebar / tab bar.
         guard presentedSheet == nil else { return }
-        guard !appSettings.hasSeenAppTour, !walkthrough.isActive else { return }
+        guard shouldAutoStartWalkthrough, !walkthrough.isActive else { return }
         // Brief delay lets the post-onboarding transition settle so the sidebar /
         // tab-bar anchors are measured in their final positions before we spotlight.
         walkthroughStartTask?.cancel()
         walkthroughStartTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(600))
             guard !Task.isCancelled else { return }
-            guard !appSettings.hasSeenAppTour, !walkthrough.isActive, presentedSheet == nil else { return }
+            guard canStartWalkthroughInCurrentRuntime,
+                  shouldAutoStartWalkthrough,
+                  !walkthrough.isActive,
+                  presentedSheet == nil
+            else { return }
             selectSurface(.dashboard, resetPath: true)
             revealSplitSidebarForWalkthroughIfNeeded()
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
@@ -202,7 +206,7 @@ struct ContentView: View {
     }
 
     private func replayGettingStartedFromRoot() {
-        guard !AppRuntime.isUITesting else { return }
+        guard canStartWalkthroughInCurrentRuntime else { return }
 
         isExplicitWalkthroughReplayPending = true
         appSettings.replayGettingStarted()
@@ -220,6 +224,14 @@ struct ContentView: View {
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
             walkthrough.restart(WalkthroughController.fullTour())
         }
+    }
+
+    private var canStartWalkthroughInCurrentRuntime: Bool {
+        !AppRuntime.isUITesting || AppRuntime.shouldStartWalkthroughForUITesting
+    }
+
+    private var shouldAutoStartWalkthrough: Bool {
+        !appSettings.hasSeenAppTour || AppRuntime.shouldStartWalkthroughForUITesting
     }
 
     private func synchronizeWalkthroughPresentation(_ presentation: WalkthroughPresentation?) {
@@ -301,7 +313,19 @@ struct ContentView: View {
         else { return }
 
         walkthrough.focusClientDetail(clientID)
-        walkthrough.completePresentation(.newClient)
+        selectClientsSurface()
+        router.popClientsToRoot()
+        revealSplitSidebarForWalkthroughIfNeeded()
+        presentedSheet = nil
+        isWalkthroughDrivingSheet = false
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(280))
+            guard walkthrough.isActive,
+                  walkthrough.currentStep?.presents == .newClient
+            else { return }
+            walkthrough.completePresentation(.newClient)
+        }
     }
 
     private enum NavigationType { case pet, client }

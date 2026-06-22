@@ -11,6 +11,7 @@ enum AppRuntime {
     static let uiTestingArgument = "-pawtrackr-ui-testing"
     static let uiTestingEnvironmentKey = "PAWTRACKR_UI_TESTING"
     static let uiTestingStartTabEnvironmentKey = "PAWTRACKR_UI_START_TAB"
+    static let uiTestingStartWalkthroughEnvironmentKey = "PAWTRACKR_UI_START_WALKTHROUGH"
     static let inMemoryStoreEnvironmentKey = "PAWTRACKR_IN_MEMORY_STORE"
     /// When set, the UI test seeder will skip inserting a BusinessConfig so the
     /// onboarding flow shows on launch — used to drive onboarding XCUI tests.
@@ -30,6 +31,14 @@ enum AppRuntime {
     static var uiTestingStartTab: String? {
         guard isUITesting else { return nil }
         return ProcessInfo.processInfo.environment[uiTestingStartTabEnvironmentKey]?.lowercased()
+    }
+
+    /// True only when a UI test explicitly asks the app shell to launch the
+    /// guided walkthrough. Normal UI tests keep the production guard that
+    /// prevents onboarding chrome from covering unrelated test screens.
+    static var shouldStartWalkthroughForUITesting: Bool {
+        guard isUITesting else { return false }
+        return ProcessInfo.processInfo.environment[uiTestingStartWalkthroughEnvironmentKey] == "1"
     }
 
     /// True when the process was launched by XCTest (unit or UI test). Used by

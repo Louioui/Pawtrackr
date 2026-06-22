@@ -20,6 +20,7 @@ struct ClientsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(NavigationRouter.self) private var router
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     var namespace: Namespace.ID
 
     init(namespace: Namespace.ID) {
@@ -53,6 +54,8 @@ struct ClientsView: View {
                 }
                 .padding(.top, 12)
                 .padding(.bottom, 80)
+                .frame(maxWidth: clientsContentMaxWidth)
+                .frame(maxWidth: .infinity)
             }
             .clientsSearchable(
                 text: searchTextBinding,
@@ -199,6 +202,25 @@ struct ClientsView: View {
         #endif
     }
 
+    private var clientsContentMaxWidth: CGFloat {
+        #if os(macOS)
+        return 1180
+        #else
+        return horizontalSizeClass == .compact ? 640 : 1100
+        #endif
+    }
+
+    private var clientGridColumns: [GridItem] {
+        #if os(macOS)
+        return [GridItem(.adaptive(minimum: 340, maximum: 520), spacing: 12)]
+        #else
+        if horizontalSizeClass == .compact {
+            return [GridItem(.adaptive(minimum: 300, maximum: .infinity), spacing: 12)]
+        }
+        return [GridItem(.adaptive(minimum: 330, maximum: 520), spacing: 12)]
+        #endif
+    }
+
     @ViewBuilder
     private func filterChips(_ viewModel: ClientsViewModel) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -285,12 +307,13 @@ struct ClientsView: View {
 
     @ViewBuilder
     private func clientList(for clients: [Client], isInProgress: Bool? = nil, enableInfiniteScroll: Bool = false) -> some View {
-        LazyVStack(spacing: 12) {
+        LazyVGrid(columns: clientGridColumns, spacing: 12) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { router.navigateToClient(client) }) {
                     ClientCard(client: client, namespace: namespace, isInProgressOverride: isInProgress)
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")
                 .contextMenu {
                     Button {
