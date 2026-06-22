@@ -446,11 +446,12 @@ final class AppSettings {
         pin == appPIN
     }
 
-    /// Resets PIN to default value.
-    func resetPINToDefault() {
-        appPIN = Defaults.pin
-        lastPINChangeDate = Date()
-    }
+    // NOTE: A `resetPINToDefault()` helper used to live here. It was dead code
+    // (zero callers) that reset the PIN to the compiled-in default — a value
+    // that is, by definition, publicly known. Removed so it can never be wired
+    // to a UI control and silently make a device unlockable with the default
+    // code. To clear a PIN, disable App Lock (which the Settings flow guards) or
+    // set a new one via `changePIN(_:)`.
 
     /// Re-arms the new-user guidance (feature tour + dashboard getting-started
     /// checklist). Intentionally non-destructive: it does NOT touch the business

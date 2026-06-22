@@ -188,6 +188,10 @@ final class WalkthroughController {
     private(set) var steps: [WalkthroughStep] = []
     private(set) var currentIndex: Int = 0
     private(set) var isActive: Bool = false
+    /// True for ~a couple of seconds after the user FINISHES the tour (not when
+    /// they skip), so the host can fire a celebratory confetti burst. The host
+    /// clears it via `endCelebration()` once the animation has played.
+    private(set) var isCelebrating: Bool = false
     private(set) var preferredClientDetailID: PersistentIdentifier?
 
     /// Invoked exactly once when the tour ends — whether the user finished or
@@ -289,11 +293,20 @@ final class WalkthroughController {
     /// Ends the tour early.
     func skip() { finish(completed: false) }
 
+    /// Clears the post-completion celebration once its confetti has played.
+    func endCelebration() {
+        withAnimation(.easeOut(duration: 0.4)) { isCelebrating = false }
+    }
+
     private func finish(completed: Bool) {
         #if os(iOS)
         HapticManager.notify(completed ? .success : .warning)
         #endif
         withAnimation(.easeOut(duration: 0.25)) { isActive = false }
+        // Reward finishing the whole tour with a confetti moment; skipping stays quiet.
+        if completed {
+            withAnimation(.easeIn(duration: 0.2)) { isCelebrating = true }
+        }
         let handler = onFinish
         onFinish = nil
         steps = []
@@ -480,7 +493,7 @@ extension WalkthroughController {
             WalkthroughStep(
                 id: next(), anchor: .cdAddPet, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.addpet.title", value: "Add a New Pet"),
-                directive: AppLocalization.localized("tour.cd.addpet.directive", value: "Tap the paw button to add another pet to this owner."),
+                directive: AppLocalization.localized("tour.cd.addpet.directive", value: "Tap the highlighted button to add another pet to this owner."),
                 purpose: AppLocalization.localized("tour.cd.addpet.purpose", value: "When a client adopts or brings in a new dog or cat, add it here. Every pet keeps its own profile, photo, breed, health notes, behavior tags, and visit history under the same owner — no need to create a second client."),
                 lesson: .clientRecords,
                 coachTip: AppLocalization.localized("tour.cd.addpet.tip", value: "One owner can have any number of pets. Add them anytime as the family grows."),

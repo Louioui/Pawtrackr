@@ -120,11 +120,10 @@ public struct PinLockGate<Content: View>: View {
 
 // MARK: - Lock Screen (4 digits; default PIN 1994)
 public struct PinLockView: View {
-    /// After this many consecutive failed attempts the user is forced to wait
-    /// `lockoutSeconds` before another attempt is accepted. The window resets
-    /// on a successful unlock or when the cooldown expires.
-    private static let lockoutThreshold = 5
-    private static let lockoutSeconds: TimeInterval = 30
+    /// Brute-force throttling lives in `PinLockoutGuard`, which persists the
+    /// failed-attempt count and lockout deadline in the Keychain so force-quit /
+    /// relaunch / reinstall can't reset them. This view only mirrors the live
+    /// countdown for display.
 
     @Environment(AppSettings.self) private var appSettings
     @State private var authenticator = BiometricAuthenticator()
@@ -135,8 +134,6 @@ public struct PinLockView: View {
     @Binding var isUnlocked: Bool
     @State private var digits: [Int] = []
     @State private var shakeOffset: CGFloat = 0
-    @State private var failedAttempts: Int = 0
-    @State private var lockoutUntil: Date? = nil
     @State private var lockoutCountdown: TimeInterval = 0
     @State private var lockoutTimer: Timer? = nil
 
@@ -152,6 +149,7 @@ public struct PinLockView: View {
             .frame(maxWidth: 420)
             .onAppear {
                 cachedBiometricType = authenticator.biometricType()
+                resumeLockoutCountdownIfNeeded()
                 authenticateWithBiometrics()
             }
             .onDisappear {
@@ -161,10 +159,7 @@ public struct PinLockView: View {
             .accessibilityElement(children: .contain)
     }
 
-    private var isLockedOut: Bool {
-        guard let lockoutUntil else { return false }
-        return Date() < lockoutUntil
-    }
+    private var isLockedOut: Bool { PinLockoutGuard.isLockedOut }
 
     private var lockContent: some View {
         VStack(spacing: 24) {
@@ -295,12 +290,13 @@ public struct PinLockView: View {
             resetLockoutState()
             isUnlocked = true
         } else {
-            failedAttempts += 1
             performShake()
             HapticManager.notify(.error)
 
-            if failedAttempts >= Self.lockoutThreshold {
-                startLockout()
+            // Persisted via the Keychain so a force-quit can't reset the count.
+            // Once the threshold is hit this opens (or escalates) the lockout.
+            if PinLockoutGuard.registerFailure() != nil {
+                startLockoutCountdown()
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -309,23 +305,33 @@ public struct PinLockView: View {
         }
     }
 
-    private func startLockout() {
-        let until = Date().addingTimeInterval(Self.lockoutSeconds)
-        lockoutUntil = until
-        lockoutCountdown = Self.lockoutSeconds
+    /// Resumes the visible countdown when the view appears mid-lockout — e.g.
+    /// the user force-quit during a cooldown and relaunched; the deadline
+    /// persisted in the Keychain, so the lock screen must keep counting down
+    /// instead of silently granting a fresh batch of attempts.
+    private func resumeLockoutCountdownIfNeeded() {
+        guard PinLockoutGuard.isLockedOut else { return }
+        startLockoutCountdown()
+    }
+
+    /// Drives the on-screen countdown from the persisted deadline. `PinLockoutGuard`
+    /// is the source of truth; this timer only refreshes the label and stops once
+    /// the deadline passes.
+    private func startLockoutCountdown() {
+        lockoutCountdown = PinLockoutGuard.remaining
         lockoutTimer?.invalidate()
         lockoutTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-            let remaining = until.timeIntervalSinceNow
-            if remaining <= 0 {
-                Task { @MainActor in
+            Task { @MainActor in
+                let remaining = PinLockoutGuard.remaining
+                if remaining <= 0 {
                     timer.invalidate()
-                    lockoutCountdown = 0
-                    lockoutUntil = nil
-                    failedAttempts = 0
                     lockoutTimer = nil
-                }
-            } else {
-                Task { @MainActor in
+                    lockoutCountdown = 0
+                    // Deadline elapsed: `isLockedOut` is already false (it compares
+                    // against the stored deadline). We deliberately keep the
+                    // escalated attempt count so renewed guessing jumps to the
+                    // next, longer rung. A successful unlock clears everything.
+                } else {
                     lockoutCountdown = remaining
                 }
             }
@@ -335,9 +341,8 @@ public struct PinLockView: View {
     private func resetLockoutState() {
         lockoutTimer?.invalidate()
         lockoutTimer = nil
-        lockoutUntil = nil
         lockoutCountdown = 0
-        failedAttempts = 0
+        PinLockoutGuard.reset()
     }
 
     private func performShake() {

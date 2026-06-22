@@ -14,6 +14,32 @@
 
 import SwiftUI
 
+/// Which slice of the tour an overlay is responsible for. On iPhone (and iPad
+/// split-screen compact) one overlay owns everything. On a `NavigationSplitView`
+/// (iPad regular / Mac) the sidebar and detail are separate hosting contexts, and
+/// a single root overlay resolves DETAIL-column anchors without the sidebar's
+/// horizontal offset — so the spotlight spans the whole window instead of framing
+/// the element. Splitting the work fixes that: the root overlay handles the
+/// sidebar nav rows (which it CAN resolve), and an overlay hosted inside the
+/// detail column handles content steps (whose anchors resolve tightly there).
+enum WalkthroughOverlayScope {
+    case all          // single overlay owns every step (iPhone / compact)
+    case navigation   // only the primary sidebar nav-row steps
+    case content      // everything except the primary nav rows
+
+    private static let navigationAnchors: Set<WalkthroughAnchorID> = [
+        .dashboard, .clients, .insights, .settings
+    ]
+
+    func handles(_ step: WalkthroughStep) -> Bool {
+        switch self {
+        case .all: return true
+        case .navigation: return Self.navigationAnchors.contains(step.anchor)
+        case .content: return !Self.navigationAnchors.contains(step.anchor)
+        }
+    }
+}
+
 extension View {
     /// Hosts the guided-tour overlay above this view's content. Anchors registered
     /// with `.walkthroughAnchor(_:)` anywhere in the subtree are resolved here, so
@@ -23,10 +49,17 @@ extension View {
     ///   own presentation and renders only that sheet's steps. Without this, the
     ///   root overlay also rendered sheet steps and pointed its `.topTrailingAction`
     ///   fallback at nothing on the main window.
-    func walkthroughOverlay(_ controller: WalkthroughController, presenting: WalkthroughPresentation? = nil) -> some View {
+    /// - Parameter scope: which steps this overlay should draw. See
+    ///   `WalkthroughOverlayScope`. Defaults to `.all` (iPhone single overlay).
+    func walkthroughOverlay(
+        _ controller: WalkthroughController,
+        presenting: WalkthroughPresentation? = nil,
+        scope: WalkthroughOverlayScope = .all
+    ) -> some View {
         overlayPreferenceValue(WalkthroughAnchorPreferenceKey.self) { anchors in
             GeometryReader { proxy in
-                if controller.isActive, let step = controller.currentStep, step.presents == presenting {
+                if controller.isActive, let step = controller.currentStep,
+                   step.presents == presenting, scope.handles(step) {
                     // Prefer the live anchor; fall back to a computed rect for
                     // targets SwiftUI won't anchor (iPhone tab-bar items).
                     let target = anchors[step.anchor].map { proxy[$0] }
@@ -130,6 +163,11 @@ private struct WalkthroughOverlayView: View {
     let containerSize: CGSize
     let containerInsets: EdgeInsets
     let controller: WalkthroughController
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Gentle, continuous "breathing" of the spotlight ring to draw the eye to
+    /// the highlighted control. Disabled under Reduce Motion.
+    @State private var ringPulse = false
 
     private let spotlightPadding: CGFloat = 10
     private let arrowExtent: CGFloat = 11
@@ -282,8 +320,15 @@ private struct WalkthroughOverlayView: View {
                         .position(x: s.midX, y: s.midY)
                 }
             }
-            .shadow(color: DS.ColorToken.primary.opacity(0.8), radius: 10)
+            .shadow(color: DS.ColorToken.primary.opacity(ringPulse ? 0.95 : 0.65), radius: ringPulse ? 16 : 8)
+            .scaleEffect(ringPulse ? 1.035 : 1.0)
             .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    ringPulse = true
+                }
+            }
         }
     }
 
@@ -327,7 +372,10 @@ private struct WalkthroughOverlayView: View {
         }
         .frame(maxWidth: bubbleWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: below ? .top : .bottom)
-        .padding(.horizontal, bubbleHorizontalPadding)
+        // Slide horizontally toward the target so the arrow can reach an
+        // off-center control on wide screens (iPad / Mac). No-op on iPhone,
+        // where the bubble already spans the full width.
+        .offset(x: verticalBubbleCenterX - containerSize.width / 2)
         .padding(.top, topInset)
         .padding(.bottom, bottomInset)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -372,10 +420,25 @@ private struct WalkthroughOverlayView: View {
         min(readableBubbleMaxHeight, max(bubbleMinHeight, availableHeight))
     }
 
-    /// Up/down pointer, nudged horizontally toward the target's center.
+    /// Where the vertical bubble's horizontal center sits. On iPhone the bubble
+    /// spans the width, so this stays at screen center (no shift). On wide screens
+    /// it slides toward the target — clamped to keep the bubble fully on screen —
+    /// so the arrow can actually reach an off-center control instead of pointing
+    /// at empty space.
+    private var verticalBubbleCenterX: CGFloat {
+        let targetX = spotlight?.midX ?? containerSize.width / 2
+        let halfWidth = bubbleWidth / 2
+        let minCenter = halfWidth + bubbleHorizontalPadding
+        let maxCenter = containerSize.width - halfWidth - bubbleHorizontalPadding
+        guard maxCenter > minCenter else { return containerSize.width / 2 }
+        return min(maxCenter, max(minCenter, targetX))
+    }
+
+    /// Up/down pointer, nudged horizontally toward the target relative to the
+    /// (possibly shifted) bubble center.
     private func verticalArrow(_ dir: ArrowDirection) -> some View {
         let targetX = spotlight?.midX ?? containerSize.width / 2
-        let rawOffset = targetX - containerSize.width / 2
+        let rawOffset = targetX - verticalBubbleCenterX
         let limit = (bubbleWidth / 2) - 24
         let offset = max(-limit, min(limit, rawOffset))
         return ArrowTriangle(direction: dir)
@@ -554,5 +617,79 @@ private struct WalkthroughOverlayView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Completion celebration
+
+/// A celebratory confetti burst shown for a couple of seconds when the user
+/// FINISHES the guided tour (skipping stays quiet). Purely decorative and
+/// non-interactive; the falling animation is skipped under Reduce Motion, which
+/// leaves just the "You're all set!" capsule.
+struct WalkthroughCelebrationView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var bannerIn = false
+    private let pieceCount = 46
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                if !reduceMotion {
+                    ForEach(0..<pieceCount, id: \.self) { _ in
+                        WalkthroughConfettiBit(bounds: proxy.size)
+                    }
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .overlay(alignment: .top) {
+            Label(
+                AppLocalization.localized("onboarding.finish.title", value: "You're all set!"),
+                systemImage: "checkmark.seal.fill"
+            )
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 11)
+            .background(DS.ColorToken.primary, in: Capsule())
+            .shadow(color: .black.opacity(0.28), radius: 14, x: 0, y: 6)
+            .padding(.top, 12)
+            .offset(y: bannerIn ? 0 : -96)
+            .opacity(bannerIn ? 1 : 0)
+            .onAppear {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) { bannerIn = true }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// One falling confetti rectangle. Random visual parameters are captured once in
+/// `@State` defaults so re-renders don't reshuffle them mid-flight.
+private struct WalkthroughConfettiBit: View {
+    let bounds: CGSize
+
+    @State private var color: Color = [.blue, .purple, .pink, .orange, .yellow, .green, .red, .mint, .cyan].randomElement() ?? .blue
+    @State private var startXFraction: CGFloat = .random(in: 0.02...0.98)
+    @State private var size: CGFloat = .random(in: 6...11)
+    @State private var drift: CGFloat = .random(in: -80...80)
+    @State private var spin: Double = .random(in: 160...920)
+    @State private var duration: Double = .random(in: 1.5...2.4)
+    @State private var delay: Double = .random(in: 0...0.55)
+    @State private var animate = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(color)
+            .frame(width: size, height: size * 1.5)
+            .rotationEffect(.degrees(animate ? spin : 0))
+            .position(
+                x: bounds.width * startXFraction + (animate ? drift : 0),
+                y: animate ? bounds.height + 60 : -60
+            )
+            .opacity(animate ? 0 : 1)
+            .onAppear {
+                withAnimation(.easeIn(duration: duration).delay(delay)) { animate = true }
+            }
     }
 }

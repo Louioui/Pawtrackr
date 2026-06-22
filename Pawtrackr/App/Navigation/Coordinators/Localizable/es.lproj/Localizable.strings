@@ -1270,7 +1270,7 @@
 "tour.cd.pets.purpose" = "Cada mascota tiene su propio estado y acciones. Las siguientes paradas explican entrada, cobro e historial para que el flujo quede claro antes de usarlo con clientes reales.";
 "tour.cd.pets.tip" = "Cada dueño puede tener varias mascotas, y cada mascota conserva su propio estado e historial de visitas.";
 "tour.cd.addpet.title" = "Agregar una mascota nueva";
-"tour.cd.addpet.directive" = "Toca el botón de la pata para agregar otra mascota a este dueño.";
+"tour.cd.addpet.directive" = "Toca el botón resaltado para agregar otra mascota a este dueño.";
 "tour.cd.addpet.purpose" = "Cuando un cliente adopta o trae un perro o gato nuevo, agrégalo aquí. Cada mascota conserva su propio perfil, foto, raza, notas de salud, etiquetas de comportamiento e historial de visitas bajo el mismo dueño, sin crear un segundo cliente.";
 "tour.cd.addpet.tip" = "Un dueño puede tener cualquier número de mascotas. Agrégalas cuando la familia crezca.";
 "tour.cd.checkin.title" = "Registrar entrada";

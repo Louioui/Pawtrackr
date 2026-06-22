@@ -57,7 +57,23 @@ struct ContentView: View {
 
     var body: some View {
         rootContent
-            .walkthroughOverlay(walkthrough)
+            .walkthroughOverlay(walkthrough, scope: rootOverlayScope)
+            // Confetti moment when the user finishes the whole tour. Sits above the
+            // walkthrough overlay so it plays as the tour dismisses, then clears
+            // itself after the burst.
+            .overlay {
+                if walkthrough.isCelebrating {
+                    WalkthroughCelebrationView()
+                        .transition(.opacity)
+                }
+            }
+            .onChange(of: walkthrough.isCelebrating) { _, celebrating in
+                guard celebrating else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2.4))
+                    walkthrough.endCelebration()
+                }
+            }
             .environment(walkthrough)
             // The deep-dive tour drives navigation: when a step lives on another
             // screen, switch to it before the step shows so its anchor exists.
@@ -513,6 +529,17 @@ struct ContentView: View {
         .allowsHitTesting(false)
     }
 
+    /// The root overlay owns every step on iPhone (single coordinate space), but
+    /// only the sidebar nav rows on a `NavigationSplitView` (iPad regular / Mac) —
+    /// content steps are handled by the detail-column overlay so they frame tightly.
+    private var rootOverlayScope: WalkthroughOverlayScope {
+        #if os(macOS)
+        return .navigation
+        #else
+        return horizontalSizeClass == .compact ? .all : .navigation
+        #endif
+    }
+
     private var splitView: some View {
         #if os(macOS)
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -521,7 +548,11 @@ struct ContentView: View {
             }
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 270)
         } detail: {
+            // Content-step overlay hosted INSIDE the detail column so its anchors
+            // resolve in the detail's coordinate space (a root overlay drops the
+            // sidebar offset and the spotlight spans the whole window).
             splitViewDetail
+                .walkthroughOverlay(walkthrough, scope: .content)
         }
         .background {
             MacTranslucentBackground()
@@ -535,7 +566,9 @@ struct ContentView: View {
                 collapseSplitSidebarAfterSelectionIfNeeded()
             }
         } detail: {
+            // Content-step overlay hosted inside the detail column (see macOS note).
             splitViewDetail
+                .walkthroughOverlay(walkthrough, scope: .content)
         }
         #endif
     }

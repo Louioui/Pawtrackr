@@ -1081,7 +1081,7 @@
 "tour.done" = "Done";
 "tour.back" = "Back";
 "tour.cd.addpet.title" = "Add a New Pet";
-"tour.cd.addpet.directive" = "Tap Add Pet to add another pet to this owner.";
+"tour.cd.addpet.directive" = "Tap the highlighted button to add another pet to this owner.";
 "tour.cd.addpet.purpose" = "When a client adopts or brings in a new dog or cat, add it here. Every pet keeps its own profile, photo, breed, health notes, behavior tags, and visit history under the same owner - no need to create a second client.";
 "tour.cd.addpet.tip" = "One owner can have any number of pets. Add them anytime as the family grows.";
 "tour.nav.clients.directive" = "Open Clients to see everyone you groom.";

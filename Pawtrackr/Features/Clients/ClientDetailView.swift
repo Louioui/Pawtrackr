@@ -231,14 +231,24 @@ struct ClientDetailView: View {
         !usesFloatingAddPetAction || (walkthrough?.isActive == true && walkthrough?.currentStep?.anchor != .cdAddPet)
     }
 
+    @ViewBuilder
     private var addPetFab: some View {
-        FAB(systemImage: "pawprint.fill", accessibilityLabel: NSLocalizedString("a11y.add_new_pet", comment: "")) {
+        let fab = FAB(systemImage: "pawprint.fill", accessibilityLabel: NSLocalizedString("a11y.add_new_pet", comment: "")) {
             sheetDestination = .addPet
         }
-        .walkthroughAnchor(.cdAddPet)
         .opacity(isAddPetFabHiddenForWalkthrough ? 0 : 1)
         .allowsHitTesting(!isAddPetFabHiddenForWalkthrough)
         .animation(.easeInOut(duration: 0.2), value: isAddPetFabHiddenForWalkthrough)
+
+        // Only the *visible* add-pet control may own the `.cdAddPet` spotlight
+        // anchor. On regular width (iPad) the inline header "Add Pet" button owns
+        // it; if the hidden FAB also registered the anchor, it would win the
+        // preference merge and point the spotlight at an empty bottom corner.
+        if usesFloatingAddPetAction {
+            fab.walkthroughAnchor(.cdAddPet)
+        } else {
+            fab
+        }
     }
     #endif
 
