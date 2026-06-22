@@ -27,8 +27,31 @@ final class Pet {
 
     // MARK: - Core Attributes
     var name: String = ""
-    var species: Species = Species.dog
-    var gender: PetGender = PetGender.male
+
+    // Species & gender are stored as the enums' String rawValues, NOT the enums
+    // themselves. A `Codable` enum stored directly becomes a SwiftData "composite
+    // attribute" that fatally and uncatchably aborts every `[Pet]` fetch (which
+    // back `@Query`-driven UI) if any record holds an undecodable value — e.g. a
+    // CloudKit sync from a build with a different case set. Raw String + a
+    // `@Transient` view is decode-crash-proof (same pattern as `behaviorTags`).
+    var speciesRaw: String = Species.dog.rawValue
+    var genderRaw: String = PetGender.male.rawValue
+
+    /// Non-persisted view over `speciesRaw`, preserving the `pet.species` API.
+    /// `@Transient` is REQUIRED — without it the `@Model` macro still synthesizes
+    /// the crashing composite attribute.
+    @Transient
+    var species: Species {
+        get { Species(rawValue: speciesRaw) ?? .dog }
+        set { speciesRaw = newValue.rawValue }
+    }
+
+    /// Non-persisted view over `genderRaw`, preserving the `pet.gender` API.
+    @Transient
+    var gender: PetGender {
+        get { PetGender(rawValue: genderRaw) ?? .male }
+        set { genderRaw = newValue.rawValue }
+    }
 
     // MARK: - Optional Attributes
     var breed: String?
@@ -51,7 +74,16 @@ final class Pet {
 
     // MARK: - Grooming & Vet Info
     var weightLbs: Decimal?
-    var preferredGroomingFrequency: GroomingFrequency?
+
+    /// Stored as the enum's String rawValue (decode-crash-proof; see `speciesRaw`).
+    var preferredGroomingFrequencyRaw: String?
+
+    /// Non-persisted view preserving the `pet.preferredGroomingFrequency` API.
+    @Transient
+    var preferredGroomingFrequency: GroomingFrequency? {
+        get { preferredGroomingFrequencyRaw.flatMap(GroomingFrequency.init(rawValue:)) }
+        set { preferredGroomingFrequencyRaw = newValue?.rawValue }
+    }
     var veterinarianName: String?
     var veterinarianPhoneE164: String?
 
@@ -229,8 +261,8 @@ final class Pet {
         self.createdAt = .now
         self.updatedAt = .now
         self.name = name.trimmed
-        self.species = species
-        self.gender = gender
+        self.speciesRaw = species.rawValue
+        self.genderRaw = gender.rawValue
     }
 
     // MARK: - Derived Properties

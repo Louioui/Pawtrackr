@@ -17,7 +17,20 @@ final class Payment {
     /// The payment amount (always non-negative and rounded to 2 decimal places).
     var amount: Decimal = Decimal.zero
 
-    var method: Method = Payment.Method.cash
+    /// Persisted payment method, stored as the enum's String rawValue. Storing a
+    /// `Codable` enum directly makes SwiftData persist it as a "composite
+    /// attribute" that fatally and uncatchably aborts any `[Payment]` fetch if a
+    /// record holds an undecodable value. Mirrors `CheckoutTransaction.methodRaw`.
+    var methodRaw: String = Payment.Method.cash.rawValue
+
+    /// Non-persisted view over `methodRaw`, preserving the existing
+    /// `payment.method` API. `@Transient` is REQUIRED — without it the `@Model`
+    /// macro still synthesizes the crashing composite attribute.
+    @Transient
+    var method: Method {
+        get { Method(rawValue: methodRaw) ?? .cash }
+        set { methodRaw = newValue.rawValue }
+    }
     var paidAt: Date = Date()
     var updatedAt: Date = Date()
     var note: String?
@@ -36,7 +49,7 @@ final class Payment {
          note: String? = nil,
          externalReference: String? = nil) {
         self.amount = max(0, amount).roundedMoney()
-        self.method = method
+        self.methodRaw = method.rawValue
         self.paidAt = paidAt
         self.updatedAt = .now
         self.note = note

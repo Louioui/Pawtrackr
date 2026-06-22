@@ -25,8 +25,22 @@ final class Service {
     /// The display name for the service (e.g., "Full Groom").
     var name: String = ""
 
-    /// The category this service belongs to.
-    var category: Category?
+    /// Persisted category, stored as the enum's String rawValue. Storing a
+    /// `Codable` enum directly makes SwiftData persist it as a "composite
+    /// attribute" that fatally and uncatchably aborts the ENTIRE `[Service]`
+    /// fetch if any record holds an undecodable value (e.g. a CloudKit sync from
+    /// a build with a different case set). The raw-String + `@Transient` pattern
+    /// (see `MessageTemplate.typeRaw`) is decode-crash-proof.
+    var categoryRaw: String?
+
+    /// Non-persisted view over `categoryRaw`, preserving the existing
+    /// `service.category` API. `@Transient` is REQUIRED — without it the `@Model`
+    /// macro still synthesizes the crashing composite attribute.
+    @Transient
+    var category: Category? {
+        get { categoryRaw.flatMap(Category.init(rawValue:)) }
+        set { categoryRaw = newValue?.rawValue }
+    }
 
     /// The name of an SF Symbol to display next to the service.
     var systemIcon: String?
@@ -66,7 +80,7 @@ final class Service {
         self.updatedAt = .now
         self.lastModifiedBy = DeviceIdentity.currentID
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.category = category
+        self.categoryRaw = category?.rawValue
         self.systemIcon = systemIcon?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.basePrice = basePrice?.roundedMoney()
         self.defaultDurationMinutes = defaultDurationMinutes.map { max(0, $0) }
