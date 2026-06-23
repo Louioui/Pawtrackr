@@ -31,6 +31,20 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         XCTAssertTrue(waitUntilHittable(app.buttons["walkthrough.primary"], timeout: 6))
     }
 
+    func testWalkthroughBackButtonReturnsToPreviousStepOnIPad() throws {
+        launch(startWalkthrough: true)
+
+        assertActiveWalkthroughAnchor("dashboard", timeout: 15)
+        XCTAssertTrue(tapWalkthroughPrimary(timeout: 8), "Walkthrough Next should be tappable.")
+
+        assertActiveWalkthroughAnchor("clients", timeout: 8)
+        let back = app.buttons["walkthrough.back"]
+        XCTAssertTrue(waitUntilHittable(back, timeout: 8), "Walkthrough Back should be tappable.")
+        back.tap()
+
+        assertActiveWalkthroughAnchor("dashboard", timeout: 8)
+    }
+
     func testWalkthroughContinuesIntoClientDetailsAfterCreatingClient() throws {
         launch(startWalkthrough: true)
 
@@ -60,6 +74,49 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         if app.staticTexts["walkthrough.stepCounter"].exists {
             XCTAssertFalse(app.staticTexts["walkthrough.stepCounter"].label.isEmpty, "Step counter should display progress information")
         }
+    }
+
+    func testClientDetailActionTargetsStayHittableAndOpenCheckoutOnIPad() throws {
+        launch(startWalkthrough: true)
+
+        advanceWalkthroughUntilActiveAnchor("cdAddPet", maxTaps: 20)
+        assertActiveWalkthroughAnchor("cdAddPet")
+        XCTAssertTrue(
+            waitUntilHittable(app.buttons["clientDetail.addPet.inline"], timeout: 8),
+            "The visible iPad Add Pet control should own the Add Pet walkthrough target."
+        )
+
+        advanceWalkthroughUntilActiveAnchor("cdCheckOut", maxTaps: 6)
+        assertActiveWalkthroughAnchor("cdCheckOut")
+        let checkoutButton = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
+        XCTAssertTrue(checkoutButton.waitForExistence(timeout: 8), "Checkout should be visible for the highlighted walkthrough target.")
+        assertBubbleDoesNotCover(checkoutButton, named: "Check Out")
+        XCTAssertTrue(
+            waitUntilHittable(checkoutButton, timeout: 8),
+            "Checkout should be highlighted without the overlay blocking taps. layout=\(activeWalkthroughLayoutDebug())"
+        )
+        checkoutButton.tap()
+
+        assertActiveWalkthroughAnchor("coServices", timeout: 12)
+
+        advanceWalkthroughUntilActiveAnchor("cdPetHistory", maxTaps: 8)
+        assertActiveWalkthroughAnchor("cdPetHistory")
+        XCTAssertTrue(
+            waitUntilHittable(app.buttons["clientDetail.pet.UITest Pet.history"], timeout: 8),
+            "The pet History button should be the highlighted, tappable target."
+        )
+        assertBubbleDoesNotCover(app.buttons["clientDetail.pet.UITest Pet.history"], named: "Pet History")
+
+        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 3)
+        assertActiveWalkthroughAnchor("cdHistory")
+    }
+
+    func testSettingsWalkthroughDetailTargetsRenderOnIPad() throws {
+        launch(startWalkthrough: true)
+
+        advanceWalkthroughUntilActiveAnchor("setBusiness", maxTaps: 48)
+        assertActiveWalkthroughAnchor("setBusiness")
+        XCTAssertTrue(app.otherElements["walkthrough.bubble"].exists)
     }
 
     func testSettingsReplayRestartsWalkthroughAfterSkip() throws {
@@ -95,9 +152,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         for _ in 0..<maxTaps {
             if firstName.exists { return }
 
-            let next = app.buttons["walkthrough.primary"]
-            if waitUntilHittable(next, timeout: 4) {
-                next.tap()
+            if tapWalkthroughPrimary(timeout: 4) {
                 // Synchronize by waiting for the UI state to change: either the firstName field appears
                 // or the next button disappears/changes, avoiding a fixed sleep.
                 if firstName.waitForExistence(timeout: 2) { return }
@@ -107,6 +162,85 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
             if firstName.waitForExistence(timeout: 3) { return }
         }
         XCTFail("Walkthrough did not present the New Client owner form.")
+    }
+
+    private func advanceWalkthroughUntilActiveAnchor(_ anchor: String, maxTaps: Int) {
+        let target = app.otherElements["walkthrough.activeAnchor.\(anchor)"]
+        for _ in 0..<maxTaps {
+            if target.exists { return }
+
+            if app.otherElements["walkthrough.activeAnchor.cdCheckIn"].exists {
+                let checkIn = app.buttons["clientDetail.pet.UITest Pet.checkIn"]
+                if waitUntilHittable(checkIn, timeout: 2) {
+                    checkIn.tap()
+                    if target.waitForExistence(timeout: 4) { return }
+                }
+            }
+
+            if app.otherElements["walkthrough.activeAnchor.cdCheckOut"].exists {
+                let checkOut = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
+                if waitUntilHittable(checkOut, timeout: 2) {
+                    checkOut.tap()
+                    if target.waitForExistence(timeout: 4) { return }
+                }
+            }
+
+            if tapWalkthroughPrimary(timeout: 4) {
+                if target.waitForExistence(timeout: 3) { return }
+                continue
+            }
+
+            if target.waitForExistence(timeout: 3) { return }
+        }
+        XCTFail("Walkthrough did not reach active anchor \(anchor).")
+    }
+
+    private func tapWalkthroughPrimary(timeout: TimeInterval = 4) -> Bool {
+        let primary = app.buttons["walkthrough.primary"]
+        if waitUntilHittable(primary, timeout: timeout) {
+            primary.tap()
+            return true
+        }
+
+        guard primary.exists, primary.frame.width > 4, primary.frame.height > 4 else {
+            return false
+        }
+
+        primary.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        return true
+    }
+
+    private func assertActiveWalkthroughAnchor(_ anchor: String, timeout: TimeInterval = 8) {
+        XCTAssertTrue(
+            app.otherElements["walkthrough.activeAnchor.\(anchor)"].waitForExistence(timeout: timeout),
+            "Walkthrough should expose active anchor \(anchor)."
+        )
+        XCTAssertTrue(
+            app.otherElements["walkthrough.bubble"].waitForExistence(timeout: timeout),
+            "Walkthrough bubble should be visible for active anchor \(anchor)."
+        )
+    }
+
+    private func activeWalkthroughLayoutDebug() -> String {
+        app.otherElements.matching(NSPredicate(format: "identifier BEGINSWITH %@", "walkthrough.activeAnchor.")).firstMatch.value as? String ?? "no layout debug"
+    }
+
+    private func assertBubbleDoesNotCover(
+        _ element: XCUIElement,
+        named name: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let bubble = app.otherElements["walkthrough.bubble"]
+        XCTAssertTrue(bubble.waitForExistence(timeout: 4), "Walkthrough bubble should be visible before checking \(name).", file: file, line: line)
+        XCTAssertTrue(element.exists, "\(name) target should exist before checking bubble overlap.", file: file, line: line)
+        let debugValue = activeWalkthroughLayoutDebug()
+        XCTAssertFalse(
+            bubble.frame.intersects(element.frame),
+            "Walkthrough bubble should not cover the highlighted \(name) target. bubble=\(bubble.frame) target=\(element.frame) layout=\(debugValue)",
+            file: file,
+            line: line
+        )
     }
 
     private func tapSettingsOnIPad() {

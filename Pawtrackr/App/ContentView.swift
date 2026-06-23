@@ -267,6 +267,33 @@ struct ContentView: View {
     }
 
     private func openWalkthroughDemoClientDetail() {
+        // The route value (.demoClientDetail) is identical across tour steps
+        // 12–24, so `onChange(of: currentStep?.route)` fires this once (step 12)
+        // — the same cycle the New Client sheet dismisses. On iPhone the push
+        // lands fine. On iPad / macOS a navigation issued into the split-view
+        // detail column while a cover dismisses is silently dropped, so the
+        // client-detail tour steps never opened the profile. Defer the push past
+        // the dismissal there so it takes.
+        #if os(iOS)
+        let needsDeferral = horizontalSizeClass != .compact
+        #else
+        let needsDeferral = true
+        #endif
+
+        guard needsDeferral else {
+            performDemoClientDetailNavigation()
+            return
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard walkthrough.isActive,
+                  walkthrough.currentStep?.route == .demoClientDetail else { return }
+            performDemoClientDetailNavigation()
+        }
+    }
+
+    private func performDemoClientDetailNavigation() {
         selectClientsSurface()
         router.popClientsToRoot()
 
@@ -461,7 +488,7 @@ struct ContentView: View {
                     ecosystemStatusInset
                 }
             #else
-            if horizontalSizeClass == .compact {
+            if usesCompactTabNavigation {
                 // On iPhone the TabView already owns the bottom safe area for
                 // its tab bar; a bottom safe-area-inset here overlaps with the
                 // tab bar and swallows taps on the middle tabs (and on
@@ -560,9 +587,15 @@ struct ContentView: View {
         #if os(macOS)
         return .navigation
         #else
-        return horizontalSizeClass == .compact ? .all : .navigation
+        return usesCompactTabNavigation ? .all : .navigation
         #endif
     }
+
+    #if os(iOS)
+    private var usesCompactTabNavigation: Bool {
+        horizontalSizeClass == .compact && UIDevice.current.userInterfaceIdiom == .phone
+    }
+    #endif
 
     private var splitView: some View {
         #if os(macOS)
@@ -576,7 +609,7 @@ struct ContentView: View {
             // resolve in the detail's coordinate space (a root overlay drops the
             // sidebar offset and the spotlight spans the whole window).
             splitViewDetail
-                .walkthroughOverlay(walkthrough, scope: .content)
+                .walkthroughOverlay(walkthrough, scope: .rootContent)
         }
         .background {
             MacTranslucentBackground()
@@ -592,7 +625,7 @@ struct ContentView: View {
         } detail: {
             // Content-step overlay hosted inside the detail column (see macOS note).
             splitViewDetail
-                .walkthroughOverlay(walkthrough, scope: .content)
+                .walkthroughOverlay(walkthrough, scope: .rootContent)
         }
         #endif
     }
@@ -722,5 +755,32 @@ private extension ContentView {
             columnVisibility = .detailOnly
         }
         #endif
+    }
+}
+
+private extension View {
+    /// Re-hosts the walkthrough content overlay on a *pushed* detail view.
+    ///
+    /// On iPad / macOS the content overlay normally lives on the split-view's
+    /// `detail` column (`splitViewDetail`), which sits OUTSIDE the column's
+    /// `NavigationStack`. Anchors set inside a *pushed* destination (e.g.
+    /// `ClientDetailView`'s `.cdOwner`) don't propagate across that boundary, so
+    /// the spotlight had nothing to draw and the bubble vanished the moment the
+    /// client-detail tour steps opened the profile. Hosting the overlay on the
+    /// pushed view itself puts it in the same layer as those anchors.
+    ///
+    /// iPhone (compact) keeps its single root `.all` overlay, which already
+    /// captures pushed anchors — so this is a deliberate no-op there to avoid a
+    /// double-dim.
+    @ViewBuilder
+    func walkthroughDetailOverlayIfNeeded(
+        _ controller: WalkthroughController,
+        sizeClass: UserInterfaceSizeClass?
+    ) -> some View {
+        if sizeClass == .compact {
+            self
+        } else {
+            walkthroughOverlay(controller, scope: .detailContent)
+        }
     }
 }

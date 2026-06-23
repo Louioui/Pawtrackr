@@ -112,6 +112,7 @@ struct SettingsView: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @Environment(NavigationRouter.self) private var router
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selection: SettingSection? = .business
     
     // State needed for sub-views
@@ -148,11 +149,21 @@ struct SettingsView: View {
         }
         .navigationTitle(Text("settings.title"))
         .navigationDestination(for: SettingSection.self) { section in
-            SettingsDetailView(section: section,
-                               showChangePIN: $showChangePIN,
-                               showResetFirstRunConfirm: $showResetFirstRunConfirm,
-                               showWipeConfirm: $showWipeConfirm,
-                               showDiagnostics: $showDiagnostics)
+            let detail = SettingsDetailView(section: section,
+                                            showChangePIN: $showChangePIN,
+                                            showResetFirstRunConfirm: $showResetFirstRunConfirm,
+                                            showWipeConfirm: $showWipeConfirm,
+                                            showDiagnostics: $showDiagnostics)
+            // Re-host the guided-tour overlay ON the pushed Settings detail so the
+            // `set*` spotlights (which live in SettingsDetailView) resolve on iPad:
+            // the split-view detail-column overlay sits OUTSIDE this NavigationStack
+            // and can't see pushed anchors. Compact (iPhone) keeps its single root
+            // overlay, so this is a no-op there to avoid a double-dim.
+            if horizontalSizeClass != .compact, let walkthrough {
+                detail.walkthroughOverlay(walkthrough, scope: .detailContent)
+            } else {
+                detail
+            }
         }
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughSection(anchor)
@@ -233,11 +244,16 @@ struct SettingsView: View {
     @ViewBuilder
     private var settingsDetail: some View {
         if let selection {
-            SettingsDetailView(section: selection,
-                               showChangePIN: $showChangePIN,
-                               showResetFirstRunConfirm: $showResetFirstRunConfirm,
-                               showWipeConfirm: $showWipeConfirm,
-                               showDiagnostics: $showDiagnostics)
+            let detail = SettingsDetailView(section: selection,
+                                            showChangePIN: $showChangePIN,
+                                            showResetFirstRunConfirm: $showResetFirstRunConfirm,
+                                            showWipeConfirm: $showWipeConfirm,
+                                            showDiagnostics: $showDiagnostics)
+            if let walkthrough {
+                detail.walkthroughOverlay(walkthrough, scope: .detailContent)
+            } else {
+                detail
+            }
         } else {
             ContentUnavailableView(LocalizedStringKey("settings.select_setting"), systemImage: "gear")
         }
@@ -339,6 +355,14 @@ private struct SettingsDetailView: View {
 
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(anchor, anchor: .center)
+            }
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(420))
+            guard walkthrough?.currentStep?.anchor == anchor else { return }
+            withAnimation(.easeInOut(duration: 0.25)) {
                 proxy.scrollTo(anchor, anchor: .center)
             }
         }

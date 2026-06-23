@@ -22,13 +22,38 @@ struct WalkthroughAnchorPreferenceKey: PreferenceKey {
     }
 }
 
+/// Collects already-resolved target frames in the nearest walkthrough overlay's
+/// coordinate space. This complements anchor preferences for views inside
+/// containers like `ScrollView`, where anchors can stop propagating before the
+/// viewport overlay that needs to draw the bubble.
+struct WalkthroughFramePreferenceKey: PreferenceKey {
+    static let coordinateSpaceName = "walkthrough.overlay.viewport"
+    static var defaultValue: [WalkthroughAnchorID: CGRect] { [:] }
+
+    static func reduce(
+        value: inout [WalkthroughAnchorID: CGRect],
+        nextValue: () -> [WalkthroughAnchorID: CGRect]
+    ) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
 extension View {
     /// Registers this view as a spotlight target for the guided tour. Harmless
     /// when no tour is running; the overlay only reads anchors while active.
     func walkthroughAnchor(_ id: WalkthroughAnchorID) -> some View {
-        anchorPreference(key: WalkthroughAnchorPreferenceKey.self, value: .bounds) { anchor in
-            [id: anchor]
-        }
+        self
+            .anchorPreference(key: WalkthroughAnchorPreferenceKey.self, value: .bounds) { anchor in
+                [id: anchor]
+            }
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: WalkthroughFramePreferenceKey.self,
+                        value: [id: proxy.frame(in: .named(WalkthroughFramePreferenceKey.coordinateSpaceName))]
+                    )
+                }
+            }
     }
 
     /// Registers this view as BOTH a spotlight anchor and a scroll target, so the

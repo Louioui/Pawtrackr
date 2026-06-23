@@ -48,6 +48,374 @@ private extension CGRect {
     }
 }
 
+enum WalkthroughOverlayLayout {
+    enum Placement: Equatable {
+        case below
+        case above
+        case trailing
+        case leading
+        case center
+    }
+
+    enum ArrowDirection: Equatable {
+        case up
+        case down
+        case left
+        case right
+    }
+
+    struct Result: Equatable {
+        let spotlight: CGRect?
+        let bubbleFrame: CGRect
+        let cardWidth: CGFloat
+        let cardMaxHeight: CGFloat
+        let placement: Placement
+        let arrowDirection: ArrowDirection?
+        let arrowOffset: CGFloat
+        let isCompactViewport: Bool
+    }
+
+    private struct Metrics {
+        let containerSize: CGSize
+        let safeAreaInsets: EdgeInsets
+
+        var isCompactViewport: Bool {
+            containerSize.width < 430 || containerSize.height < 760
+        }
+
+        var bubbleMaxWidth: CGFloat {
+            if containerSize.width >= 900 { return 520 }
+            if containerSize.width >= 620 { return 480 }
+            return 370
+        }
+
+        var horizontalPadding: CGFloat {
+            isCompactViewport ? 16 : 20
+        }
+
+        var cardWidth: CGFloat {
+            min(bubbleMaxWidth, max(260, containerSize.width - horizontalPadding * 2))
+        }
+
+        var bubbleMinHeight: CGFloat {
+            isCompactViewport ? 150 : 164
+        }
+
+        var safeTopPadding: CGFloat {
+            max(safeAreaInsets.top + 8, 16)
+        }
+
+        var safeBottomPadding: CGFloat {
+            max(safeAreaInsets.bottom + 8, 16)
+        }
+
+        var readableBubbleMaxHeight: CGFloat {
+            min(isCompactViewport ? 300 : 348, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
+        }
+    }
+
+    private static let spotlightPadding: CGFloat = 10
+    private static let bubbleGap: CGFloat = 16
+    private static let compactBubbleGap: CGFloat = 10
+    private static let arrowExtent: CGFloat = 11
+    private static let trailingGap: CGFloat = 12
+    private static let minimumSideBubbleWidth: CGFloat = 260
+
+    static func layout(
+        step: WalkthroughStep,
+        targetRect: CGRect?,
+        containerSize: CGSize,
+        safeAreaInsets: EdgeInsets
+    ) -> Result {
+        let metrics = Metrics(containerSize: containerSize, safeAreaInsets: safeAreaInsets)
+        let gap = metrics.isCompactViewport ? compactBubbleGap : bubbleGap
+        let spotlight = spotlightRect(for: targetRect, metrics: metrics)
+        guard let spotlight else {
+            let height = boundedCardHeight(
+                availableHeight: containerSize.height - metrics.safeTopPadding - metrics.safeBottomPadding,
+                metrics: metrics
+            )
+            let frame = CGRect(
+                x: (containerSize.width - metrics.cardWidth) / 2,
+                y: (containerSize.height - height) / 2,
+                width: metrics.cardWidth,
+                height: height
+            ).clamped(to: safeBounds(metrics: metrics))
+            return Result(
+                spotlight: nil,
+                bubbleFrame: frame,
+                cardWidth: metrics.cardWidth,
+                cardMaxHeight: frame.height,
+                placement: .center,
+                arrowDirection: nil,
+                arrowOffset: 0,
+                isCompactViewport: metrics.isCompactViewport
+            )
+        }
+
+        let placement = choosePlacement(for: step, spotlight: spotlight, metrics: metrics, gap: gap)
+        let preferred = result(for: placement, spotlight: spotlight, metrics: metrics, gap: gap)
+        if !preferred.bubbleFrame.intersects(spotlight) {
+            return preferred
+        }
+
+        for fallbackPlacement in fallbackPlacements(after: placement, spotlight: spotlight, metrics: metrics, gap: gap) {
+            let fallback = result(for: fallbackPlacement, spotlight: spotlight, metrics: metrics, gap: gap)
+            if !fallback.bubbleFrame.intersects(spotlight) {
+                return fallback
+            }
+        }
+
+        return preferred
+    }
+
+    private static func spotlightRect(for targetRect: CGRect?, metrics: Metrics) -> CGRect? {
+        guard let targetRect, targetRect.width > 0, targetRect.height > 0 else { return nil }
+        let padded = targetRect.insetBy(dx: -spotlightPadding, dy: -spotlightPadding)
+        let bounds = CGRect(
+            x: max(6, metrics.safeAreaInsets.leading + 6),
+            y: max(6, metrics.safeAreaInsets.top + 6),
+            width: max(1, metrics.containerSize.width - metrics.safeAreaInsets.leading - metrics.safeAreaInsets.trailing - 12),
+            height: max(1, metrics.containerSize.height - metrics.safeAreaInsets.top - metrics.safeAreaInsets.bottom - 12)
+        )
+        let clamped = padded.intersection(bounds)
+        return clamped.isNull || clamped.isEmpty ? padded : clamped
+    }
+
+    private static func choosePlacement(
+        for step: WalkthroughStep,
+        spotlight: CGRect,
+        metrics: Metrics,
+        gap: CGFloat
+    ) -> Placement {
+        let trailingSpace = metrics.containerSize.width - spotlight.maxX - metrics.horizontalPadding
+        let leadingSpace = spotlight.minX - metrics.horizontalPadding
+        let minimumSideSpace = minimumSideBubbleWidth + arrowExtent + trailingGap
+        if metrics.containerSize.width >= 620 {
+            if trailingSpace >= minimumSideSpace,
+               trailingSpace > leadingSpace {
+                return .trailing
+            }
+
+            if leadingSpace >= minimumSideSpace,
+               leadingSpace >= trailingSpace {
+                return .leading
+            }
+        }
+
+        if spotlight.midY > metrics.containerSize.height * 0.72 { return .above }
+
+        let below = availableBelow(spotlight: spotlight, metrics: metrics, gap: gap)
+        let above = availableAbove(spotlight: spotlight, metrics: metrics, gap: gap)
+        let preferredMinimum = metrics.bubbleMinHeight
+
+        if below >= preferredMinimum || below >= above {
+            return .below
+        }
+        if above >= preferredMinimum || above > 0 {
+            return .above
+        }
+
+        // Keep an anchored bubble outside the target even in cramped layouts.
+        // The card body can scroll, but the target must remain visible and tappable.
+        return below >= above ? .below : .above
+    }
+
+    private static func result(
+        for placement: Placement,
+        spotlight: CGRect,
+        metrics: Metrics,
+        gap: CGFloat
+    ) -> Result {
+        switch placement {
+        case .below:
+            return verticalResult(below: true, spotlight: spotlight, metrics: metrics, gap: gap)
+        case .above:
+            return verticalResult(below: false, spotlight: spotlight, metrics: metrics, gap: gap)
+        case .trailing:
+            return trailingResult(spotlight: spotlight, metrics: metrics)
+        case .leading:
+            return leadingResult(spotlight: spotlight, metrics: metrics)
+        case .center:
+            let height = boundedCardHeight(
+                availableHeight: metrics.containerSize.height - metrics.safeTopPadding - metrics.safeBottomPadding,
+                metrics: metrics
+            )
+            let frame = CGRect(
+                x: (metrics.containerSize.width - metrics.cardWidth) / 2,
+                y: (metrics.containerSize.height - height) / 2,
+                width: metrics.cardWidth,
+                height: height
+            ).clamped(to: safeBounds(metrics: metrics))
+            return Result(
+                spotlight: spotlight,
+                bubbleFrame: frame,
+                cardWidth: metrics.cardWidth,
+                cardMaxHeight: frame.height,
+                placement: .center,
+                arrowDirection: nil,
+                arrowOffset: 0,
+                isCompactViewport: metrics.isCompactViewport
+            )
+        }
+    }
+
+    private static func fallbackPlacements(
+        after placement: Placement,
+        spotlight: CGRect,
+        metrics: Metrics,
+        gap: CGFloat
+    ) -> [Placement] {
+        var placements: [Placement] = []
+
+        let above = availableAbove(spotlight: spotlight, metrics: metrics, gap: gap)
+        let below = availableBelow(spotlight: spotlight, metrics: metrics, gap: gap)
+        if placement != .above, above > 0 { placements.append(.above) }
+        if placement != .below, below > 0 { placements.append(.below) }
+
+        let trailingSpace = metrics.containerSize.width - spotlight.maxX - metrics.horizontalPadding
+        if placement != .trailing,
+           metrics.containerSize.width >= 620,
+           trailingSpace >= minimumSideBubbleWidth + arrowExtent + trailingGap {
+            placements.append(.trailing)
+        }
+
+        let leadingSpace = spotlight.minX - metrics.horizontalPadding
+        if placement != .leading,
+           metrics.containerSize.width >= 620,
+           leadingSpace >= minimumSideBubbleWidth + arrowExtent + trailingGap {
+            placements.append(.leading)
+        }
+
+        return placements
+    }
+
+    private static func verticalResult(
+        below: Bool,
+        spotlight: CGRect,
+        metrics: Metrics,
+        gap: CGFloat
+    ) -> Result {
+        let available = below
+            ? availableBelow(spotlight: spotlight, metrics: metrics, gap: gap)
+            : availableAbove(spotlight: spotlight, metrics: metrics, gap: gap)
+        let cardHeight = boundedCardHeight(availableHeight: available, metrics: metrics)
+        let totalHeight = cardHeight + arrowExtent
+        let centerX = clampedBubbleCenterX(for: spotlight, cardWidth: metrics.cardWidth, metrics: metrics)
+        let x = centerX - metrics.cardWidth / 2
+        let y = below
+            ? spotlight.maxY + gap
+            : spotlight.minY - gap - totalHeight
+        let frame = CGRect(x: x, y: y, width: metrics.cardWidth, height: totalHeight)
+            .clamped(to: safeBounds(metrics: metrics))
+        let rawOffset = spotlight.midX - frame.midX
+        let limit = (metrics.cardWidth / 2) - 24
+        let arrowOffset = max(-limit, min(limit, rawOffset))
+
+        return Result(
+            spotlight: spotlight,
+            bubbleFrame: frame,
+            cardWidth: metrics.cardWidth,
+            cardMaxHeight: min(cardHeight, frame.height - arrowExtent),
+            placement: below ? .below : .above,
+            arrowDirection: below ? .up : .down,
+            arrowOffset: arrowOffset,
+            isCompactViewport: metrics.isCompactViewport
+        )
+    }
+
+    private static func trailingResult(spotlight: CGRect, metrics: Metrics) -> Result {
+        let safe = safeBounds(metrics: metrics)
+        let x = min(spotlight.maxX + trailingGap, metrics.containerSize.width * 0.55)
+        let availableWidth = max(260, safe.maxX - x)
+        let outerWidth = min(metrics.cardWidth + arrowExtent, availableWidth)
+        let cardWidth = max(240, outerWidth - arrowExtent)
+        let cardHeight = boundedCardHeight(
+            availableHeight: metrics.containerSize.height - metrics.safeTopPadding - metrics.safeBottomPadding,
+            metrics: metrics
+        )
+        let y = max(safe.minY, min(spotlight.minY - 8, safe.maxY - cardHeight))
+        let frame = CGRect(x: x, y: y, width: outerWidth, height: cardHeight)
+            .clamped(to: safe)
+
+        return Result(
+            spotlight: spotlight,
+            bubbleFrame: frame,
+            cardWidth: cardWidth,
+            cardMaxHeight: frame.height,
+            placement: .trailing,
+            arrowDirection: .left,
+            arrowOffset: 16,
+            isCompactViewport: metrics.isCompactViewport
+        )
+    }
+
+    private static func leadingResult(spotlight: CGRect, metrics: Metrics) -> Result {
+        let safe = safeBounds(metrics: metrics)
+        let availableWidth = max(260, spotlight.minX - safe.minX - trailingGap)
+        let outerWidth = min(metrics.cardWidth + arrowExtent, availableWidth)
+        let cardWidth = max(240, outerWidth - arrowExtent)
+        let x = max(safe.minX, spotlight.minX - trailingGap - outerWidth)
+        let cardHeight = boundedCardHeight(
+            availableHeight: metrics.containerSize.height - metrics.safeTopPadding - metrics.safeBottomPadding,
+            metrics: metrics
+        )
+        let y = max(safe.minY, min(spotlight.minY - 8, safe.maxY - cardHeight))
+        let frame = CGRect(x: x, y: y, width: outerWidth, height: cardHeight)
+            .clamped(to: safe)
+
+        return Result(
+            spotlight: spotlight,
+            bubbleFrame: frame,
+            cardWidth: cardWidth,
+            cardMaxHeight: frame.height,
+            placement: .leading,
+            arrowDirection: .right,
+            arrowOffset: 16,
+            isCompactViewport: metrics.isCompactViewport
+        )
+    }
+
+    private static func availableAbove(spotlight: CGRect, metrics: Metrics, gap: CGFloat) -> CGFloat {
+        spotlight.minY - gap - arrowExtent - metrics.safeTopPadding
+    }
+
+    private static func availableBelow(spotlight: CGRect, metrics: Metrics, gap: CGFloat) -> CGFloat {
+        metrics.containerSize.height - spotlight.maxY - gap - arrowExtent - metrics.safeBottomPadding
+    }
+
+    private static func boundedCardHeight(availableHeight: CGFloat, metrics: Metrics) -> CGFloat {
+        min(metrics.readableBubbleMaxHeight, max(96, availableHeight))
+    }
+
+    private static func clampedBubbleCenterX(for spotlight: CGRect, cardWidth: CGFloat, metrics: Metrics) -> CGFloat {
+        let halfWidth = cardWidth / 2
+        let minCenter = halfWidth + metrics.horizontalPadding
+        let maxCenter = metrics.containerSize.width - halfWidth - metrics.horizontalPadding
+        guard maxCenter > minCenter else { return metrics.containerSize.width / 2 }
+        return min(maxCenter, max(minCenter, spotlight.midX))
+    }
+
+    private static func safeBounds(metrics: Metrics) -> CGRect {
+        CGRect(
+            x: max(0, metrics.safeAreaInsets.leading) + 8,
+            y: max(0, metrics.safeAreaInsets.top) + 8,
+            width: max(1, metrics.containerSize.width - max(0, metrics.safeAreaInsets.leading) - max(0, metrics.safeAreaInsets.trailing) - 16),
+            height: max(1, metrics.containerSize.height - max(0, metrics.safeAreaInsets.top) - max(0, metrics.safeAreaInsets.bottom) - 16)
+        )
+    }
+}
+
+private extension CGRect {
+    func clamped(to bounds: CGRect) -> CGRect {
+        let width = min(self.width, bounds.width)
+        let height = min(self.height, bounds.height)
+        let x = min(max(self.minX, bounds.minX), bounds.maxX - width)
+        let y = min(max(self.minY, bounds.minY), bounds.maxY - height)
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+}
+
 /// Which slice of the tour an overlay is responsible for. On iPhone (and iPad
 /// split-screen compact) one overlay owns everything. On a `NavigationSplitView`
 /// (iPad regular / Mac) the sidebar and detail are separate hosting contexts, and
@@ -57,12 +425,28 @@ private extension CGRect {
 /// sidebar nav rows (which it CAN resolve), and an overlay hosted inside the
 /// detail column handles content steps (whose anchors resolve tightly there).
 enum WalkthroughOverlayScope {
-    case all          // single overlay owns every step (iPhone / compact)
-    case navigation   // only the primary sidebar nav-row steps
-    case content      // everything except the primary nav rows
+    case all           // single overlay owns every step (iPhone / compact)
+    case navigation    // only the primary sidebar nav-row steps
+    case content       // everything except the primary nav rows
+    case rootContent   // content in a column ROOT view (dashboard / insights) — NOT a pushed detail
+    case detailContent // content whose anchors live in a PUSHED detail view
 
     private static let navigationAnchors: Set<WalkthroughAnchorID> = [
         .dashboard, .clients, .insights, .settings
+    ]
+
+    /// Anchors that live inside a PUSHED `NavigationStack` destination
+    /// (`ClientDetailView`, `CheckoutView`, `SettingsDetailView`). On iPad / macOS
+    /// these are drawn by an overlay re-hosted ON the pushed view, because the
+    /// split-view detail-column overlay sits OUTSIDE the `NavigationStack` and
+    /// can't resolve them. Excluding them from the detail-column overlay
+    /// (`.rootContent`) stops a SECOND overlay from drawing a stray spotlight and
+    /// double-dimming the real target (which left e.g. the Add Pet button un-lit
+    /// with a faint stray circle elsewhere).
+    private static let detailAnchors: Set<WalkthroughAnchorID> = [
+        .cdOwner, .cdEmergency, .cdPets, .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory,
+        .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
+        .setBusiness, .setSecurity, .setData, .setICloud, .setAbout, .setStartFresh
     ]
 
     func handles(_ step: WalkthroughStep) -> Bool {
@@ -70,6 +454,10 @@ enum WalkthroughOverlayScope {
         case .all: return true
         case .navigation: return Self.navigationAnchors.contains(step.anchor)
         case .content: return !Self.navigationAnchors.contains(step.anchor)
+        case .rootContent:
+            return !Self.navigationAnchors.contains(step.anchor) && !Self.detailAnchors.contains(step.anchor)
+        case .detailContent:
+            return Self.detailAnchors.contains(step.anchor)
         }
     }
 }
@@ -90,34 +478,99 @@ extension View {
         presenting: WalkthroughPresentation? = nil,
         scope: WalkthroughOverlayScope = .all
     ) -> some View {
-        overlayPreferenceValue(WalkthroughAnchorPreferenceKey.self) { anchors in
-            GeometryReader { proxy in
-                if controller.isActive, let step = controller.currentStep,
-                   step.presents == presenting, scope.handles(step) {
-                    // Prefer the live anchor; fall back to a computed rect for
-                    // targets SwiftUI won't anchor (iPhone tab-bar items).
-                    let liveTarget = WalkthroughTargetFrame.validated(
-                        anchors[step.anchor].map { proxy[$0] },
-                        in: proxy.size,
-                        safeAreaInsets: proxy.safeAreaInsets
-                    )
-                    let fallbackTarget = WalkthroughTargetFrame.validated(
-                        walkthroughFallbackRect(step.fallback, in: proxy),
-                        in: proxy.size,
-                        safeAreaInsets: proxy.safeAreaInsets
-                    )
-                    let target = liveTarget ?? fallbackTarget
-                    WalkthroughOverlayView(
-                        step: step,
-                        targetRect: target,
-                        containerSize: proxy.size,
-                        containerInsets: proxy.safeAreaInsets,
-                        controller: controller
+        WalkthroughOverlayHost(
+            content: self,
+            controller: controller,
+            presenting: presenting,
+            scope: scope
+        )
+    }
+}
+
+private struct WalkthroughOverlayHost<Content: View>: View {
+    let content: Content
+    let controller: WalkthroughController
+    let presenting: WalkthroughPresentation?
+    let scope: WalkthroughOverlayScope
+
+    @State private var frames: [WalkthroughAnchorID: CGRect] = [:]
+    @State private var hostFrame: CGRect = .zero
+
+    var body: some View {
+        content
+            .coordinateSpace(name: WalkthroughFramePreferenceKey.coordinateSpaceName)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: WalkthroughHostFramePreferenceKey.self,
+                        value: proxy.frame(in: .global)
                     )
                 }
             }
-            .ignoresSafeArea()
-        }
+            .onPreferenceChange(WalkthroughFramePreferenceKey.self) { frames = $0 }
+            .onPreferenceChange(WalkthroughHostFramePreferenceKey.self) { hostFrame = $0 }
+            .overlayPreferenceValue(WalkthroughAnchorPreferenceKey.self) { anchors in
+                GeometryReader { proxy in
+                    if controller.isActive, let step = controller.currentStep,
+                       step.presents == presenting, scope.handles(step) {
+                        let targetOffset = targetCoordinateOffset(in: proxy)
+                        // Prefer the live viewport frame, then the live anchor,
+                        // then a computed fallback for targets SwiftUI won't expose.
+                        let rawFrameTarget = frames[step.anchor]?.offsetBy(
+                            dx: targetOffset.width,
+                            dy: targetOffset.height
+                        )
+                        let rawAnchorTarget = anchors[step.anchor].map {
+                            proxy[$0].offsetBy(dx: targetOffset.width, dy: targetOffset.height)
+                        }
+                        let rawLiveTarget = rawAnchorTarget ?? rawFrameTarget
+                        let liveTarget = WalkthroughTargetFrame.validated(
+                            rawLiveTarget,
+                            in: proxy.size,
+                            safeAreaInsets: proxy.safeAreaInsets
+                        )
+                        let fallbackTarget = WalkthroughTargetFrame.validated(
+                            walkthroughFallbackRect(step.fallback, in: proxy),
+                            in: proxy.size,
+                            safeAreaInsets: proxy.safeAreaInsets
+                        )
+                        let target = liveTarget ?? fallbackTarget
+                        WalkthroughOverlayView(
+                            step: step,
+                            rawTargetRect: rawLiveTarget,
+                            targetRect: target,
+                            containerSize: proxy.size,
+                            containerInsets: proxy.safeAreaInsets,
+                            targetCoordinateOffset: targetOffset,
+                            controller: controller
+                        )
+                    }
+                }
+                .ignoresSafeArea()
+            }
+    }
+
+    private func targetCoordinateOffset(in proxy: GeometryProxy) -> CGSize {
+        guard scope.requiresPushedDetailCoordinateOffset else { return .zero }
+        return CGSize(
+            width: max(hostFrame.minX, proxy.safeAreaInsets.leading),
+            height: max(hostFrame.minY, proxy.safeAreaInsets.top)
+        )
+    }
+}
+
+private struct WalkthroughHostFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect { .zero }
+
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+private extension WalkthroughOverlayScope {
+    var requiresPushedDetailCoordinateOffset: Bool {
+        if case .detailContent = self { return true }
+        return false
     }
 }
 
@@ -167,12 +620,10 @@ private func walkthroughFallbackRect(_ fallback: SpotlightFallback, in proxy: Ge
     }
 }
 
-private enum ArrowDirection { case up, down, left, right }
-
 /// An isosceles triangle pointing in one of four directions — the bubble's
 /// pointer into the spotlight.
 private struct ArrowTriangle: Shape {
-    var direction: ArrowDirection
+    var direction: WalkthroughOverlayLayout.ArrowDirection
     func path(in rect: CGRect) -> Path {
         var p = Path()
         switch direction {
@@ -198,22 +649,19 @@ private struct ArrowTriangle: Shape {
     }
 }
 
-private enum BubblePlacement { case below, above, trailing, center }
-
 private struct WalkthroughOverlayView: View {
     let step: WalkthroughStep
+    let rawTargetRect: CGRect?
     let targetRect: CGRect?
     let containerSize: CGSize
     let containerInsets: EdgeInsets
+    let targetCoordinateOffset: CGSize
     let controller: WalkthroughController
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Gentle, continuous "breathing" of the spotlight ring to draw the eye to
     /// the highlighted control. Disabled under Reduce Motion.
     @State private var ringPulse = false
-
-    private let spotlightPadding: CGFloat = 10
-    private let arrowExtent: CGFloat = 11
 
     private var dimOpacity: Double {
         #if os(macOS)
@@ -223,42 +671,25 @@ private struct WalkthroughOverlayView: View {
         #endif
     }
 
-    private var bubbleMaxWidth: CGFloat {
-        if containerSize.width >= 900 { return 520 }
-        if containerSize.width >= 620 { return 480 }
-        return 370
+    private var layout: WalkthroughOverlayLayout.Result {
+        WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: targetRect,
+            containerSize: containerSize,
+            safeAreaInsets: containerInsets
+        )
     }
 
-    private var bubbleMinHeight: CGFloat {
-        isCompactViewport ? 150 : 164
+    private var spotlight: CGRect? {
+        layout.spotlight
     }
 
     private var isCompactViewport: Bool {
-        containerSize.width < 430 || containerSize.height < 760
-    }
-
-    private var bubbleHorizontalPadding: CGFloat {
-        isCompactViewport ? 16 : 20
+        layout.isCompactViewport
     }
 
     private var bubbleWidth: CGFloat {
-        min(bubbleMaxWidth, max(260, containerSize.width - bubbleHorizontalPadding * 2))
-    }
-
-    private var safeTopPadding: CGFloat {
-        max(containerInsets.top + 8, 16)
-    }
-
-    private var safeBottomPadding: CGFloat {
-        max(containerInsets.bottom + 8, 16)
-    }
-
-    private var bubbleGap: CGFloat {
-        isCompactViewport ? 10 : 16
-    }
-
-    private var readableBubbleMaxHeight: CGFloat {
-        min(isCompactViewport ? 300 : 348, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
+        layout.cardWidth
     }
 
     private var bubbleCardPadding: CGFloat {
@@ -269,48 +700,8 @@ private struct WalkthroughOverlayView: View {
         isCompactViewport ? 124 : 140
     }
 
-    private var availableAboveSpotlight: CGFloat {
-        guard let s = spotlight else { return readableBubbleMaxHeight }
-        return s.minY - bubbleGap - arrowExtent - safeTopPadding
-    }
-
-    private var availableBelowSpotlight: CGFloat {
-        guard let s = spotlight else { return readableBubbleMaxHeight }
-        return containerSize.height - s.maxY - bubbleGap - arrowExtent - safeBottomPadding
-    }
-
-    /// Inflated rect we actually cut/ring around the target.
-    private var spotlight: CGRect? {
-        guard let r = targetRect, r.width > 0, r.height > 0 else { return nil }
-        let padded = r.insetBy(dx: -spotlightPadding, dy: -spotlightPadding)
-        let bounds = CGRect(
-            x: max(6, containerInsets.leading + 6),
-            y: max(6, containerInsets.top + 6),
-            width: max(1, containerSize.width - containerInsets.leading - containerInsets.trailing - 12),
-            height: max(1, containerSize.height - containerInsets.top - containerInsets.bottom - 12)
-        )
-        let clamped = padded.intersection(bounds)
-        return clamped.isNull || clamped.isEmpty ? padded : clamped
-    }
-
-    /// Where the bubble goes relative to the spotlight, chosen from the target's
-    /// position: bottom tab bar → above; left-column sidebar row → trailing;
-    /// otherwise the opposite vertical half.
-    private var placement: BubblePlacement {
-        guard let s = spotlight else { return .center }
-        if s.midY > containerSize.height * 0.72 { return .above }          // tab bar
-        let availableTrailingWidth = containerSize.width - s.maxX - bubbleHorizontalPadding
-        if containerSize.width >= 620,
-           s.maxX < containerSize.width * 0.45,
-           availableTrailingWidth >= bubbleWidth + 20 {
-            return .trailing
-        }
-
-        let preferredMinimum = isCompactViewport ? 280.0 : 320.0
-        if availableBelowSpotlight >= preferredMinimum || availableBelowSpotlight >= availableAboveSpotlight {
-            return .below
-        }
-        return .above
+    private var placement: WalkthroughOverlayLayout.Placement {
+        layout.placement
     }
 
     var body: some View {
@@ -320,11 +711,12 @@ private struct WalkthroughOverlayView: View {
             spotlightTapTarget
             bubble
             accessibilityProbe
+            activeAnchorProbe
         }
         // Interpolate the spotlight + bubble both when the step changes and when
         // the target frame moves (e.g. a macOS window resize mid-tour).
         .motionAnimation(MotionSystem.fluid, value: step.id)
-        .motionAnimation(MotionSystem.fluid, value: targetRect)
+            .motionAnimation(MotionSystem.fluid, value: targetRect)
     }
 
     private var accessibilityProbe: some View {
@@ -336,7 +728,45 @@ private struct WalkthroughOverlayView: View {
             .accessibilityIdentifier("walkthrough.card")
             .accessibilityLabel(Text(step.title))
             .accessibilityValue(Text("\(controller.stepNumber) of \(controller.stepCount)"))
-            .accessibilityHidden(true)
+    }
+
+    private var activeAnchorProbe: some View {
+        Color.clear
+            .frame(width: 2, height: 2)
+            .position(x: 3, y: 3)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("walkthrough.activeAnchor.\(step.anchor.rawValue)")
+            .accessibilityLabel(Text(step.anchor.rawValue))
+            .accessibilityValue(Text(layoutDebugValue))
+    }
+
+    private var layoutDebugValue: String {
+        [
+            "placement=\(placement)",
+            "raw=\(debugDescription(for: rawTargetRect))",
+            "target=\(debugDescription(for: targetRect))",
+            "offset=\(debugDescription(for: targetCoordinateOffset))",
+            "spotlight=\(debugDescription(for: spotlight))",
+            "bubble=\(debugDescription(for: layout.bubbleFrame))",
+            "container=\(Int(containerSize.width.rounded()))x\(Int(containerSize.height.rounded()))"
+        ].joined(separator: ";")
+    }
+
+    private func debugDescription(for size: CGSize) -> String {
+        "[\(Int(size.width.rounded())),\(Int(size.height.rounded()))]"
+    }
+
+    private func debugDescription(for rect: CGRect?) -> String {
+        guard let rect else { return "nil" }
+        return debugDescription(for: rect)
+    }
+
+    private func debugDescription(for rect: CGRect) -> String {
+        let values = [rect.minX, rect.minY, rect.width, rect.height]
+            .map { Int($0.rounded()).description }
+            .joined(separator: ",")
+        return "[\(values)]"
     }
 
     // MARK: Dim + cutout
@@ -414,54 +844,57 @@ private struct WalkthroughOverlayView: View {
         case .below: verticalBubble(below: true)
         case .above: verticalBubble(below: false)
         case .trailing: trailingBubble
+        case .leading: leadingBubble
         case .center: centerBubble
         }
     }
 
     /// Bubble above or below the spotlight (tab bar / general case).
     private func verticalBubble(below: Bool) -> some View {
-        let availableHeight = below ? availableBelowSpotlight : availableAboveSpotlight
-        let cardMaxHeight = boundedBubbleHeight(for: availableHeight)
-        let topInset = below ? min((spotlight?.maxY ?? 0) + bubbleGap, containerSize.height - safeBottomPadding - cardMaxHeight - arrowExtent) : 0
-        let bottomInset = below ? 0 : min(containerSize.height - (spotlight?.minY ?? containerSize.height) + bubbleGap, containerSize.height - safeTopPadding - cardMaxHeight - arrowExtent)
+        let result = layout
 
         return VStack(spacing: 0) {
             if below { verticalArrow(.up) }
-            bubbleCard(maxHeight: cardMaxHeight)
-                .frame(maxHeight: cardMaxHeight, alignment: .top)
+            bubbleCard(maxHeight: result.cardMaxHeight)
+                .frame(maxHeight: result.cardMaxHeight, alignment: .top)
             if !below { verticalArrow(.down) }
         }
-        .frame(maxWidth: bubbleWidth)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: below ? .top : .bottom)
-        // Slide horizontally toward the target so the arrow can reach an
-        // off-center control on wide screens (iPad / Mac). No-op on iPhone,
-        // where the bubble already spans the full width.
-        .offset(x: verticalBubbleCenterX - containerSize.width / 2)
-        .padding(.top, topInset)
-        .padding(.bottom, bottomInset)
+        .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: below ? .top : .bottom)
+        .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+    }
+
+    /// Bubble to the leading side of a right-side target, like iPad pet actions.
+    private var leadingBubble: some View {
+        let result = layout
+
+        return HStack(alignment: .top, spacing: 0) {
+            bubbleCard(maxHeight: result.cardMaxHeight)
+                .frame(maxHeight: result.cardMaxHeight, alignment: .top)
+            ArrowTriangle(direction: .right)
+                .fill(DS.ColorToken.surface)
+                .frame(width: 11, height: 22)
+                .padding(.top, result.arrowOffset)
+        }
+        .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: .topLeading)
+        .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
     /// Bubble to the trailing side of the spotlight (sidebar row on Mac/iPad).
     private var trailingBubble: some View {
-        let gap: CGFloat = 12
-        let leadingInset = min((spotlight?.maxX ?? 0) + gap, containerSize.width * 0.55)
-        let cardMaxHeight = boundedBubbleHeight(for: containerSize.height - safeTopPadding - safeBottomPadding)
-        let topInset = max(safeTopPadding, min((spotlight?.minY ?? 0) - 8, containerSize.height - safeBottomPadding - cardMaxHeight))
+        let result = layout
 
         return HStack(alignment: .top, spacing: 0) {
             ArrowTriangle(direction: .left)
                 .fill(DS.ColorToken.surface)
                 .frame(width: 11, height: 22)
-                .padding(.top, 16)
-            bubbleCard(maxHeight: cardMaxHeight)
-                .frame(maxHeight: cardMaxHeight, alignment: .top)
+                .padding(.top, result.arrowOffset)
+            bubbleCard(maxHeight: result.cardMaxHeight)
+                .frame(maxHeight: result.cardMaxHeight, alignment: .top)
         }
-        .frame(maxWidth: bubbleWidth, alignment: .leading)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.leading, leadingInset)
-        .padding(.top, topInset)
-        .padding(.trailing, 16)
+        .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: .topLeading)
+        .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
@@ -469,43 +902,20 @@ private struct WalkthroughOverlayView: View {
     /// appeared yet. This keeps the tour readable instead of silently dropping
     /// the bubble.
     private var centerBubble: some View {
-        bubbleCard(maxHeight: boundedBubbleHeight(for: containerSize.height - safeTopPadding - safeBottomPadding))
-            .frame(maxHeight: boundedBubbleHeight(for: containerSize.height - safeTopPadding - safeBottomPadding), alignment: .center)
-            .frame(maxWidth: bubbleWidth)
-            .padding(.horizontal, bubbleHorizontalPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        let result = layout
+        return bubbleCard(maxHeight: result.cardMaxHeight)
+            .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: .center)
+            .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
-    }
-
-    private func boundedBubbleHeight(for availableHeight: CGFloat) -> CGFloat {
-        min(readableBubbleMaxHeight, max(bubbleMinHeight, availableHeight))
-    }
-
-    /// Where the vertical bubble's horizontal center sits. On iPhone the bubble
-    /// spans the width, so this stays at screen center (no shift). On wide screens
-    /// it slides toward the target — clamped to keep the bubble fully on screen —
-    /// so the arrow can actually reach an off-center control instead of pointing
-    /// at empty space.
-    private var verticalBubbleCenterX: CGFloat {
-        let targetX = spotlight?.midX ?? containerSize.width / 2
-        let halfWidth = bubbleWidth / 2
-        let minCenter = halfWidth + bubbleHorizontalPadding
-        let maxCenter = containerSize.width - halfWidth - bubbleHorizontalPadding
-        guard maxCenter > minCenter else { return containerSize.width / 2 }
-        return min(maxCenter, max(minCenter, targetX))
     }
 
     /// Up/down pointer, nudged horizontally toward the target relative to the
     /// (possibly shifted) bubble center.
-    private func verticalArrow(_ dir: ArrowDirection) -> some View {
-        let targetX = spotlight?.midX ?? containerSize.width / 2
-        let rawOffset = targetX - verticalBubbleCenterX
-        let limit = (bubbleWidth / 2) - 24
-        let offset = max(-limit, min(limit, rawOffset))
+    private func verticalArrow(_ dir: WalkthroughOverlayLayout.ArrowDirection) -> some View {
         return ArrowTriangle(direction: dir)
             .fill(DS.ColorToken.surface)
             .frame(width: 22, height: 11)
-            .offset(x: offset)
+            .offset(x: layout.arrowOffset)
     }
 
     private func bubbleCard(maxHeight: CGFloat) -> some View {
@@ -545,8 +955,8 @@ private struct WalkthroughOverlayView: View {
                 .padding(.top, 2)
         }
         .padding(bubbleCardPadding)
-        .frame(maxWidth: bubbleWidth, alignment: .top)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: bubbleWidth, alignment: .top)
+        .frame(maxHeight: maxHeight, alignment: .top)
         .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -554,6 +964,7 @@ private struct WalkthroughOverlayView: View {
         }
         .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 8)
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("walkthrough.bubble")
         .accessibilityLabel(Text(step.title))
         .accessibilityValue(Text("\(controller.stepNumber) of \(controller.stepCount)"))
     }

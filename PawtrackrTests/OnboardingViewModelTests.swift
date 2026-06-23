@@ -323,6 +323,26 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(leakedCopy.isEmpty, "Spanish walkthrough copy should use recorrido instead of leaving walkthrough in English: \(leakedCopy)")
     }
 
+    func testFullWalkthroughCopyStaysShortAndPlainInEnglish() {
+        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+
+        assertWalkthroughCopyIsShortAndPlain(WalkthroughController.fullTour())
+    }
+
+    func testFullWalkthroughCopyStaysShortAndPlainInSpanish() {
+        UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+
+        assertWalkthroughCopyIsShortAndPlain(WalkthroughController.fullTour())
+    }
+
+    func testAddPetWalkthroughWaitsForLiveTargetInsteadOfMacToolbarFallback() {
+        XCTAssertEqual(
+            WalkthroughController.addPetSpotlightFallback,
+            .none,
+            "Add Pet should highlight the visible paw Add Pet control; a top-trailing fallback can point at empty toolbar space on macOS."
+        )
+    }
+
     func testWalkthroughReplayRestartsFromFirstStepEvenWhenAlreadyActive() throws {
         let controller = WalkthroughController()
         let steps = WalkthroughController.fullTour()
@@ -337,6 +357,25 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(controller.isActive)
         XCTAssertEqual(controller.currentIndex, 0)
         XCTAssertEqual(controller.currentStep?.anchor, .dashboard)
+    }
+
+    func testWalkthroughBackReturnsToPreviousClientDetailActionStep() throws {
+        let controller = WalkthroughController()
+        let steps = WalkthroughController.fullTour()
+        let checkOutIndex = try XCTUnwrap(steps.firstIndex { $0.anchor == .cdCheckOut })
+        controller.start(steps)
+
+        while controller.currentIndex < checkOutIndex {
+            controller.advance()
+        }
+
+        XCTAssertEqual(controller.currentStep?.anchor, .cdCheckOut)
+        XCTAssertTrue(controller.canGoBack)
+
+        controller.goBack()
+
+        XCTAssertEqual(controller.currentStep?.anchor, .cdCheckIn)
+        XCTAssertTrue(controller.isActive)
     }
 
     func testWalkthroughCompletesNewClientChapterAfterUserCreatesClient() throws {
@@ -407,15 +446,191 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: 200, y: 200, width: 0.5, height: 24), in: container, safeAreaInsets: insets))
 
         // Also reject non-finite values
-        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: .nan, y: 0, width: 40, height: 40), in: container, safeAreaInsets: insets))
-        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: 0, y: 0, width: .infinity, height: 40), in: container, safeAreaInsets: insets))
+        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: CGFloat.nan, y: 0, width: 40, height: 40), in: container, safeAreaInsets: insets))
+        XCTAssertNil(WalkthroughTargetFrame.validated(CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 40), in: container, safeAreaInsets: insets))
 
         // WalkthroughTargetFrame.validated should clamp rects to safe bounds with an 8pt buffer:
         // maxX: 1024 - 8 = 1016
         // maxY: (768 - 20 bottom inset) - 8 = 740
-        let visible = WalkthroughTargetFrame.validated(CGRect(x: 980, y: 720, width: 80, height: 80), in: container, safeAreaInsets: insets))
+        let visible = WalkthroughTargetFrame.validated(CGRect(x: 980, y: 720, width: 80, height: 80), in: container, safeAreaInsets: insets)
         XCTAssertEqual(visible?.maxX, 1016)
         XCTAssertEqual(visible?.maxY, 740)
+    }
+
+    func testWalkthroughInteractiveTargetBubbleDoesNotOverlapIPadCheckoutTarget() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .cdCheckOut,
+            title: "Check Out",
+            directive: "Tap the highlighted button.",
+            purpose: "Finish the visit.",
+            allowsTargetInteraction: true,
+            requiresTargetAction: true
+        )
+        let container = CGSize(width: 834, height: 1_194)
+        let target = CGRect(x: 328, y: 424, width: 252, height: 78)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertNotEqual(result.placement, .center)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight), "Interactive checkout bubble must not cover the tappable target.")
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughLayoutShrinksInsteadOfClampingBubbleOverTarget() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .cdCheckOut,
+            title: "Check Out",
+            directive: "Tap the highlighted button.",
+            purpose: "Finish the visit.",
+            allowsTargetInteraction: true,
+            requiresTargetAction: true
+        )
+        let container = CGSize(width: 834, height: 600)
+        let target = CGRect(x: 260, y: 200, width: 300, height: 260)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertNotEqual(result.placement, .center)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight), "Clamping a bubble into safe bounds must not push it back over an interactive target.")
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughRightSideCheckoutTargetUsesLeadingBubbleOnIPadLandscape() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .cdCheckOut,
+            title: "Check Out",
+            directive: "Tap the highlighted button.",
+            purpose: "Finish the visit.",
+            allowsTargetInteraction: true,
+            requiresTargetAction: true
+        )
+        let container = CGSize(width: 1_194, height: 834)
+        let target = CGRect(x: 670, y: 406, width: 252, height: 88)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertEqual(result.placement, .leading)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight), "Right-side iPad actions need a leading bubble so the highlighted button remains tappable.")
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughRightSideCheckoutTargetUsesLeadingBubbleInShortDetailHost() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .cdCheckOut,
+            title: "Check Out",
+            directive: "Tap the highlighted button.",
+            purpose: "Finish the visit.",
+            allowsTargetInteraction: true,
+            requiresTargetAction: true
+        )
+        let container = CGSize(width: 834, height: 600)
+        let target = CGRect(x: 430, y: 396, width: 252, height: 88)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertEqual(result.placement, .leading)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight), "A short iPad detail host should still place the bubble beside a right-side action instead of clamping it over the target.")
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughBubbleStaysInBoundsForIPadLandscapePetHistoryTarget() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .cdPetHistory,
+            title: "Pet History",
+            directive: "Open the pet timeline.",
+            purpose: "Review past visits."
+        )
+        let container = CGSize(width: 1_194, height: 834)
+        let target = CGRect(x: 834, y: 356, width: 270, height: 76)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertNotEqual(result.placement, .center)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughCompactTabBarBubbleAppearsAboveTarget() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .dashboard,
+            title: "Dashboard",
+            directive: "Start here.",
+            purpose: "Daily overview."
+        )
+        let container = CGSize(width: 393, height: 852)
+        let tabTarget = CGRect(x: 20, y: 766, width: 58, height: 44)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: tabTarget,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 59, leading: 0, bottom: 34, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertEqual(result.placement, .above)
+        XCTAssertLessThanOrEqual(result.bubbleFrame.maxY, spotlight.minY)
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughMacSettingsBubbleIsInBoundsAndOffTarget() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .setBusiness,
+            title: "Business Settings",
+            directive: "Check your shop profile.",
+            purpose: "These fields power receipts."
+        )
+        let container = CGSize(width: 1_024, height: 768)
+        let target = CGRect(x: 44, y: 172, width: 560, height: 150)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 24, leading: 0, bottom: 0, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertNotEqual(result.placement, .center)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
     }
 
     func testWalkthroughRemembersCreatedClientForDetailsChapter() throws {
@@ -500,5 +715,20 @@ final class OnboardingViewModelTests: XCTestCase {
         }
         // PIN now lives in the Keychain; clear it explicitly so tests start fresh.
         KeychainStorage.remove(forKey: AppSettingsKeys.appPINKeychainAccount)
+    }
+
+    private func assertWalkthroughCopyIsShortAndPlain(_ steps: [WalkthroughStep], file: StaticString = #filePath, line: UInt = #line) {
+        for step in steps {
+            XCTAssertLessThanOrEqual(step.directive.count, 86, "Directive is too long for \(step.anchor): \(step.directive)", file: file, line: line)
+            XCTAssertLessThanOrEqual(step.purpose.count, 190, "Purpose is too long for \(step.anchor): \(step.purpose)", file: file, line: line)
+            if let coachTip = step.coachTip {
+                XCTAssertLessThanOrEqual(coachTip.count, 150, "Coach tip is too long for \(step.anchor): \(coachTip)", file: file, line: line)
+            }
+
+            for text in [step.directive, step.purpose] + [step.coachTip].compactMap(\.self) {
+                XCTAssertFalse(text.contains(";"), "Use short sentences instead of semicolons for \(step.anchor): \(text)", file: file, line: line)
+                XCTAssertFalse(text.contains(" — "), "Use short sentences instead of long dash clauses for \(step.anchor): \(text)", file: file, line: line)
+            }
+        }
     }
 }

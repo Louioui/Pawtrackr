@@ -319,9 +319,9 @@ final class WalkthroughController {
 // MARK: - Default flows
 
 extension WalkthroughController {
-    /// The add-pet control differs by platform: iPhone and iPad show a circular
-    /// paw FAB that anchors directly, while Mac shows a compact "+" toolbar button
-    /// that SwiftUI won't anchor — so it falls back to a narrow top-trailing rect.
+    /// The add-pet control differs by platform, but the walkthrough only trusts
+    /// a live anchor on the visible paw control. A fake toolbar fallback can point
+    /// at empty macOS chrome while the real Add Pet button is in the pet section.
     static var addPetSpotlightShape: SpotlightShape {
         #if os(iOS)
         .circle
@@ -331,11 +331,7 @@ extension WalkthroughController {
     }
 
     static var addPetSpotlightFallback: SpotlightFallback {
-        #if os(iOS)
         .none
-        #else
-        .topTrailingIcon
-        #endif
     }
 
     /// The New Client confirmation action is top-trailing in iOS full-screen
@@ -362,7 +358,7 @@ extension WalkthroughController {
                 id: next(), anchor: .dashboard, surface: .dashboard,
                 title: AppLocalization.localized("tour.nav.dashboard.title", value: "Your Dashboard"),
                 directive: AppLocalization.localized("tour.nav.dashboard.directive", value: "Start every day here."),
-                purpose: AppLocalization.localized("tour.nav.dashboard.purpose", value: "Dashboard is the command center: active visits, today’s revenue, shortcuts, reminders, and recent clients all land in one place."),
+                purpose: AppLocalization.localized("tour.nav.dashboard.purpose", value: "Dashboard shows active visits, today’s money, shortcuts, reminders, and recent clients in one place."),
                 lesson: .appMap,
                 coachTip: AppLocalization.localized("tour.nav.dashboard.tip", value: "The app loop is simple: find the client, check in the pet, finish checkout, then review the numbers."),
                 icon: "square.grid.2x2.fill", fallback: .tabBarItem(index: 0, count: 4)
@@ -436,7 +432,7 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.nc.owner.directive", value: "Start with the person who books and pays."),
                 purpose: AppLocalization.localized("tour.nc.owner.purpose", value: "Name, phone, email, address, and emergency contacts help you confirm appointments, follow up, and keep the right contact details on receipts and exports."),
                 lesson: .clientRecords,
-                coachTip: AppLocalization.localized("tour.nc.owner.tip", value: "Only a name is required; add the rest now or fill it in later."),
+                coachTip: AppLocalization.localized("tour.nc.owner.tip", value: "Only a name is required. Add the rest now or fill it in later."),
                 icon: "person.text.rectangle",
                 presents: .newClient,
                 allowsTargetInteraction: true
@@ -494,10 +490,10 @@ extension WalkthroughController {
                 id: next(), anchor: .cdAddPet, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.addpet.title", value: "Add a New Pet"),
                 directive: AppLocalization.localized("tour.cd.addpet.directive", value: "Tap the highlighted button to add another pet to this owner."),
-                purpose: AppLocalization.localized("tour.cd.addpet.purpose", value: "When a client adopts or brings in a new dog or cat, add it here. Every pet keeps its own profile, photo, breed, health notes, behavior tags, and visit history under the same owner — no need to create a second client."),
+                purpose: AppLocalization.localized("tour.cd.addpet.purpose", value: "When an owner gets a new dog or cat, add the pet here. The pet keeps its own photo, breed, health notes, tags, and visit history."),
                 lesson: .clientRecords,
                 coachTip: AppLocalization.localized("tour.cd.addpet.tip", value: "One owner can have any number of pets. Add them anytime as the family grows."),
-                icon: "pawprint.badge.plus",
+                icon: "pawprint.fill",
                 shape: addPetSpotlightShape,
                 fallback: addPetSpotlightFallback
             ),
@@ -549,7 +545,7 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.co.payment.directive", value: "Confirm the amount and how the client paid."),
                 purpose: AppLocalization.localized("tour.co.payment.purpose", value: "Payment captures the final amount, payment method, tip, and any required card or transfer reference so receipts and bookkeeping match the real transaction."),
                 lesson: .checkoutAndMoney,
-                coachTip: AppLocalization.localized("tour.co.payment.tip", value: "You can override the amount when needed; tips and totals still stay separated for reporting."),
+                coachTip: AppLocalization.localized("tour.co.payment.tip", value: "You can change the amount when needed. Tips and totals still stay separate for reports."),
                 icon: "creditcard.fill",
                 presents: .checkout
             ),
@@ -567,7 +563,7 @@ extension WalkthroughController {
                 id: next(), anchor: .coConfirm, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.co.confirm.title", value: "Confirm & Save"),
                 directive: AppLocalization.localized("tour.co.confirm.directive", value: "This is the real checkout finish line."),
-                purpose: AppLocalization.localized("tour.co.confirm.purpose", value: "Confirm & Pay completes the visit, saves the payment, updates the client and pet history, refreshes insights, and prepares receipt details. The walkthrough moves on without charging or saving a demo checkout."),
+                purpose: AppLocalization.localized("tour.co.confirm.purpose", value: "Confirm & Pay saves the payment, updates history, refreshes insights, and prepares receipt details. This demo tour does not charge or save."),
                 lesson: .checkoutAndMoney,
                 coachTip: AppLocalization.localized("tour.co.confirm.tip", value: "During real use, only press this once the client has paid and the visit details are right."),
                 icon: "checkmark.seal.fill",
@@ -594,7 +590,7 @@ extension WalkthroughController {
                 id: next(), anchor: .insights, surface: .insights,
                 title: AppLocalization.localized("tour.nav.insights.title", value: "Insights"),
                 directive: AppLocalization.localized("tour.nav.insights.directive", value: "Let the app do the math."),
-                purpose: AppLocalization.localized("tour.nav.insights.purpose", value: "Revenue, top services, payment mix, categories, retention, and visit trends are calculated automatically from completed checkouts."),
+                purpose: AppLocalization.localized("tour.nav.insights.purpose", value: "Insights turns finished checkouts into revenue, services, payments, retention, and visit trend charts."),
                 lesson: .businessInsights,
                 coachTip: AppLocalization.localized("tour.nav.insights.tip", value: "Use Insights after a busy day to spot pricing, staffing, and rebooking opportunities."),
                 icon: "chart.bar.fill", fallback: .tabBarItem(index: 2, count: 4)
@@ -706,7 +702,7 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.set.start_fresh.directive", value: "Use this when you are done practicing."),
                 purpose: AppLocalization.localized("tour.set.start_fresh.purpose", value: "After you know your way around, Wipe & Start Fresh clears the demo clients, pets, visits, payments, and history so you can begin with an empty workspace for real business."),
                 lesson: .dataOwnership,
-                coachTip: AppLocalization.localized("tour.set.start_fresh.tip", value: "Your business profile and service menu stay in place; only operational records are removed."),
+                coachTip: AppLocalization.localized("tour.set.start_fresh.tip", value: "Your business profile and service menu stay. Only practice records are removed."),
                 icon: "trash.fill"
             )
         ]

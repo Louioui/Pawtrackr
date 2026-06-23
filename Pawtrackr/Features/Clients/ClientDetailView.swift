@@ -206,7 +206,7 @@ struct ClientDetailView: View {
     private var macAddPetToolbarItem: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Button { sheetDestination = .addPet } label: {
-                Label(NSLocalizedString("a11y.add_new_pet", comment: ""), systemImage: "plus")
+                Label(NSLocalizedString("a11y.add_new_pet", comment: ""), systemImage: "pawprint.fill")
             }
         }
     }
@@ -377,6 +377,7 @@ struct ClientDetailView: View {
                 .frame(maxWidth: clientDetailContentMaxWidth)
                 .frame(maxWidth: .infinity)
             }
+            .modifier(ClientDetailWalkthroughOverlayModifier(walkthrough: walkthrough, sizeClass: horizontalSizeClass))
             .onAppear {
                 scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: proxy)
             }
@@ -431,6 +432,14 @@ struct ClientDetailView: View {
 
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.35)) {
+                proxy.scrollTo(anchor, anchor: .center)
+            }
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(420))
+            guard walkthrough?.currentStep?.anchor == anchor else { return }
+            withAnimation(.easeInOut(duration: 0.25)) {
                 proxy.scrollTo(anchor, anchor: .center)
             }
         }
@@ -750,7 +759,7 @@ struct ClientDetailView: View {
                     Button {
                         sheetDestination = .addPet
                     } label: {
-                        Label(NSLocalizedString("client_detail.add_pet", value: "Add Pet", comment: ""), systemImage: "plus.circle.fill")
+                        Label(NSLocalizedString("client_detail.add_pet", value: "Add Pet", comment: ""), systemImage: "pawprint.fill")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -1129,6 +1138,28 @@ struct ClientDetailView: View {
 private struct EmptyToolbarContent: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .automatic) { }
+    }
+}
+
+private struct ClientDetailWalkthroughOverlayModifier: ViewModifier {
+    let walkthrough: WalkthroughController?
+    let sizeClass: UserInterfaceSizeClass?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if let walkthrough, sizeClass != .compact {
+            content.walkthroughOverlay(walkthrough, scope: .detailContent)
+        } else {
+            content
+        }
+        #else
+        if let walkthrough {
+            content.walkthroughOverlay(walkthrough, scope: .detailContent)
+        } else {
+            content
+        }
+        #endif
     }
 }
 
