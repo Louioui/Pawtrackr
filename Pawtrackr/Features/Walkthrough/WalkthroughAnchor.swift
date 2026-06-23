@@ -42,18 +42,29 @@ extension View {
     /// Registers this view as a spotlight target for the guided tour. Harmless
     /// when no tour is running; the overlay only reads anchors while active.
     func walkthroughAnchor(_ id: WalkthroughAnchorID) -> some View {
-        self
-            .anchorPreference(key: WalkthroughAnchorPreferenceKey.self, value: .bounds) { anchor in
-                [id: anchor]
-            }
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
+        // Emit BOTH the bounds anchor and the viewport frame from a DETACHED
+        // `.background` subtree (a `Color.clear` that fills `self`, so its
+        // `.bounds` anchor equals self's frame). This matters: applying
+        // `.anchorPreference` directly to `self` places it ABOVE descendants in
+        // the view tree, where a parent target's anchor — e.g. `.cdPets` on the
+        // whole pets section — OVERRIDES the same-key anchors of nested targets
+        // (`.cdCheckOut`, `.cdAddPet`, `.cdCheckIn`, `.cdPetHistory`). Those
+        // arrive nil at the overlay, which then falls back to a stale frame and
+        // spotlights the wrong place (Check Out drawn above the button; Pet
+        // History landing on Recent History). Hosting the anchor in a sibling
+        // background — exactly how the frame preference is already emitted, and
+        // observed to merge correctly — lets every target's anchor reduce-merge
+        // independently, so deeply nested controls resolve tightly.
+        self.background {
+            GeometryReader { proxy in
+                Color.clear
+                    .anchorPreference(key: WalkthroughAnchorPreferenceKey.self, value: .bounds) { anchor in [id: anchor] }
+                    .preference(
                         key: WalkthroughFramePreferenceKey.self,
                         value: [id: proxy.frame(in: .named(WalkthroughFramePreferenceKey.coordinateSpaceName))]
                     )
-                }
             }
+        }
     }
 
     /// Registers this view as BOTH a spotlight anchor and a scroll target, so the
