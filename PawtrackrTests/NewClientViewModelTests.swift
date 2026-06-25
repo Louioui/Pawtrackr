@@ -99,4 +99,26 @@ final class NewClientViewModelTests: XCTestCase {
         XCTAssertNotNil(vm.validationError(for: .phone))
         XCTAssertFalse(vm.isSaving)
     }
+
+    func testCreateClient_clampsOversizedFreeTextBeforePersisting() async throws {
+        let vm = NewClientViewModel(modelContext: context)
+        vm.first = String(repeating: "a", count: 120)
+        vm.last = String(repeating: "b", count: 120)
+        vm.address = String(repeating: "c", count: 1_500)
+        vm.pets[0].name = String(repeating: "m", count: 140)
+        vm.pets[0].breed = String(repeating: "poodle ", count: 30)
+        vm.pets[0].health = String(repeating: "health note ", count: 150)
+
+        let outcome = await vm.createClient()
+
+        XCTAssertEqual(outcome, .created)
+        let client = try XCTUnwrap(try context.fetch(FetchDescriptor<Client>()).first)
+        XCTAssertLessThanOrEqual(client.firstName.count, 64)
+        XCTAssertLessThanOrEqual(client.lastName.count, 64)
+        XCTAssertLessThanOrEqual(client.address?.count ?? 0, 256)
+        let pet = try XCTUnwrap(client.pets?.first)
+        XCTAssertLessThanOrEqual(pet.name.count, 64)
+        XCTAssertLessThanOrEqual(pet.breed?.count ?? 0, 64)
+        XCTAssertLessThanOrEqual(pet.notes?.count ?? 0, 1_000)
+    }
 }

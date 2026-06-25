@@ -7,6 +7,33 @@
 
 import Foundation
 
+enum TextInputLimits {
+    static let name = 64
+    static let shortText = 64
+    static let phone = 32
+    static let email = 254
+    static let address = 256
+    static let notes = 1_000
+
+    /// Returns `value` with leading/trailing whitespace removed and no more than `maxLength` user-visible characters.
+    static func clamped(_ value: String, to maxLength: Int) -> String {
+        limited(value.trimmed, to: maxLength)
+    }
+
+    /// Returns a trimmed, length-limited string, or `nil` when the resulting value is empty.
+    static func clampedOptional(_ value: String, to maxLength: Int) -> String? {
+        let clampedValue = clamped(value, to: maxLength)
+        return clampedValue.isEmpty ? nil : clampedValue
+    }
+
+    /// Returns `value` with its original surrounding whitespace preserved but no more than `maxLength` user-visible characters.
+    static func limited(_ value: String, to maxLength: Int) -> String {
+        guard maxLength >= 0 else { return "" }
+        guard value.count > maxLength else { return value }
+        return String(value.prefix(maxLength))
+    }
+}
+
 extension String {
     /// Returns the string with leading and trailing whitespace and newlines removed.
     var trimmed: String {

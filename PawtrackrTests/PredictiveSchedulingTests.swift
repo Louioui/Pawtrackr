@@ -2,6 +2,7 @@ import XCTest
 import SwiftData
 @testable import Pawtrackr
 
+@MainActor
 final class PredictiveSchedulingTests: XCTestCase {
     var container: ModelContainer!
     var context: ModelContext!

@@ -67,7 +67,9 @@ final class NewClientViewModel {
     }
 
     func createClient() async -> CreateClientOutcome {
-        Logger.newClient.info("createClient enter: first='\(self.first)' last='\(self.last)' phone='\(self.phone)' isSaving=\(self.isSaving)")
+        Logger.newClient.info(
+            "createClient enter: firstLength=\(self.first.count, privacy: .public) lastLength=\(self.last.count, privacy: .public) phonePresent=\(!self.phone.trimmed.isEmpty, privacy: .public) isSaving=\(self.isSaving, privacy: .public)"
+        )
         guard !isSaving else {
             Logger.newClient.warning("createClient ignored because a save is already in progress")
             return .failed
@@ -83,7 +85,7 @@ final class NewClientViewModel {
             Logger.newClient.info("createClient: validation passed")
 
             let e164 = PhoneUtils.toE164(phone)
-            Logger.newClient.info("createClient: e164=\(e164 ?? "nil"); checking duplicates")
+            Logger.newClient.info("createClient: normalizedPhonePresent=\((e164 != nil), privacy: .public); checking duplicates")
             if let e164, let existing = try await repository.findClient(byPhone: e164) {
                 Logger.newClient.info("createClient: duplicate found")
                 duplicateClientID = existing
@@ -103,16 +105,17 @@ final class NewClientViewModel {
             }
 
             let newPets = pets.compactMap { tp -> NewPetData? in
-                guard !tp.name.trimmed.isEmpty, let gender = tp.gender else { return nil }
+                let petName = TextInputLimits.clamped(tp.name.capitalizedName, to: TextInputLimits.name)
+                guard !petName.isEmpty, let gender = tp.gender else { return nil }
                 return NewPetData(
-                    name: tp.name.capitalizedName,
+                    name: petName,
                     species: tp.species,
                     gender: gender,
-                    breed: tp.breed.trimmed.isEmpty ? nil : tp.breed.capitalizedName,
-                    color: tp.color.trimmed.isEmpty ? nil : tp.color.trimmed.lowercased(),
+                    breed: TextInputLimits.clampedOptional(tp.breed.capitalizedName, to: TextInputLimits.shortText),
+                    color: TextInputLimits.clampedOptional(tp.color.trimmed.lowercased(), to: TextInputLimits.shortText),
                     photoData: tp.photoData,
-                    health: tp.health.trimmed.isEmpty ? nil : tp.health.trimmed,
-                    behaviorTags: Array(tp.behaviorTags),
+                    health: TextInputLimits.clampedOptional(tp.health, to: TextInputLimits.notes),
+                    behaviorTags: tp.behaviorTags.map { TextInputLimits.limited($0, to: TextInputLimits.shortText) },
                     birthdate: tp.hasBirthdate ? tp.birthdate : nil
                 )
             }
@@ -122,15 +125,19 @@ final class NewClientViewModel {
                 let relation = c.relation.trimmed.lowercased()
                 let ph = c.phone.trimmed
                 guard !name.isEmpty, let e164c = PhoneUtils.toE164(ph) else { return nil }
-                return NewContactData(name: name, relation: relation.isEmpty ? nil : relation, phone: e164c)
+                return NewContactData(
+                    name: TextInputLimits.limited(name, to: TextInputLimits.name),
+                    relation: TextInputLimits.clampedOptional(relation, to: TextInputLimits.shortText),
+                    phone: e164c
+                )
             }
 
             let clientID = try await repository.createClient(
-                firstName: first.capitalizedName,
-                lastName: last.capitalizedName,
+                firstName: TextInputLimits.clamped(first.capitalizedName, to: TextInputLimits.name),
+                lastName: TextInputLimits.clamped(last.capitalizedName, to: TextInputLimits.name),
                 phone: e164 ?? "",
-                email: email.trimmed.lowercased(),
-                address: address.trimmed,
+                email: TextInputLimits.clamped(email.trimmed.lowercased(), to: TextInputLimits.email),
+                address: TextInputLimits.clamped(address, to: TextInputLimits.address),
                 photoData: nil,
                 pets: newPets,
                 contacts: newContacts
@@ -147,12 +154,12 @@ final class NewClientViewModel {
             Logger.newClient.info("createClient: returning .created")
             return .created
         } catch let error as ValidationError {
-            Logger.newClient.error("createClient: validation failed: \(error.localizedDescription)")
+            Logger.newClient.error("createClient: validation failed: \(error.localizedDescription, privacy: .public)")
             self.appError = .validation(error)
             HapticManager.notify(.error)
             return .failed
         } catch {
-            Logger.newClient.error("createClient: save/db error: \(String(describing: error))")
+            Logger.newClient.error("createClient: save/db error: \(String(describing: error), privacy: .private)")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "creating client")
             self.appError = .database(error.localizedDescription)
             HapticManager.notify(.error)

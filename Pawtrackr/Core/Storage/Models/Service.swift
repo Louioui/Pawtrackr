@@ -79,9 +79,9 @@ final class Service {
         self.createdAt = .now
         self.updatedAt = .now
         self.lastModifiedBy = DeviceIdentity.currentID
-        self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.name = TextInputLimits.clamped(name, to: TextInputLimits.name)
         self.categoryRaw = category?.rawValue
-        self.systemIcon = systemIcon?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.systemIcon = systemIcon.map { TextInputLimits.clamped($0, to: TextInputLimits.shortText) }
         self.basePrice = basePrice?.roundedMoney()
         self.defaultDurationMinutes = defaultDurationMinutes.map { max(0, $0) }
         self.isEnabled = isEnabled
@@ -95,7 +95,7 @@ final class Service {
     
     // MARK: - Mutating API (explicitly updates timestamps)
     func rename(_ newName: String) {
-        self.name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.name = TextInputLimits.clamped(newName, to: TextInputLimits.name)
         didUpdate()
     }
 
@@ -105,7 +105,7 @@ final class Service {
     }
 
     func setSystemIcon(_ newSymbol: String?) {
-        self.systemIcon = newSymbol?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.systemIcon = newSymbol.map { TextInputLimits.clamped($0, to: TextInputLimits.shortText) }
         didUpdate()
     }
 

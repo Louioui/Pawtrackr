@@ -150,6 +150,20 @@ final class EditServiceViewModelTests: XCTestCase {
         XCTAssertEqual(names, ["Bath", "Haircut"], "Both original services should still exist with their original names.")
     }
 
+    func testSave_ClampsOversizedServiceTextBeforePersisting() async throws {
+        let vm = EditServiceViewModel(modelContext: context, service: nil, repository: repo)
+        vm.name = String(repeating: "deluxe wash ", count: 20)
+        vm.systemIcon = String(repeating: "sparkles", count: 20)
+        vm.price = 35
+
+        try await vm.save()
+
+        let all = try await repo.fetchAllServices()
+        let saved = try XCTUnwrap(all.first)
+        XCTAssertLessThanOrEqual(saved.name.count, 64)
+        XCTAssertLessThanOrEqual(saved.systemIcon?.count ?? 0, 64)
+    }
+
     // MARK: - Helpers
 
     @discardableResult

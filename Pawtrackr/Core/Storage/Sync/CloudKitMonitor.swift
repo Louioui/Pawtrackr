@@ -549,7 +549,7 @@ final class CloudKitMonitor {
                         _ = visit.afterThumbnailData
                     }
                     
-                    Logger.cloudKit.info("Predictive Warming: Media cache prepared for pet \(pet.name)")
+                    Logger.cloudKit.info("Predictive Warming: Media cache prepared for petID=\(pet.uuid.uuidString, privacy: .public) petName=\(pet.name, privacy: .private(mask: .hash))")
                 }
             } catch {
                 Logger.cloudKit.error("Media warming failed: \(error.localizedDescription, privacy: .public)")

@@ -77,7 +77,7 @@ struct AddPetSheet: View {
                             .padding(.vertical, 8)
 
                             // Pet name
-                            petInputField(NSLocalizedString("add_pet.name", comment: ""), text: $petName)
+                            petInputField(NSLocalizedString("add_pet.name", comment: ""), text: $petName, maxLength: TextInputLimits.name)
                                 .accessibilityIdentifier("addPet.name")
                                 #if os(iOS)
                                 .textInputAutocapitalization(.words)
@@ -120,6 +120,7 @@ struct AddPetSheet: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     TextField("", text: $breed)
+                                        .textLengthLimit($breed, to: TextInputLimits.shortText)
                                         #if os(iOS)
                                 .textInputAutocapitalization(.words)
                                 #endif
@@ -143,6 +144,7 @@ struct AddPetSheet: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     TextField("", text: $color)
+                                        .textLengthLimit($color, to: TextInputLimits.shortText)
                                         #if os(iOS)
                                 .textInputAutocapitalization(.words)
                                 #endif
@@ -185,6 +187,7 @@ struct AddPetSheet: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 TextField("", text: $healthNotes)
+                                    .textLengthLimit($healthNotes, to: TextInputLimits.notes)
                                     #if os(iOS)
                                 .textInputAutocapitalization(.sentences)
                                 #endif
@@ -239,8 +242,9 @@ struct AddPetSheet: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func petInputField(_ title: String, text: Binding<String>) -> some View {
+    private func petInputField(_ title: String, text: Binding<String>, maxLength: Int) -> some View {
         TextField(title, text: text)
+            .textLengthLimit(text, to: maxLength)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -255,7 +259,7 @@ struct AddPetSheet: View {
             appError = .validation(.custom(message: NSLocalizedString("add_pet.select_species", comment: "")))
             return
         }
-        let trimmedName = canonicalPetName(petName)
+        let trimmedName = TextInputLimits.clamped(canonicalPetName(petName), to: TextInputLimits.name)
         guard !trimmedName.isEmpty else {
             appError = .validation(.custom(message: NSLocalizedString("add_pet.name_empty", comment: "")))
             return
@@ -263,9 +267,9 @@ struct AddPetSheet: View {
 
         let newPet = Pet(name: trimmedName, species: species, gender: selectedGender)
 
-        let trimmedBreed = canonicalOptionalWord(breed)
-        let trimmedColor = canonicalOptionalWord(color)
-        let trimmedHealth = canonicalOptionalWord(healthNotes)
+        let trimmedBreed = canonicalOptionalWord(breed).map { TextInputLimits.limited($0, to: TextInputLimits.shortText) }
+        let trimmedColor = canonicalOptionalWord(color).map { TextInputLimits.limited($0, to: TextInputLimits.shortText) }
+        let trimmedHealth = TextInputLimits.clampedOptional(healthNotes, to: TextInputLimits.notes)
 
         if let trimmedBreed { newPet.breed = trimmedBreed }
         if let trimmedColor { newPet.color = trimmedColor }

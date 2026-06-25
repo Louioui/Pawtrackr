@@ -39,3 +39,7 @@ xcuserdata
 
 # App Center
 appcenter-post-clone.sh
+
+# AI session / conversation history dumps (may contain credentials & local paths)
+Pawtrackr_Conversation_History_Report.md
+*_Conversation_History_Report.md

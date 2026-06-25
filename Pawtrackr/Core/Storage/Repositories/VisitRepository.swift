@@ -82,7 +82,7 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
-        Logger.visits.info("VisitRepository: CheckIn initiated for pet \(pet.name)")
+        Logger.visits.info("VisitRepository: CheckIn initiated for petID=\(pet.uuid.uuidString, privacy: .public) petName=\(pet.name, privacy: .private(mask: .hash))")
         
         // Re-fetch pet in current context to ensure relationship integrity
         let petID = pet.persistentModelID
@@ -185,10 +185,10 @@ final class VisitRepository: VisitRepositoryProtocol {
         let active = visits.first { $0.pet?.uuid == petUUID }
         if let activeID = active?.persistentModelID,
            let contextActive = modelContext.model(for: activeID) as? Visit {
-            Logger.visits.info("VisitRepository: activeVisit found for pet \(pet.name): visitID=\(contextActive.uuid), petUUID=\(petUUID), endedAt=\(String(describing: contextActive.endedAt))")
+            Logger.visits.info("VisitRepository: activeVisit found for petID=\(petUUID.uuidString, privacy: .public): visitID=\(contextActive.uuid.uuidString, privacy: .public), endedAt=\(String(describing: contextActive.endedAt), privacy: .public)")
             return contextActive
         } else {
-            Logger.visits.info("VisitRepository: No active visit found for pet \(pet.name)")
+            Logger.visits.info("VisitRepository: No active visit found for petID=\(petUUID.uuidString, privacy: .public)")
             return nil
         }
     }

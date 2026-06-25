@@ -34,8 +34,8 @@ struct ContentView: View {
     @Environment(DataStoreService.self) private var dataStore
 
     @State private var router = NavigationRouter()
-    @State private var sidebarSelection: NavigationItem? = .dashboard
-    @State private var tabSelection: NavigationItem = .dashboard
+    @SceneStorage("content.sidebarSelection") private var sidebarSelectionRaw = NavigationItem.dashboard.rawValue
+    @SceneStorage("content.tabSelection") private var tabSelectionRaw = NavigationItem.dashboard.rawValue
     @State private var presentedSheet: SheetDestination?
     @State private var isWalkthroughDrivingSheet = false
     /// The interactive spotlight tour, hosted at the navigation root so it can
@@ -54,6 +54,30 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .doubleColumn
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Namespace private var sharedNamespace
+
+    private var sidebarSelection: NavigationItem? {
+        get { NavigationItem(rawValue: sidebarSelectionRaw) ?? .dashboard }
+        nonmutating set { sidebarSelectionRaw = newValue?.rawValue ?? NavigationItem.dashboard.rawValue }
+    }
+
+    private var tabSelection: NavigationItem {
+        get { NavigationItem(rawValue: tabSelectionRaw) ?? .dashboard }
+        nonmutating set { tabSelectionRaw = newValue.rawValue }
+    }
+
+    private var sidebarSelectionBinding: Binding<NavigationItem?> {
+        Binding(
+            get: { sidebarSelection },
+            set: { sidebarSelection = $0 }
+        )
+    }
+
+    private var tabSelectionBinding: Binding<NavigationItem> {
+        Binding(
+            get: { tabSelection },
+            set: { tabSelection = $0 }
+        )
+    }
 
     var body: some View {
         rootContent
@@ -520,7 +544,7 @@ struct ContentView: View {
     }
 
     private var tabView: some View {
-        TabView(selection: $tabSelection) {
+        TabView(selection: tabSelectionBinding) {
             NavigationStack(path: $router.dashboardPath) {
                 DashboardView(namespace: sharedNamespace)
                     .navigationDestination(for: AppDestination.self) { destination in
@@ -600,7 +624,7 @@ struct ContentView: View {
     private var splitView: some View {
         #if os(macOS)
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $sidebarSelection) { item in
+            SidebarView(selection: sidebarSelectionBinding) { item in
                 selectSurface(item, resetPath: true)
             }
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 270)
@@ -618,7 +642,7 @@ struct ContentView: View {
         .frame(minWidth: 820, minHeight: 560)
         #else
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $sidebarSelection) { item in
+            SidebarView(selection: sidebarSelectionBinding) { item in
                 selectSurface(item, resetPath: true)
                 collapseSplitSidebarAfterSelectionIfNeeded()
             }

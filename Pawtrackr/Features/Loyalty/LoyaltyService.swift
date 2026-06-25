@@ -19,6 +19,10 @@ actor LoyaltyService {
     }
     
     func redeemPoints(client: Client, points: Int) throws {
+        guard points > 0 else {
+            throw AppError.validation(.custom(message: "Loyalty redemption must be greater than zero."))
+        }
+
         guard client.loyaltyPoints >= points else {
             throw AppError.database("Insufficient loyalty points")
         }

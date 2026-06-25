@@ -51,4 +51,29 @@ extension View {
         self.sheet(item: item, content: content)
         #endif
     }
+
+    /// Keeps a text binding within a fixed character budget while the user types or pastes.
+    func textLengthLimit(_ text: Binding<String>, to maxLength: Int) -> some View {
+        modifier(TextLengthLimitModifier(text: text, maxLength: maxLength))
+    }
+}
+
+private struct TextLengthLimitModifier: ViewModifier {
+    @Binding var text: String
+    let maxLength: Int
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear(perform: clampTextIfNeeded)
+            .onChange(of: text) { _, _ in
+                clampTextIfNeeded()
+            }
+    }
+
+    private func clampTextIfNeeded() {
+        let limitedText = TextInputLimits.limited(text, to: maxLength)
+        if limitedText != text {
+            text = limitedText
+        }
+    }
 }

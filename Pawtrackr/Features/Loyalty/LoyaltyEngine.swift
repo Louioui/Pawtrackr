@@ -6,6 +6,8 @@ struct LoyaltyEngine {
     /// Calculates points earned based on total spent.
     /// Example: 1 point per $1 spent, rounded down.
     static func calculatePoints(for total: Decimal) -> Int {
+        guard total > .zero else { return 0 }
+
         // Banker's rounding for point calculation
         let rounded = total.roundedMoney()
         return (rounded as NSDecimalNumber).intValue
