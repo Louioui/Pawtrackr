@@ -120,6 +120,10 @@ struct RootView: View {
 
     private func updateFirstSyncGate(for accountState: CloudKitMonitor.AccountState) {
         guard !AppRuntime.isUITesting else { return }
+        // Never show the "restoring from iCloud" splash while onboarding is up or
+        // pending — a new/reinstalling user sees the Welcome flow immediately and
+        // the gate would only flash behind it.
+        guard !onboardingIncomplete, !showOnboarding else { return }
         guard accountState.isAvailable, !cloudKitMonitor.firstSyncCompleted else { return }
         showFirstSyncGate = true
     }
