@@ -164,6 +164,21 @@ final class EditServiceViewModelTests: XCTestCase {
         XCTAssertEqual(saved.systemIcon?.count, 64)
     }
 
+    func testEditServiceViewClampsVisibleServiceNameInput() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let serviceManagementView = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Pawtrackr/Features/Settings/ServiceManagementView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            serviceManagementView.contains(".textLengthLimit($viewModel.name, to: TextInputLimits.name)"),
+            "The visible service-name TextField must clamp pasted text before it can distort Settings layouts."
+        )
+    }
+
     // MARK: - Helpers
 
     @discardableResult
