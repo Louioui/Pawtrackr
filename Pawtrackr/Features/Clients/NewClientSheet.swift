@@ -113,7 +113,8 @@ struct NewClientSheet: View {
                             accessibilityIdentifier: "newClient.phone",
                             validationError: viewModel.validationError(for: .phone),
                             focus: .phone,
-                            nextFocus: .email
+                            nextFocus: .email,
+                            maxLength: TextInputLimits.phone
                         )
                             .phoneFieldFormatting($viewModel.phone)
                             .onChange(of: viewModel.phone) { _, _ in viewModel.clearValidationError(for: .phone) }
@@ -124,7 +125,8 @@ struct NewClientSheet: View {
                             accessibilityIdentifier: "newClient.email",
                             validationError: viewModel.validationError(for: .email),
                             focus: .email,
-                            nextFocus: .address
+                            nextFocus: .address,
+                            maxLength: TextInputLimits.email
                         )
                         .onChange(of: viewModel.email) { _, _ in viewModel.clearValidationError(for: .email) }
 
@@ -133,7 +135,8 @@ struct NewClientSheet: View {
                             text: $viewModel.address,
                             accessibilityIdentifier: "newClient.address",
                             focus: .address,
-                            nextFocus: firstPetFocus(in: viewModel)
+                            nextFocus: firstPetFocus(in: viewModel),
+                            maxLength: TextInputLimits.address
                         )
                     }
                 }
@@ -170,7 +173,8 @@ struct NewClientSheet: View {
                                         NSLocalizedString("new_client.contact_phone", comment: ""),
                                         text: $contact.phone,
                                         focus: .contactPhone(contact.id),
-                                        nextFocus: firstPetFocus(in: viewModel)
+                                        nextFocus: firstPetFocus(in: viewModel),
+                                        maxLength: TextInputLimits.phone
                                     )
                                         .phoneFieldFormatting($contact.phone)
                                 }
@@ -374,13 +378,15 @@ struct NewClientSheet: View {
         validationError: String? = nil,
         focus: FocusField,
         nextFocus: FocusField?,
-        submitLabel: SubmitLabel = .next
+        submitLabel: SubmitLabel = .next,
+        maxLength: Int = TextInputLimits.name
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             TextField(title, text: text)
                 .optionalAccessibilityIdentifier(accessibilityIdentifier)
                 .focused($focusedField, equals: focus)
                 .submitLabel(submitLabel)
+                .textLengthLimit(text, to: maxLength)
                 .onSubmit {
                     focusedField = nextFocus
                 }

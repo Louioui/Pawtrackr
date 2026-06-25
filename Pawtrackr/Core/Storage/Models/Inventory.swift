@@ -21,6 +21,11 @@ final class InventoryItem {
         self.unit = unit
         self.costPerUnit = costPerUnit
     }
+
+    /// Applies an inventory ledger quantity change to the item's current stock.
+    func applyStockChange(_ quantityChange: Decimal) {
+        currentStock += quantityChange
+    }
 }
 
 @Model
@@ -38,5 +43,6 @@ final class InventoryTransaction {
         self.item = item
         self.quantityChange = quantityChange
         self.note = note
+        item.applyStockChange(quantityChange)
     }
 }

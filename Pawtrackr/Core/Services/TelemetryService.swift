@@ -15,7 +15,7 @@ final class TelemetryService {
             .sorted()
             .joined(separator: ",")
 
-        Logger.performance.info("Telemetry event=\(sanitizedEvent, privacy: .public) parameters=\(sanitizedParameters, privacy: .public)")
+        Logger.performance.info("Telemetry event=\(sanitizedEvent, privacy: .public) parameters=\(sanitizedParameters, privacy: .private)")
     }
     
     /// Generates a sanitized log bundle for user support requests.

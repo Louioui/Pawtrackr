@@ -20,11 +20,22 @@ final class InventoryTests: XCTestCase {
         
         let tx = InventoryTransaction(item: item, quantityChange: Decimal(-1), note: "Used for session")
         context.insert(tx)
-        
-        item.currentStock += tx.quantityChange
         try context.save()
         
         XCTAssertEqual(item.currentStock, Decimal(9))
         XCTAssertEqual(item.transactions?.count, 1)
+    }
+
+    func testInventoryTransaction_AppliesQuantityChangeToItemStock() throws {
+        let item = InventoryItem(name: "Conditioner", category: "Supplies", unit: "Bottles", costPerUnit: Decimal(12))
+        item.currentStock = Decimal(10)
+        context.insert(item)
+
+        let tx = InventoryTransaction(item: item, quantityChange: Decimal(-2), note: "Used during checkout")
+        context.insert(tx)
+        try context.save()
+
+        XCTAssertEqual(item.currentStock, Decimal(8))
+        XCTAssertEqual(item.transactions?.first?.quantityChange, Decimal(-2))
     }
 }

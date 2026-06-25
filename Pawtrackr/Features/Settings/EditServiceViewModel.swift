@@ -40,8 +40,8 @@ class EditServiceViewModel {
         }
     }
     
-    private func validate() throws {
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    private func validate(trimmedName: String) throws {
+        guard !trimmedName.isEmpty else {
             throw ValidationError.custom(message: AppLocalization.localized("service.validation.name_empty", value: "Service name cannot be empty."))
         }
         
@@ -55,9 +55,9 @@ class EditServiceViewModel {
     }
 
     func save() async throws {
-        try validate()
-
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = TextInputLimits.clamped(name, to: TextInputLimits.name)
+        let trimmedSystemIcon = TextInputLimits.limited(systemIcon.trimmingCharacters(in: .whitespacesAndNewlines), to: TextInputLimits.shortText)
+        try validate(trimmedName: trimmedName)
         let serviceToSave: Service
 
         if let service {
@@ -88,7 +88,7 @@ class EditServiceViewModel {
         serviceToSave.setEnabled(isEnabled)
         serviceToSave.isPackage = isPackage
         serviceToSave.setDefaultDurationMinutes(duration)
-        serviceToSave.setSystemIcon(systemIcon)
+        serviceToSave.setSystemIcon(trimmedSystemIcon)
 
         try await repository.saveService(serviceToSave)
     }

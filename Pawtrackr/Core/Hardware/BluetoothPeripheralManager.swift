@@ -190,6 +190,17 @@ enum ThermalReceiptPayloadBuilder {
 final class BluetoothPeripheralManager: NSObject, @unchecked Sendable {
     static let shared = BluetoothPeripheralManager()
 
+    /// Stable CoreBluetooth restoration identifier for Pawtrackr's central manager.
+    static let centralManagerRestorationIdentifier = "PartnerShipWithMedia.Pawtrackr.bluetooth.central"
+
+    /// Builds the CoreBluetooth central-manager options used by the production manager.
+    static func centralManagerOptions() -> [String: Any] {
+        [
+            CBCentralManagerOptionShowPowerAlertKey: true,
+            CBCentralManagerOptionRestoreIdentifierKey: centralManagerRestorationIdentifier
+        ]
+    }
+
     private let configuration: POSBluetoothConfiguration
     private let workQueue = DispatchQueue(label: "com.pawtrackr.hardware.bluetooth", qos: .utility)
     private var centralManager: CBCentralManager?
@@ -315,7 +326,7 @@ final class BluetoothPeripheralManager: NSObject, @unchecked Sendable {
         let manager = CBCentralManager(
             delegate: self,
             queue: workQueue,
-            options: [CBCentralManagerOptionShowPowerAlertKey: true]
+            options: Self.centralManagerOptions()
         )
         centralManager = manager
         return manager
@@ -473,6 +484,29 @@ final class BluetoothPeripheralManager: NSObject, @unchecked Sendable {
 }
 
 extension BluetoothPeripheralManager: CBCentralManagerDelegate {
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        centralManager = central
+        let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] ?? []
+        guard !restoredPeripherals.isEmpty else { return }
+
+        Logger.bluetoothHardware.info("Restored \(restoredPeripherals.count, privacy: .public) Bluetooth peripheral(s)")
+        for peripheral in restoredPeripherals {
+            peripheral.delegate = self
+            discoveredPeripherals[peripheral.identifier] = peripheral
+            discoveredDescriptors[peripheral.identifier] = POSPeripheralDescriptor(
+                id: peripheral.identifier,
+                name: peripheral.name ?? "Restored Peripheral",
+                kind: inferKind(name: peripheral.name ?? "", advertisementData: [:]),
+                rssi: 0
+            )
+
+            if peripheral.state == .connected {
+                connectedPrinterPeripheral = peripheral
+                peripheral.discoverServices(printerServiceUUIDs)
+            }
+        }
+    }
+
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Logger.bluetoothHardware.info("Bluetooth state changed: \(self.describe(central.state), privacy: .public)")
         if central.state == .poweredOn, shouldScanForPrinters {
