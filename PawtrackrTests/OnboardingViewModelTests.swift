@@ -633,6 +633,57 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
     }
 
+    func testWalkthroughCompactRecentHistoryHeaderKeepsGuideReadable() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .cdHistory,
+            title: "Recent History",
+            directive: "Review what happened last time.",
+            purpose: "Completed checkouts appear here."
+        )
+        let container = CGSize(width: 402, height: 741)
+        let target = CGRect(x: 8, y: 88, width: 386, height: 56)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertEqual(result.placement, .below)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+        XCTAssertGreaterThanOrEqual(result.cardMaxHeight, 250, "Step 24 should have enough room to show the guide copy on iPhone.")
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughMacNewClientSaveFooterTargetStaysReadableAndOffButton() {
+        let step = WalkthroughStep(
+            id: 0,
+            anchor: .ncSave,
+            title: "Save the client",
+            directive: "Create once, reuse every visit.",
+            purpose: "Tap Create when this is a real client.",
+            allowsTargetInteraction: true
+        )
+        let container = CGSize(width: 470, height: 688)
+        let target = CGRect(x: 372, y: 642, width: 82, height: 30)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertEqual(result.placement, .above)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+        XCTAssertGreaterThanOrEqual(result.cardMaxHeight, 250)
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
     func testWalkthroughRemembersCreatedClientForDetailsChapter() throws {
         let controller = WalkthroughController()
         let client = Client(firstName: "Tour", lastName: "Client")

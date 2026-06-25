@@ -81,7 +81,7 @@ struct NewClientSheet: View {
     @ViewBuilder
     private func formContent(_ viewModel: NewClientViewModel) -> some View {
         @Bindable var viewModel = viewModel
-        ScrollView {
+        let form = ScrollView {
             VStack(spacing: 16) {
                 // Owner Info Card
                 Card {
@@ -273,6 +273,28 @@ struct NewClientSheet: View {
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
+
+        #if os(macOS)
+        VStack(spacing: 0) {
+            form
+            Divider()
+            macOSFooterActions(viewModel)
+        }
+        .navigationTitle(NSLocalizedString("new_client.new_client", comment: ""))
+        .alert(
+            Text(NSLocalizedString("common.error", comment: "")),
+            isPresented: Binding(
+                get: { viewModel.appError != nil },
+                set: { if !$0 { viewModel.appError = nil } }
+            ),
+            presenting: viewModel.appError
+        ) { _ in
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) {}
+        } message: { error in
+            Text(error.localizedDescription)
+        }
+        #else
+        form
         .navigationTitle(NSLocalizedString("new_client.new_client", comment: ""))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -280,29 +302,7 @@ struct NewClientSheet: View {
                     .accessibilityIdentifier("newClient.cancel")
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    Logger.newClient.info("Create button tapped")
-                    Task {
-                        let outcome = await viewModel.createClient()
-                        Logger.newClient.info("Create button outcome: \(String(describing: outcome))")
-                        if outcome == .created {
-                            dismiss()
-                        }
-                    }
-                } label: {
-                    if viewModel.isSaving {
-                        ProgressView()
-                    } else {
-                        Label(NSLocalizedString("common.create", comment: ""), systemImage: "checkmark.circle.fill")
-                    }
-                }
-                .disabled(viewModel.isSaving)
-                .accessibilityIdentifier("newClient.create")
-                // NOTE: deliberately NOT `.walkthroughAnchor(.ncSave)`. Toolbar items
-                // live in a UINavigationBar and report bogus anchor bounds, which made
-                // the spotlight cut a large/mis-placed hole (form looked un-dimmed and
-                // the bubble arrow pointed at nothing). The `.ncSave` step falls back to
-                // a deterministic platform-specific action rect instead.
+                createButton(viewModel)
             }
         }
         .alert(
@@ -317,7 +317,54 @@ struct NewClientSheet: View {
         } message: { error in
             Text(error.localizedDescription)
         }
+        #endif
     }
+
+    private func createClient(_ viewModel: NewClientViewModel) {
+        Logger.newClient.info("Create button tapped")
+        Task {
+            let outcome = await viewModel.createClient()
+            Logger.newClient.info("Create button outcome: \(String(describing: outcome))")
+            if outcome == .created {
+                dismiss()
+            }
+        }
+    }
+
+    private func createButton(_ viewModel: NewClientViewModel) -> some View {
+        Button {
+            createClient(viewModel)
+        } label: {
+            if viewModel.isSaving {
+                ProgressView()
+            } else {
+                Label(NSLocalizedString("common.create", comment: ""), systemImage: "checkmark.circle.fill")
+            }
+        }
+        .disabled(viewModel.isSaving)
+        .accessibilityIdentifier("newClient.create")
+    }
+
+    #if os(macOS)
+    private func macOSFooterActions(_ viewModel: NewClientViewModel) -> some View {
+        HStack(spacing: 10) {
+            Spacer()
+
+            Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) { dismiss() }
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("newClient.cancel")
+
+            createButton(viewModel)
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .walkthroughAnchor(.ncSave)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
+    #endif
 
     @ViewBuilder
     private func inputField(
