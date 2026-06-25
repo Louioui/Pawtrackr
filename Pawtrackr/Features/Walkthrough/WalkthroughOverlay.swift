@@ -14,6 +14,14 @@
 
 import SwiftUI
 
+// TEMP DEBUG — remove after diagnosis
+enum WalkthroughDebugFmt {
+    static func r(_ rect: CGRect?) -> String {
+        guard let rect else { return "nil" }
+        return "[\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))]"
+    }
+}
+
 enum WalkthroughTargetFrame {
     /// Returns a visible, non-trivial target rect in the overlay's local
     /// coordinate space, or nil when SwiftUI handed us a stale/offscreen anchor.
@@ -535,15 +543,28 @@ private struct WalkthroughOverlayHost<Content: View>: View {
                             safeAreaInsets: proxy.safeAreaInsets
                         )
                         let target = liveTarget ?? fallbackTarget
-                        WalkthroughOverlayView(
-                            step: step,
-                            rawTargetRect: rawLiveTarget,
-                            targetRect: target,
-                            containerSize: proxy.size,
-                            containerInsets: proxy.safeAreaInsets,
-                            targetCoordinateOffset: targetOffset,
-                            controller: controller
-                        )
+                        ZStack(alignment: .topLeading) {
+                            WalkthroughOverlayView(
+                                step: step,
+                                rawTargetRect: rawLiveTarget,
+                                targetRect: target,
+                                containerSize: proxy.size,
+                                containerInsets: proxy.safeAreaInsets,
+                                targetCoordinateOffset: targetOffset,
+                                controller: controller
+                            )
+                            // TEMP DEBUG — remove after diagnosis
+                            let dbgAnchor = anchors[step.anchor].map { proxy[$0] }
+                            let dbgFrame = frames[step.anchor]
+                            Text("\(step.anchor.rawValue) | anc=\(WalkthroughDebugFmt.r(dbgAnchor)) frm=\(WalkthroughDebugFmt.r(dbgFrame)) off=[\(Int(targetOffset.width)),\(Int(targetOffset.height))] tgt=\(WalkthroughDebugFmt.r(target)) ins=[\(Int(proxy.safeAreaInsets.bottom))] sz=\(Int(proxy.size.width))x\(Int(proxy.size.height))")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.black)
+                                .padding(4)
+                                .background(.yellow)
+                                .padding(.top, 30)
+                                .padding(.leading, 8)
+                                .allowsHitTesting(false)
+                        }
                     }
                 }
                 .ignoresSafeArea()
