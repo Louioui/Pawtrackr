@@ -100,6 +100,15 @@ struct RootView: View {
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
+        .onChange(of: onboardingIncomplete) { _, incomplete in
+            // A returning user's setup-complete BusinessConfig imported from iCloud
+            // while they were on the Welcome screen. Adopt it: dismiss onboarding so
+            // they don't re-onboard or create a duplicate config, and let the normal
+            // lock gate take over.
+            if !incomplete, showOnboarding {
+                showOnboarding = false
+            }
+        }
         .toastOverlay()
     }
 
