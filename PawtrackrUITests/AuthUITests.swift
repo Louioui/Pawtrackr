@@ -4,7 +4,8 @@
 //
 //  Drives the PIN lock screen. By default the UI test seeder disables the lock,
 //  so this test re-enables it from Settings, backgrounds, and verifies the
-//  PIN gate appears and accepts the default PIN (1994).
+//  PIN gate appears and accepts the UI-test seed PIN (1234). There is no
+//  shippable default PIN; the seed is applied only under UI testing.
 //
 
 import XCTest

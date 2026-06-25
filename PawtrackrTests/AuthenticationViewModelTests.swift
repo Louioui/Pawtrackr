@@ -41,6 +41,27 @@ final class AuthenticationViewModelTests: XCTestCase {
         XCTAssertNil(vm.currentUser)
     }
 
+    func testNoFallbackPIN_LockCannotValidateWithoutRealPIN() {
+        // Security regression: the app must NOT fall back to a compiled-in PIN.
+        // With no Keychain PIN, isPINSet is false and no code (including the
+        // formerly-default "1994"/"0000") can validate or arm the lock.
+        KeychainStorage.remove(forKey: AppSettingsKeys.appPINKeychainAccount)
+        let freshSettings = AppSettings()
+        XCTAssertFalse(freshSettings.isPINSet, "A fresh install with no stored PIN must report no PIN set.")
+        XCTAssertTrue(freshSettings.appPIN.isEmpty, "appPIN must stay empty when no real PIN is stored.")
+        XCTAssertFalse(freshSettings.validatePIN("1994"), "The leaked default PIN must never unlock the app.")
+        XCTAssertFalse(freshSettings.validatePIN("0000"), "No compiled-in fallback PIN may unlock the app.")
+    }
+
+    func testSetPIN_EnablesValidationAndMarksPINSet() {
+        KeychainStorage.remove(forKey: AppSettingsKeys.appPINKeychainAccount)
+        let freshSettings = AppSettings()
+        XCTAssertTrue(freshSettings.changePIN(to: "7531"))
+        XCTAssertTrue(freshSettings.isPINSet)
+        XCTAssertTrue(freshSettings.validatePIN("7531"))
+        XCTAssertFalse(freshSettings.validatePIN("1994"))
+    }
+
     func testSignInWithPIN_RejectsWrongPIN() {
         let vm = AuthenticationViewModel(modelContext: context)
         let ok = vm.signInWithPIN("0000", appSettings: settings)
