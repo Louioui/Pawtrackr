@@ -100,6 +100,7 @@ struct EditServiceView: View {
         Form {
             Section(NSLocalizedString("service.details", comment: "")) {
                 TextField(NSLocalizedString("service.name", comment: ""), text: $viewModel.name)
+                    .textLengthLimit($viewModel.name, to: TextInputLimits.name)
                 Picker(NSLocalizedString("service.category", comment: ""), selection: $viewModel.category) {
                     ForEach(Service.Category.allCases) { category in
                         Text(category.localizedName).tag(category)
