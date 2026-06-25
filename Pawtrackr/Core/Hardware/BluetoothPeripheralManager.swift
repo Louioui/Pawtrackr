@@ -500,7 +500,11 @@ extension BluetoothPeripheralManager: CBCentralManagerDelegate {
                 rssi: 0
             )
 
-            if peripheral.state == .connected {
+            // Only adopt a restored peripheral as the active printer when its
+            // inferred kind is a thermal printer; otherwise a restored cash
+            // drawer or RFID scanner would be misidentified as the printer.
+            if peripheral.state == .connected,
+               discoveredDescriptors[peripheral.identifier]?.kind == .thermalPrinter {
                 connectedPrinterPeripheral = peripheral
                 peripheral.discoverServices(printerServiceUUIDs)
             }

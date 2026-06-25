@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 import OSLog
 
-private let forecastLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "PredictiveForecasting")
+private let forecastLog = Logger.forecasting
 
 /// Predictive engine to forecast grooming shop trends.
 actor PredictiveForecastingEngine {
@@ -22,9 +22,13 @@ actor PredictiveForecastingEngine {
         let container = modelContainer
         return await Task.detached(priority: .utility) {
             let context = ModelContext(container)
-            var descriptor = FetchDescriptor<Visit>(sortBy: [
-                SortDescriptor(\.startedAt, order: .reverse)
-            ])
+            // Restrict to completed visits (endedAt != nil) before applying the
+            // row cap so a backlog of in-progress visits can't starve the sample
+            // window of actual completed-revenue rows.
+            var descriptor = FetchDescriptor<Visit>(
+                predicate: #Predicate<Visit> { $0.endedAt != nil },
+                sortBy: [SortDescriptor(\.endedAt, order: .reverse)]
+            )
             descriptor.fetchLimit = 500
 
             do {
