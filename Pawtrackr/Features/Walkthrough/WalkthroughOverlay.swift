@@ -14,14 +14,6 @@
 
 import SwiftUI
 
-// TEMP DEBUG — remove after diagnosis
-enum WalkthroughDebugFmt {
-    static func r(_ rect: CGRect?) -> String {
-        guard let rect else { return "nil" }
-        return "[\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width)),\(Int(rect.height))]"
-    }
-}
-
 enum WalkthroughTargetFrame {
     /// Returns a visible, non-trivial target rect in the overlay's local
     /// coordinate space, or nil when SwiftUI handed us a stale/offscreen anchor.
@@ -502,35 +494,19 @@ private struct WalkthroughOverlayHost<Content: View>: View {
     let scope: WalkthroughOverlayScope
 
     @State private var frames: [WalkthroughAnchorID: CGRect] = [:]
-    @State private var hostFrame: CGRect = .zero
 
     var body: some View {
         content
             .coordinateSpace(name: WalkthroughFramePreferenceKey.coordinateSpaceName)
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.preference(
-                        key: WalkthroughHostFramePreferenceKey.self,
-                        value: proxy.frame(in: .global)
-                    )
-                }
-            }
             .onPreferenceChange(WalkthroughFramePreferenceKey.self) { frames = $0 }
-            .onPreferenceChange(WalkthroughHostFramePreferenceKey.self) { hostFrame = $0 }
             .overlayPreferenceValue(WalkthroughAnchorPreferenceKey.self) { anchors in
                 GeometryReader { proxy in
                     if controller.isActive, let step = controller.currentStep,
                        step.presents == presenting, scope.handles(step) {
-                        let targetOffset = targetCoordinateOffset(in: proxy)
                         // Prefer the live viewport frame, then the live anchor,
                         // then a computed fallback for targets SwiftUI won't expose.
-                        let rawFrameTarget = frames[step.anchor]?.offsetBy(
-                            dx: targetOffset.width,
-                            dy: targetOffset.height
-                        )
-                        let rawAnchorTarget = anchors[step.anchor].map {
-                            proxy[$0].offsetBy(dx: targetOffset.width, dy: targetOffset.height)
-                        }
+                        let rawFrameTarget = frames[step.anchor]
+                        let rawAnchorTarget = anchors[step.anchor].map { proxy[$0] }
                         let rawLiveTarget = rawAnchorTarget ?? rawFrameTarget
                         let liveTarget = WalkthroughTargetFrame.validated(
                             rawLiveTarget,
@@ -543,55 +519,18 @@ private struct WalkthroughOverlayHost<Content: View>: View {
                             safeAreaInsets: proxy.safeAreaInsets
                         )
                         let target = liveTarget ?? fallbackTarget
-                        ZStack(alignment: .topLeading) {
-                            WalkthroughOverlayView(
-                                step: step,
-                                rawTargetRect: rawLiveTarget,
-                                targetRect: target,
-                                containerSize: proxy.size,
-                                containerInsets: proxy.safeAreaInsets,
-                                targetCoordinateOffset: targetOffset,
-                                controller: controller
-                            )
-                            // TEMP DEBUG — remove after diagnosis
-                            let dbgAnchor = anchors[step.anchor].map { proxy[$0] }
-                            let dbgFrame = frames[step.anchor]
-                            Text("\(step.anchor.rawValue) | anc=\(WalkthroughDebugFmt.r(dbgAnchor)) frm=\(WalkthroughDebugFmt.r(dbgFrame)) off=[\(Int(targetOffset.width)),\(Int(targetOffset.height))] tgt=\(WalkthroughDebugFmt.r(target)) ins=[\(Int(proxy.safeAreaInsets.bottom))] sz=\(Int(proxy.size.width))x\(Int(proxy.size.height))")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(.black)
-                                .padding(4)
-                                .background(.yellow)
-                                .padding(.top, 30)
-                                .padding(.leading, 8)
-                                .allowsHitTesting(false)
-                        }
+                        WalkthroughOverlayView(
+                            step: step,
+                            rawTargetRect: rawLiveTarget,
+                            targetRect: target,
+                            containerSize: proxy.size,
+                            containerInsets: proxy.safeAreaInsets,
+                            controller: controller
+                        )
                     }
                 }
                 .ignoresSafeArea()
             }
-    }
-
-    private func targetCoordinateOffset(in proxy: GeometryProxy) -> CGSize {
-        guard scope.requiresPushedDetailCoordinateOffset else { return .zero }
-        return CGSize(
-            width: max(hostFrame.minX, proxy.safeAreaInsets.leading),
-            height: max(hostFrame.minY, proxy.safeAreaInsets.top)
-        )
-    }
-}
-
-private struct WalkthroughHostFramePreferenceKey: PreferenceKey {
-    static var defaultValue: CGRect { .zero }
-
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        value = nextValue()
-    }
-}
-
-private extension WalkthroughOverlayScope {
-    var requiresPushedDetailCoordinateOffset: Bool {
-        if case .detailContent = self { return true }
-        return false
     }
 }
 
@@ -676,7 +615,6 @@ private struct WalkthroughOverlayView: View {
     let targetRect: CGRect?
     let containerSize: CGSize
     let containerInsets: EdgeInsets
-    let targetCoordinateOffset: CGSize
     let controller: WalkthroughController
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -767,15 +705,10 @@ private struct WalkthroughOverlayView: View {
             "placement=\(placement)",
             "raw=\(debugDescription(for: rawTargetRect))",
             "target=\(debugDescription(for: targetRect))",
-            "offset=\(debugDescription(for: targetCoordinateOffset))",
             "spotlight=\(debugDescription(for: spotlight))",
             "bubble=\(debugDescription(for: layout.bubbleFrame))",
             "container=\(Int(containerSize.width.rounded()))x\(Int(containerSize.height.rounded()))"
         ].joined(separator: ";")
-    }
-
-    private func debugDescription(for size: CGSize) -> String {
-        "[\(Int(size.width.rounded())),\(Int(size.height.rounded()))]"
     }
 
     private func debugDescription(for rect: CGRect?) -> String {

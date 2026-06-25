@@ -370,7 +370,6 @@ struct ClientDetailView: View {
                     petsSection(vm: vm)
                         .walkthroughTarget(.cdPets)
                     recentHistorySection(vm: vm)
-                        .walkthroughTarget(.cdHistory)
                     syncMetadataFooter(client: vm.client)
                 }
                 .padding(.vertical, 8)
@@ -863,6 +862,7 @@ struct ClientDetailView: View {
                 .frame(maxWidth: 260)
             }
             .padding(.horizontal)
+            .walkthroughTarget(.cdHistory)
 
             if vm.recentVisits.isEmpty {
                 ContentUnavailableView(NSLocalizedString("client_detail.no_history_yet", comment: ""), systemImage: "clock.badge.questionmark")
