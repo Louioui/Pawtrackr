@@ -948,7 +948,9 @@ struct ClientDetailView: View {
 
         let client = vm.client
         // Gather affected dates before deletion for summary updates
+        let clientUUID = client.uuid
         let pets = client.pets ?? []
+        let petUUIDs = pets.map(\.uuid)
         let visits = pets.flatMap { $0.visits ?? [] }
         let paymentDates = visits.compactMap { $0.payment?.paidAt }
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
@@ -958,6 +960,7 @@ struct ClientDetailView: View {
 
         do {
             try modelContext.save()
+            SpotlightIndexer.shared.removeClientAndPetsFromIndex(clientID: clientUUID, petIDs: petUUIDs)
             CloudKitMonitor.shared.recordLocalChange("Deleted client")
 
             // Rebuild summaries for affected days
