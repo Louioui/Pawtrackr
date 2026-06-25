@@ -356,6 +356,13 @@ final class CloudKitMonitor {
             }
             postChange()
         }
+
+        // Arm the view-independent first-sync backstop as soon as iCloud is
+        // available so onboarding's commit (and the gate) can never wait forever
+        // on an empty zone that emits no import event.
+        if mapped == .available {
+            armFirstSyncLaunchWatchdog()
+        }
     }
 
     private func observeAccountChanges() {
@@ -904,8 +911,13 @@ final class CloudKitMonitor {
     func markFirstSyncCompleted() {
         guard !firstSyncCompleted else { return }
         firstSyncSettleTask?.cancel()
+        firstSyncLaunchWatchdog?.cancel()
         firstSyncCompleted = true
         UserDefaults.standard.set(true, forKey: DefaultsKey.firstSyncCompleted)
+        // Resume anyone awaiting the first-sync gate (e.g. the onboarding commit).
+        let waiters = firstSyncWaiters
+        firstSyncWaiters.removeAll()
+        for waiter in waiters.values { waiter.resume() }
         appendEvent(
             kind: .importFromCloud,
             status: .succeeded,
