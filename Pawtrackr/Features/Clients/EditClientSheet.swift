@@ -36,12 +36,14 @@ struct EditClientSheet: View {
                 Section(NSLocalizedString("new_client.owner_section", comment: "")) {
                     TextField(NSLocalizedString("new_client.first_name", comment: ""), text: $firstName)
                         .accessibilityIdentifier("editClient.firstName")
+                        .textLengthLimit($firstName, to: TextInputLimits.name)
                     #if os(iOS)
                     .textContentType(.givenName)
                     .textInputAutocapitalization(.words)
                     #endif
                     TextField(NSLocalizedString("new_client.last_name", comment: ""), text: $lastName)
                         .accessibilityIdentifier("editClient.lastName")
+                        .textLengthLimit($lastName, to: TextInputLimits.name)
                     #if os(iOS)
                     .textContentType(.familyName)
                     .textInputAutocapitalization(.words)
@@ -49,8 +51,10 @@ struct EditClientSheet: View {
                     TextField(NSLocalizedString("new_client.phone", comment: ""), text: $phone)
                         .accessibilityIdentifier("editClient.phone")
                         .phoneFieldFormatting($phone)
+                        .textLengthLimit($phone, to: TextInputLimits.phone)
                     TextField(NSLocalizedString("new_client.email", comment: ""), text: $email)
                         .accessibilityIdentifier("editClient.email")
+                        .textLengthLimit($email, to: TextInputLimits.email)
                     #if os(iOS)
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)
@@ -59,6 +63,7 @@ struct EditClientSheet: View {
                     #endif
                     TextField(NSLocalizedString("new_client.address", comment: ""), text: $address)
                         .accessibilityIdentifier("editClient.address")
+                        .textLengthLimit($address, to: TextInputLimits.address)
                     #if os(iOS)
                     .textContentType(.fullStreetAddress)
                     #endif

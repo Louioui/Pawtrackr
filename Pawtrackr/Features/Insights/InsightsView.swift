@@ -80,6 +80,7 @@ struct InsightsView: View {
                 reportButton
             }
         }
+        .privacyBlur()
     }
 
     // MARK: - Main content

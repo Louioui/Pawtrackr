@@ -48,10 +48,10 @@ final class Client {
         self.uuid = UUID()
         self.createdAt = .now
         self.updatedAt = .now
-        self.firstName = firstName.trimmed
-        self.lastName = lastName.trimmed
-        self.phone = phone?.trimmed
-        self.email = email?.trimmed
+        self.firstName = TextInputLimits.clamped(firstName, to: TextInputLimits.name)
+        self.lastName = TextInputLimits.clamped(lastName, to: TextInputLimits.name)
+        self.phone = TextInputLimits.clampedOptional(phone, to: TextInputLimits.phone)
+        self.email = TextInputLimits.clampedOptional(email, to: TextInputLimits.email)?.lowercased()
         updatePrimaryContact()
     }
 
@@ -93,15 +93,15 @@ final class Client {
 
     // MARK: - Mutating API (keeps timestamps correct without property observers)
     func setFirstName(_ value: String) {
-        firstName = value.trimmed
+        firstName = TextInputLimits.clamped(value, to: TextInputLimits.name)
         didUpdate()
     }
     func setLastName(_ value: String) {
-        lastName = value.trimmed
+        lastName = TextInputLimits.clamped(value, to: TextInputLimits.name)
         didUpdate()
     }
     func setPhone(_ value: String?) {
-        let trimmed = value?.trimmed
+        let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.phone)
         if let t = trimmed, !t.isEmpty {
             // Prefer canonical E.164. If the input doesn't parse, fall back to
             // the user's literal text — but `findClient(byPhone:)` normalizes
@@ -114,18 +114,18 @@ final class Client {
         didUpdate()
     }
     func setEmail(_ value: String?) {
-        let trimmed = value?.trimmed
+        let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.email)
         email = trimmed?.isEmpty == false ? trimmed?.lowercased() : nil
         updatePrimaryContact()
         didUpdate()
     }
     func setAddress(_ value: String?) {
-        let trimmed = value?.trimmed
+        let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.address)
         address = trimmed?.isEmpty == false ? trimmed : nil
         didUpdate()
     }
     func setNotes(_ value: String?) {
-        notes = value
+        notes = TextInputLimits.clampedOptional(value, to: TextInputLimits.notes)
         didUpdate()
     }
     func addPet(_ pet: Pet) {

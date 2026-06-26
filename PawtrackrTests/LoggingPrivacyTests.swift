@@ -40,4 +40,52 @@ final class LoggingPrivacyTests: XCTestCase {
             "Auth save labels and errors must use explicit privacy annotations."
         )
     }
+
+    func testInsightsRevenueSurfaceUsesPrivacyBlur() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        let insightsView = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Pawtrackr/Features/Insights/InsightsView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            insightsView.contains(".privacyBlur()"),
+            "Insights shows revenue and average-ticket data, so it must blur when the scene resigns active."
+        )
+    }
+
+    func testDashboardRevenueSurfaceUsesPrivacyBlur() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        let dashboardView = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Pawtrackr/Features/Dashboard/DashboardView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            dashboardView.contains(".privacyBlur()"),
+            "Dashboard shows today and 7-day revenue data, so it must blur when the scene resigns active."
+        )
+    }
+
+    func testRecentHistoryRevenueSurfaceUsesPrivacyBlur() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        let recentHistoryView = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Pawtrackr/Features/Dashboard/RecentHistoryView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            recentHistoryView.contains(".privacyBlur()"),
+            "Recent History shows visit totals and revenue summaries, so it must blur when the scene resigns active."
+        )
+    }
 }

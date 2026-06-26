@@ -26,6 +26,12 @@ enum TextInputLimits {
         return clampedValue.isEmpty ? nil : clampedValue
     }
 
+    /// Returns a trimmed, length-limited optional string, or `nil` when the input or resulting value is empty.
+    static func clampedOptional(_ value: String?, to maxLength: Int) -> String? {
+        guard let value else { return nil }
+        return clampedOptional(value, to: maxLength)
+    }
+
     /// Returns `value` with its original surrounding whitespace preserved but no more than `maxLength` user-visible characters.
     static func limited(_ value: String, to maxLength: Int) -> String {
         guard maxLength >= 0 else { return "" }

@@ -38,6 +38,7 @@ struct RecentHistoryView: View {
                     viewModel = vm
                 }
             }
+            .privacyBlur()
     }
 
     @ViewBuilder

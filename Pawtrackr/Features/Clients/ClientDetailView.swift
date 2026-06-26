@@ -280,9 +280,12 @@ struct ClientDetailView: View {
                 Section(editingContact == nil ? NSLocalizedString("client_detail.new_emergency_contact", comment: "") : NSLocalizedString("client_detail.edit_emergency_contact", comment: "")) {
                     TextField(NSLocalizedString("form.name", comment: ""), text: $newContactName)
                         .focused($contactNameFocused)
+                        .textLengthLimit($newContactName, to: TextInputLimits.name)
                     TextField(NSLocalizedString("form.relation", comment: ""), text: $newContactRelation)
+                        .textLengthLimit($newContactRelation, to: TextInputLimits.shortText)
                     TextField(NSLocalizedString("form.phone", comment: ""), text: $newContactPhone)
                         .phoneFieldFormatting($newContactPhone)
+                        .textLengthLimit($newContactPhone, to: TextInputLimits.phone)
                 }
             }
             .navigationTitle(editingContact == nil ? NSLocalizedString("client_detail.add_contact", comment: "") : NSLocalizedString("client_detail.edit_contact", comment: ""))
@@ -512,14 +515,21 @@ struct ClientDetailView: View {
                 if isEditingClientInline {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            TextField(NSLocalizedString("new_client.first_name", comment: ""), text: $editFirst).textFieldStyle(.roundedBorder)
-                            TextField(NSLocalizedString("new_client.last_name", comment: ""), text: $editLast).textFieldStyle(.roundedBorder)
+                            TextField(NSLocalizedString("new_client.first_name", comment: ""), text: $editFirst)
+                                .textFieldStyle(.roundedBorder)
+                                .textLengthLimit($editFirst, to: TextInputLimits.name)
+                            TextField(NSLocalizedString("new_client.last_name", comment: ""), text: $editLast)
+                                .textFieldStyle(.roundedBorder)
+                                .textLengthLimit($editLast, to: TextInputLimits.name)
                         }
                         HStack {
                             TextField(NSLocalizedString("new_client.phone", comment: ""), text: $editPhone)
                                 .textFieldStyle(.roundedBorder)
                                 .phoneFieldFormatting($editPhone)
-                            TextField(NSLocalizedString("new_client.email", comment: ""), text: $editEmail).textFieldStyle(.roundedBorder)
+                                .textLengthLimit($editPhone, to: TextInputLimits.phone)
+                            TextField(NSLocalizedString("new_client.email", comment: ""), text: $editEmail)
+                                .textFieldStyle(.roundedBorder)
+                                .textLengthLimit($editEmail, to: TextInputLimits.email)
                         }
                     }
                 } else {
@@ -649,9 +659,9 @@ struct ClientDetailView: View {
 
     private func addOrUpdateContact() {
         guard let vm = viewModel else { return }
-        let name = newContactName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let relation = newContactRelation.trimmingCharacters(in: .whitespacesAndNewlines)
-        let phone = newContactPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = TextInputLimits.clamped(newContactName, to: TextInputLimits.name)
+        let relation = TextInputLimits.clamped(newContactRelation, to: TextInputLimits.shortText)
+        let phone = TextInputLimits.clamped(newContactPhone, to: TextInputLimits.phone)
         
         guard !name.isEmpty else {
             validationError = "Name is required."
@@ -687,9 +697,9 @@ struct ClientDetailView: View {
 
     private func beginEditContact(_ c: EmergencyContact) {
         editingContact = c
-        newContactName = c.name
-        newContactRelation = c.relation ?? ""
-        newContactPhone = PhoneUtils.display(c.phone) ?? c.phone
+        newContactName = TextInputLimits.limited(c.name, to: TextInputLimits.name)
+        newContactRelation = TextInputLimits.limited(c.relation ?? "", to: TextInputLimits.shortText)
+        newContactPhone = TextInputLimits.limited(PhoneUtils.display(c.phone) ?? c.phone, to: TextInputLimits.phone)
         showContactEditor = true
     }
 
@@ -986,10 +996,10 @@ struct ClientDetailView: View {
     }
 
     private func beginInlineEdit(_ client: Client) {
-        editFirst = client.firstName
-        editLast = client.lastName
-        editPhone = PhoneUtils.display(client.phone ?? "") ?? (client.phone ?? "")
-        editEmail = client.email ?? ""
+        editFirst = TextInputLimits.limited(client.firstName, to: TextInputLimits.name)
+        editLast = TextInputLimits.limited(client.lastName, to: TextInputLimits.name)
+        editPhone = TextInputLimits.limited(PhoneUtils.display(client.phone ?? "") ?? (client.phone ?? ""), to: TextInputLimits.phone)
+        editEmail = TextInputLimits.limited(client.email ?? "", to: TextInputLimits.email)
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = true }
     }
 

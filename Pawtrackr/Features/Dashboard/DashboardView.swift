@@ -49,6 +49,7 @@ struct DashboardView: View {
                 )
             }
             .toolbar { insightsToolbarItem }
+            .privacyBlur()
     }
 
     @ViewBuilder
