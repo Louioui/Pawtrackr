@@ -461,6 +461,7 @@ struct OnboardingView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.title3)
                         .accessibilityIdentifier("onboarding.businessName")
+                        .textLengthLimit($viewModel.name, to: TextInputLimits.name)
                         #if os(iOS)
                         .textInputAutocapitalization(.words)
                         #endif
@@ -491,10 +492,30 @@ struct OnboardingView: View {
                 
                 Card {
                     VStack(spacing: DS.Spacing.md) {
-                        onboardingTextField(title: NSLocalizedString("onboarding.regional.email", value: "Contact Email", comment: ""), text: $viewModel.email, icon: "envelope", contentType: .emailAddress)
-                        onboardingTextField(title: NSLocalizedString("onboarding.regional.phone", value: "Phone Number", comment: ""), text: $viewModel.phone, icon: "phone", contentType: .telephoneNumber)
+                        onboardingTextField(
+                            title: NSLocalizedString("onboarding.regional.email", value: "Contact Email", comment: ""),
+                            text: $viewModel.email,
+                            icon: "envelope",
+                            contentType: .emailAddress,
+                            maxLength: TextInputLimits.email
+                        )
+                        onboardingTextField(
+                            title: NSLocalizedString("onboarding.regional.phone", value: "Phone Number", comment: ""),
+                            text: $viewModel.phone,
+                            icon: "phone",
+                            contentType: .telephoneNumber,
+                            maxLength: TextInputLimits.phone
+                        )
                             .phoneFieldFormatting($viewModel.phone)
-                        onboardingTextField(title: NSLocalizedString("onboarding.regional.address", value: "Business Address", comment: ""), text: $viewModel.address, icon: "mappin.and.ellipse", axis: .vertical, contentType: .fullStreetAddress)                    }
+                        onboardingTextField(
+                            title: NSLocalizedString("onboarding.regional.address", value: "Business Address", comment: ""),
+                            text: $viewModel.address,
+                            icon: "mappin.and.ellipse",
+                            axis: .vertical,
+                            contentType: .fullStreetAddress,
+                            maxLength: TextInputLimits.address
+                        )
+                    }
                 }
                 .padding(.horizontal, DS.Spacing.xxl)
             }
@@ -503,7 +524,14 @@ struct OnboardingView: View {
         .scrollBounceBehavior(.basedOnSize)
     }
 
-    private func onboardingTextField(title: String, text: Binding<String>, icon: String, axis: Axis = .horizontal, contentType: PlatformContentType? = nil) -> some View {
+    private func onboardingTextField(
+        title: String,
+        text: Binding<String>,
+        icon: String,
+        axis: Axis = .horizontal,
+        contentType: PlatformContentType? = nil,
+        maxLength: Int = TextInputLimits.name
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: icon)
                 .font(.subheadline.bold())
@@ -514,10 +542,12 @@ struct OnboardingView: View {
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(3...5)
                     .textContentType(contentType)
+                    .textLengthLimit(text, to: maxLength)
             } else {
                 TextField(title, text: text)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(contentType)
+                    .textLengthLimit(text, to: maxLength)
                     #if os(iOS)
                     .keyboardType(keyboardType(for: contentType))
                     #endif

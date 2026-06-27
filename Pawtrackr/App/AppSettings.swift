@@ -199,6 +199,10 @@ final class AppSettings {
 
     var businessName: String {
         didSet {
+            let limited = TextInputLimits.limited(businessName, to: TextInputLimits.name)
+            if limited != businessName {
+                businessName = limited
+            }
             UserDefaults.standard.set(businessName, forKey: AppSettingsKeys.businessName)
             UbiquitousSettingsStore.shared.push(businessName, forKey: AppSettingsKeys.businessName)
         }
@@ -314,6 +318,10 @@ final class AppSettings {
 
     var deviceName: String {
         didSet {
+            let limited = TextInputLimits.limited(deviceName, to: TextInputLimits.shortText)
+            if limited != deviceName {
+                deviceName = limited
+            }
             UserDefaults.standard.set(deviceName, forKey: AppSettingsKeys.deviceName)
             // Notify CloudKitMonitor to push the new name immediately
             NotificationCenter.default.post(name: .deviceNameDidChange, object: nil)
@@ -372,7 +380,10 @@ final class AppSettings {
         ])
 
         // Read values
-        self.businessName = UserDefaults.standard.string(forKey: AppSettingsKeys.businessName) ?? Defaults.businessName
+        self.businessName = TextInputLimits.limited(
+            UserDefaults.standard.string(forKey: AppSettingsKeys.businessName) ?? Defaults.businessName,
+            to: TextInputLimits.name
+        )
         // didSet sanitization does not run during init, so normalize here too.
         let storedCurrency = (UserDefaults.standard.string(forKey: AppSettingsKeys.currencySymbol) ?? Defaults.currencySymbol)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -407,7 +418,10 @@ final class AppSettings {
         #else
         let defaultDeviceName = "Device"
         #endif
-        self.deviceName = UserDefaults.standard.string(forKey: AppSettingsKeys.deviceName) ?? defaultDeviceName
+        self.deviceName = TextInputLimits.limited(
+            UserDefaults.standard.string(forKey: AppSettingsKeys.deviceName) ?? defaultDeviceName,
+            to: TextInputLimits.shortText
+        )
 
         // Migrate any existing plaintext PIN out of UserDefaults into the
         // Keychain, then erase the UserDefaults copy. Future reads come from

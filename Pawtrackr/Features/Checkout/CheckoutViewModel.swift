@@ -333,7 +333,7 @@ final class CheckoutViewModel {
     private func hydrateStateFromVisit() {
         Logger.checkout.info("CheckoutViewModel: Hydrating from visit \(self.visit.uuid)")
         suppressDraftAutosave = true
-        sessionNotes = visit.note?.trimmed ?? ""
+        sessionNotes = TextInputLimits.limited(visit.note?.trimmed ?? "", to: TextInputLimits.notes)
 
         if visit.behaviorTags.isEmpty {
             tags = Set(pet.behaviorTags)
@@ -366,12 +366,13 @@ final class CheckoutViewModel {
     }
 
     func setSessionNotes(_ text: String) {
-        sessionNotes = text
+        sessionNotes = TextInputLimits.limited(text, to: TextInputLimits.notes)
         scheduleDraftSave(reason: "session_notes_changed")
     }
 
     func setExternalReference(_ text: String) {
-        externalReference = selectedPaymentMethod.normalizeReference(text)
+        let normalized = selectedPaymentMethod.normalizeReference(text)
+        externalReference = TextInputLimits.limited(normalized, to: TextInputLimits.shortText)
         scheduleCriticalDraftSave(reason: "reference_changed")
     }
 
@@ -487,7 +488,7 @@ final class CheckoutViewModel {
         if !method.requiresExternalReference {
             externalReference = ""
         } else if method.preservesReference(whenSwitchingFrom: previousMethod) {
-            externalReference = method.normalizeReference(existingReference)
+            externalReference = TextInputLimits.limited(method.normalizeReference(existingReference), to: TextInputLimits.shortText)
         } else {
             externalReference = ""
         }
@@ -745,11 +746,11 @@ final class CheckoutViewModel {
         guard let draft = await draftStore.loadDraft(for: visit.uuid), draft.petID == pet.uuid else { return }
 
         suppressDraftAutosave = true
-        sessionNotes = draft.sessionNotes
+        sessionNotes = TextInputLimits.limited(draft.sessionNotes, to: TextInputLimits.notes)
         amountString = draft.amountString
         tipAmountString = draft.tipAmountString
         selectedTipPercentage = draft.selectedTipPercentage
-        externalReference = draft.externalReference
+        externalReference = TextInputLimits.limited(draft.externalReference, to: TextInputLimits.shortText)
         tags = Set(draft.tags)
         
         if let method = Payment.Method(rawValue: draft.selectedPaymentMethodRawValue) {

@@ -36,10 +36,38 @@ final class OnboardingViewModel {
     }
 
     var currentStep: Step = .welcome
-    var name: String = "" { didSet { saveDraft() } }
-    var email: String = "" { didSet { saveDraft() } }
-    var phone: String = "" { didSet { saveDraft() } }
-    var address: String = "" { didSet { saveDraft() } }
+    var name: String = "" {
+        didSet {
+            if name.count > TextInputLimits.name {
+                name = TextInputLimits.limited(name, to: TextInputLimits.name)
+            }
+            saveDraft()
+        }
+    }
+    var email: String = "" {
+        didSet {
+            if email.count > TextInputLimits.email {
+                email = TextInputLimits.limited(email, to: TextInputLimits.email)
+            }
+            saveDraft()
+        }
+    }
+    var phone: String = "" {
+        didSet {
+            if phone.count > TextInputLimits.phone {
+                phone = TextInputLimits.limited(phone, to: TextInputLimits.phone)
+            }
+            saveDraft()
+        }
+    }
+    var address: String = "" {
+        didSet {
+            if address.count > TextInputLimits.address {
+                address = TextInputLimits.limited(address, to: TextInputLimits.address)
+            }
+            saveDraft()
+        }
+    }
     var logoData: Data? = nil { didSet { saveDraft() } }
     var pin: String = "" {
         didSet {

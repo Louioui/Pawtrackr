@@ -59,6 +59,11 @@ class ScheduledTasks {
     ) -> Bool {
         if Task.isCancelled { return false }
 
+        if let deferralReason = SystemWorkloadPolicy.heavyBackgroundWorkDeferralReason() {
+            log.info("Deferred maintenance: reason=\(deferralReason, privacy: .public) trigger=\(reason, privacy: .public)")
+            return true
+        }
+
         log.info("Starting maintenance: \(reason, privacy: .public)")
         let context = ModelContext(container)
         SummaryUpdater.rebuildAllSummaries(in: context)

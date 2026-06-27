@@ -1,5 +1,11 @@
 import SwiftUI
 
+enum PrivacyScreenScenePolicy {
+    static func shouldCoverContent(for phase: ScenePhase) -> Bool {
+        phase == .inactive || phase == .background
+    }
+}
+
 struct PrivacyScreen: View {
     var body: some View {
         ZStack {

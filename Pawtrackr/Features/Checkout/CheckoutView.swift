@@ -319,6 +319,7 @@ struct CheckoutView: View {
                                 #endif
                                 .focused($focusedField, equals: .sessionNotes)
                                 .accessibilityIdentifier("checkout.notesEditor")
+                                .textLengthLimit($notesEditorText, to: TextInputLimits.notes)
                                 .frame(minHeight: 120)
                                 .padding(8)
                                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.05)))
@@ -467,6 +468,7 @@ struct CheckoutView: View {
                                 .textFieldStyle(.roundedBorder)
                                 .padding(.horizontal)
                                 .accessibilityIdentifier("checkout.referenceField")
+                                .textLengthLimit($referenceEditorText, to: TextInputLimits.shortText)
                                 .autocorrectionDisabled()
                                 #if os(iOS)
                                 .keyboardType(viewModel.selectedPaymentMethod.referenceFormat == .cardLast4 ? .numberPad : .asciiCapable)
@@ -1221,8 +1223,9 @@ struct CheckoutView: View {
             get: { referenceEditorText },
             set: { newValue in
                 let normalized = viewModel.selectedPaymentMethod.normalizeReference(newValue)
-                referenceEditorText = normalized
-                viewModel.setExternalReference(normalized)
+                let limited = TextInputLimits.limited(normalized, to: TextInputLimits.shortText)
+                referenceEditorText = limited
+                viewModel.setExternalReference(limited)
             }
         )
     }

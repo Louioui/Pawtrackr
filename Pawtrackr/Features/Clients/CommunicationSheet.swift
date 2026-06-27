@@ -34,6 +34,7 @@ struct CommunicationSheet: View {
                         TextEditor(text: $customMessage)
                             .frame(minHeight: 120)
                             .accessibilityIdentifier("communication.messagePreview")
+                            .textLengthLimit($customMessage, to: TextInputLimits.notes)
                     }
                 }
 
@@ -89,7 +90,7 @@ struct CommunicationSheet: View {
         let processed = template.processedContent(pet: pet, visit: visit)
         Button {
             selectedTemplateTitle = template.title
-            customMessage = processed
+            customMessage = TextInputLimits.limited(processed, to: TextInputLimits.notes)
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: selectedTemplateTitle == template.title ? "checkmark.circle.fill" : "circle")
@@ -137,7 +138,7 @@ struct CommunicationSheet: View {
         else { return }
 
         selectedTemplateTitle = first.title
-        customMessage = first.processedContent(pet: pet, visit: visit)
+        customMessage = TextInputLimits.limited(first.processedContent(pet: pet, visit: visit), to: TextInputLimits.notes)
     }
     
     enum MessageMethod {
@@ -148,11 +149,12 @@ struct CommunicationSheet: View {
         guard let phone = pet.owner?.phone else { return }
         
         let urlString: String?
+        let boundedMessage = TextInputLimits.limited(customMessage, to: TextInputLimits.notes)
         switch method {
         case .sms:
-            urlString = PhoneUtils.smsURLString(phone, body: customMessage)
+            urlString = PhoneUtils.smsURLString(phone, body: boundedMessage)
         case .whatsapp:
-            urlString = PhoneUtils.whatsappURLString(phone, body: customMessage)
+            urlString = PhoneUtils.whatsappURLString(phone, body: boundedMessage)
         }
         
         guard let urlString = urlString, let url = URL(string: urlString) else { return }

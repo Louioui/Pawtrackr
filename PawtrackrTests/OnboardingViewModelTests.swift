@@ -103,6 +103,36 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(configs.first?.isSetupComplete, true)
     }
 
+    func testFreeTextFieldsClampBeforeDraftAndFinishPersistence() async throws {
+        let settings = AppSettings()
+        let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)
+
+        viewModel.name = String(repeating: "Northside Grooming ", count: 20)
+        viewModel.email = String(repeating: "owner", count: 80) + "@example.com"
+        viewModel.phone = String(repeating: "5", count: 80)
+        viewModel.address = String(repeating: "123 Very Long Street ", count: 30)
+        viewModel.pin = "4826"
+        viewModel.confirmPin = "4826"
+
+        XCTAssertLessThanOrEqual(viewModel.name.count, TextInputLimits.name)
+        XCTAssertLessThanOrEqual(viewModel.email.count, TextInputLimits.email)
+        XCTAssertLessThanOrEqual(viewModel.phone.count, TextInputLimits.phone)
+        XCTAssertLessThanOrEqual(viewModel.address.count, TextInputLimits.address)
+
+        viewModel.email = "owner@example.com"
+        let task = await viewModel.finish(seedSampleData: false) { }
+        _ = await task?.result
+
+        XCTAssertNil(viewModel.saveError)
+        XCTAssertLessThanOrEqual(settings.businessName.count, TextInputLimits.name)
+        let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
+        let config = try XCTUnwrap(configs.first)
+        XCTAssertLessThanOrEqual(config.name.count, TextInputLimits.name)
+        XCTAssertLessThanOrEqual(config.email?.count ?? 0, TextInputLimits.email)
+        XCTAssertLessThanOrEqual(config.phone?.count ?? 0, TextInputLimits.phone)
+        XCTAssertLessThanOrEqual(config.address?.count ?? 0, TextInputLimits.address)
+    }
+
     func testFinishWithDemoDataSeedsStarterRecords() async throws {
         let settings = AppSettings()
         let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)

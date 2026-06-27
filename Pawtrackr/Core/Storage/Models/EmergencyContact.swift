@@ -19,9 +19,9 @@ final class EmergencyContact {
 
     init(name: String, relation: String? = nil, phone: String) {
         self.uuid = UUID()
-        self.name = name
-        self.relation = relation
-        self.phone = phone
+        self.name = TextInputLimits.clamped(name, to: TextInputLimits.name)
+        self.relation = TextInputLimits.clampedOptional(relation, to: TextInputLimits.shortText)
+        self.phone = TextInputLimits.clamped(phone, to: TextInputLimits.phone)
     }
 }
 
