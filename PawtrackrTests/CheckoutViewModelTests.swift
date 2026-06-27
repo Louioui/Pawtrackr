@@ -308,6 +308,59 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.externalReference, "1234")
     }
 
+    func testFreeTextInputsClampBeforeDraftAndPersistenceBoundaries() {
+        let vm = makeVM()
+        vm.choosePayment(.zelle)
+
+        vm.setSessionNotes(String(repeating: "High energy. ", count: 200))
+        vm.setExternalReference(String(repeating: "zelle-ref-", count: 20))
+
+        XCTAssertLessThanOrEqual(vm.sessionNotes.count, TextInputLimits.notes)
+        XCTAssertLessThanOrEqual(vm.externalReference.count, TextInputLimits.shortText)
+    }
+
+    func testCheckoutTraceFileDoesNotPersistPetDisplayName() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let logURL = root.appendingPathComponent("trace.log")
+        let recorder = CheckoutEventRecorder(logURL: logURL)
+        let visitID = UUID()
+
+        for index in 0..<10 {
+            await recorder.record("privacy_probe_\(index)", visitID: visitID, petName: "Buddy")
+        }
+
+        let contents = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(contents.contains("visit=\(visitID.uuidString)"))
+        XCTAssertTrue(contents.contains("petNameToken="))
+        XCTAssertFalse(contents.contains("pet=Buddy"))
+        XCTAssertFalse(contents.contains("Buddy"))
+    }
+
+    func testCheckoutTraceFilePrunesOldestLinesWhenByteCapExceeded() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let logURL = root.appendingPathComponent("trace.log")
+        let recorder = CheckoutEventRecorder(logURL: logURL, maxLines: 300, maxFileBytes: 900)
+        let visitID = UUID()
+
+        for index in 0..<20 {
+            await recorder.record(
+                "event_\(index)_\(String(repeating: "x", count: 120))",
+                visitID: visitID,
+                petName: "Buddy"
+            )
+        }
+
+        let data = try Data(contentsOf: logURL)
+        let contents = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertLessThanOrEqual(data.count, 900)
+        XCTAssertTrue(contents.contains("event_19_"))
+        XCTAssertFalse(contents.contains("event_0_"))
+        XCTAssertFalse(contents.contains("Buddy"))
+    }
+
     // MARK: - Draft
 
     func testMakeDraft_PhotosAreNil() {
