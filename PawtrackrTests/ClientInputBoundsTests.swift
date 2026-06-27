@@ -61,6 +61,57 @@ final class ClientInputBoundsTests: XCTestCase {
         )
     }
 
+    func testRemainingVisibleFreeTextEditorsLimitPastedText() throws {
+        let onboarding = try loadSource("Pawtrackr/Features/Onboarding/OnboardingView.swift")
+        let settings = try loadSource("Pawtrackr/Features/Settings/SettingsView.swift")
+        let checkout = try loadSource("Pawtrackr/Features/Checkout/CheckoutView.swift")
+        let communication = try loadSource("Pawtrackr/Features/Clients/CommunicationSheet.swift")
+
+        XCTAssertTrue(
+            onboarding.contains(".textLengthLimit($viewModel.name, to: TextInputLimits.name)"),
+            "Onboarding business name must clamp pasted text before it expands the setup layout."
+        )
+        XCTAssertTrue(
+            onboarding.contains("maxLength: TextInputLimits.email"),
+            "Onboarding email must route through the shared bounded text-field helper."
+        )
+        XCTAssertTrue(
+            onboarding.contains("maxLength: TextInputLimits.phone"),
+            "Onboarding phone must route through the shared bounded text-field helper."
+        )
+        XCTAssertTrue(
+            onboarding.contains("maxLength: TextInputLimits.address"),
+            "Onboarding address must route through the shared bounded text-field helper."
+        )
+
+        XCTAssertTrue(
+            settings.contains(".textLengthLimit($appSettings.businessName, to: TextInputLimits.name)"),
+            "Settings business name must clamp pasted text."
+        )
+        XCTAssertTrue(
+            settings.contains(".textLengthLimit($appSettings.currencySymbol, to: TextInputLimits.shortText)"),
+            "Settings currency symbol must clamp pasted text before persistence sanitization."
+        )
+        XCTAssertTrue(
+            settings.contains(".textLengthLimit($appSettings.deviceName, to: TextInputLimits.shortText)"),
+            "Settings device name must clamp pasted text before CloudKit presence updates."
+        )
+
+        XCTAssertTrue(
+            checkout.contains(".textLengthLimit($notesEditorText, to: TextInputLimits.notes)"),
+            "Checkout notes must clamp pasted text in the visible editor."
+        )
+        XCTAssertTrue(
+            checkout.contains(".textLengthLimit($referenceEditorText, to: TextInputLimits.shortText)"),
+            "Checkout external reference must clamp pasted text in the visible editor."
+        )
+
+        XCTAssertTrue(
+            communication.contains(".textLengthLimit($customMessage, to: TextInputLimits.notes)"),
+            "Client communication message previews must clamp pasted text before URL construction."
+        )
+    }
+
     func testClientModelClampsOversizedFreeTextBeforePersisting() {
         let longName = String(repeating: "Name", count: 40)
         let longPhone = String(repeating: "5", count: 80)

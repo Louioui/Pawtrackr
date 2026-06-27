@@ -706,8 +706,10 @@ private struct BusinessSectionView: View {
         CardView {
             TextField(settingsLocalized("settings.business.name", value: "Business Name"), text: $appSettings.businessName)
                 .textFieldStyle(.roundedBorder)
+                .textLengthLimit($appSettings.businessName, to: TextInputLimits.name)
             TextField(settingsLocalized("settings.business.currency_symbol", value: "Currency Symbol"), text: $appSettings.currencySymbol)
                 .textFieldStyle(.roundedBorder)
+                .textLengthLimit($appSettings.currencySymbol, to: TextInputLimits.shortText)
         }
     }
 }
@@ -746,6 +748,7 @@ private struct PreferencesSectionView: View {
             ) {
                 TextField(settingsLocalized("settings.preferences.device_name_placeholder", value: "Reception iPad"), text: $appSettings.deviceName)
                     .textFieldStyle(.roundedBorder)
+                    .textLengthLimit($appSettings.deviceName, to: TextInputLimits.shortText)
             }
 
             ColorPicker(
