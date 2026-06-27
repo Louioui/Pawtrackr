@@ -149,7 +149,12 @@ final class AppSettings {
 
     private enum Defaults {
         static let isLockEnabled = true
-        static let pin = "1994"
+        /// No shippable default PIN. A compiled-in PIN is, by definition, publicly
+        /// known, so the app must never fall back to one (see `init` / `isPINSet`).
+        static let pin = ""
+        /// UI-test-only seed PIN, applied solely under `AppRuntime.isUITesting` so
+        /// the automated lock test has a known code. Never a shipping fallback.
+        static let uiTestPIN = "1234"
         static let biometricEnabled = true
         static let autoLockBackground = true
         static let autoLockInactivity = false
@@ -339,7 +344,7 @@ final class AppSettings {
             UserDefaults.standard.set(Defaults.currencySymbol, forKey: AppSettingsKeys.currencySymbol)
             UserDefaults.standard.removeObject(forKey: AppSettingsKeys.lastPINChangeDate)
             KeychainStorage.remove(forKey: AppSettingsKeys.appPINKeychainAccount)
-            KeychainStorage.set(Defaults.pin, forKey: AppSettingsKeys.appPINKeychainAccount)
+            KeychainStorage.set(Defaults.uiTestPIN, forKey: AppSettingsKeys.appPINKeychainAccount)
         }
 
         // Register defaults first
@@ -416,13 +421,14 @@ final class AppSettings {
             UserDefaults.standard.removeObject(forKey: AppSettingsKeys.legacyAppPIN)
         }
 
-        let storedPIN = KeychainStorage.string(forKey: AppSettingsKeys.appPINKeychainAccount) ?? Defaults.pin
-        self.appPIN = Self.isValidPIN(storedPIN) ? storedPIN : Defaults.pin
-        // If we just defaulted (no Keychain entry yet, no legacy migration),
-        // make sure the Keychain has a value so subsequent reads are stable.
-        if KeychainStorage.string(forKey: AppSettingsKeys.appPINKeychainAccount) == nil {
-            KeychainStorage.set(self.appPIN, forKey: AppSettingsKeys.appPINKeychainAccount)
-        }
+        // Adopt only a Keychain-stored PIN. There is intentionally NO compiled-in
+        // fallback: a shipped default PIN is publicly known, so a device with the
+        // lock enabled but no real user PIN must never become unlockable with it.
+        // When no valid PIN is stored, `appPIN` stays empty and the lock gate
+        // treats the lock as inactive (see `isPINSet`) — no lockout, no guessable
+        // code, and no default written into the Keychain.
+        let storedPIN = KeychainStorage.string(forKey: AppSettingsKeys.appPINKeychainAccount) ?? ""
+        self.appPIN = Self.isValidPIN(storedPIN) ? storedPIN : ""
 
         // Apply saved accent color to ThemeManager so views using
         // DS.ColorToken.primary render with it from the first frame.
@@ -441,9 +447,17 @@ final class AppSettings {
         return true
     }
 
-    /// Validates the provided PIN against the stored PIN.
+    /// Validates the provided PIN against the stored PIN. Always false when no
+    /// real PIN is set, so an empty/unset PIN can never be matched.
     func validatePIN(_ pin: String) -> Bool {
-        pin == appPIN
+        isPINSet && pin == appPIN
+    }
+
+    /// True only when a real 4-digit user PIN is stored. The app lock must never
+    /// engage without this — otherwise a device with no stored PIN could fall back
+    /// to a guessable code. See `PinLockGate`.
+    var isPINSet: Bool {
+        Self.isValidPIN(appPIN)
     }
 
     // NOTE: A `resetPINToDefault()` helper used to live here. It was dead code

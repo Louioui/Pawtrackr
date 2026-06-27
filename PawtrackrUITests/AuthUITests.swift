@@ -4,7 +4,8 @@
 //
 //  Drives the PIN lock screen. By default the UI test seeder disables the lock,
 //  so this test re-enables it from Settings, backgrounds, and verifies the
-//  PIN gate appears and accepts the default PIN (1994).
+//  PIN gate appears and accepts the UI-test seed PIN (1234). There is no
+//  shippable default PIN; the seed is applied only under UI testing.
 //
 
 import XCTest
@@ -61,17 +62,16 @@ final class AuthUITests: XCTestCase {
         sleep(1)
         app.activate()
 
-        // Wait for PIN gate, then enter the expected UI-test PIN.
+        // Wait for PIN gate, then enter the UI-test seed PIN. The legacy default
+        // "1994" must no longer be accepted, so the test enters only "1234" — if
+        // a future regression re-accepts the old default, this stops exercising it.
         guard app.buttons["1"].waitForHittable(timeout: 8) else {
             // If lock didn't appear, the test environment differs — skip rather than fail spuriously.
             try XCTSkipIf(true, "Lock screen did not appear; environment may suppress lock.")
             return
         }
 
-        enterPIN("1994")
-        if !waitForUnlockedShell(timeout: 3) {
-            enterPIN("1234")
-        }
+        enterPIN("1234")
 
         try XCTSkipIf(
             !waitForUnlockedShell(timeout: 8),

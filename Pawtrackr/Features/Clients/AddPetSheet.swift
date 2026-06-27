@@ -242,6 +242,12 @@ struct AddPetSheet: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// Builds a styled, length-limited text field for the pet entry form.
+    /// - Parameters:
+    ///   - title: Localized placeholder shown while the field is empty.
+    ///   - text: Binding to the backing string the field reads from and writes to.
+    ///   - maxLength: Maximum number of characters accepted; input is clamped to this length.
+    /// - Returns: A `View` rendering the bordered, length-limited input field.
     private func petInputField(_ title: String, text: Binding<String>, maxLength: Int) -> some View {
         TextField(title, text: text)
             .textLengthLimit(text, to: maxLength)

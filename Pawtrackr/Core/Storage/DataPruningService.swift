@@ -32,11 +32,11 @@ final class DataPruningService {
                     let attr = try fm.attributesOfItem(atPath: file.path)
                     if let modDate = attr[.modificationDate] as? Date, modDate < thirtyDaysAgo {
                         try fm.removeItem(at: file)
-                        Logger.performance.debug("Pruned stale asset: \(file.lastPathComponent)")
+                        Logger.performance.debug("Pruned stale asset: \(file.lastPathComponent, privacy: .private(mask: .hash))")
                     }
                 }
             } catch {
-                Logger.performance.error("Pruning failed for folder \(folder.lastPathComponent): \(error.localizedDescription)")
+                Logger.performance.error("Pruning failed for folder \(folder.lastPathComponent, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .public)")
             }
         }
         Logger.performance.info("Completed automated data pruning.")

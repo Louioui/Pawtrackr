@@ -35,7 +35,23 @@ final class InventoryTests: XCTestCase {
         context.insert(tx)
         try context.save()
 
-        XCTAssertEqual(item.currentStock, Decimal(8))
-        XCTAssertEqual(item.transactions?.first?.quantityChange, Decimal(-2))
+        // Re-fetch from a FRESH context so the assertions verify persisted
+        // store state rather than cached in-memory objects from `context`.
+        let verifyContext = ModelContext(container)
+        let itemUUID = item.uuid
+        let savedItem = try XCTUnwrap(
+            try verifyContext.fetch(FetchDescriptor<InventoryItem>(
+                predicate: #Predicate { $0.uuid == itemUUID }
+            )).first
+        )
+        XCTAssertEqual(savedItem.currentStock, Decimal(8))
+
+        let txUUID = tx.uuid
+        let savedTx = try XCTUnwrap(
+            try verifyContext.fetch(FetchDescriptor<InventoryTransaction>(
+                predicate: #Predicate { $0.uuid == txUUID }
+            )).first
+        )
+        XCTAssertEqual(savedTx.quantityChange, Decimal(-2))
     }
 }

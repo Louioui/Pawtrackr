@@ -23,9 +23,14 @@ final class LoyaltyServiceTests: XCTestCase {
         do {
             try await service.redeemPoints(client: client, points: -5)
             XCTFail("Negative redemptions must not be accepted.")
-        } catch {
+        } catch let error as AppError {
             // Expected: invalid redemption amounts are rejected before mutation.
+            guard case .validation = error else {
+                return XCTFail("Expected a validation error, got \(error).")
+            }
         }
+        // Any non-AppError throw propagates out of this `throws` test and fails it,
+        // so unrelated runtime/infrastructure failures no longer pass silently.
 
         XCTAssertEqual(client.loyaltyPoints, 20)
     }

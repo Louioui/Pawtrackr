@@ -100,6 +100,15 @@ struct RootView: View {
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
+        .onChange(of: onboardingIncomplete) { _, incomplete in
+            // A returning user's setup-complete BusinessConfig imported from iCloud
+            // while they were on the Welcome screen. Adopt it: dismiss onboarding so
+            // they don't re-onboard or create a duplicate config, and let the normal
+            // lock gate take over.
+            if !incomplete, showOnboarding {
+                showOnboarding = false
+            }
+        }
         .toastOverlay()
     }
 
@@ -120,6 +129,10 @@ struct RootView: View {
 
     private func updateFirstSyncGate(for accountState: CloudKitMonitor.AccountState) {
         guard !AppRuntime.isUITesting else { return }
+        // Never show the "restoring from iCloud" splash while onboarding is up or
+        // pending — a new/reinstalling user sees the Welcome flow immediately and
+        // the gate would only flash behind it.
+        guard !onboardingIncomplete, !showOnboarding else { return }
         guard accountState.isAvailable, !cloudKitMonitor.firstSyncCompleted else { return }
         showFirstSyncGate = true
     }
@@ -149,7 +162,13 @@ struct RootView: View {
     }
 
     private func evaluateOnboardingIfReady() {
-        guard canProceedPastFirstSync, !didEvaluateOnboarding else { return }
+        // Onboarding display is intentionally NOT gated on CloudKit first-sync:
+        // a brand-new user must see the Welcome screen immediately rather than
+        // waiting up to 30s for an empty iCloud zone to settle. The first-sync
+        // data-safety invariant is enforced at the onboarding COMMIT instead
+        // (OnboardingViewModel.finish awaits CloudKitMonitor.awaitFirstSyncSettled),
+        // and a returning user's synced config auto-dismisses onboarding below.
+        guard !didEvaluateOnboarding else { return }
         didEvaluateOnboarding = true
         if !businessConfigs.contains(where: \.isSetupComplete) {
             showOnboarding = true

@@ -32,6 +32,11 @@ final class SpotlightIndexer: @unchecked Sendable {
 
     private init() {}
 
+    /// Returns the Spotlight identifiers that become stale when a client and its cascaded pets are deleted.
+    static func searchableIdentifiersForDeletedClient(clientID: UUID, petIDs: [UUID]) -> [String] {
+        ["client-\(clientID.uuidString)"] + petIDs.map { "pet-\($0.uuidString)" }
+    }
+
     /// Coalesces rapid Client edits into a single Spotlight write per id.
     nonisolated func scheduleClientIndex(id: UUID, title: String, description: String) {
         queue.async { [weak self] in
@@ -154,6 +159,23 @@ final class SpotlightIndexer: @unchecked Sendable {
     nonisolated func removeFromIndex(id: String) {
         queue.async {
             CSSearchableIndex.default().deleteSearchableItems(withIdentifiers: [id], completionHandler: nil)
+        }
+    }
+
+    /// Removes a deleted client and its cascaded pets from Spotlight, including pending debounced updates.
+    nonisolated func removeClientAndPetsFromIndex(clientID: UUID, petIDs: [UUID]) {
+        let identifiers = Self.searchableIdentifiersForDeletedClient(clientID: clientID, petIDs: petIDs)
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.pendingClients.removeValue(forKey: clientID)
+            for petID in petIDs {
+                self.pendingPets.removeValue(forKey: petID)
+            }
+            CSSearchableIndex.default().deleteSearchableItems(withIdentifiers: identifiers) { error in
+                if let error {
+                    self.log.error("Spotlight delete failed for \(identifiers.count, privacy: .public) item(s): \(error.localizedDescription, privacy: .public)")
+                }
+            }
         }
     }
     

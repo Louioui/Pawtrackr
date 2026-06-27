@@ -53,7 +53,7 @@ public struct PinLockGate<Content: View>: View {
                 }
             }
             .onAppear {
-                if !appSettings.isLockEnabled {
+                if !appSettings.isLockEnabled || !appSettings.isPINSet {
                     isUnlocked = true
                     onUnlock()
                 }
@@ -73,7 +73,7 @@ public struct PinLockGate<Content: View>: View {
 
     @ViewBuilder
     private var gateContent: some View {
-        if isUnlocked || !appSettings.isLockEnabled {
+        if isUnlocked || !appSettings.isLockEnabled || !appSettings.isPINSet {
             content
         } else {
             PinLockView(isUnlocked: $isUnlocked)

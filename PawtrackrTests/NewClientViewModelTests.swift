@@ -113,12 +113,12 @@ final class NewClientViewModelTests: XCTestCase {
 
         XCTAssertEqual(outcome, .created)
         let client = try XCTUnwrap(try context.fetch(FetchDescriptor<Client>()).first)
-        XCTAssertLessThanOrEqual(client.firstName.count, 64)
-        XCTAssertLessThanOrEqual(client.lastName.count, 64)
-        XCTAssertLessThanOrEqual(client.address?.count ?? 0, 256)
+        XCTAssertEqual(client.firstName.count, 64)
+        XCTAssertEqual(client.lastName.count, 64)
+        XCTAssertEqual(client.address?.count, 256)
         let pet = try XCTUnwrap(client.pets?.first)
-        XCTAssertLessThanOrEqual(pet.name.count, 64)
-        XCTAssertLessThanOrEqual(pet.breed?.count ?? 0, 64)
-        XCTAssertLessThanOrEqual(pet.notes?.count ?? 0, 1_000)
+        XCTAssertEqual(pet.name.count, 64)
+        XCTAssertEqual(pet.breed?.count, 64)
+        XCTAssertEqual(pet.notes?.count, 1_000)
     }
 }

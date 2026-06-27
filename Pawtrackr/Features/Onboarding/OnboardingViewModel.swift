@@ -342,6 +342,16 @@ final class OnboardingViewModel {
             return nil
         }
 
+        // Before writing BusinessConfig, let any pre-existing config syncing down
+        // from iCloud land first. The fetch-first below then UPDATES that imported
+        // config instead of inserting a duplicate (protects a returning user who
+        // reinstalled and tapped through onboarding). For a genuine new user this
+        // returns almost immediately — the launch first-sync watchdog has long
+        // since settled while they filled in the form.
+        if CloudKitMonitor.shared.accountState.isAvailable {
+            await CloudKitMonitor.shared.awaitFirstSyncSettled(timeout: .seconds(5))
+        }
+
         do {
             var descriptor = FetchDescriptor<BusinessConfig>()
             descriptor.fetchLimit = 1

@@ -213,6 +213,13 @@ final class CloudKitMonitor {
     private var eventBus: GlobalEventBus?
     private var remoteWakeWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
     private var firstSyncSettleTask: Task<Void, Never>?
+    /// Continuations parked by `awaitFirstSyncSettled` (e.g. the onboarding commit),
+    /// resumed when the first-sync gate completes or each one's own timeout fires.
+    private var firstSyncWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    /// View-independent backstop that flips `firstSyncCompleted` a bounded time
+    /// after the account becomes available, so completion no longer depends on
+    /// FirstSyncGateView being mounted. Cancelled once first sync completes.
+    private var firstSyncLaunchWatchdog: Task<Void, Never>?
     /// The currently-running forceSync watchdog. Replaced (and cancelled) on each
     /// new forceSync call so rapid pull-to-refresh doesn't stack watchdogs that
     /// later all race to flip syncState back to .idle.
@@ -348,6 +355,13 @@ final class CloudKitMonitor {
                 flushOfflineMutationBuffer(reason: "iCloud account available")
             }
             postChange()
+        }
+
+        // Arm the view-independent first-sync backstop as soon as iCloud is
+        // available so onboarding's commit (and the gate) can never wait forever
+        // on an empty zone that emits no import event.
+        if mapped == .available {
+            armFirstSyncLaunchWatchdog()
         }
     }
 
@@ -897,8 +911,13 @@ final class CloudKitMonitor {
     func markFirstSyncCompleted() {
         guard !firstSyncCompleted else { return }
         firstSyncSettleTask?.cancel()
+        firstSyncLaunchWatchdog?.cancel()
         firstSyncCompleted = true
         UserDefaults.standard.set(true, forKey: DefaultsKey.firstSyncCompleted)
+        // Resume anyone awaiting the first-sync gate (e.g. the onboarding commit).
+        let waiters = firstSyncWaiters
+        firstSyncWaiters.removeAll()
+        for waiter in waiters.values { waiter.resume() }
         appendEvent(
             kind: .importFromCloud,
             status: .succeeded,
@@ -906,6 +925,36 @@ final class CloudKitMonitor {
             errorCode: nil
         )
         postChange()
+    }
+
+    /// Suspends until the first-launch iCloud restore gate has settled (an import
+    /// landed, the user skipped, or the launch watchdog fired) or `timeout`
+    /// elapses — whichever is first. Returns immediately if already settled.
+    /// Onboarding's commit awaits this so a returning user's synced BusinessConfig
+    /// is adopted (via fetch-first) rather than duplicated; a genuine new user
+    /// waits ~0s because the launch watchdog settles while they fill in the form.
+    func awaitFirstSyncSettled(timeout: Duration) async {
+        if firstSyncCompleted { return }
+        let id = UUID()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            firstSyncWaiters[id] = continuation
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: timeout)
+                guard let self, let waiter = self.firstSyncWaiters.removeValue(forKey: id) else { return }
+                waiter.resume()
+            }
+        }
+    }
+
+    /// Starts the view-independent first-sync backstop once iCloud is available.
+    /// Idempotent: no-ops if first sync already completed or the watchdog is armed.
+    private func armFirstSyncLaunchWatchdog() {
+        guard !firstSyncCompleted, firstSyncLaunchWatchdog == nil else { return }
+        firstSyncLaunchWatchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            guard let self, !Task.isCancelled else { return }
+            self.markFirstSyncCompleted()
+        }
     }
 
     // MARK: - UI helpers

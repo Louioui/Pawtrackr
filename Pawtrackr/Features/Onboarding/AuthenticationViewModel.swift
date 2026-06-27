@@ -100,7 +100,7 @@ final class AuthenticationViewModel {
         do {
             return try modelContext.fetch(descriptor).first
         } catch {
-            Logger.auth.error("User fetch failed for email lookup: \(String(describing: error))")
+            Logger.auth.error("User fetch failed for email lookup: \(String(describing: error), privacy: .private)")
             return nil
         }
     }
@@ -109,7 +109,7 @@ final class AuthenticationViewModel {
         do {
             try context.save()
         } catch {
-            Logger.auth.error("\(label) save failed: \(String(describing: error))")
+            Logger.auth.error("\(label, privacy: .public) save failed: \(String(describing: error), privacy: .private)")
         }
     }
 }

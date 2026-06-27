@@ -268,12 +268,14 @@ final actor ClientRepository: ClientRepositoryProtocol {
         let clientUUID = client.uuid
         
         let pets = Array(client.pets ?? [])
+        let petUUIDs = pets.map(\.uuid)
         let visits = pets.flatMap { pet in Array(pet.visits ?? []) }
         let paymentDates = visits.compactMap { $0.payment?.paidAt }
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
 
         modelContext.delete(client)
         try modelContext.save()
+        SpotlightIndexer.shared.removeClientAndPetsFromIndex(clientID: clientUUID, petIDs: petUUIDs)
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Deleted client",
