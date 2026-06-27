@@ -77,13 +77,11 @@ struct RootView: View {
                     showPrivacyScreen = false
                 }
             case .inactive:
-                break
+                showPrivacyScreen = PrivacyScreenScenePolicy.shouldCoverContent(for: newPhase)
             case .background:
                 TimeHub.shared.pause()
                 bypassLockForCurrentSession = false
-                withAnimation {
-                    showPrivacyScreen = true
-                }
+                showPrivacyScreen = PrivacyScreenScenePolicy.shouldCoverContent(for: newPhase)
             @unknown default:
                 break
             }
