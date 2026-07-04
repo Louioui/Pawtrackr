@@ -73,6 +73,62 @@ actor LoyaltyService {
         )
     }
 
+    func updateConfig(
+        earnMode: LoyaltyEarnMode,
+        pointsPerDollar: Decimal,
+        pointsPerVisit: Int,
+        redemptionThreshold: Int,
+        isRewardsCatalogEnabled: Bool
+    ) throws {
+        guard pointsPerDollar >= .zero else {
+            throw AppError.validation(.custom(message: "Points per dollar cannot be negative."))
+        }
+        guard pointsPerVisit >= 0 else {
+            throw AppError.validation(.custom(message: "Points per visit cannot be negative."))
+        }
+        guard redemptionThreshold > 0 else {
+            throw AppError.validation(.custom(message: "Reward threshold must be greater than zero."))
+        }
+
+        let config = try fetchOrCreateConfig()
+        config.setEarnMode(earnMode)
+        config.setPointsPerDollar(pointsPerDollar)
+        config.setPointsPerVisit(pointsPerVisit)
+        config.setRedemptionThreshold(redemptionThreshold)
+        config.setRewardsCatalogEnabled(isRewardsCatalogEnabled)
+        try modelContext.save()
+    }
+
+    func createRewardTemplate(
+        title: String,
+        detail: String,
+        pointCost: Int,
+        systemImage: String,
+        style: LoyaltyReward.Style
+    ) throws {
+        guard pointCost > 0 else {
+            throw AppError.validation(.custom(message: "Reward cost must be greater than zero."))
+        }
+
+        let templates = try modelContext.fetch(FetchDescriptor<LoyaltyRewardTemplate>())
+        let nextOrder = (templates.map(\.sortOrder).max() ?? -1) + 1
+        let reward = LoyaltyRewardTemplate(
+            title: title,
+            detail: detail,
+            pointCost: pointCost,
+            systemImage: systemImage,
+            styleRaw: style.rawValue,
+            sortOrder: nextOrder
+        )
+        modelContext.insert(reward)
+        try modelContext.save()
+    }
+
+    func setRewardTemplate(_ reward: LoyaltyRewardTemplate, isEnabled: Bool) throws {
+        reward.setEnabled(isEnabled)
+        try modelContext.save()
+    }
+
     private func recordLedgerEntry(kind: LoyaltyLedgerEntry.Kind, points: Int, client: Client, reason: String?) {
         let entry = LoyaltyLedgerEntry(
             kind: kind,
@@ -99,5 +155,20 @@ actor LoyaltyService {
                 changedKeys: changedKeys
             )
         }
+    }
+
+    private func fetchOrCreateConfig() throws -> LoyaltyConfig {
+        var descriptor = FetchDescriptor<LoyaltyConfig>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        descriptor.fetchLimit = 1
+
+        if let existing = try modelContext.fetch(descriptor).first {
+            return existing
+        }
+
+        let config = LoyaltyConfig()
+        modelContext.insert(config)
+        return config
     }
 }
