@@ -34,6 +34,9 @@ struct PawtrackrApp: App {
     let eventBus = GlobalEventBus()
     @State private var appSettings = AppSettings()
     @State private var authViewModel: AuthenticationViewModel
+    /// StoreKit 2 entitlement layer (Pawtrackr Pro). Started with the main scene;
+    /// the future paywall reads this via the environment. See ADR-0001.
+    @State private var entitlements = EntitlementStore()
     @AppStorage(AppSettingsKeys.appLanguageOverride) private var appLanguageOverrideRaw = AppLanguageOverride.system.rawValue
 
     // Platform AppDelegate for silent CloudKit pushes.
@@ -306,7 +309,9 @@ struct PawtrackrApp: App {
                 .environment(dataStore)
                 .environment(router)
                 .environment(eventBus)
+                .environment(entitlements)
                 .modelContainer(container)
+                .task { entitlements.start() }
                 .onContinueUserActivity("com.pawtrackr.viewPet") { activity in
                     handleViewPetActivity(activity)
                 }

@@ -1,0 +1,48 @@
+{
+  "identifier" : "5A9C6E10-0000-4000-8000-000000000000",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA"
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "5A9C6E10-0000-4000-8000-000000000001",
+      "localizations" : [],
+      "name" : "Pawtrackr Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "29.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5A9C6E10-0000-4000-8000-000000000002",
+          "introductoryOffer" : {
+            "internalID" : "5A9C6E10-0000-4000-8000-000000000003",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "Unlimited access to Pawtrackr Pro — loyalty suite, advanced dashboards, and multi-device CloudKit sync.",
+              "displayName" : "Pawtrackr Pro (Monthly)",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "PartnerShipWithMedia.Pawtrackr.monthly.pro",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Pawtrackr Pro Monthly",
+          "subscriptionGroupID" : "5A9C6E10-0000-4000-8000-000000000001",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

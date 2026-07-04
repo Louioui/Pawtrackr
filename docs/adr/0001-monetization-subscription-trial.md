@@ -31,7 +31,7 @@ Ship an **auto-renewable subscription** ("Pawtrackr Pro") with a **7-day introdu
 trial**, implemented with **StoreKit 2**, with entitlement checked as a gate in `RootView`.
 Reject the Keychain-timed non-consumable and the two-app model.
 
-- **Product:** subscription group `Pawtrackr Pro`; monthly `PartnerShipWithMedia.Pawtrackr.pro.monthly`
+- **Product:** subscription group `Pawtrackr Pro`; monthly `PartnerShipWithMedia.Pawtrackr.monthly.pro`
   at $29.99 (optionally add an annual SKU later for churn resistance). **7-day free trial** as an
   App Store Connect **Introductory Offer** (free), configured per-product — *not* in code.
 - **Entitlement source of truth:** `Transaction.currentEntitlements` + a `Transaction.updates`
@@ -105,7 +105,7 @@ structures for you.
 ## Action Items
 
 1. [ ] App Store Connect: create subscription group `Pawtrackr Pro`, product
-       `PartnerShipWithMedia.Pawtrackr.pro.monthly` ($29.99), add a **7-day free Introductory Offer**.
+       `PartnerShipWithMedia.Pawtrackr.monthly.pro` ($29.99), add a **7-day free Introductory Offer**.
 2. [ ] Add `Features/Subscription/` with an `EntitlementStore` (`@Observable`/`@MainActor`)
        wrapping `Transaction.currentEntitlements` + a launch `Transaction.updates` task; cache the
        last-known entitlement for offline launch (no new `@Model`).
