@@ -15,6 +15,28 @@ final class LoyaltyServiceTests: XCTestCase {
         XCTAssertEqual(LoyaltyEngine.calculatePoints(for: Decimal(string: "-12.34")!), 0)
     }
 
+    func testCalculatePoints_UsesDefaultPointsPerDollarSnapshot() {
+        let points = LoyaltyEngine.calculatePoints(
+            for: Decimal(string: "80.99")!,
+            config: .default
+        )
+
+        XCTAssertEqual(points, 80)
+    }
+
+    func testCalculatePoints_UsesFlatPerVisitSnapshot() {
+        let config = LoyaltyConfigSnapshot(
+            earnMode: .flatPerVisit,
+            pointsPerDollar: Decimal(1),
+            pointsPerVisit: 20,
+            redemptionThreshold: 100,
+            isRewardsCatalogEnabled: true
+        )
+
+        XCTAssertEqual(LoyaltyEngine.calculatePoints(for: Decimal(80), config: config), 20)
+        XCTAssertEqual(LoyaltyEngine.calculatePoints(for: Decimal.zero, config: config), 0)
+    }
+
     func testRedeemPoints_RejectsNegativeRedemptionWithoutMutatingBalance() async throws {
         let client = Client(firstName: "Ava", lastName: "Martinez")
         client.loyaltyPoints = 20

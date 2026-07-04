@@ -15,13 +15,18 @@ struct LoyaltyEngine {
     /// How soon a return visit must happen (in days) to earn the rebook bonus.
     static let rebookWindowDays = 45
 
-    /// Calculates base points earned from total spent: 1 point per whole $1.
-    static func calculatePoints(for total: Decimal) -> Int {
+    /// Calculates base points earned from the configured earning rule.
+    static func calculatePoints(for total: Decimal, config: LoyaltyConfigSnapshot = .default) -> Int {
         guard total > .zero else { return 0 }
 
-        // Banker's rounding for point calculation
-        let rounded = total.roundedMoney()
-        return (rounded as NSDecimalNumber).intValue
+        switch config.earnMode {
+        case .pointsPerDollar:
+            let roundedTotal = total.roundedMoney()
+            let rawPoints = (roundedTotal * config.pointsPerDollar).roundedMoney(scale: 4)
+            return max(0, (rawPoints as NSDecimalNumber).intValue)
+        case .flatPerVisit:
+            return max(0, config.pointsPerVisit)
+        }
     }
 
     /// Applies the tier's earn multiplier to base points. Integer math only:

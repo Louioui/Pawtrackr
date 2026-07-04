@@ -11,12 +11,14 @@ actor LoyaltyService {
     func applyPoints(for visit: Visit) async throws {
         guard let pet = visit.pet else { return }
 
+        let config = LoyaltyConfigResolver.snapshot(in: modelContext)
         let clientUUID = LoyaltyCheckoutProcessor.applyEarnings(
             visit: visit,
             pet: pet,
             total: visit.total,
             in: modelContext,
-            now: visit.endedAt ?? .now
+            now: visit.endedAt ?? .now,
+            config: config
         )
         guard clientUUID != nil, let client = pet.owner else { return }
 

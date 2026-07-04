@@ -29,11 +29,12 @@ enum LoyaltyCheckoutProcessor {
         pet: Pet,
         total: Decimal,
         in context: ModelContext,
-        now: Date = .now
+        now: Date = .now,
+        config: LoyaltyConfigSnapshot = .default
     ) -> UUID? {
         let client = pet.owner
 
-        let base = LoyaltyEngine.calculatePoints(for: total)
+        let base = LoyaltyEngine.calculatePoints(for: total, config: config)
         let tier = LoyaltyEngine.tier(
             forLifetimeEarned: LoyaltyEngine.lifetimeEarnedPoints(for: client, excluding: visit.uuid)
         )

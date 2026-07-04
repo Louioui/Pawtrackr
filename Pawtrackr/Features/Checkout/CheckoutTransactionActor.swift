@@ -92,12 +92,14 @@ final actor CheckoutTransactionActor {
             // 7. Finalize Visit
             visit.markCheckedOut(total: request.amount, now: endedAt)
             pet.reconcileBehaviorTagsFromCompletedVisits()
+            let loyaltyConfig = LoyaltyConfigResolver.snapshot(in: modelContext)
             let loyaltyClientUUID = LoyaltyCheckoutProcessor.applyEarnings(
                 visit: visit,
                 pet: pet,
                 total: request.amount,
                 in: modelContext,
-                now: endedAt
+                now: endedAt,
+                config: loyaltyConfig
             )
             
             // 8. Commit

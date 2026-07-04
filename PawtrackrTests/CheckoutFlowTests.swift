@@ -237,6 +237,40 @@ final class CheckoutFlowTests: XCTestCase {
             "Balance must be delta-adjusted (+20), not re-credited the full award.")
     }
 
+    func testLoyaltyProcessor_ReprocessesFlatVisitModeIdempotently() throws {
+        let visit = Visit(pet: pet)
+        context.insert(visit)
+        try context.save()
+
+        let config = LoyaltyConfigSnapshot(
+            earnMode: .flatPerVisit,
+            pointsPerDollar: Decimal(1),
+            pointsPerVisit: 20,
+            redemptionThreshold: 100,
+            isRewardsCatalogEnabled: true
+        )
+
+        LoyaltyCheckoutProcessor.applyEarnings(
+            visit: visit,
+            pet: pet,
+            total: Decimal(80),
+            in: context,
+            now: .now,
+            config: config
+        )
+        LoyaltyCheckoutProcessor.applyEarnings(
+            visit: visit,
+            pet: pet,
+            total: Decimal(120),
+            in: context,
+            now: .now,
+            config: config
+        )
+
+        XCTAssertEqual(visit.loyaltyPointsChange, 20)
+        XCTAssertEqual(client.loyaltyPoints, 20)
+    }
+
     /// Zelle without a transaction reference must be rejected by validation, so the
     /// audit-mandated "Confirm button disabled unless reference entered" promise holds.
     func testZellePaymentWithoutReference_FailsValidation() {
