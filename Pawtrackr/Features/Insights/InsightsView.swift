@@ -36,6 +36,7 @@ struct InsightsView: View {
     @State private var reportCSVDocument: ExportDocument?
     @State private var isPreparingReport = false
     @State private var selectedDrilldown: InsightsDrilldown?
+    @State private var selectedRevenueDate: Date?
 
     var body: some View {
         Group {
@@ -227,6 +228,12 @@ struct InsightsView: View {
 
     // MARK: - Revenue
 
+    private func selectedRevenuePoint(in vm: InsightsViewModel) -> InsightsViewModel.RevenueData? {
+        guard let selectedRevenueDate else { return nil }
+        let calendar = Calendar.current
+        return vm.revenueSeries.first { calendar.isDate($0.date, inSameDayAs: selectedRevenueDate) }
+    }
+
     private func revenueCard(_ vm: InsightsViewModel) -> some View {
         Card {
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
@@ -252,6 +259,14 @@ struct InsightsView: View {
                 if vm.revenueSeries.isEmpty || vm.totalRevenue == .zero {
                     emptyState(icon: "chart.bar.xaxis", message: "No revenue recorded in this period")
                 } else {
+                    if let selected = selectedRevenuePoint(in: vm) {
+                        Text("\(selected.date.formatted(.dateTime.weekday(.wide))): \(selected.amount.moneyString)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(DS.ColorToken.primary)
+                            .transition(.opacity)
+                            .accessibilityIdentifier("insights.revenue.selected")
+                    }
+
                     Chart(vm.revenueSeries) { data in
                         BarMark(
                             x: .value(localized("insights.chart.day", value: "Day"), data.date, unit: .day),
@@ -267,11 +282,12 @@ struct InsightsView: View {
                             AxisGridLine()
                         }
                     }
+                    .chartXSelection(value: $selectedRevenueDate)
                     .frame(height: 155)
-                    // Read-only chart: the bars are non-interactive. Reconciliation
-                    // is still available via the explicit "View visits behind this
-                    // number" button below.
+                    // Scrubbing previews individual days; reconciliation remains
+                    // available through the explicit visit drilldown button below.
                     .animation(.spring(), value: vm.revenueSeries.count)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedRevenueDate)
 
                     HStack {
                         Label(String(format: localized("insights.visits_count_fmt", value: "%d visits"), vm.totalVisitsInPeriod), systemImage: "scissors")
@@ -300,6 +316,7 @@ struct InsightsView: View {
                     guard vm.revenuePeriodDays != period else { return }
                     withAnimation(Animations.responsiveSpringSoft) {
                         vm.revenuePeriodDays = period
+                        selectedRevenueDate = nil
                     }
                     reportPDFData = nil
                     reportCSVDocument = nil
