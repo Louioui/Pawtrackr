@@ -117,6 +117,9 @@
 "clients.in_progress" = "EN PROCESO";
 "clients.all_clients" = "TODOS LOS CLIENTES";
 "clients.search_placeholder" = "Buscar dueños, mascotas o teléfono";
+"client.action.open_client_window" = "Abrir ventana del cliente";
+"client.action.open_loyalty_window" = "Abrir ventana de lealtad";
+"client.window.unavailable" = "Cliente no disponible";
 
 // Client Detail
 "client_details.checkin_confirm_title_fmt" = "¿Iniciar sesión para %@?";

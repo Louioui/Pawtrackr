@@ -117,6 +117,9 @@
 "clients.in_progress" = "IN PROGRESS";
 "clients.all_clients" = "ALL CLIENTS";
 "clients.search_placeholder" = "Search owners, pets, or phone";
+"client.action.open_client_window" = "Open Client Window";
+"client.action.open_loyalty_window" = "Open Loyalty Window";
+"client.window.unavailable" = "Client Unavailable";
 
 // Client Detail
 "client_details.checkin_confirm_title_fmt" = "Start session for %@?";
