@@ -71,6 +71,10 @@ final class EntitlementStore {
     /// monitoring. Safe to call from multiple scene lifecycles — only the first starts work.
     func start() {
         guard listener == nil else { return }
+        if AppRuntime.shouldForcePremiumForUITesting {
+            status = .entitled(inTrial: true, expiration: .distantFuture)
+            return
+        }
         listener = Task { [weak self] in
             // Resolve the current entitlement immediately...
             await self?.refresh()

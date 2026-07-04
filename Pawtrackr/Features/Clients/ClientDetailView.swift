@@ -26,6 +26,7 @@ struct ClientDetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
+    @Environment(EntitlementStore.self) private var entitlements
 
     // Lazy-initialized ViewModel to avoid context crashes
     @State private var viewModel: ClientDetailViewModel? = nil
@@ -40,6 +41,7 @@ struct ClientDetailView: View {
         case editClient
         case history(Pet)
         case communication(Pet)
+        case subscriptionPaywall
 
         var id: String {
             switch self {
@@ -51,6 +53,8 @@ struct ClientDetailView: View {
                 return "history_\(String(describing: pet.persistentModelID))"
             case .communication(let pet):
                 return "communication_\(String(describing: pet.persistentModelID))"
+            case .subscriptionPaywall:
+                return "subscriptionPaywall"
             }
         }
     }
@@ -271,6 +275,8 @@ struct ClientDetailView: View {
             PetHistoryView(pet: pet)
         case .communication(let pet):
             CommunicationSheet(pet: pet, visit: nil)
+        case .subscriptionPaywall:
+            SubscriptionPaywallView()
         }
     }
 
@@ -370,6 +376,7 @@ struct ClientDetailView: View {
                     emergencyContactsCard(client: vm.client)
                         .walkthroughTarget(.cdEmergency)
                     notesCard(client: vm.client)
+                    loyaltySection(client: vm.client)
                     petsSection(vm: vm)
                         .walkthroughTarget(.cdPets)
                     recentHistorySection(vm: vm)
@@ -419,6 +426,71 @@ struct ClientDetailView: View {
                 }
             }
         }
+    }
+
+    private func loyaltySection(client: Client) -> some View {
+        Card {
+            Group {
+                if entitlements.isPremium {
+                    NavigationLink {
+                        ClientLoyaltyView(client: client)
+                    } label: {
+                        loyaltyRowContent(client: client, isLocked: false)
+                    }
+                    .buttonStyle(.plain)
+                    .pressScaleStyle(hapticsEnabled: true)
+                } else {
+                    Button {
+                        sheetDestination = .subscriptionPaywall
+                    } label: {
+                        loyaltyRowContent(client: client, isLocked: true)
+                    }
+                    .buttonStyle(.plain)
+                    .pressScaleStyle(hapticsEnabled: true)
+                }
+            }
+            .accessibilityIdentifier("clientDetail.loyaltyRewards")
+        }
+        .padding(.horizontal)
+    }
+
+    private func loyaltyRowContent(client: Client, isLocked: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: isLocked ? "lock.fill" : "crown.fill")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(DS.ColorToken.warning.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Loyalty & Rewards")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text(isLocked ? "Premium client retention tools" : "Manage balance, rewards, and visit-earned points")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 5) {
+                Image(systemName: "pawprint.fill")
+                    .font(.caption2)
+                Text("\(client.loyaltyPoints)")
+                    .font(.caption.weight(.bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.vertical, 5)
+            .padding(.horizontal, 9)
+            .background(DS.ColorToken.warning, in: Capsule())
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isLocked ? "Loyalty and rewards locked, \(client.loyaltyPoints) points" : "Loyalty and rewards, \(client.loyaltyPoints) points")
     }
 
     private var clientDetailContentMaxWidth: CGFloat {

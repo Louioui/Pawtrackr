@@ -60,6 +60,7 @@ struct RootView: View {
         .sheet(isPresented: Binding(
             get: {
                 entitlements.status == .notEntitled
+                    && AppRuntime.allowsAutomaticSubscriptionPaywall
                     && !onboardingIncomplete
                     && !showOnboarding
                     && !showWhatIsNew

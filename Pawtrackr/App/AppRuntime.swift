@@ -12,6 +12,8 @@ enum AppRuntime {
     static let uiTestingEnvironmentKey = "PAWTRACKR_UI_TESTING"
     static let uiTestingStartTabEnvironmentKey = "PAWTRACKR_UI_START_TAB"
     static let uiTestingStartWalkthroughEnvironmentKey = "PAWTRACKR_UI_START_WALKTHROUGH"
+    static let uiTestingPremiumEnvironmentKey = "PAWTRACKR_UI_TESTING_PREMIUM"
+    static let uiTestingAutomaticPaywallEnvironmentKey = "PAWTRACKR_UI_TESTING_AUTOMATIC_PAYWALL"
     static let inMemoryStoreEnvironmentKey = "PAWTRACKR_IN_MEMORY_STORE"
     /// When set, the UI test seeder will skip inserting a BusinessConfig so the
     /// onboarding flow shows on launch — used to drive onboarding XCUI tests.
@@ -39,6 +41,20 @@ enum AppRuntime {
     static var shouldStartWalkthroughForUITesting: Bool {
         guard isUITesting else { return false }
         return ProcessInfo.processInfo.environment[uiTestingStartWalkthroughEnvironmentKey] == "1"
+    }
+
+    /// UI-test-only StoreKit override. Production launches always resolve
+    /// entitlements through StoreKit.
+    static var shouldForcePremiumForUITesting: Bool {
+        guard isUITesting else { return false }
+        return ProcessInfo.processInfo.environment[uiTestingPremiumEnvironmentKey] == "1"
+    }
+
+    /// Existing UI tests need to navigate the app without the launch paywall
+    /// covering every tab. Focused paywall tests opt back in explicitly.
+    static var allowsAutomaticSubscriptionPaywall: Bool {
+        guard isUITesting else { return true }
+        return ProcessInfo.processInfo.environment[uiTestingAutomaticPaywallEnvironmentKey] == "1"
     }
 
     /// True when the process was launched by XCTest (unit or UI test). Used by

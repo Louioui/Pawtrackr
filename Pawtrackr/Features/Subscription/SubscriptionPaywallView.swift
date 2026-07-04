@@ -38,7 +38,24 @@ struct SubscriptionPaywallView: View {
             .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(DS.ColorToken.background)
+        .overlay(alignment: .topTrailing) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 40, height: 40)
+                    .background(.thinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .pressScaleStyle(hapticsEnabled: true)
+            .accessibilityLabel("Dismiss")
+            .accessibilityIdentifier("subscriptionPaywall.dismiss")
+            .padding(.top, 12)
+            .padding(.trailing, 16)
+        }
         .task { await loadProduct() }
         // If the entitlement resolves to active (e.g. purchase/restore succeeds,
         // or a family-shared entitlement arrives), close automatically.
@@ -106,7 +123,7 @@ struct SubscriptionPaywallView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
+                .fill(DS.ColorToken.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
