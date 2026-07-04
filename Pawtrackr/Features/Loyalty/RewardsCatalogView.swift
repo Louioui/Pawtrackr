@@ -153,7 +153,7 @@ struct RewardsCatalogView: View {
         Task {
             do {
                 let service = LoyaltyService(modelContainer: modelContext.container)
-                try await service.redeemPoints(client: client, points: reward.pointCost)
+                try await service.redeemPoints(client: client, points: reward.pointCost, reason: reward.title)
                 withAnimation(MotionSystem.snappy) {
                     successMessage = "Redeemed \(reward.title)"
                 }

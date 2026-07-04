@@ -18,12 +18,24 @@ struct ClientLoyaltyView: View {
     }
 
     @Bindable var client: Client
+    @Query private var ledgerEntries: [LoyaltyLedgerEntry]
     @State private var sheetDestination: SheetDestination?
+    @State private var animatedTierProgress: Double = 0
+
+    init(client: Client) {
+        self.client = client
+        let clientUUID = client.uuid
+        _ledgerEntries = Query(
+            filter: #Predicate<LoyaltyLedgerEntry> { $0.clientUUID == clientUUID },
+            sort: [SortDescriptor(\LoyaltyLedgerEntry.createdAt, order: .reverse)]
+        )
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 balanceCard
+                tierCard
                 quickActions
                 ledgerSection
             }
@@ -58,16 +70,16 @@ struct ClientLoyaltyView: View {
         ) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .center, spacing: 14) {
-                    Image(systemName: "crown.fill")
+                    Image(systemName: tier.systemImage)
                         .font(.title2)
                         .foregroundStyle(.white)
                         .frame(width: 52, height: 52)
-                        .background(DS.ColorToken.warning.gradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .background(tier.tint.gradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(client.fullName)
                             .font(.headline)
-                        Text("Premium loyalty balance")
+                        Text("\(tier.displayName) member • Earning \(tier.earnRateText) points")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -88,7 +100,65 @@ struct ClientLoyaltyView: View {
         }
         .padding(.horizontal)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(client.fullName), \(client.loyaltyPoints) loyalty points")
+        .accessibilityLabel("\(client.fullName), \(client.loyaltyPoints) loyalty points, \(tier.displayName) tier")
+    }
+
+    private var tierCard: some View {
+        Card(
+            cornerRadius: 18,
+            padding: EdgeInsets(top: 16, leading: 18, bottom: 16, trailing: 18)
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: tier.systemImage)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(tier.tint.gradient, in: Circle())
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(tier.displayName) Tier")
+                            .font(.subheadline.weight(.bold))
+                        Text("Every visit earns \(tier.earnRateText) points")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if let next = tier.next {
+                        Text(next.displayName)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(next.tint)
+                            .padding(.vertical, 3)
+                            .padding(.horizontal, 8)
+                            .background(Capsule().fill(next.tint.opacity(0.14)))
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: animatedTierProgress)
+                        .tint(tier.next?.tint ?? tier.tint)
+                    Text(tierProgressText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(tierAccessibilityLabel)
+        .accessibilityIdentifier("clientLoyalty.tierCard")
+        .task {
+            withAnimation(MotionSystem.fluid.delay(0.15)) {
+                animatedTierProgress = LoyaltyEngine.tierProgress(lifetimeEarned: lifetimeEarned)
+            }
+        }
+        .onChange(of: lifetimeEarned) { _, newValue in
+            withAnimation(MotionSystem.fluid) {
+                animatedTierProgress = LoyaltyEngine.tierProgress(lifetimeEarned: newValue)
+            }
+        }
     }
 
     private var quickActions: some View {
@@ -132,7 +202,7 @@ struct ClientLoyaltyView: View {
                 Text("Points Ledger")
                     .font(.headline)
                 Spacer()
-                Text("\(loyaltyVisits.count)")
+                Text("\(ledgerEntries.count)")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 3)
@@ -141,17 +211,17 @@ struct ClientLoyaltyView: View {
             }
             .padding(.horizontal)
 
-            if loyaltyVisits.isEmpty {
+            if ledgerEntries.isEmpty {
                 ContentUnavailableView(
                     "No Loyalty History",
                     systemImage: "clock.arrow.2.circlepath",
-                    description: Text("Completed visits with earned points will appear here.")
+                    description: Text("Earned points, redemptions, and adjustments will appear here.")
                 )
                 .padding(.vertical, 28)
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(loyaltyVisits) { visit in
-                        LoyaltyLedgerVisitRow(visit: visit)
+                    ForEach(ledgerEntries) { entry in
+                        LoyaltyLedgerEntryRow(entry: entry)
                     }
                 }
                 .padding(.horizontal)
@@ -160,11 +230,26 @@ struct ClientLoyaltyView: View {
         .padding(.bottom, 24)
     }
 
-    private var loyaltyVisits: [Visit] {
-        (client.pets ?? [])
-            .flatMap { $0.visits ?? [] }
-            .filter { $0.loyaltyPointsChange != 0 }
-            .sorted { $0.sortKeyDate > $1.sortKeyDate }
+    private var tier: LoyaltyTier {
+        LoyaltyEngine.tier(forLifetimeEarned: lifetimeEarned)
+    }
+
+    private var lifetimeEarned: Int {
+        LoyaltyEngine.lifetimeEarnedPoints(for: client)
+    }
+
+    private var tierProgressText: String {
+        if let next = tier.next, let remaining = LoyaltyEngine.pointsUntilNextTier(lifetimeEarned: lifetimeEarned) {
+            return "\(remaining) earned points until \(next.displayName) (\(next.earnRateText) earn rate)"
+        }
+        return "Top tier reached — every visit earns \(tier.earnRateText) points"
+    }
+
+    private var tierAccessibilityLabel: String {
+        if let next = tier.next, let remaining = LoyaltyEngine.pointsUntilNextTier(lifetimeEarned: lifetimeEarned) {
+            return "\(tier.displayName) tier, \(remaining) points until \(next.displayName)"
+        }
+        return "\(tier.displayName) tier, top tier"
     }
 
     private var nextReward: LoyaltyReward? {
@@ -189,26 +274,26 @@ struct ClientLoyaltyView: View {
     }
 }
 
-private struct LoyaltyLedgerVisitRow: View {
-    let visit: Visit
+private struct LoyaltyLedgerEntryRow: View {
+    let entry: LoyaltyLedgerEntry
 
     var body: some View {
         Card(cornerRadius: 14, padding: EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12), elevation: .regular) {
             HStack(spacing: 12) {
-                Image(systemName: visit.loyaltyPointsChange >= 0 ? "plus.circle.fill" : "minus.circle.fill")
+                Image(systemName: kindSymbol)
                     .font(.title3)
-                    .foregroundStyle(visit.loyaltyPointsChange >= 0 ? DS.ColorToken.success : DS.ColorToken.danger)
+                    .foregroundStyle(pointsTint)
                     .frame(width: 34, height: 34)
-                    .background((visit.loyaltyPointsChange >= 0 ? DS.ColorToken.success : DS.ColorToken.danger).opacity(0.12), in: Circle())
+                    .background(pointsTint.opacity(0.12), in: Circle())
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(visit.pet?.name ?? "Visit")
+                    Text(title)
                         .font(.subheadline.weight(.semibold))
                     HStack(spacing: 6) {
-                        Text(Formatters.dateOnly.string(from: visit.sortKeyDate))
-                        if visit.total > .zero {
+                        Text(Formatters.dateOnly.string(from: entry.createdAt))
+                        if let balance = entry.balanceAfter {
                             Text("•")
-                            Text(Formatters.currencyString(visit.total))
+                            Text("Balance \(balance)")
                         }
                     }
                     .font(.caption)
@@ -219,17 +304,40 @@ private struct LoyaltyLedgerVisitRow: View {
 
                 Text(pointsText)
                     .font(.system(.headline, design: .rounded).weight(.bold))
-                    .foregroundStyle(visit.loyaltyPointsChange >= 0 ? DS.ColorToken.success : DS.ColorToken.danger)
+                    .foregroundStyle(pointsTint)
             }
         }
         .accessibilityElement(children: .combine)
     }
 
-    private var pointsText: String {
-        if visit.loyaltyPointsChange > 0 {
-            return "+\(visit.loyaltyPointsChange)"
+    private var title: String {
+        switch entry.kind {
+        case .earned:
+            entry.reason.map { "Visit — \($0)" } ?? "Visit checkout"
+        case .redeemed:
+            entry.reason ?? "Reward redeemed"
+        case .adjusted:
+            entry.reason ?? "Manual adjustment"
         }
-        return "\(visit.loyaltyPointsChange)"
+    }
+
+    private var kindSymbol: String {
+        switch entry.kind {
+        case .earned:
+            "plus.circle.fill"
+        case .redeemed:
+            "gift.fill"
+        case .adjusted:
+            "slider.horizontal.3"
+        }
+    }
+
+    private var pointsTint: Color {
+        entry.points >= 0 ? DS.ColorToken.success : DS.ColorToken.danger
+    }
+
+    private var pointsText: String {
+        entry.points > 0 ? "+\(entry.points)" : "\(entry.points)"
     }
 }
 

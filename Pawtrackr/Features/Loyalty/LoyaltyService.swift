@@ -5,17 +5,21 @@ import SwiftData
 actor LoyaltyService {
 
     /// Applies checkout-earned loyalty points to the visit's owning client.
+    /// Delegates to LoyaltyCheckoutProcessor so this path and
+    /// CheckoutTransactionActor award identical points (tier multiplier +
+    /// rebook bonus) and stay idempotent on re-processing.
     func applyPoints(for visit: Visit) async throws {
-        guard let client = visit.pet?.owner else { return }
-        
-        let points = LoyaltyEngine.calculatePoints(for: visit.total)
-        
-        client.loyaltyPoints += points
-        stampClientMutation(client)
-        
-        visit.loyaltyPointsChange = points
-        stampVisitMutation(visit)
-        
+        guard let pet = visit.pet else { return }
+
+        let clientUUID = LoyaltyCheckoutProcessor.applyEarnings(
+            visit: visit,
+            pet: pet,
+            total: visit.total,
+            in: modelContext,
+            now: visit.endedAt ?? .now
+        )
+        guard clientUUID != nil, let client = pet.owner else { return }
+
         try modelContext.save()
         await recordClientChange(
             operation: "Applied loyalty points",
@@ -25,7 +29,7 @@ actor LoyaltyService {
     }
 
     /// Redeems points from a client balance without allowing overdrafts.
-    func redeemPoints(client: Client, points: Int) async throws {
+    func redeemPoints(client: Client, points: Int, reason: String? = nil) async throws {
         guard points > 0 else {
             throw AppError.validation(.custom(message: "Loyalty redemption must be greater than zero."))
         }
@@ -33,9 +37,10 @@ actor LoyaltyService {
         guard client.loyaltyPoints >= points else {
             throw AppError.database("Insufficient loyalty points")
         }
-        
+
         client.loyaltyPoints -= points
         stampClientMutation(client)
+        recordLedgerEntry(kind: .redeemed, points: -points, client: client, reason: reason)
         try modelContext.save()
         await recordClientChange(
             operation: "Redeemed loyalty points",
@@ -45,7 +50,7 @@ actor LoyaltyService {
     }
 
     /// Applies a staff-entered loyalty balance correction.
-    func adjustPoints(client: Client, delta: Int) async throws {
+    func adjustPoints(client: Client, delta: Int, reason: String? = nil) async throws {
         guard delta != 0 else {
             throw AppError.validation(.custom(message: "Loyalty adjustment must not be zero."))
         }
@@ -57,6 +62,7 @@ actor LoyaltyService {
 
         client.loyaltyPoints = adjustedBalance
         stampClientMutation(client)
+        recordLedgerEntry(kind: .adjusted, points: delta, client: client, reason: reason)
         try modelContext.save()
         await recordClientChange(
             operation: "Adjusted loyalty points",
@@ -65,15 +71,20 @@ actor LoyaltyService {
         )
     }
 
+    private func recordLedgerEntry(kind: LoyaltyLedgerEntry.Kind, points: Int, client: Client, reason: String?) {
+        let entry = LoyaltyLedgerEntry(
+            kind: kind,
+            points: points,
+            clientUUID: client.uuid,
+            balanceAfter: client.loyaltyPoints,
+            reason: reason
+        )
+        modelContext.insert(entry)
+    }
+
     private func stampClientMutation(_ client: Client) {
         client.updatedAt = .now
         client.lastModifiedBy = DeviceIdentity.currentID
-    }
-
-    private func stampVisitMutation(_ visit: Visit) {
-        visit.updatedAt = .now
-        visit.lastModifiedAt = .now
-        visit.lastModifiedBy = DeviceIdentity.currentID
     }
 
     private func recordClientChange(operation: String, client: Client, changedKeys: [String]) async {

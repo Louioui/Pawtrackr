@@ -51,6 +51,15 @@ struct LoyaltyPointsBadge: View {
             }
         }
 
+        var deltaFont: Font {
+            switch self {
+            case .compact:
+                .caption2.weight(.heavy)
+            case .prominent:
+                .callout.weight(.heavy)
+            }
+        }
+
         var cornerRadius: CGFloat {
             switch self {
             case .compact:
@@ -88,12 +97,27 @@ struct LoyaltyPointsBadge: View {
         }
     }
 
+    /// One points change event. Identity (`id`) is unique per event so the
+    /// floating delta chip and sparkle burst get FRESH view identity each
+    /// time — a second rapid event replaces them instead of silently
+    /// updating views mid-animation.
+    private struct DeltaEvent: Equatable {
+        let id: Int
+        let amount: Int
+    }
+
     let client: Client
     let scale: Scale
 
-    @State private var bouncePhase = false
-    @State private var sparkleSeed = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var pulseCount = 0
+    @State private var deltaEvent: DeltaEvent?
     @State private var showSparkles = false
+    /// Sole owner of decoration teardown. Exactly one lives at a time:
+    /// every new event cancels the previous task BEFORE mutating any
+    /// animation state, so competing sleeps can never fight over it.
+    @State private var decorationTask: Task<Void, Never>?
 
     init(client: Client, scale: Scale = .prominent) {
         self.client = client
@@ -103,34 +127,54 @@ struct LoyaltyPointsBadge: View {
     var body: some View {
         ZStack(alignment: .top) {
             badgeContent
-                .scaleEffect(bouncePhase ? 1.055 : 1)
-                .animation(.interpolatingSpring(stiffness: 260, damping: 13), value: bouncePhase)
+                .phaseAnimator([false, true], trigger: pulseCount) { view, bouncing in
+                    view.scaleEffect(bouncing ? 1.06 : 1)
+                } animation: { bouncing in
+                    bouncing
+                        ? .interpolatingSpring(stiffness: 300, damping: 12)
+                        : .interpolatingSpring(stiffness: 300, damping: 18)
+                }
 
-            if showSparkles {
-                LoyaltySparkleBurst(seed: sparkleSeed, scale: scale)
+            if showSparkles, let deltaEvent {
+                LoyaltySparkleBurst(seed: deltaEvent.id, scale: scale)
+                    .id(deltaEvent.id)
                     .offset(y: -6)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
+
+            if let deltaEvent {
+                deltaChip(for: deltaEvent)
+                    .id(deltaEvent.id)
+                    .allowsHitTesting(false)
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(client.loyaltyPoints) loyalty points")
+        .accessibilityLabel("\(client.loyaltyPoints) loyalty points, \(tier.displayName) tier")
         .accessibilityIdentifier("loyaltyPointsBadge")
         .onChange(of: client.loyaltyPoints) { oldValue, newValue in
-            triggerAnimation(pointsWereAdded: newValue > oldValue)
+            pointsDidChange(by: newValue - oldValue)
         }
+        .onDisappear {
+            decorationTask?.cancel()
+            decorationTask = nil
+        }
+    }
+
+    private var tier: LoyaltyTier {
+        LoyaltyEngine.tier(forLifetimeEarned: LoyaltyEngine.lifetimeEarnedPoints(for: client))
     }
 
     private var badgeContent: some View {
         HStack(spacing: scale == .compact ? 5 : 9) {
-            Image(systemName: "pawprint.fill")
+            Image(systemName: tier.systemImage)
                 .font(.system(size: scale.iconSize, weight: .bold))
                 .symbolRenderingMode(.hierarchical)
 
             VStack(alignment: scale == .compact ? .center : .trailing, spacing: scale == .compact ? 0 : -1) {
                 Text("\(client.loyaltyPoints)")
                     .font(scale.pointsFont)
-                    .contentTransition(.numericText())
+                    .contentTransition(.numericText(value: Double(client.loyaltyPoints)))
                     .monospacedDigit()
                 if scale == .prominent {
                     Text("points")
@@ -144,36 +188,66 @@ struct LoyaltyPointsBadge: View {
         .padding(.vertical, scale.verticalPadding)
         .background(
             RoundedRectangle(cornerRadius: scale.cornerRadius, style: .continuous)
-                .fill(DS.ColorToken.warning.gradient)
-                .shadow(color: DS.ColorToken.warning.opacity(0.24), radius: scale == .compact ? 4 : 10, y: scale == .compact ? 2 : 5)
+                .fill(tier.tint.gradient)
+                .shadow(color: tier.tint.opacity(0.24), radius: scale == .compact ? 4 : 10, y: scale == .compact ? 2 : 5)
         )
         .overlay {
             RoundedRectangle(cornerRadius: scale.cornerRadius, style: .continuous)
                 .stroke(.white.opacity(0.18), lineWidth: 1)
         }
+        // The odometer roll must run even when the mutation arrives without an
+        // animation transaction (CheckoutTransactionActor save, CloudKit import).
+        .animation(MotionSystem.resolved(MotionSystem.snappy, reduceMotion: reduceMotion), value: client.loyaltyPoints)
     }
 
-    private func triggerAnimation(pointsWereAdded: Bool) {
-        withAnimation(.interpolatingSpring(stiffness: 300, damping: 12)) {
-            bouncePhase = true
+    private func deltaChip(for event: DeltaEvent) -> some View {
+        let gained = event.amount > 0
+        return Text(gained ? "+\(event.amount)" : "\(event.amount)")
+            .font(scale.deltaFont)
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, scale == .compact ? 6 : 9)
+            .padding(.vertical, scale == .compact ? 2 : 4)
+            .background(
+                Capsule().fill((gained ? DS.ColorToken.success : DS.ColorToken.danger).gradient)
+                    .shadow(color: .black.opacity(0.14), radius: 3, y: 1)
+            )
+            .offset(y: scale == .compact ? -18 : -26)
+            .transition(
+                .asymmetric(
+                    insertion: .offset(y: 10).combined(with: .scale(scale: 0.6)).combined(with: .opacity),
+                    removal: .offset(y: -14).combined(with: .opacity)
+                )
+            )
+    }
+
+    private func pointsDidChange(by delta: Int) {
+        guard delta != 0 else { return }
+        pulseCount &+= 1
+
+        // Decorations are pure garnish — respect Reduce Motion / thermals and
+        // let the numericText roll carry the change on its own.
+        guard MotionGovernor.shouldAnimate(reduceMotion: reduceMotion) else { return }
+
+        // Cancel the previous event's teardown FIRST so it can never clobber
+        // the state this event is about to own.
+        decorationTask?.cancel()
+
+        let event = DeltaEvent(id: (deltaEvent?.id ?? 0) &+ 1, amount: delta)
+        withAnimation(MotionSystem.snappy) {
+            deltaEvent = event
+            showSparkles = delta > 0
         }
 
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(140))
-            withAnimation(.interpolatingSpring(stiffness: 300, damping: 18)) {
-                bouncePhase = false
+        decorationTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(900))
+            } catch {
+                return // cancelled: a newer event owns the decorations now
             }
-        }
-
-        guard pointsWereAdded else { return }
-        sparkleSeed &+= 1
-        withAnimation(.easeOut(duration: 0.08)) {
-            showSparkles = true
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(590))
-            withAnimation(.easeOut(duration: 0.12)) {
+            withAnimation(.easeOut(duration: 0.18)) {
                 showSparkles = false
+                deltaEvent = nil
             }
         }
     }
@@ -193,7 +267,6 @@ private struct LoyaltySparkleBurst: View {
         }
         .frame(width: scale.sparkleSpread, height: scale.sparkleRise)
         .onAppear {
-            expanded = false
             withAnimation(.easeOut(duration: 0.56)) {
                 expanded = true
             }

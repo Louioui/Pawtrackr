@@ -161,6 +161,80 @@ final class CheckoutFlowTests: XCTestCase {
 
         XCTAssertEqual(refreshedVisit.loyaltyPointsChange, 85)
         XCTAssertEqual(refreshedClient.loyaltyPoints, 205)
+
+        // The checkout must also leave an auditable `.earned` ledger row.
+        let entries = try freshContext.fetch(
+            FetchDescriptor<LoyaltyLedgerEntry>(predicate: #Predicate<LoyaltyLedgerEntry> { $0.visitUUID == visitUUID })
+        )
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.kind, .earned)
+        XCTAssertEqual(entries.first?.points, 85)
+        XCTAssertEqual(entries.first?.balanceAfter, 205)
+        XCTAssertEqual(entries.first?.clientUUID, clientUUID)
+        XCTAssertEqual(entries.first?.reason, "Buddy")
+    }
+
+    /// A Gold-tier client (≥1500 lifetime visit-earned points) who rebooked
+    /// within the 45-day window earns floor(85 × 1.25) + 20 = 126 points.
+    func testGoldTierRebookingClientEarnsMultiplierPlusBonus() async throws {
+        let priorVisit = Visit(pet: pet)
+        context.insert(priorVisit)
+        priorVisit.loyaltyPointsChange = 1_500
+        priorVisit.setEndedAt(Date(timeIntervalSinceNow: -10 * 86_400))
+        try context.save()
+
+        let visitUUID = UUID()
+        let request = CheckoutRequest(
+            visitUUID: visitUUID,
+            petUUID: pet.uuid,
+            clientUUID: client.uuid,
+            amount: Decimal(string: "85.50")!,
+            paymentMethod: .cash,
+            externalReference: nil,
+            sessionNotes: nil,
+            behaviorTags: [],
+            beforePhotoData: nil,
+            afterPhotoData: nil,
+            selectedServiceIDs: [fullGroom.persistentModelID],
+            selectedAddOnIDs: []
+        )
+
+        _ = try await actor.process(request)
+
+        let freshContext = ModelContext(container)
+        let refreshedVisit = try XCTUnwrap(
+            try freshContext.fetch(FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.uuid == visitUUID })).first
+        )
+        XCTAssertEqual(refreshedVisit.loyaltyPointsChange, 126,
+            "Gold multiplier (85 → 106) plus rebook bonus (+20) must both apply.")
+    }
+
+    /// Re-awarding an edited checkout must UPDATE the visit's earned ledger
+    /// row (delta-adjusting the balance), never append a duplicate.
+    func testReprocessedCheckoutUpsertsEarnedLedgerEntry() async throws {
+        let visit = Visit(pet: pet)
+        context.insert(visit)
+        visit.markCheckedOut(total: Decimal(80))
+        try context.save()
+
+        LoyaltyCheckoutProcessor.applyEarnings(visit: visit, pet: pet, total: Decimal(80), in: context)
+        try context.save()
+        XCTAssertEqual(visit.loyaltyPointsChange, 80)
+        XCTAssertEqual(client.loyaltyPoints, 80)
+
+        // The groomer corrects the total upward; the award must follow.
+        LoyaltyCheckoutProcessor.applyEarnings(visit: visit, pet: pet, total: Decimal(100), in: context)
+        try context.save()
+
+        let visitUUID = visit.uuid
+        let entries = try context.fetch(
+            FetchDescriptor<LoyaltyLedgerEntry>(predicate: #Predicate<LoyaltyLedgerEntry> { $0.visitUUID == visitUUID })
+        )
+        XCTAssertEqual(entries.count, 1, "Re-processing must upsert, not duplicate, the earned entry.")
+        XCTAssertEqual(entries.first?.points, 100)
+        XCTAssertEqual(visit.loyaltyPointsChange, 100)
+        XCTAssertEqual(client.loyaltyPoints, 100,
+            "Balance must be delta-adjusted (+20), not re-credited the full award.")
     }
 
     /// Zelle without a transaction reference must be rejected by validation, so the

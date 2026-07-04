@@ -37,14 +37,15 @@ import OSLog
 typealias PawtrackrSchema = PawtrackrSchemaV1
 
 enum PawtrackrSchemaV1: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 0, 6)
+    static var versionIdentifier: Schema.Version = .init(1, 0, 7)
 
     static var models: [any PersistentModel.Type] {
         [
             Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, User.self,
             DaySummary.self, ServiceDaySummary.self, CategoryDaySummary.self, ClientInsightSummary.self,
             CheckoutTransaction.self, EmergencyContact.self, BusinessConfig.self, MessageTemplate.self,
-            InventoryItem.self, InventoryTransaction.self, DeviceMetadata.self, PresenceRecord.self
+            InventoryItem.self, InventoryTransaction.self, DeviceMetadata.self, PresenceRecord.self,
+            LoyaltyLedgerEntry.self
         ]
     }
 }
@@ -241,6 +242,68 @@ enum DataMigrations {
             }
         } catch {
             Logger.migrations.error("ensureServiceCatalog failed: \(String(describing: error))")
+        }
+    }
+
+    /// Backfill `.earned` loyalty ledger entries for visits that awarded points
+    /// before the ledger existed, and collapse cross-device backfill duplicates
+    /// (two devices can each run this once; CloudKit then merges both sets).
+    /// Idempotent: keyed by visit UUID, safe to run on every launch.
+    static func backfillLoyaltyLedger(in context: ModelContext) {
+        do {
+            let earnedRaw = LoyaltyLedgerEntry.Kind.earned.rawValue
+            let earnedEntries = try context.fetch(
+                FetchDescriptor<LoyaltyLedgerEntry>(
+                    predicate: #Predicate<LoyaltyLedgerEntry> { $0.kindRaw == earnedRaw }
+                )
+            )
+
+            // Dedupe: keep the earliest-created entry per visit.
+            var byVisit: [UUID: LoyaltyLedgerEntry] = [:]
+            var removed = 0
+            for entry in earnedEntries {
+                guard let visitUUID = entry.visitUUID else { continue }
+                if let kept = byVisit[visitUUID] {
+                    let loser = entry.createdAt < kept.createdAt ? kept : entry
+                    let winner = entry.createdAt < kept.createdAt ? entry : kept
+                    byVisit[visitUUID] = winner
+                    context.delete(loser)
+                    removed += 1
+                } else {
+                    byVisit[visitUUID] = entry
+                }
+            }
+
+            // Backfill pre-ledger visit earns. Historical balances are unknowable,
+            // so `balanceAfter` stays nil on backfilled rows.
+            let visits = try context.fetch(
+                FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.loyaltyPointsChange != 0 })
+            )
+            var inserted = 0
+            for visit in visits where byVisit[visit.uuid] == nil {
+                guard let client = visit.pet?.owner else { continue }
+                let entry = LoyaltyLedgerEntry(
+                    kind: .earned,
+                    points: visit.loyaltyPointsChange,
+                    clientUUID: client.uuid,
+                    visitUUID: visit.uuid,
+                    balanceAfter: nil,
+                    reason: visit.pet?.name,
+                    createdAt: visit.endedAt ?? visit.startedAt
+                )
+                context.insert(entry)
+                byVisit[visit.uuid] = entry
+                inserted += 1
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+            if inserted > 0 || removed > 0 {
+                Logger.migrations.info("Loyalty ledger backfill: inserted=\(inserted), dedupedAway=\(removed)")
+            }
+        } catch {
+            Logger.migrations.error("Loyalty ledger backfill failed: \(String(describing: error))")
         }
     }
 

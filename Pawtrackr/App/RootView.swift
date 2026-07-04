@@ -88,6 +88,10 @@ struct RootView: View {
                 withAnimation {
                     showPrivacyScreen = false
                 }
+                // Re-resolve the entitlement on every foreground: StoreKit emits
+                // no Transaction.update when a cancelled subscription simply
+                // lapses, so this is what catches "expired while backgrounded".
+                Task { await entitlements.refresh() }
             case .inactive:
                 showPrivacyScreen = PrivacyScreenScenePolicy.shouldCoverContent(for: newPhase)
             case .background:
@@ -209,6 +213,7 @@ struct RootView: View {
             DataMigrations.backfillVisitSessionTokens(in: backgroundContext)
             DataMigrations.ensureServiceCatalog(in: backgroundContext)
             DataMigrations.ensureMessageTemplates(in: backgroundContext)
+            DataMigrations.backfillLoyaltyLedger(in: backgroundContext)
             SummaryUpdater.rebuildAllSummaries(in: backgroundContext)
         }
     }

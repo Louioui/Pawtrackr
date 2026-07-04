@@ -60,6 +60,7 @@ final class EntitlementStore {
     }
 
     private var listener: Task<Void, Never>?
+    private var expiryRefresh: Task<Void, Never>?
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr",
         category: "entitlement"
@@ -91,10 +92,16 @@ final class EntitlementStore {
     func stop() {
         listener?.cancel()
         listener = nil
+        expiryRefresh?.cancel()
+        expiryRefresh = nil
     }
 
     /// Recomputes `status` from StoreKit's current entitlements.
     func refresh() async {
+        if let mockedStatus = AppRuntime.mockedEntitlementStatusForUITesting {
+            status = mockedStatus
+            return
+        }
         var resolved: Status = .notEntitled
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else { continue }
@@ -108,6 +115,28 @@ final class EntitlementStore {
             )
         }
         status = resolved
+        armExpiryRefresh()
+    }
+
+    /// StoreKit emits NO transaction update when a cancelled subscription
+    /// simply lapses at period end, so an entitled app would stay unlocked
+    /// past expiry. Schedule a re-resolve just after the known expiration;
+    /// each refresh re-arms (or clears) the timer.
+    private func armExpiryRefresh() {
+        expiryRefresh?.cancel()
+        expiryRefresh = nil
+        guard case .entitled(_, let expiration) = status, let expiration else { return }
+        // Small grace so we re-check after — not exactly at — the boundary.
+        let delay = expiration.timeIntervalSinceNow + 2
+        guard delay > 0 else { return }
+        expiryRefresh = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return // cancelled — a newer refresh owns the schedule now
+            }
+            await self?.refresh()
+        }
     }
 
     /// Purchases the monthly subscription (with its intro trial, if the user is
