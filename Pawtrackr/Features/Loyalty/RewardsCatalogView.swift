@@ -7,10 +7,22 @@ struct RewardsCatalogView: View {
     @Environment(\.modelContext) private var modelContext
 
     @Bindable var client: Client
+    @Query(
+        filter: #Predicate<LoyaltyRewardTemplate> { $0.isEnabled == true },
+        sort: \LoyaltyRewardTemplate.sortOrder,
+        order: .forward
+    ) private var rewardTemplates: [LoyaltyRewardTemplate]
+    @Query(sort: \LoyaltyConfig.createdAt, order: .forward) private var configs: [LoyaltyConfig]
 
     @State private var redeemingRewardID: LoyaltyReward.ID?
     @State private var errorMessage: String?
     @State private var successMessage: String?
+
+    private var visibleRewards: [LoyaltyReward] {
+        guard configs.first?.isRewardsCatalogEnabled ?? true else { return [] }
+        let persistent = rewardTemplates.map(\.displayReward)
+        return persistent.isEmpty ? LoyaltyReward.builtInCatalog : persistent
+    }
 
     var body: some View {
         NavigationStack {
@@ -20,8 +32,16 @@ struct RewardsCatalogView: View {
                 }
 
                 Section("Rewards") {
-                    ForEach(LoyaltyReward.builtInCatalog) { reward in
-                        rewardRow(reward)
+                    if visibleRewards.isEmpty {
+                        ContentUnavailableView(
+                            "Rewards Paused",
+                            systemImage: "gift",
+                            description: Text("Rewards can be re-enabled in Loyalty settings.")
+                        )
+                    } else {
+                        ForEach(visibleRewards) { reward in
+                            rewardRow(reward)
+                        }
                     }
                 }
             }
@@ -48,7 +68,7 @@ struct RewardsCatalogView: View {
                 Text("Available Balance")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text("Redeem against built-in rewards")
+                Text("Redeem available loyalty rewards")
                     .font(.subheadline.weight(.semibold))
             }
 
