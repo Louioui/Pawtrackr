@@ -14,6 +14,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AuthenticationViewModel.self) private var authViewModel
     @Environment(AppSettings.self) private var appSettings
+    @Environment(EntitlementStore.self) private var entitlements
     @Query private var businessConfigs: [BusinessConfig]
     @State private var cloudKitMonitor = CloudKitMonitor.shared
     @State private var showOnboarding = false
@@ -23,6 +24,8 @@ struct RootView: View {
     @State private var bypassLockForCurrentSession = false
     @State private var showPrivacyScreen = false
     @State private var showWhatIsNew = false
+    /// Soft subscription gate: once dismissed, stays dismissed for this app launch.
+    @State private var paywallDismissed = false
 
     var body: some View {
         ZStack {
@@ -49,6 +52,22 @@ struct RootView: View {
                 showWhatIsNew = false
                 UserDefaults.standard.set(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, forKey: "lastSeenVersion")
             }
+        }
+        // Soft subscription gate (ADR-0001): present the paywall only once the
+        // entitlement has *resolved* to not-entitled, after onboarding, and while
+        // nothing else is presenting. Dismissible — premium features gate later;
+        // the app never bricks and local data is never held hostage.
+        .sheet(isPresented: Binding(
+            get: {
+                entitlements.status == .notEntitled
+                    && !onboardingIncomplete
+                    && !showOnboarding
+                    && !showWhatIsNew
+                    && !paywallDismissed
+            },
+            set: { presented in if !presented { paywallDismissed = true } }
+        )) {
+            SubscriptionPaywallView()
         }
         .adaptiveCover(isPresented: $showOnboarding) {
             OnboardingView {
