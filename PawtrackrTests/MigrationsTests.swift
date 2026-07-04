@@ -60,6 +60,45 @@ final class MigrationsTests: XCTestCase {
         XCTAssertTrue(titles.contains("Running Late"))
         XCTAssertTrue(titles.contains("Post-Visit Follow-up"))
     }
+
+    func testEnsureLoyaltyDefaults_CreatesConfigAndRewardTemplates() throws {
+        DataMigrations.ensureLoyaltyDefaults(in: context)
+
+        let configs = try context.fetch(FetchDescriptor<LoyaltyConfig>())
+        XCTAssertEqual(configs.count, 1)
+        XCTAssertEqual(configs.first?.earnMode, .pointsPerDollar)
+        XCTAssertEqual(configs.first?.pointsPerDollar, Decimal(1))
+        XCTAssertEqual(configs.first?.pointsPerVisit, 20)
+        XCTAssertEqual(configs.first?.redemptionThreshold, 100)
+
+        let rewards = try context.fetch(
+            FetchDescriptor<LoyaltyRewardTemplate>(sortBy: [SortDescriptor(\.sortOrder)])
+        )
+        XCTAssertEqual(rewards.count, LoyaltyReward.builtInCatalog.count)
+        XCTAssertEqual(rewards.first?.pointCost, 100)
+    }
+
+    func testEnsureLoyaltyDefaults_IsIdempotent() throws {
+        DataMigrations.ensureLoyaltyDefaults(in: context)
+        DataMigrations.ensureLoyaltyDefaults(in: context)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<LoyaltyConfig>()).count, 1)
+        XCTAssertEqual(
+            try context.fetch(FetchDescriptor<LoyaltyRewardTemplate>()).count,
+            LoyaltyReward.builtInCatalog.count
+        )
+    }
+
+    func testEnsureLoyaltyDefaults_CollapsesAllDuplicateConfigs() throws {
+        context.insert(LoyaltyConfig())
+        context.insert(LoyaltyConfig())
+        context.insert(LoyaltyConfig())
+        try context.save()
+
+        DataMigrations.ensureLoyaltyDefaults(in: context)
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<LoyaltyConfig>()).count, 1)
+    }
     
     func testCoercePets_StandardizesGenders() throws {
         let pet = Pet(name: "Test", species: .dog)

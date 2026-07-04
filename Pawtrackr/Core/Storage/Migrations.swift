@@ -34,7 +34,7 @@ import OSLog
 
 /// Always points at the most recent shipped schema. The rest of the app
 /// references this name; only the migration plan distinguishes versions.
-typealias PawtrackrSchema = PawtrackrSchemaV1
+typealias PawtrackrSchema = PawtrackrSchemaV2
 
 enum PawtrackrSchemaV1: VersionedSchema {
     static var versionIdentifier: Schema.Version = .init(1, 0, 7)
@@ -50,25 +50,34 @@ enum PawtrackrSchemaV1: VersionedSchema {
     }
 }
 
+enum PawtrackrSchemaV2: VersionedSchema {
+    static var versionIdentifier: Schema.Version = .init(1, 1, 0)
+
+    static var models: [any PersistentModel.Type] {
+        PawtrackrSchemaV1.models + [
+            LoyaltyConfig.self,
+            LoyaltyRewardTemplate.self
+        ]
+    }
+}
+
 // MARK: - Migration Plan
 
 enum PawtrackrMigrationPlan: SchemaMigrationPlan {
     /// Ordered list of every schema we've ever shipped. Append new versions;
     /// never remove or reorder.
     static var schemas: [any VersionedSchema.Type] {
-        [PawtrackrSchemaV1.self]
+        [PawtrackrSchemaV1.self, PawtrackrSchemaV2.self]
     }
 
-    /// Transitions between adjacent schema versions. Empty for now because
-    /// V1 is the only version. When V2 ships, add:
-    ///
-    ///   .lightweight(fromVersion: PawtrackrSchemaV1.self,
-    ///                toVersion:   PawtrackrSchemaV2.self)
-    ///
-    /// or a `.custom` stage with `willMigrate` / `didMigrate` closures for
-    /// data transformations (e.g., backfilling a new required field).
+    /// Transitions between adjacent schema versions.
     static var stages: [MigrationStage] {
-        []
+        [
+            .lightweight(
+                fromVersion: PawtrackrSchemaV1.self,
+                toVersion: PawtrackrSchemaV2.self
+            )
+        ]
     }
 }
 
@@ -326,6 +335,44 @@ enum DataMigrations {
             }
         } catch {
             Logger.migrations.error("ensureMessageTemplates failed: \(String(describing: error))")
+        }
+    }
+
+    static func ensureLoyaltyDefaults(in context: ModelContext) {
+        do {
+            var didChange = false
+
+            let configDescriptor = FetchDescriptor<LoyaltyConfig>(
+                sortBy: [SortDescriptor(\.createdAt, order: .forward)]
+            )
+            let configs = try context.fetch(configDescriptor)
+            if configs.isEmpty {
+                context.insert(LoyaltyConfig())
+                didChange = true
+            } else if configs.count > 1 {
+                for duplicate in configs.dropFirst() {
+                    context.delete(duplicate)
+                    didChange = true
+                }
+            }
+
+            let existingRewards = try context.fetch(FetchDescriptor<LoyaltyRewardTemplate>())
+            let existingTitles = Set(
+                existingRewards.map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            )
+            for template in LoyaltyRewardTemplate.seedTemplates() {
+                let key = template.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if !existingTitles.contains(key) {
+                    context.insert(template)
+                    didChange = true
+                }
+            }
+
+            if didChange || context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            Logger.migrations.error("ensureLoyaltyDefaults failed: \(String(describing: error))")
         }
     }
 }

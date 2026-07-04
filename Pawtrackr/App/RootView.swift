@@ -213,6 +213,7 @@ struct RootView: View {
             DataMigrations.backfillVisitSessionTokens(in: backgroundContext)
             DataMigrations.ensureServiceCatalog(in: backgroundContext)
             DataMigrations.ensureMessageTemplates(in: backgroundContext)
+            DataMigrations.ensureLoyaltyDefaults(in: backgroundContext)
             DataMigrations.backfillLoyaltyLedger(in: backgroundContext)
             SummaryUpdater.rebuildAllSummaries(in: backgroundContext)
         }
