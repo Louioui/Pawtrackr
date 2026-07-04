@@ -19,18 +19,16 @@ final class LoyaltyUITests: XCTestCase {
         app = nil
     }
 
-    func testNonPremiumLoyaltyEntryPresentsPaywall() throws {
-        launch(premium: false)
-        openSeededClient()
-
-        tapLoyaltyEntry()
-
+    func testNonPremiumLaunchShowsStrictSubscriptionLock() throws {
+        launch(entitlement: .notEntitled)
         XCTAssertTrue(app.staticTexts["Elevate Pawtrackr"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["subscriptionPaywall.dismiss"].waitForHittable(timeout: 4))
+        XCTAssertFalse(app.tabBars.firstMatch.exists)
+        XCTAssertFalse(app.navigationBars["Dashboard"].exists)
+        XCTAssertFalse(app.buttons["subscriptionPaywall.dismiss"].exists)
     }
 
     func testPremiumCanAdjustPointsAndRedeemReward() throws {
-        launch(premium: true)
+        launch(entitlement: .premium)
         openSeededClient()
 
         tapLoyaltyEntry()
@@ -72,15 +70,25 @@ final class LoyaltyUITests: XCTestCase {
         XCTAssertFalse(salonCreditReward.isEnabled)
     }
 
-    private func launch(premium: Bool) {
+    private enum EntitlementLaunch {
+        case notEntitled
+        case premium
+    }
+
+    private func launch(entitlement: EntitlementLaunch) {
         app = XCUIApplication()
         app.launchArguments = [
+            "--uitesting",
             "-pawtrackr-ui-testing",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US"
         ]
         app.launchEnvironment["PAWTRACKR_UI_TESTING"] = "1"
-        if premium {
+        switch entitlement {
+        case .notEntitled:
+            app.launchArguments.append("--mock-storekit-not-entitled")
+        case .premium:
+            app.launchArguments.append("--mock-storekit-premium")
             app.launchEnvironment["PAWTRACKR_UI_TESTING_PREMIUM"] = "1"
         }
         app.launch()

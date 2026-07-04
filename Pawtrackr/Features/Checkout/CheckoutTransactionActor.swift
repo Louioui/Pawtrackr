@@ -92,6 +92,7 @@ final actor CheckoutTransactionActor {
             // 7. Finalize Visit
             visit.markCheckedOut(total: request.amount, now: endedAt)
             pet.reconcileBehaviorTagsFromCompletedVisits()
+            let loyaltyClientUUID = applyCheckoutLoyalty(visit: visit, pet: pet, total: request.amount)
             
             // 8. Commit
             transaction.markSucceeded(completedAt: endedAt)
@@ -113,6 +114,16 @@ final actor CheckoutTransactionActor {
                         "updatedAt"
                     ]
                 )
+            }
+            if let loyaltyClientUUID {
+                await MainActor.run {
+                    CloudKitMonitor.shared.recordLocalChange(
+                        "Applied checkout loyalty points",
+                        entityName: "Client",
+                        recordUUID: loyaltyClientUUID,
+                        changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
+                    )
+                }
             }
             
             // 9. Rebuild Summaries (Off-actor utility)
@@ -287,6 +298,23 @@ final actor CheckoutTransactionActor {
             modelContext.insert(payment)
             visit.attachPayment(payment)
         }
+    }
+
+    private func applyCheckoutLoyalty(visit: Visit, pet: Pet, total: Decimal) -> UUID? {
+        let points = LoyaltyEngine.calculatePoints(for: total)
+        let previousPoints = visit.loyaltyPointsChange
+        guard points != previousPoints else { return nil }
+
+        visit.loyaltyPointsChange = points
+        visit.updatedAt = .now
+        visit.lastModifiedAt = .now
+        visit.lastModifiedBy = DeviceIdentity.currentID
+
+        guard let client = pet.owner else { return nil }
+        client.loyaltyPoints += points - previousPoints
+        client.updatedAt = .now
+        client.lastModifiedBy = DeviceIdentity.currentID
+        return client.uuid
     }
     
     private func buildResult(for visitUUID: UUID, endedAt: Date) throws -> CheckoutResult {

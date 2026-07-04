@@ -57,7 +57,7 @@ struct ClientLoyaltyView: View {
             )))
         ) {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .center, spacing: 14) {
                     Image(systemName: "crown.fill")
                         .font(.title2)
                         .foregroundStyle(.white)
@@ -74,14 +74,7 @@ struct ClientLoyaltyView: View {
 
                     Spacer(minLength: 12)
 
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text("\(client.loyaltyPoints)")
-                            .font(.system(.largeTitle, design: .rounded).weight(.black))
-                            .contentTransition(.numericText(value: Double(client.loyaltyPoints)))
-                        Text("points")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
+                    LoyaltyPointsBadge(client: client, scale: .prominent)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {

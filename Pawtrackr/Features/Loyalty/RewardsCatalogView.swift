@@ -44,22 +44,17 @@ struct RewardsCatalogView: View {
 
     private var balanceHeader: some View {
         HStack(spacing: 14) {
-            Image(systemName: "giftcard.fill")
-                .font(.title2)
-                .foregroundStyle(.white)
-                .frame(width: 48, height: 48)
-                .background(DS.ColorToken.warning.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
             VStack(alignment: .leading, spacing: 2) {
                 Text("Available Balance")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text("\(client.loyaltyPoints) points")
-                    .font(.title3.weight(.bold))
-                    .contentTransition(.numericText(value: Double(client.loyaltyPoints)))
+                Text("Redeem against built-in rewards")
+                    .font(.subheadline.weight(.semibold))
             }
 
             Spacer()
+
+            LoyaltyPointsBadge(client: client, scale: .compact)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Available balance, \(client.loyaltyPoints) points")

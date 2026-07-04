@@ -3,6 +3,7 @@ import SwiftUI
 @testable import Pawtrackr
 
 final class DashboardPerformanceTests: XCTestCase {
+    private weak var weakDashboardViewModel: DashboardViewModel?
 
     @MainActor
     func testDashboardTimeToInteractive() async throws {
@@ -12,9 +13,6 @@ final class DashboardPerformanceTests: XCTestCase {
         let start = CFAbsoluteTimeGetCurrent()
         
         let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
-        
-        // Measure time to reach .loaded state
-        let expectation = XCTestExpectation(description: "Dashboard should load within 150ms")
         
         // In a real test, we'd observe the state change.
         // For PoC, we await the refresh.
@@ -31,10 +29,10 @@ final class DashboardPerformanceTests: XCTestCase {
     @MainActor
     func testRetainCycleSafety() {
         var vm: DashboardViewModel? = DashboardViewModel(dataStore: DataStoreService(inMemory: true), eventBus: GlobalEventBus())
-        weak var weakVM = vm
+        weakDashboardViewModel = vm
         
         vm = nil
         
-        XCTAssertNil(weakVM, "DashboardViewModel has a retain cycle")
+        XCTAssertNil(weakDashboardViewModel, "DashboardViewModel has a retain cycle")
     }
 }

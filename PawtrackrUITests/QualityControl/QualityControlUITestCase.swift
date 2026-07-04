@@ -21,8 +21,14 @@ class QualityControlUITestCase: XCTestCase {
         ]
         if onboarding {
             app.launchArguments.append("-pawtrackr-ui-onboarding")
+            app.launchArguments.append("--mock-storekit-unknown")
+        } else {
+            app.launchArguments.append("--mock-storekit-premium")
         }
         app.launchEnvironment["PAWTRACKR_UI_TESTING"] = "1"
+        if !onboarding {
+            app.launchEnvironment["PAWTRACKR_UI_TESTING_PREMIUM"] = "1"
+        }
         if let startTab {
             app.launchEnvironment["PAWTRACKR_UI_START_TAB"] = startTab
         }
@@ -44,7 +50,8 @@ class QualityControlUITestCase: XCTestCase {
 
     @discardableResult
     func waitForDashboard(timeout: TimeInterval = 12) -> Bool {
-        waitForAny([
+        unlockIfNeeded()
+        return waitForAny([
             { self.app.staticTexts["Dashboard"].exists },
             { self.app.navigationBars["Dashboard"].exists }
         ], timeout: timeout)
@@ -151,6 +158,20 @@ class QualityControlUITestCase: XCTestCase {
     func dismissKeyboardIfPresent() {
         _ = tapIfHittable(app.keyboards.buttons["Done"], timeout: 0.5)
         _ = tapIfHittable(app.toolbars.buttons["Done"], timeout: 0.5)
+    }
+
+    func unlockIfNeeded() {
+        if app.staticTexts["Enter PIN"].waitForExistence(timeout: 1) || app.buttons["1"].exists {
+            enterPIN("1234")
+        }
+    }
+
+    private func enterPIN(_ pin: String) {
+        for digit in pin {
+            let button = app.buttons[String(digit)]
+            guard waitUntilHittable(button, timeout: 2) else { return }
+            button.tap()
+        }
     }
 
     func waitUntilHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {

@@ -71,8 +71,8 @@ final class EntitlementStore {
     /// monitoring. Safe to call from multiple scene lifecycles — only the first starts work.
     func start() {
         guard listener == nil else { return }
-        if AppRuntime.shouldForcePremiumForUITesting {
-            status = .entitled(inTrial: true, expiration: .distantFuture)
+        if let mockedStatus = AppRuntime.mockedEntitlementStatusForUITesting {
+            status = mockedStatus
             return
         }
         listener = Task { [weak self] in

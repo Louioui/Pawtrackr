@@ -16,9 +16,9 @@ final class StoreHealthCheckTests: XCTestCase {
         XCTAssertTrue(healthy)
     }
     
-    func testRepairStore_DoesNotCrash() {
-        // Repair store clears caches and indexes. We verify it executes without error.
-        StoreHealthCheck.repairStore()
+    func testClearAuxiliaryCaches_DoesNotCrash() {
+        // Cache clearing reindexes auxiliary data without touching SwiftData.
+        StoreHealthCheck.clearAuxiliaryCaches()
         XCTAssertTrue(true)
     }
 }

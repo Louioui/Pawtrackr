@@ -19,10 +19,12 @@ final class AuthUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "-pawtrackr-ui-testing",
+            "--mock-storekit-premium",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US"
         ]
         app.launchEnvironment["PAWTRACKR_UI_TESTING"] = "1"
+        app.launchEnvironment["PAWTRACKR_UI_TESTING_PREMIUM"] = "1"
         app.launch()
     }
 
@@ -91,10 +93,20 @@ final class AuthUITests: XCTestCase {
     }
 
     private func waitForDashboard() {
+        if app.staticTexts["Enter PIN"].waitForExistence(timeout: 3) || app.buttons["1"].exists {
+            enterPIN("1234")
+        }
+
         XCTAssertTrue(
-            app.staticTexts["Dashboard"].waitForExistence(timeout: 12)
-                || app.navigationBars["Dashboard"].waitForExistence(timeout: 2),
-            "Dashboard did not load."
+            waitForAny([
+                { self.app.staticTexts["Dashboard"].exists },
+                { self.app.navigationBars["Dashboard"].exists },
+                { self.app.tabBars.buttons["Dashboard"].exists },
+                { self.app.tabBars.buttons["Settings"].exists },
+                { self.app.staticTexts["Settings"].exists },
+                { self.app.switches["settings.appLockToggle"].exists }
+            ], timeout: 12),
+            "Unlocked app shell did not load."
         )
     }
 
@@ -123,12 +135,40 @@ final class AuthUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 8), "App Lock toggle should be present.")
         if toggle.value as? String == "0" {
             toggle.tap()
+            if waitForAny([
+                { self.app.navigationBars["Set PIN"].exists },
+                { self.app.staticTexts["Set PIN"].exists },
+                { self.app.secureTextFields["settings.pin.new"].exists }
+            ], timeout: 6) {
+                enterInitialPIN("1234")
+            }
+            XCTAssertTrue(waitForAny([
+                { toggle.value as? String == "1" },
+                { self.app.buttons["settings.changePIN"].exists }
+            ], timeout: 8), "Saving the initial PIN should enable App Lock.")
         }
 
         let lockOnBackground = app.switches["settings.autoLockOnBackgroundToggle"]
-        if lockOnBackground.waitForExistence(timeout: 4), lockOnBackground.value as? String == "0" {
+        XCTAssertTrue(lockOnBackground.waitForExistence(timeout: 4), "Background lock toggle should be present.")
+        if lockOnBackground.value as? String == "0" {
+            XCTAssertTrue(lockOnBackground.waitForHittable(timeout: 6), "Background lock toggle should be enabled after App Lock is on.")
             lockOnBackground.tap()
         }
+    }
+
+    private func enterInitialPIN(_ pin: String) {
+        let newPIN = app.secureTextFields["settings.pin.new"]
+        let confirmPIN = app.secureTextFields["settings.pin.confirm"]
+        XCTAssertTrue(newPIN.waitForHittable(timeout: 4), "New PIN field should be hittable.")
+        newPIN.tap()
+        newPIN.typeText(pin)
+        XCTAssertTrue(confirmPIN.waitForHittable(timeout: 4), "Confirm PIN field should be hittable.")
+        confirmPIN.tap()
+        confirmPIN.typeText(pin)
+
+        let save = app.buttons["settings.pin.save"].exists ? app.buttons["settings.pin.save"] : app.buttons["Save"]
+        XCTAssertTrue(save.waitForHittable(timeout: 4), "PIN save button should be hittable.")
+        save.tap()
     }
 
     private func enterPIN(_ pin: String) {

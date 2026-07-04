@@ -298,17 +298,6 @@ struct ContentView: View {
         // detail column while a cover dismisses is silently dropped, so the
         // client-detail tour steps never opened the profile. Defer the push past
         // the dismissal there so it takes.
-        #if os(iOS)
-        let needsDeferral = horizontalSizeClass != .compact
-        #else
-        let needsDeferral = true
-        #endif
-
-        guard needsDeferral else {
-            performDemoClientDetailNavigation()
-            return
-        }
-
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
             guard walkthrough.isActive,

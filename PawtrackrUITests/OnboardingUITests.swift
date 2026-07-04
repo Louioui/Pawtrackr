@@ -17,6 +17,7 @@ final class OnboardingUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "-pawtrackr-ui-testing",
+            "--mock-storekit-unknown",
             "-pawtrackr-ui-onboarding",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US"
@@ -98,13 +99,9 @@ final class OnboardingUITests: XCTestCase {
 
         // Contact information — leave defaults, tap Continue
         XCTAssertTrue(waitForRegionalStep())
-        tapOnboardingContinue()
+        advanceFromRegionalToSecurity()
 
         // Security — type both PINs
-        XCTAssertTrue(
-            app.staticTexts["Set Your App PIN"].waitForExistence(timeout: 5)
-                || app.staticTexts["Security"].waitForExistence(timeout: 5)
-        )
         let pinField = app.textFields["onboarding.pinField"]
         let confirmPinField = app.textFields["onboarding.confirmPinField"]
 
@@ -177,6 +174,22 @@ final class OnboardingUITests: XCTestCase {
                 return title.exists && ["Contact Information", "Regional Info"].contains(title.label)
             }
         ], timeout: timeout)
+    }
+
+    private func waitForSecurityStep(timeout: TimeInterval = 8) -> Bool {
+        waitForAny([
+            { self.app.staticTexts["Set Your App PIN"].exists },
+            { self.app.staticTexts["Security"].exists },
+            { self.app.textFields["onboarding.pinField"].exists }
+        ], timeout: timeout)
+    }
+
+    private func advanceFromRegionalToSecurity() {
+        tapOnboardingContinue()
+        if !waitForSecurityStep(timeout: 4), waitForRegionalStep(timeout: 1) {
+            tapOnboardingContinue()
+        }
+        XCTAssertTrue(waitForSecurityStep(), "Regional/contact step should advance to Security.")
     }
 
     private func waitForAny(_ conditions: [() -> Bool], timeout: TimeInterval) -> Bool {

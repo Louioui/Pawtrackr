@@ -4,7 +4,7 @@ import XCTest
 final class CheckoutQualityControlUITests: QualityControlUITestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
-        launch()
+        launch(startTab: "dashboard")
     }
 
     func testCreditPaymentShowsReferenceValidationImmediately() throws {
@@ -38,9 +38,9 @@ final class CheckoutQualityControlUITests: QualityControlUITestCase {
 
         XCTAssertTrue(app.staticTexts["Confirm payment"].waitForExistence(timeout: 8))
 
-        _ = tapIfHittable(app.buttons["checkout.payment.creditCard"], timeout: 5)
-        _ = tapIfHittable(app.buttons["checkout.payment.cash"], timeout: 5)
-        _ = tapIfHittable(app.buttons["checkout.payment.zelle"], timeout: 5)
+        tapPaymentMethod("checkout.payment.creditCard")
+        tapPaymentMethod("checkout.payment.cash")
+        tapPaymentMethod("checkout.payment.zelle")
 
         XCTAssertTrue(
             waitForAny([
@@ -64,5 +64,26 @@ final class CheckoutQualityControlUITests: QualityControlUITestCase {
         _ = tapIfHittable(app.buttons["checkout.backButton"], timeout: 5)
 
         XCTAssertTrue(app.staticTexts["Add notes and photos"].waitForExistence(timeout: 6))
+    }
+
+    private func tapPaymentMethod(_ identifier: String) {
+        let button = app.buttons[identifier]
+        let scroll = app.scrollViews.firstMatch
+
+        for _ in 0..<5 {
+            if button.exists && button.isHittable {
+                button.tap()
+                return
+            }
+            if scroll.exists {
+                scroll.swipeDown()
+            } else {
+                app.swipeDown()
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+
+        XCTAssertTrue(waitUntilHittable(button, timeout: 4), "\(identifier) should be hittable.")
+        button.tap()
     }
 }

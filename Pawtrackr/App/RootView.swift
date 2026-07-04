@@ -24,13 +24,15 @@ struct RootView: View {
     @State private var bypassLockForCurrentSession = false
     @State private var showPrivacyScreen = false
     @State private var showWhatIsNew = false
-    /// Soft subscription gate: once dismissed, stays dismissed for this app launch.
-    @State private var paywallDismissed = false
 
     var body: some View {
         ZStack {
             Group {
-                if shouldBypassLockGate {
+                if shouldShowSubscriptionLock {
+                    SubscriptionPaywallView(allowsDismiss: false)
+                        .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                        .zIndex(20)
+                } else if shouldBypassLockGate {
                     mainShell
                 } else {
                     PinLockGate(onUnlock: {
@@ -47,28 +49,18 @@ struct RootView: View {
                     .zIndex(100)
             }
         }
-        .sheet(isPresented: $showWhatIsNew) {
-            WhatIsNewView {
-                showWhatIsNew = false
-                UserDefaults.standard.set(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, forKey: "lastSeenVersion")
-            }
-        }
-        // Soft subscription gate (ADR-0001): present the paywall only once the
-        // entitlement has *resolved* to not-entitled, after onboarding, and while
-        // nothing else is presenting. Dismissible — premium features gate later;
-        // the app never bricks and local data is never held hostage.
+        .animation(.easeInOut(duration: 0.25), value: shouldShowSubscriptionLock)
         .sheet(isPresented: Binding(
-            get: {
-                entitlements.status == .notEntitled
-                    && AppRuntime.allowsAutomaticSubscriptionPaywall
-                    && !onboardingIncomplete
-                    && !showOnboarding
-                    && !showWhatIsNew
-                    && !paywallDismissed
-            },
-            set: { presented in if !presented { paywallDismissed = true } }
+            get: { showWhatIsNew && !shouldShowSubscriptionLock },
+            set: { presented in
+                if !presented {
+                    showWhatIsNew = false
+                }
+            }
         )) {
-            SubscriptionPaywallView()
+            WhatIsNewView {
+                acknowledgeWhatIsNew()
+            }
         }
         .adaptiveCover(isPresented: $showOnboarding) {
             OnboardingView {
@@ -118,6 +110,12 @@ struct RootView: View {
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
+        .onChange(of: shouldShowSubscriptionLock) { _, locked in
+            if locked {
+                showWhatIsNew = false
+                showFirstSyncGate = false
+            }
+        }
         .onChange(of: onboardingIncomplete) { _, incomplete in
             // A returning user's setup-complete BusinessConfig imported from iCloud
             // while they were on the Welcome screen. Adopt it: dismiss onboarding so
@@ -160,11 +158,17 @@ struct RootView: View {
         // Hold this back during onboarding so it doesn't race the cover —
         // SwiftUI only presents one sheet/cover at a time per stack.
         guard !onboardingIncomplete, !showOnboarding else { return }
+        guard !shouldShowSubscriptionLock else { return }
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         let lastSeenVersion = UserDefaults.standard.string(forKey: "lastSeenVersion")
         if currentVersion != lastSeenVersion {
             showWhatIsNew = true
         }
+    }
+
+    private func acknowledgeWhatIsNew() {
+        showWhatIsNew = false
+        UserDefaults.standard.set(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, forKey: "lastSeenVersion")
     }
 
     private var canProceedPastFirstSync: Bool {
@@ -211,6 +215,12 @@ struct RootView: View {
 
     private var onboardingIncomplete: Bool {
         !businessConfigs.contains(where: \.isSetupComplete)
+    }
+
+    private var shouldShowSubscriptionLock: Bool {
+        entitlements.status == .notEntitled
+            && !onboardingIncomplete
+            && !showOnboarding
     }
 
     private var shouldBypassLockGate: Bool {

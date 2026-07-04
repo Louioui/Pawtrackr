@@ -128,6 +128,41 @@ final class CheckoutFlowTests: XCTestCase {
             "Idempotency key must collapse retries to one audit row.")
     }
 
+    func testCheckoutTransactionAccruesClientLoyaltyPoints() async throws {
+        let visitUUID = UUID()
+        client.loyaltyPoints = 120
+        try context.save()
+
+        let request = CheckoutRequest(
+            visitUUID: visitUUID,
+            petUUID: pet.uuid,
+            clientUUID: client.uuid,
+            amount: Decimal(string: "85.50")!,
+            paymentMethod: .cash,
+            externalReference: nil,
+            sessionNotes: nil,
+            behaviorTags: [],
+            beforePhotoData: nil,
+            afterPhotoData: nil,
+            selectedServiceIDs: [fullGroom.persistentModelID],
+            selectedAddOnIDs: [nailTrim.persistentModelID]
+        )
+
+        _ = try await actor.process(request)
+
+        let clientUUID = client.uuid
+        let freshContext = ModelContext(container)
+        let refreshedClient = try XCTUnwrap(
+            try freshContext.fetch(FetchDescriptor<Client>(predicate: #Predicate<Client> { $0.uuid == clientUUID })).first
+        )
+        let refreshedVisit = try XCTUnwrap(
+            try freshContext.fetch(FetchDescriptor<Visit>(predicate: #Predicate<Visit> { $0.uuid == visitUUID })).first
+        )
+
+        XCTAssertEqual(refreshedVisit.loyaltyPointsChange, 85)
+        XCTAssertEqual(refreshedClient.loyaltyPoints, 205)
+    }
+
     /// Zelle without a transaction reference must be rejected by validation, so the
     /// audit-mandated "Confirm button disabled unless reference entered" promise holds.
     func testZellePaymentWithoutReference_FailsValidation() {

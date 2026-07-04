@@ -1,9 +1,14 @@
 import XCTest
+import UIKit
 
 @MainActor
 final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
+        try XCTSkipIf(
+            UIDevice.current.userInterfaceIdiom != .pad,
+            "iPad walkthrough stress tests require an iPad simulator destination."
+        )
         XCUIDevice.shared.orientation = .landscapeLeft
     }
 

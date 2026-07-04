@@ -4,8 +4,7 @@
 //
 //  Pawtrackr Pro paywall. Reads the EntitlementStore from the environment and
 //  drives StoreKit purchase / restore. Pricing is loaded live from StoreKit
-//  (never hardcoded) per ADR-0001. Dismissible — the app does not hold local
-//  data hostage; premium *features* gate, the app does not brick.
+//  (never hardcoded) per ADR-0001.
 //
 
 import SwiftUI
@@ -13,17 +12,29 @@ import StoreKit
 import OSLog
 
 struct SubscriptionPaywallView: View {
+    private enum ProductLoadState: Equatable {
+        case loading
+        case ready
+        case unavailable
+    }
+
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(\.dismiss) private var dismiss
 
     @State private var product: Product?
+    @State private var productLoadState: ProductLoadState = .loading
     @State private var isProcessing = false
     @State private var errorMessage: String?
 
+    private let allowsDismiss: Bool
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr",
         category: "paywall"
     )
+
+    init(allowsDismiss: Bool = true) {
+        self.allowsDismiss = allowsDismiss
+    }
 
     var body: some View {
         ScrollView {
@@ -40,21 +51,23 @@ struct SubscriptionPaywallView: View {
         }
         .background(DS.ColorToken.background)
         .overlay(alignment: .topTrailing) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 40, height: 40)
-                    .background(.thinMaterial, in: Circle())
+            if allowsDismiss {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, height: 40)
+                        .background(.thinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .pressScaleStyle(hapticsEnabled: true)
+                .accessibilityLabel("Dismiss")
+                .accessibilityIdentifier("subscriptionPaywall.dismiss")
+                .padding(.top, 12)
+                .padding(.trailing, 16)
             }
-            .buttonStyle(.plain)
-            .pressScaleStyle(hapticsEnabled: true)
-            .accessibilityLabel("Dismiss")
-            .accessibilityIdentifier("subscriptionPaywall.dismiss")
-            .padding(.top, 12)
-            .padding(.trailing, 16)
         }
         .task { await loadProduct() }
         // If the entitlement resolves to active (e.g. purchase/restore succeeds,
@@ -154,7 +167,7 @@ struct SubscriptionPaywallView: View {
                 .padding()
                 .background((isProcessing ? Color.gray : Color.accentColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .disabled(isProcessing || product == nil)
+            .disabled(!canStartPurchase)
             .padding(.horizontal, 24)
 
             Button("Restore Purchases", action: startRestore)
@@ -165,12 +178,10 @@ struct SubscriptionPaywallView: View {
     }
 
     private var legalFootnote: some View {
-        // Terms of Use (EULA) + Privacy Policy are required on an auto-renewable
-        // subscription paywall (App Review). TODO: point at the real hosted URLs.
         HStack(spacing: 6) {
-            Link("Terms of Use", destination: URL(string: "https://pawtrackr.app/terms")!)
+            Link("Terms of Use", destination: AppLinks.termsOfUse)
             Text(verbatim: "·").foregroundStyle(.secondary)
-            Link("Privacy Policy", destination: URL(string: "https://pawtrackr.app/privacy")!)
+            Link("Privacy Policy", destination: AppLinks.privacyPolicy)
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
@@ -180,7 +191,7 @@ struct SubscriptionPaywallView: View {
     // MARK: - Copy derived from the live product
 
     private var subscribeTitle: LocalizedStringKey {
-        hasFreeTrial ? "Start Free Trial" : "Subscribe"
+        hasFreeTrial ? "Start 7-Day Free Trial" : "Subscribe"
     }
 
     private var hasFreeTrial: Bool {
@@ -189,24 +200,37 @@ struct SubscriptionPaywallView: View {
 
     /// e.g. "7 days free, then $29.99/month" — all values sourced from StoreKit.
     private var priceHeadline: String {
-        guard let product else {
+        switch productLoadState {
+        case .loading:
             return String(localized: "subscription.paywall.loading_price",
                           defaultValue: "Loading subscription…")
+        case .unavailable:
+            return String(localized: "subscription.paywall.unavailable",
+                          defaultValue: "Subscription is temporarily unavailable.")
+        case .ready:
+            guard let product else {
+                return String(localized: "subscription.paywall.unavailable",
+                              defaultValue: "Subscription is temporarily unavailable.")
+            }
+            let perMonth = String(
+                format: String(localized: "subscription.paywall.price_per_month",
+                               defaultValue: "%@ / month"),
+                product.displayPrice
+            )
+            guard hasFreeTrial, let offer = product.subscription?.introductoryOffer else {
+                return perMonth
+            }
+            let trial = Self.periodText(offer.period)
+            return String(
+                format: String(localized: "subscription.paywall.trial_then_price",
+                               defaultValue: "%@ free, then %@"),
+                trial, perMonth
+            )
         }
-        let perMonth = String(
-            format: String(localized: "subscription.paywall.price_per_month",
-                           defaultValue: "%@ / month"),
-            product.displayPrice
-        )
-        guard hasFreeTrial, let offer = product.subscription?.introductoryOffer else {
-            return perMonth
-        }
-        let trial = Self.periodText(offer.period)
-        return String(
-            format: String(localized: "subscription.paywall.trial_then_price",
-                           defaultValue: "%@ free, then %@"),
-            trial, perMonth
-        )
+    }
+
+    private var canStartPurchase: Bool {
+        productLoadState == .ready && product != nil && !isProcessing
     }
 
     private static func periodText(_ period: Product.SubscriptionPeriod) -> String {
@@ -223,17 +247,35 @@ struct SubscriptionPaywallView: View {
     // MARK: - Actions
 
     private func loadProduct() async {
+        productLoadState = .loading
+        errorMessage = nil
         do {
             product = try await Product.products(for: [EntitlementStore.monthlyProductID]).first
             if product == nil {
+                productLoadState = .unavailable
                 logger.warning("No product returned for \(EntitlementStore.monthlyProductID, privacy: .public) — is the StoreKit config selected in the scheme?")
+            } else {
+                productLoadState = .ready
             }
         } catch {
+            product = nil
+            productLoadState = .unavailable
+            errorMessage = String(
+                localized: "subscription.paywall.load_failed",
+                defaultValue: "We could not load the subscription right now. Please try again later."
+            )
             logger.error("Failed to load product: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     private func startPurchase() {
+        guard productLoadState == .ready, product != nil else {
+            errorMessage = String(
+                localized: "subscription.paywall.unavailable_detail",
+                defaultValue: "Subscription is temporarily unavailable. Please try again later."
+            )
+            return
+        }
         isProcessing = true
         errorMessage = nil
         Task {

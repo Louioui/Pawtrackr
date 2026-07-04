@@ -13,7 +13,7 @@ final class ScalabilityTests: XCTDataTestCase {
         await withTaskGroup(of: Void.self) { group in
             for i in 0..<count {
                 group.addTask {
-                    try? await repo.createClient(
+                    _ = try? await repo.createClient(
                         firstName: "Performance",
                         lastName: "Test \(i)",
                         phone: "555\(String(format: "%04d", i))",

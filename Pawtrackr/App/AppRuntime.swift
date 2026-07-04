@@ -8,26 +8,33 @@
 import Foundation
 
 enum AppRuntime {
+    static let alternateUITestingArgument = "--uitesting"
     static let uiTestingArgument = "-pawtrackr-ui-testing"
     static let uiTestingEnvironmentKey = "PAWTRACKR_UI_TESTING"
     static let uiTestingStartTabEnvironmentKey = "PAWTRACKR_UI_START_TAB"
     static let uiTestingStartWalkthroughEnvironmentKey = "PAWTRACKR_UI_START_WALKTHROUGH"
     static let uiTestingPremiumEnvironmentKey = "PAWTRACKR_UI_TESTING_PREMIUM"
-    static let uiTestingAutomaticPaywallEnvironmentKey = "PAWTRACKR_UI_TESTING_AUTOMATIC_PAYWALL"
     static let inMemoryStoreEnvironmentKey = "PAWTRACKR_IN_MEMORY_STORE"
+    static let mockStoreKitUnknownArgument = "--mock-storekit-unknown"
+    static let mockStoreKitNotEntitledArgument = "--mock-storekit-not-entitled"
+    static let mockStoreKitPremiumArgument = "--mock-storekit-premium"
     /// When set, the UI test seeder will skip inserting a BusinessConfig so the
     /// onboarding flow shows on launch — used to drive onboarding XCUI tests.
     static let onboardingTestArgument = "-pawtrackr-ui-onboarding"
+    static let firstLaunchTestArgument = "--is-first-launch"
 
     static var isUITesting: Bool {
         let processInfo = ProcessInfo.processInfo
         return processInfo.arguments.contains(uiTestingArgument)
+            || processInfo.arguments.contains(alternateUITestingArgument)
             || processInfo.environment[uiTestingEnvironmentKey] == "1"
     }
 
     /// True when the UI tester wants the onboarding flow to be shown on launch.
     static var isOnboardingTestMode: Bool {
-        ProcessInfo.processInfo.arguments.contains(onboardingTestArgument)
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains(onboardingTestArgument)
+            || arguments.contains(firstLaunchTestArgument)
     }
 
     static var uiTestingStartTab: String? {
@@ -50,11 +57,19 @@ enum AppRuntime {
         return ProcessInfo.processInfo.environment[uiTestingPremiumEnvironmentKey] == "1"
     }
 
-    /// Existing UI tests need to navigate the app without the launch paywall
-    /// covering every tab. Focused paywall tests opt back in explicitly.
-    static var allowsAutomaticSubscriptionPaywall: Bool {
-        guard isUITesting else { return true }
-        return ProcessInfo.processInfo.environment[uiTestingAutomaticPaywallEnvironmentKey] == "1"
+    static var mockedEntitlementStatusForUITesting: EntitlementStore.Status? {
+        guard isUITesting else { return nil }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains(mockStoreKitPremiumArgument) || shouldForcePremiumForUITesting {
+            return .entitled(inTrial: true, expiration: .distantFuture)
+        }
+        if arguments.contains(mockStoreKitNotEntitledArgument) {
+            return .notEntitled
+        }
+        if arguments.contains(mockStoreKitUnknownArgument) {
+            return .unknown
+        }
+        return nil
     }
 
     /// True when the process was launched by XCTest (unit or UI test). Used by

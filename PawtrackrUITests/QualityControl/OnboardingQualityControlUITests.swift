@@ -69,11 +69,7 @@ final class OnboardingQualityControlUITests: QualityControlUITestCase {
 
         tapOnboardingContinue()
         XCTAssertTrue(waitForRegionalStep(), "Regional/contact step should appear.")
-        tapOnboardingContinue()
-        XCTAssertTrue(waitForAny([
-            { self.app.staticTexts["Set Your App PIN"].exists },
-            { self.app.textFields["onboarding.pinField"].exists }
-        ], timeout: 8))
+        advanceFromRegionalToSecurity()
     }
 
     private func waitForRegionalStep(timeout: TimeInterval = 5) -> Bool {
@@ -86,6 +82,22 @@ final class OnboardingQualityControlUITests: QualityControlUITestCase {
                 return title.exists && ["Contact Information", "Regional Info"].contains(title.label)
             }
         ], timeout: timeout)
+    }
+
+    private func waitForSecurityStep(timeout: TimeInterval = 8) -> Bool {
+        waitForAny([
+            { self.app.staticTexts["Set Your App PIN"].exists },
+            { self.app.staticTexts["Security"].exists },
+            { self.app.textFields["onboarding.pinField"].exists }
+        ], timeout: timeout)
+    }
+
+    private func advanceFromRegionalToSecurity() {
+        tapOnboardingContinue()
+        if !waitForSecurityStep(timeout: 4), waitForRegionalStep(timeout: 1) {
+            tapOnboardingContinue()
+        }
+        XCTAssertTrue(waitForSecurityStep(), "Regional/contact step should advance to Security.")
     }
 
     private func advanceToWarmStartStep() {

@@ -473,16 +473,7 @@ struct ClientDetailView: View {
 
             Spacer(minLength: 8)
 
-            HStack(spacing: 5) {
-                Image(systemName: "pawprint.fill")
-                    .font(.caption2)
-                Text("\(client.loyaltyPoints)")
-                    .font(.caption.weight(.bold))
-            }
-            .foregroundStyle(.white)
-            .padding(.vertical, 5)
-            .padding(.horizontal, 9)
-            .background(DS.ColorToken.warning, in: Capsule())
+            LoyaltyPointsBadge(client: client, scale: .compact)
 
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.bold))

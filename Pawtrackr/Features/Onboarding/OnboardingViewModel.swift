@@ -135,7 +135,11 @@ final class OnboardingViewModel {
         self.autoLockAfterInactivityEnabled = appSettings?.autoLockAfterInactivity ?? false
         self.biometricsEnabled = (appSettings?.isBiometricLockEnabled ?? false) && isBiometricsAvailable
 
-        loadDraft()
+        if AppRuntime.isOnboardingTestMode {
+            clearDraft()
+        } else {
+            loadDraft()
+        }
     }
 
     func bindIfNeeded(modelContext: ModelContext, appSettings: AppSettings) {

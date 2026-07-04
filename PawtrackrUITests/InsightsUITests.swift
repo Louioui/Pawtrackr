@@ -16,10 +16,12 @@ final class InsightsUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "-pawtrackr-ui-testing",
+            "--mock-storekit-premium",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US"
         ]
         app.launchEnvironment["PAWTRACKR_UI_TESTING"] = "1"
+        app.launchEnvironment["PAWTRACKR_UI_TESTING_PREMIUM"] = "1"
         app.launchEnvironment["PAWTRACKR_UI_START_TAB"] = "insights"
         app.launch()
     }
