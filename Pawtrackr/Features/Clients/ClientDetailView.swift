@@ -1040,6 +1040,10 @@ struct ClientDetailView: View {
 
     // MARK: - Actions
     private func openClientWindow(_ mode: DetachedClientWindowMode) {
+        guard entitlements.isPremium else {
+            sheetDestination = .subscriptionPaywall
+            return
+        }
         openWindow(id: "client-window", value: DetachedClientWindowRoute(clientUUID: client.uuid, mode: mode))
     }
 

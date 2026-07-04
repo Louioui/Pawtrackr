@@ -99,6 +99,41 @@ final class MigrationsTests: XCTestCase {
 
         XCTAssertEqual(try context.fetch(FetchDescriptor<LoyaltyConfig>()).count, 1)
     }
+
+    func testEnsureLoyaltyDefaults_MergesDuplicateConfigsFieldWise() throws {
+        let baseline = LoyaltyConfig()
+        baseline.createdAt = Date(timeIntervalSince1970: 10)
+        baseline.updatedAt = Date(timeIntervalSince1970: 10)
+
+        let earningRules = LoyaltyConfig()
+        earningRules.setEarnMode(.flatPerVisit)
+        earningRules.setPointsPerVisit(80)
+        earningRules.createdAt = Date(timeIntervalSince1970: 20)
+        earningRules.updatedAt = Date(timeIntervalSince1970: 20)
+
+        let rewardRules = LoyaltyConfig()
+        rewardRules.setPointsPerDollar(Decimal(3))
+        rewardRules.setRedemptionThreshold(275)
+        rewardRules.setRewardsCatalogEnabled(false)
+        rewardRules.createdAt = Date(timeIntervalSince1970: 30)
+        rewardRules.updatedAt = Date(timeIntervalSince1970: 30)
+
+        context.insert(baseline)
+        context.insert(earningRules)
+        context.insert(rewardRules)
+        try context.save()
+
+        DataMigrations.ensureLoyaltyDefaults(in: context)
+
+        let configs = try context.fetch(FetchDescriptor<LoyaltyConfig>())
+        let config = try XCTUnwrap(configs.first)
+        XCTAssertEqual(configs.count, 1)
+        XCTAssertEqual(config.earnMode, .flatPerVisit)
+        XCTAssertEqual(config.pointsPerDollar, Decimal(3))
+        XCTAssertEqual(config.pointsPerVisit, 80)
+        XCTAssertEqual(config.redemptionThreshold, 275)
+        XCTAssertFalse(config.isRewardsCatalogEnabled)
+    }
     
     func testCoercePets_StandardizesGenders() throws {
         let pet = Pet(name: "Test", species: .dog)

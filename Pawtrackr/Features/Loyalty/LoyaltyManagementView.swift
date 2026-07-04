@@ -178,6 +178,7 @@ struct LoyaltyManagementView: View {
                 Label("Add Reward", systemImage: "plus.circle.fill")
             }
             .buttonStyle(.borderedProminent)
+            .pressScaleStyle(hapticsEnabled: true)
             .disabled(newRewardTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityIdentifier("loyaltySettings.addReward")
         }
@@ -273,11 +274,11 @@ struct LoyaltyManagementView: View {
     ) {
         mutate { service in
             try await service.updateConfig(
-                earnMode: earnMode ?? config?.earnMode ?? .pointsPerDollar,
-                pointsPerDollar: pointsPerDollar ?? config?.pointsPerDollar ?? Decimal(1),
-                pointsPerVisit: pointsPerVisit ?? config?.pointsPerVisit ?? 20,
-                redemptionThreshold: redemptionThreshold ?? config?.redemptionThreshold ?? 100,
-                isRewardsCatalogEnabled: isRewardsCatalogEnabled ?? config?.isRewardsCatalogEnabled ?? true
+                earnMode: earnMode,
+                pointsPerDollar: pointsPerDollar,
+                pointsPerVisit: pointsPerVisit,
+                redemptionThreshold: redemptionThreshold,
+                isRewardsCatalogEnabled: isRewardsCatalogEnabled
             )
         }
     }

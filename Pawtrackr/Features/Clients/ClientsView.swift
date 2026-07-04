@@ -23,6 +23,7 @@ struct ClientsView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.openWindow) private var openWindow
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
+    @Environment(EntitlementStore.self) private var entitlements
     var namespace: Namespace.ID
 
     init(namespace: Namespace.ID) {
@@ -324,7 +325,7 @@ struct ClientsView: View {
                         Label(NSLocalizedString("clients.action.view_details", value: "View Details", comment: ""), systemImage: "person.crop.circle")
                     }
 
-                    if supportsMultipleWindows {
+                    if supportsMultipleWindows && entitlements.isPremium {
                         Button {
                             openClientWindow(client, mode: .detail)
                         } label: {
@@ -508,6 +509,7 @@ struct ClientsView: View {
     }
 
     private func openClientWindow(_ client: Client, mode: DetachedClientWindowMode) {
+        guard supportsMultipleWindows, entitlements.isPremium else { return }
         openWindow(id: "client-window", value: DetachedClientWindowRoute(clientUUID: client.uuid, mode: mode))
     }
 

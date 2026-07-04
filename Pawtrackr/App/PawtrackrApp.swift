@@ -280,7 +280,7 @@ struct PawtrackrApp: App {
                     .task { entitlements.start() }
             } else {
                 ContentUnavailableView(
-                    "Client Unavailable",
+                    AppLocalization.localized("client.window.unavailable", value: "Client Unavailable"),
                     systemImage: "person.crop.circle.badge.exclamationmark"
                 )
                 .environment(\.locale, customLocale)

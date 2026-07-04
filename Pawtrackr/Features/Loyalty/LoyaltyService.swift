@@ -74,28 +74,38 @@ actor LoyaltyService {
     }
 
     func updateConfig(
-        earnMode: LoyaltyEarnMode,
-        pointsPerDollar: Decimal,
-        pointsPerVisit: Int,
-        redemptionThreshold: Int,
-        isRewardsCatalogEnabled: Bool
+        earnMode: LoyaltyEarnMode? = nil,
+        pointsPerDollar: Decimal? = nil,
+        pointsPerVisit: Int? = nil,
+        redemptionThreshold: Int? = nil,
+        isRewardsCatalogEnabled: Bool? = nil
     ) throws {
-        guard pointsPerDollar >= .zero else {
+        if let pointsPerDollar, pointsPerDollar < .zero {
             throw AppError.validation(.custom(message: "Points per dollar cannot be negative."))
         }
-        guard pointsPerVisit >= 0 else {
+        if let pointsPerVisit, pointsPerVisit < 0 {
             throw AppError.validation(.custom(message: "Points per visit cannot be negative."))
         }
-        guard redemptionThreshold > 0 else {
+        if let redemptionThreshold, redemptionThreshold <= 0 {
             throw AppError.validation(.custom(message: "Reward threshold must be greater than zero."))
         }
 
         let config = try fetchOrCreateConfig()
-        config.setEarnMode(earnMode)
-        config.setPointsPerDollar(pointsPerDollar)
-        config.setPointsPerVisit(pointsPerVisit)
-        config.setRedemptionThreshold(redemptionThreshold)
-        config.setRewardsCatalogEnabled(isRewardsCatalogEnabled)
+        if let earnMode {
+            config.setEarnMode(earnMode)
+        }
+        if let pointsPerDollar {
+            config.setPointsPerDollar(pointsPerDollar)
+        }
+        if let pointsPerVisit {
+            config.setPointsPerVisit(pointsPerVisit)
+        }
+        if let redemptionThreshold {
+            config.setRedemptionThreshold(redemptionThreshold)
+        }
+        if let isRewardsCatalogEnabled {
+            config.setRewardsCatalogEnabled(isRewardsCatalogEnabled)
+        }
         try modelContext.save()
     }
 

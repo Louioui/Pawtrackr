@@ -39,6 +39,27 @@ final class LoyaltyServiceConfigTests: XCTestCase {
         XCTAssertEqual(config.redemptionThreshold, 100)
     }
 
+    func testUpdateConfigMergesOnlyProvidedFields() async throws {
+        let service = LoyaltyService(modelContainer: container)
+
+        try await service.updateConfig(
+            earnMode: .flatPerVisit,
+            pointsPerDollar: Decimal(4),
+            pointsPerVisit: 45,
+            redemptionThreshold: 250,
+            isRewardsCatalogEnabled: false
+        )
+        try await service.updateConfig(pointsPerVisit: 70)
+
+        let context = ModelContext(container)
+        let config = try XCTUnwrap(try context.fetch(FetchDescriptor<LoyaltyConfig>()).first)
+        XCTAssertEqual(config.earnMode, .flatPerVisit)
+        XCTAssertEqual(config.pointsPerDollar, Decimal(4))
+        XCTAssertEqual(config.pointsPerVisit, 70)
+        XCTAssertEqual(config.redemptionThreshold, 250)
+        XCTAssertFalse(config.isRewardsCatalogEnabled)
+    }
+
     func testCreateRewardTemplatePersistsReward() async throws {
         let service = LoyaltyService(modelContainer: container)
 

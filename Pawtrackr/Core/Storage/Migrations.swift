@@ -350,10 +350,7 @@ enum DataMigrations {
                 context.insert(LoyaltyConfig())
                 didChange = true
             } else if configs.count > 1 {
-                for duplicate in configs.dropFirst() {
-                    context.delete(duplicate)
-                    didChange = true
-                }
+                didChange = collapseDuplicateLoyaltyConfigs(configs, in: context)
             }
 
             let existingRewards = try context.fetch(FetchDescriptor<LoyaltyRewardTemplate>())
@@ -374,6 +371,57 @@ enum DataMigrations {
         } catch {
             Logger.migrations.error("ensureLoyaltyDefaults failed: \(String(describing: error))")
         }
+    }
+
+    /// Merges duplicate loyalty settings field-by-field before deleting extras.
+    private static func collapseDuplicateLoyaltyConfigs(_ configs: [LoyaltyConfig], in context: ModelContext) -> Bool {
+        guard configs.count > 1 else { return false }
+
+        let canonical = configs.min { lhs, rhs in
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+            return lhs.updatedAt < rhs.updatedAt
+        } ?? configs[0]
+        let defaults = LoyaltyConfigSnapshot.default
+        let newestFirst = configs.sorted { lhs, rhs in
+            loyaltyConfigIsNewer(lhs, than: rhs)
+        }
+
+        if let earnMode = newestFirst.first(where: { $0.earnMode != defaults.earnMode })?.earnMode,
+           canonical.earnMode != earnMode {
+            canonical.setEarnMode(earnMode)
+        }
+        if let pointsPerDollar = newestFirst.first(where: { $0.pointsPerDollar != defaults.pointsPerDollar })?.pointsPerDollar,
+           canonical.pointsPerDollar != pointsPerDollar {
+            canonical.setPointsPerDollar(pointsPerDollar)
+        }
+        if let pointsPerVisit = newestFirst.first(where: { $0.pointsPerVisit != defaults.pointsPerVisit })?.pointsPerVisit,
+           canonical.pointsPerVisit != pointsPerVisit {
+            canonical.setPointsPerVisit(pointsPerVisit)
+        }
+        if let redemptionThreshold = newestFirst.first(where: { $0.redemptionThreshold != defaults.redemptionThreshold })?.redemptionThreshold,
+           canonical.redemptionThreshold != redemptionThreshold {
+            canonical.setRedemptionThreshold(redemptionThreshold)
+        }
+        if let isRewardsCatalogEnabled = newestFirst.first(where: { $0.isRewardsCatalogEnabled != defaults.isRewardsCatalogEnabled })?.isRewardsCatalogEnabled,
+           canonical.isRewardsCatalogEnabled != isRewardsCatalogEnabled {
+            canonical.setRewardsCatalogEnabled(isRewardsCatalogEnabled)
+        }
+
+        for duplicate in configs where duplicate !== canonical {
+            context.delete(duplicate)
+        }
+        canonical.markModified()
+        return true
+    }
+
+    /// Orders loyalty settings so reconciliation prefers the most recent field source.
+    private static func loyaltyConfigIsNewer(_ lhs: LoyaltyConfig, than rhs: LoyaltyConfig) -> Bool {
+        if lhs.updatedAt != rhs.updatedAt {
+            return lhs.updatedAt > rhs.updatedAt
+        }
+        return lhs.createdAt > rhs.createdAt
     }
 }
 

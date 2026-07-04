@@ -12,6 +12,7 @@ struct RewardsCatalogView: View {
         sort: \LoyaltyRewardTemplate.sortOrder,
         order: .forward
     ) private var rewardTemplates: [LoyaltyRewardTemplate]
+    @Query(sort: \LoyaltyRewardTemplate.sortOrder, order: .forward) private var allRewardTemplates: [LoyaltyRewardTemplate]
     @Query(sort: \LoyaltyConfig.createdAt, order: .forward) private var configs: [LoyaltyConfig]
 
     @State private var redeemingRewardID: LoyaltyReward.ID?
@@ -21,7 +22,7 @@ struct RewardsCatalogView: View {
     private var visibleRewards: [LoyaltyReward] {
         guard configs.first?.isRewardsCatalogEnabled ?? true else { return [] }
         let persistent = rewardTemplates.map(\.displayReward)
-        return persistent.isEmpty ? LoyaltyReward.builtInCatalog : persistent
+        return persistent.isEmpty && allRewardTemplates.isEmpty ? LoyaltyReward.builtInCatalog : persistent
     }
 
     var body: some View {

@@ -6,5 +6,6 @@ struct DetachedInsightsWindow: View {
             InsightsView()
         }
         .frame(minWidth: 760, minHeight: 560)
+        .privacyBlur()
     }
 }
