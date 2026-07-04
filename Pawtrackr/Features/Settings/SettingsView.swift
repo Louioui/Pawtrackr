@@ -20,12 +20,13 @@ private func settingsLocalized(_ key: String, value: String) -> String {
 }
 
 enum SettingSection: String, CaseIterable, Identifiable {
-    case business, preferences, security, dataExport, icloud, help, devices, about
+    case business, preferences, loyalty, security, dataExport, icloud, help, devices, about
     var id: String { rawValue }
     var localizationKey: String {
         switch self {
         case .business: return "settings.section.business"
         case .preferences: return "settings.section.preferences"
+        case .loyalty: return "settings.section.loyalty"
         case .security: return "settings.section.security"
         case .dataExport: return "settings.section.export"
         case .icloud: return "settings.section.icloud"
@@ -43,6 +44,7 @@ enum SettingSection: String, CaseIterable, Identifiable {
         switch self {
         case .business: return "building.2.fill"
         case .preferences: return "slider.horizontal.3"
+        case .loyalty: return "star.circle.fill"
         case .security: return "lock.shield.fill"
         case .dataExport: return "square.and.arrow.up"
         case .icloud: return "icloud.fill"
@@ -64,7 +66,7 @@ enum SettingSection: String, CaseIterable, Identifiable {
             return .setICloud
         case .about:
             return .setAbout
-        case .preferences, .help, .devices:
+        case .preferences, .loyalty, .help, .devices:
             return nil
         }
     }
@@ -387,6 +389,7 @@ private struct SettingsDetailView: View {
         switch section {
         case .business: BusinessSectionView(appSettings: appSettings)
         case .preferences: PreferencesSectionView(appSettings: appSettings)
+        case .loyalty: LoyaltyManagementView()
         case .security: SecuritySectionView(appSettings: appSettings, showChangePIN: $showChangePIN)
         case .dataExport: DataExportSectionView(modelContext: modelContext)
         case .icloud: ICloudSectionView(showDiagnostics: $showDiagnostics)

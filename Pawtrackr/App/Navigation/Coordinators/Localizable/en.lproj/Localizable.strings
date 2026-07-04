@@ -235,6 +235,7 @@
 "settings.title" = "Settings";
 "settings.section.business" = "Business";
 "settings.section.preferences" = "Preferences";
+"settings.section.loyalty" = "Loyalty";
 "settings.section.security" = "Security";
 "settings.section.export" = "Data Export";
 "settings.section.icloud" = "iCloud";
