@@ -266,6 +266,51 @@ struct PawtrackrApp: App {
         }
         #endif
 
+        WindowGroup("Client", id: "client-window", for: DetachedClientWindowRoute.self) { route in
+            if let container, let route = route.wrappedValue {
+                DetachedClientWindow(route: route)
+                    .environment(\.locale, customLocale)
+                    .environment(appSettings)
+                    .environment(authViewModel)
+                    .environment(dataStore)
+                    .environment(router)
+                    .environment(eventBus)
+                    .environment(entitlements)
+                    .modelContainer(container)
+                    .task { entitlements.start() }
+            } else {
+                ContentUnavailableView(
+                    "Client Unavailable",
+                    systemImage: "person.crop.circle.badge.exclamationmark"
+                )
+                .environment(\.locale, customLocale)
+            }
+        }
+        #if os(macOS)
+        .defaultSize(width: 760, height: 680)
+        #endif
+
+        WindowGroup("Insights", id: "insights-window") {
+            if let container {
+                DetachedInsightsWindow()
+                    .environment(\.locale, customLocale)
+                    .environment(appSettings)
+                    .environment(authViewModel)
+                    .environment(dataStore)
+                    .environment(router)
+                    .environment(eventBus)
+                    .environment(entitlements)
+                    .modelContainer(container)
+                    .task { entitlements.start() }
+            } else {
+                Text(AppLocalization.localized("common.database_unavailable", value: "Database unavailable"))
+                    .environment(\.locale, customLocale)
+            }
+        }
+        #if os(macOS)
+        .defaultSize(width: 980, height: 720)
+        #endif
+
         #if os(macOS)
         Settings {
             if let container = container {
@@ -276,6 +321,7 @@ struct PawtrackrApp: App {
                     .environment(dataStore)
                     .environment(router)
                     .environment(eventBus)
+                    .environment(entitlements)
                     .modelContainer(container)
                     .frame(width: 450, height: 500)
             } else {

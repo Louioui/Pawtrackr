@@ -21,6 +21,8 @@ struct ClientsView: View {
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(NavigationRouter.self) private var router
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     var namespace: Namespace.ID
 
     init(namespace: Namespace.ID) {
@@ -322,6 +324,26 @@ struct ClientsView: View {
                         Label(NSLocalizedString("clients.action.view_details", value: "View Details", comment: ""), systemImage: "person.crop.circle")
                     }
 
+                    if supportsMultipleWindows {
+                        Button {
+                            openClientWindow(client, mode: .detail)
+                        } label: {
+                            Label(
+                                NSLocalizedString("client.action.open_client_window", value: "Open Client Window", comment: ""),
+                                systemImage: "rectangle.on.rectangle"
+                            )
+                        }
+
+                        Button {
+                            openClientWindow(client, mode: .loyalty)
+                        } label: {
+                            Label(
+                                NSLocalizedString("client.action.open_loyalty_window", value: "Open Loyalty Window", comment: ""),
+                                systemImage: "star.circle"
+                            )
+                        }
+                    }
+
                     #if canImport(UIKit)
                     if let phone = client.phone, let tel = PhoneUtils.telURLString(phone), let url = URL(string: tel) {
                         Button {
@@ -483,6 +505,10 @@ struct ClientsView: View {
         #if os(macOS)
         searchFocusRequest += 1
         #endif
+    }
+
+    private func openClientWindow(_ client: Client, mode: DetachedClientWindowMode) {
+        openWindow(id: "client-window", value: DetachedClientWindowRoute(clientUUID: client.uuid, mode: mode))
     }
 
     private var errorBinding: Binding<AppError?> {

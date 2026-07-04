@@ -24,6 +24,8 @@ struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @Environment(EntitlementStore.self) private var entitlements
@@ -156,6 +158,7 @@ struct ClientDetailView: View {
             .toolbar {
                 toolbarContent(vm)
                 macAddPetToolbarItem
+                proWindowToolbarItems
             }
             #if os(iOS)
             .fabOverlay { addPetFab }
@@ -220,6 +223,31 @@ struct ClientDetailView: View {
         EmptyToolbarContent()
     }
     #endif
+
+    @ToolbarContentBuilder
+    private var proWindowToolbarItems: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            if supportsMultipleWindows {
+                Button {
+                    openClientWindow(.detail)
+                } label: {
+                    Label(
+                        NSLocalizedString("client.action.open_client_window", value: "Open Client Window", comment: ""),
+                        systemImage: "rectangle.on.rectangle"
+                    )
+                }
+
+                Button {
+                    openClientWindow(.loyalty)
+                } label: {
+                    Label(
+                        NSLocalizedString("client.action.open_loyalty_window", value: "Open Loyalty Window", comment: ""),
+                        systemImage: "star.circle"
+                    )
+                }
+            }
+        }
+    }
 
     #if os(iOS)
     private var usesFloatingAddPetAction: Bool {
@@ -1011,6 +1039,10 @@ struct ClientDetailView: View {
     }
 
     // MARK: - Actions
+    private func openClientWindow(_ mode: DetachedClientWindowMode) {
+        openWindow(id: "client-window", value: DetachedClientWindowRoute(clientUUID: client.uuid, mode: mode))
+    }
+
     private func deleteClient(vm: ClientDetailViewModel) {
         Task { await performDeleteClient(vm: vm) }
     }

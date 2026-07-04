@@ -79,6 +79,11 @@ struct PawtrackrMenuBarExtra: View {
                 }
             }
 
+            Button(NSLocalizedString("mac.command.show_insights", value: "Show Insights", comment: "")) {
+                openWindow(id: "insights-window")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
             Button(NSLocalizedString("menu_bar.open_main_window", value: "Open Main Window", comment: "")) {
                 openMainWindow()
             }
