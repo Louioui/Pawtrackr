@@ -20,13 +20,19 @@ final class RootLockUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Elevate Pawtrackr"].exists)
     }
 
-    func testUnsubscribedUserIsStrictlyLockedOutOfWorkspace() throws {
+    func testUnsubscribedUserCanDismissLaunchPaywallAndReadWorkspace() throws {
         launch(arguments: ["--mock-storekit-not-entitled", "--onboarding-complete"])
 
         XCTAssertTrue(app.staticTexts["Elevate Pawtrackr"].waitForExistence(timeout: 8))
-        XCTAssertFalse(app.tabBars.firstMatch.exists)
-        XCTAssertFalse(app.navigationBars["Dashboard"].exists)
-        XCTAssertFalse(app.buttons["subscriptionPaywall.dismiss"].exists)
+        let dismiss = app.buttons["subscriptionPaywall.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 6))
+        dismiss.tap()
+
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            app.staticTexts["Dashboard"].exists || app.navigationBars["Dashboard"].exists,
+            "Dashboard should remain readable after dismissing the launch paywall."
+        )
     }
 
     func testPremiumUserAutomaticallyBypassesLockToMainApp() throws {

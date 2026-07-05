@@ -19,12 +19,19 @@ final class LoyaltyUITests: XCTestCase {
         app = nil
     }
 
-    func testNonPremiumLaunchShowsStrictSubscriptionLock() throws {
+    func testNonPremiumLoyaltyEntryShowsPaywallAfterDismissedLaunchPaywall() throws {
         launch(entitlement: .notEntitled)
         XCTAssertTrue(app.staticTexts["Elevate Pawtrackr"].waitForExistence(timeout: 8))
-        XCTAssertFalse(app.tabBars.firstMatch.exists)
-        XCTAssertFalse(app.navigationBars["Dashboard"].exists)
-        XCTAssertFalse(app.buttons["subscriptionPaywall.dismiss"].exists)
+
+        let dismiss = app.buttons["subscriptionPaywall.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 6))
+        dismiss.tap()
+
+        openSeededClient()
+        tapLoyaltyEntry()
+
+        XCTAssertTrue(app.staticTexts["Elevate Pawtrackr"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["subscriptionPaywall.dismiss"].exists)
     }
 
     func testPremiumCanAdjustPointsAndRedeemReward() throws {

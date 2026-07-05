@@ -27,13 +27,15 @@ struct SubscriptionPaywallView: View {
     @State private var errorMessage: String?
 
     private let allowsDismiss: Bool
+    private let onDismiss: (() -> Void)?
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr",
         category: "paywall"
     )
 
-    init(allowsDismiss: Bool = true) {
+    init(allowsDismiss: Bool = true, onDismiss: (() -> Void)? = nil) {
         self.allowsDismiss = allowsDismiss
+        self.onDismiss = onDismiss
     }
 
     var body: some View {
@@ -53,7 +55,11 @@ struct SubscriptionPaywallView: View {
         .overlay(alignment: .topTrailing) {
             if allowsDismiss {
                 Button {
-                    dismiss()
+                    if let onDismiss {
+                        onDismiss()
+                    } else {
+                        dismiss()
+                    }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.headline.weight(.bold))

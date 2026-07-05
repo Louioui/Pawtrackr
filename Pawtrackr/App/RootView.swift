@@ -24,15 +24,12 @@ struct RootView: View {
     @State private var bypassLockForCurrentSession = false
     @State private var showPrivacyScreen = false
     @State private var showWhatIsNew = false
+    @State private var didDismissLaunchSubscriptionPaywall = false
 
     var body: some View {
         ZStack {
             Group {
-                if shouldShowSubscriptionLock {
-                    SubscriptionPaywallView(allowsDismiss: false)
-                        .transition(.opacity.combined(with: .scale(scale: 0.985)))
-                        .zIndex(20)
-                } else if shouldBypassLockGate {
+                if shouldBypassLockGate {
                     mainShell
                 } else {
                     PinLockGate(onUnlock: {
@@ -42,6 +39,15 @@ struct RootView: View {
                     }
                 }
             }
+
+            if shouldShowLaunchSubscriptionPaywall {
+                SubscriptionPaywallView(
+                    allowsDismiss: true,
+                    onDismiss: dismissLaunchSubscriptionPaywall
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .zIndex(20)
+            }
             
             if showPrivacyScreen {
                 PrivacyScreen()
@@ -49,9 +55,9 @@ struct RootView: View {
                     .zIndex(100)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: shouldShowSubscriptionLock)
+        .animation(.easeInOut(duration: 0.25), value: shouldShowLaunchSubscriptionPaywall)
         .sheet(isPresented: Binding(
-            get: { showWhatIsNew && !shouldShowSubscriptionLock },
+            get: { showWhatIsNew && !shouldShowLaunchSubscriptionPaywall },
             set: { presented in
                 if !presented {
                     showWhatIsNew = false
@@ -114,7 +120,7 @@ struct RootView: View {
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
-        .onChange(of: shouldShowSubscriptionLock) { _, locked in
+        .onChange(of: shouldShowLaunchSubscriptionPaywall) { _, locked in
             if locked {
                 showWhatIsNew = false
                 showFirstSyncGate = false
@@ -162,7 +168,7 @@ struct RootView: View {
         // Hold this back during onboarding so it doesn't race the cover —
         // SwiftUI only presents one sheet/cover at a time per stack.
         guard !onboardingIncomplete, !showOnboarding else { return }
-        guard !shouldShowSubscriptionLock else { return }
+        guard !shouldShowLaunchSubscriptionPaywall else { return }
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         let lastSeenVersion = UserDefaults.standard.string(forKey: "lastSeenVersion")
         if currentVersion != lastSeenVersion {
@@ -219,14 +225,21 @@ struct RootView: View {
         }
     }
 
+    private func dismissLaunchSubscriptionPaywall() {
+        didDismissLaunchSubscriptionPaywall = true
+        evaluateWhatIsNew()
+        updateFirstSyncGate(for: cloudKitMonitor.accountState)
+    }
+
     private var onboardingIncomplete: Bool {
         !businessConfigs.contains(where: \.isSetupComplete)
     }
 
-    private var shouldShowSubscriptionLock: Bool {
+    private var shouldShowLaunchSubscriptionPaywall: Bool {
         entitlements.status == .notEntitled
             && !onboardingIncomplete
             && !showOnboarding
+            && !didDismissLaunchSubscriptionPaywall
     }
 
     private var shouldBypassLockGate: Bool {
