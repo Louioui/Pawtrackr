@@ -16,4 +16,5 @@
 
 ## Verification Notes
 
-- The requested `platform=iOS Simulator,name=iPhone 15` destination fails on this machine when Xcode resolves `OS:latest`; use an explicit installed OS such as `OS=17.4`.
+- Don't assume a simulator destination exists — resolve one first with `xcrun simctl list devices available` and pass it as `-destination "id=<UUID>"`. As of 2026-07, the installed runtimes are iOS 18.x and 26.5 (no 17.x); named-device + `OS:latest` lookups have failed on this machine before.
+- The paywall loads live StoreKit products from `Pawtrackr.storekit` — both shared schemes reference it in their LaunchAction. If `Product.products` returns nothing in a dev build, check that scheme reference before suspecting code.

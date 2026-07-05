@@ -174,7 +174,25 @@ struct SubscriptionPaywallView: View {
                 .background((isProcessing ? Color.gray : Color.accentColor), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .disabled(!canStartPurchase)
+            // A full-color button that silently ignores taps reads as broken;
+            // dim it whenever a purchase can't actually start.
+            .opacity(canStartPurchase || isProcessing ? 1 : 0.5)
             .padding(.horizontal, 24)
+            .accessibilityIdentifier("subscriptionPaywall.subscribe")
+
+            if productLoadState == .unavailable {
+                Button {
+                    Task { await loadProduct() }
+                } label: {
+                    Label(
+                        String(localized: "subscription.paywall.retry", defaultValue: "Try Again"),
+                        systemImage: "arrow.clockwise"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                }
+                .disabled(isProcessing)
+                .accessibilityIdentifier("subscriptionPaywall.retry")
+            }
 
             Button("Restore Purchases", action: startRestore)
                 .font(.subheadline)
@@ -256,7 +274,11 @@ struct SubscriptionPaywallView: View {
         productLoadState = .loading
         errorMessage = nil
         do {
-            product = try await Product.products(for: [EntitlementStore.monthlyProductID]).first
+            // Bounded fetch: a hung StoreKit call must surface the retry state,
+            // never an infinite "Loading subscription…" spinner.
+            product = try await StoreKitTimeout.run {
+                try await Product.products(for: [EntitlementStore.monthlyProductID]).first
+            }
             if product == nil {
                 productLoadState = .unavailable
                 logger.warning("No product returned for \(EntitlementStore.monthlyProductID, privacy: .public) — is the StoreKit config selected in the scheme?")

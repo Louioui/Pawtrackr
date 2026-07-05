@@ -143,7 +143,9 @@ final class EntitlementStore {
     /// eligible). Returns `true` on a verified purchase. The paywall calls this.
     @discardableResult
     func purchaseMonthly() async throws -> Bool {
-        guard let product = try await Product.products(for: [Self.monthlyProductID]).first else {
+        guard let product = try await StoreKitTimeout.run({
+            try await Product.products(for: [Self.monthlyProductID]).first
+        }) else {
             logger.error("Pawtrackr Pro product not found: \(Self.monthlyProductID, privacy: .public)")
             return false
         }
@@ -193,5 +195,37 @@ private extension Transaction {
     /// project's iOS 18 / macOS 15 deployment targets.
     var isIntroductoryTrial: Bool {
         offer?.type == .introductory
+    }
+}
+
+// MARK: - Timeout guard
+
+/// Races an async operation against a wall-clock deadline. `Product.products`
+/// can hang indefinitely on a throttled network, which would strand the paywall
+/// in a permanent loading state with no error and no retry. Wrap only the
+/// *fetch* calls — never `product.purchase()`, whose payment sheet legitimately
+/// waits on the user.
+enum StoreKitTimeout {
+    struct TimedOut: LocalizedError, Equatable {
+        var errorDescription: String? {
+            String(localized: "storekit.timeout",
+                   defaultValue: "The App Store did not respond. Please check your connection and try again.")
+        }
+    }
+
+    static func run<T: Sendable>(
+        seconds: Double = 2.0,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw TimedOut()
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw TimedOut() }
+            return first
+        }
     }
 }
