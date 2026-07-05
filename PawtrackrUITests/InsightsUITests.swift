@@ -30,6 +30,44 @@ final class InsightsUITests: XCTestCase {
         app = nil
     }
 
+    // MARK: - Pro lock
+
+    func testInsightsLockedWithoutProAndUnlockOpensPaywall() throws {
+        // The shared setUp launches premium; this scenario needs a not-entitled run.
+        app.terminate()
+
+        let lockedApp = XCUIApplication()
+        lockedApp.launchArguments = [
+            "-pawtrackr-ui-testing",
+            "--mock-storekit-not-entitled",
+            "-AppleLanguages", "(en)",
+            "-AppleLocale", "en_US"
+        ]
+        lockedApp.launchEnvironment["PAWTRACKR_UI_TESTING"] = "1"
+        lockedApp.launchEnvironment["PAWTRACKR_UI_START_TAB"] = "insights"
+        lockedApp.launch()
+
+        // Not-entitled runs open on the launch paywall; dismiss it to reach the shell.
+        let dismiss = lockedApp.buttons["subscriptionPaywall.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 8), "Launch paywall should appear for non-subscribers.")
+        dismiss.tap()
+
+        // The Insights surface itself must be locked behind Pro.
+        let lockVisible = waitForAny([
+            { lockedApp.scrollViews["insights.locked"].exists },
+            { lockedApp.otherElements["insights.locked"].exists },
+            { lockedApp.buttons["insights.locked.unlock"].exists }
+        ], timeout: 10)
+        XCTAssertTrue(lockVisible, "Insights should show the Pro lock for non-subscribers.")
+
+        let unlock = lockedApp.buttons["insights.locked.unlock"]
+        XCTAssertTrue(unlock.waitForExistence(timeout: 6))
+        unlock.tap()
+
+        XCTAssertTrue(lockedApp.staticTexts["Elevate Pawtrackr"].waitForExistence(timeout: 8),
+                      "The unlock button should open the subscription paywall.")
+    }
+
     // MARK: - Tab activation
 
     func testInsightsTabLoadsAndShowsKPIs() throws {

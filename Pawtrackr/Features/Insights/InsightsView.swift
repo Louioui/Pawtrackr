@@ -23,9 +23,22 @@ private struct InsightsDrilldownRow: Identifiable {
     let trailing: String
 }
 
+/// Pure gate for the Insights premium lock (unit-tested): analytics are part of
+/// Pawtrackr Pro, so an explicit `.notEntitled` locks the surface. `.unknown`
+/// (the brief window before StoreKit resolves at launch) stays unlocked so
+/// paying users never see a lock flash — mirroring RootView's launch paywall.
+/// The guided tour also bypasses the lock: it walks these charts on demo data
+/// and is the pitch that sells the subscription.
+enum InsightsAccessPolicy {
+    static func isLocked(status: EntitlementStore.Status, isWalkthroughActive: Bool) -> Bool {
+        status == .notEntitled && !isWalkthroughActive
+    }
+}
+
 struct InsightsView: View {
     @Environment(DataStoreService.self) private var dataStore
     @Environment(GlobalEventBus.self) private var eventBus
+    @Environment(EntitlementStore.self) private var entitlements
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Present only while a guided tour is running; used to scroll deep-dive
@@ -37,10 +50,21 @@ struct InsightsView: View {
     @State private var isPreparingReport = false
     @State private var selectedDrilldown: InsightsDrilldown?
     @State private var selectedRevenueDate: Date?
+    @State private var showProPaywall = false
+
+    private var isProLocked: Bool {
+        InsightsAccessPolicy.isLocked(
+            status: entitlements.status,
+            isWalkthroughActive: walkthrough?.isActive == true
+        )
+    }
 
     var body: some View {
         Group {
-            if let vm = viewModel {
+            if isProLocked {
+                lockedContent
+                    .transition(.opacity)
+            } else if let vm = viewModel {
                 switch vm.state {
                 case .loading:
                     loadingContent
@@ -76,12 +100,113 @@ struct InsightsView: View {
         .sheet(item: $selectedDrilldown) { drilldown in
             drilldownSheet(drilldown)
         }
+        .sheet(isPresented: $showProPaywall) {
+            proPaywallSheet
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                reportButton
+                if !isProLocked {
+                    reportButton
+                }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: isProLocked)
         .privacyBlur()
+    }
+
+    // MARK: - Pro lock
+
+    /// Shown instead of the analytics when there is no active Pro entitlement.
+    /// Reaching this screen is a conversion moment, so it explains what unlocks
+    /// and opens the paywall directly.
+    private var lockedContent: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(Color.orange.gradient)
+                    .shadow(color: .orange.opacity(0.3), radius: 10, y: 5)
+                    .padding(.top, 48)
+
+                Text(localized("insights.locked.title", value: "Insights is part of Pawtrackr Pro"))
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .multilineTextAlignment(.center)
+
+                Text(localized(
+                    "insights.locked.subtitle",
+                    value: "Subscribe to turn your completed checkouts into live business analytics — no spreadsheets required."
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    lockedFeatureRow(
+                        icon: "dollarsign.circle.fill", tint: DS.ColorToken.primary,
+                        text: localized("insights.locked.feature.revenue", value: "Revenue trends over 7, 30, and 90 days plus month-by-month performance.")
+                    )
+                    lockedFeatureRow(
+                        icon: "scissors", tint: .green,
+                        text: localized("insights.locked.feature.services", value: "Service profitability, payment mix, and returning-client retention.")
+                    )
+                    lockedFeatureRow(
+                        icon: "square.and.arrow.up", tint: .blue,
+                        text: localized("insights.locked.feature.export", value: "Exportable PDF and CSV reports for bookkeeping.")
+                    )
+                }
+                .padding(18)
+                .frame(maxWidth: 460)
+                .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                Button {
+                    showProPaywall = true
+                } label: {
+                    Label(
+                        localized("insights.locked.cta", value: "Unlock with Pawtrackr Pro"),
+                        systemImage: "lock.open.fill"
+                    )
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 12)
+                    .background(Color.accentColor, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .pressScaleStyle(hapticsEnabled: true)
+                .accessibilityIdentifier("insights.locked.unlock")
+                .padding(.bottom, 32)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(DS.Spacing.lg)
+        }
+        .accessibilityIdentifier("insights.locked")
+    }
+
+    private func lockedFeatureRow(icon: String, tint: Color, text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.headline)
+                .foregroundStyle(tint)
+                .frame(width: 28)
+            Text(text)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var proPaywallSheet: some View {
+        // Re-inject the store: @Observable environment values don't reliably
+        // reach sheet content (macOS especially — see CommunicationSheet fix).
+        #if os(macOS)
+        SubscriptionPaywallView()
+            .environment(entitlements)
+            .frame(minWidth: 560, minHeight: 620)
+        #else
+        SubscriptionPaywallView()
+            .environment(entitlements)
+        #endif
     }
 
     // MARK: - Main content

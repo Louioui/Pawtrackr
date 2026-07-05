@@ -1196,3 +1196,11 @@
 "communication.title_fmt" = "Message %@";
 "communication.fallback_client" = "Client";
 "common.validation_error" = "Validation Error";
+
+/* Insights Pro lock */
+"insights.locked.title" = "Insights is part of Pawtrackr Pro";
+"insights.locked.subtitle" = "Subscribe to turn your completed checkouts into live business analytics — no spreadsheets required.";
+"insights.locked.feature.revenue" = "Revenue trends over 7, 30, and 90 days plus month-by-month performance.";
+"insights.locked.feature.services" = "Service profitability, payment mix, and returning-client retention.";
+"insights.locked.feature.export" = "Exportable PDF and CSV reports for bookkeeping.";
+"insights.locked.cta" = "Unlock with Pawtrackr Pro";

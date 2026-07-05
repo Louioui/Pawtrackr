@@ -1335,3 +1335,11 @@
 "tour.set.start_fresh.directive" = "Úsalo cuando termines de practicar.";
 "tour.set.start_fresh.purpose" = "Cuando ya conozcas la app, Borrar y empezar desde cero limpia clientes, mascotas, visitas, pagos e historial de demo para que empieces con un espacio vacío para el negocio real.";
 "tour.set.start_fresh.tip" = "Tu perfil y menú de servicios se conservan. Solo se borran registros de práctica.";
+
+/* Insights Pro lock */
+"insights.locked.title" = "Estadísticas es parte de Pawtrackr Pro";
+"insights.locked.subtitle" = "Suscríbete para convertir tus cobros completados en estadísticas de negocio en vivo, sin hojas de cálculo.";
+"insights.locked.feature.revenue" = "Tendencias de ingresos de 7, 30 y 90 días y rendimiento mes a mes.";
+"insights.locked.feature.services" = "Rentabilidad por servicio, mezcla de pagos y retención de clientes que regresan.";
+"insights.locked.feature.export" = "Reportes en PDF y CSV exportables para tu contabilidad.";
+"insights.locked.cta" = "Desbloquear con Pawtrackr Pro";
