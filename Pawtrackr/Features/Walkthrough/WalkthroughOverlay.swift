@@ -101,8 +101,20 @@ enum WalkthroughOverlayLayout {
             isCompactViewport ? 150 : 164
         }
 
+        /// The macOS root window draws content — and this overlay — under the
+        /// unified toolbar, where the safe-area-ignoring host reports a zero top
+        /// inset. Bubbles must stay clear of that chrome or they render over the
+        /// traffic lights and toolbar buttons.
+        var topChromeClearance: CGFloat {
+            #if os(macOS)
+            52
+            #else
+            0
+            #endif
+        }
+
         var safeTopPadding: CGFloat {
-            max(safeAreaInsets.top + 8, 16)
+            max(max(safeAreaInsets.top + 8, 16), topChromeClearance + 8)
         }
 
         var safeBottomPadding: CGFloat {
@@ -155,18 +167,27 @@ enum WalkthroughOverlayLayout {
 
         let placement = choosePlacement(for: step, spotlight: spotlight, metrics: metrics, gap: gap)
         let preferred = result(for: placement, spotlight: spotlight, metrics: metrics, gap: gap)
-        if !preferred.bubbleFrame.intersects(spotlight) {
+        if isUsable(preferred, spotlight: spotlight, metrics: metrics) {
             return preferred
         }
 
         for fallbackPlacement in fallbackPlacements(after: placement, spotlight: spotlight, metrics: metrics, gap: gap) {
             let fallback = result(for: fallbackPlacement, spotlight: spotlight, metrics: metrics, gap: gap)
-            if !fallback.bubbleFrame.intersects(spotlight) {
+            if isUsable(fallback, spotlight: spotlight, metrics: metrics) {
                 return fallback
             }
         }
 
         return preferred
+    }
+
+    /// A bubble is only worth anchoring if it leaves the spotlight clear AND has
+    /// room for its copy. A card shorter than `bubbleMinHeight` clips the body
+    /// down to bare chrome — a header and footer with no step text — which is the
+    /// "empty Back / Skip / Next strip" failure seen on wide macOS windows.
+    private static func isUsable(_ result: Result, spotlight: CGRect, metrics: Metrics) -> Bool {
+        guard !result.bubbleFrame.intersects(spotlight) else { return false }
+        return result.cardMaxHeight >= metrics.bubbleMinHeight
     }
 
     private static func spotlightRect(for targetRect: CGRect?, metrics: Metrics) -> CGRect? {
@@ -260,6 +281,11 @@ enum WalkthroughOverlayLayout {
         }
     }
 
+    /// Alternatives tried when the preferred placement is unusable. Roomy
+    /// vertical slots come first (larger side leading, so a cramped strip above a
+    /// top-anchored target can never beat a spacious area below it), then the
+    /// sides, then a centered card. Cramped vertical strips are never offered: a
+    /// card that cannot fit its copy is worse than the centered fallback.
     private static func fallbackPlacements(
         after placement: Placement,
         spotlight: CGRect,
@@ -270,8 +296,11 @@ enum WalkthroughOverlayLayout {
 
         let above = availableAbove(spotlight: spotlight, metrics: metrics, gap: gap)
         let below = availableBelow(spotlight: spotlight, metrics: metrics, gap: gap)
-        if placement != .above, above > 0 { placements.append(.above) }
-        if placement != .below, below > 0 { placements.append(.below) }
+        let vertical: [(Placement, CGFloat)] = [(.above, above), (.below, below)]
+        placements += vertical
+            .filter { $0.0 != placement && $0.1 >= metrics.bubbleMinHeight }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
 
         let trailingSpace = metrics.containerSize.width - spotlight.maxX - metrics.horizontalPadding
         if placement != .trailing,
@@ -285,6 +314,10 @@ enum WalkthroughOverlayLayout {
            metrics.containerSize.width >= 620,
            leadingSpace >= minimumSideBubbleWidth + arrowExtent + trailingGap {
             placements.append(.leading)
+        }
+
+        if placement != .center {
+            placements.append(.center)
         }
 
         return placements
@@ -326,7 +359,11 @@ enum WalkthroughOverlayLayout {
 
     private static func trailingResult(spotlight: CGRect, metrics: Metrics) -> Result {
         let safe = safeBounds(metrics: metrics)
-        let x = min(spotlight.maxX + trailingGap, metrics.containerSize.width * 0.55)
+        // Always sit fully beyond the spotlight's trailing edge. An earlier cap at
+        // 55% of the container width dragged the bubble back INSIDE wide spotlights
+        // (Dashboard "Today", Settings section cards on large macOS windows), which
+        // rejected the trailing placement and cascaded into a cramped fallback.
+        let x = spotlight.maxX + trailingGap
         let availableWidth = max(260, safe.maxX - x)
         let outerWidth = min(metrics.cardWidth + arrowExtent, availableWidth)
         let cardWidth = max(240, outerWidth - arrowExtent)
@@ -397,12 +434,11 @@ enum WalkthroughOverlayLayout {
     }
 
     private static func safeBounds(metrics: Metrics) -> CGRect {
-        CGRect(
-            x: max(0, metrics.safeAreaInsets.leading) + 8,
-            y: max(0, metrics.safeAreaInsets.top) + 8,
-            width: max(1, metrics.containerSize.width - max(0, metrics.safeAreaInsets.leading) - max(0, metrics.safeAreaInsets.trailing) - 16),
-            height: max(1, metrics.containerSize.height - max(0, metrics.safeAreaInsets.top) - max(0, metrics.safeAreaInsets.bottom) - 16)
-        )
+        let minX = max(0, metrics.safeAreaInsets.leading) + 8
+        let minY = max(max(0, metrics.safeAreaInsets.top) + 8, metrics.topChromeClearance + 8)
+        let maxX = metrics.containerSize.width - max(0, metrics.safeAreaInsets.trailing) - 8
+        let maxY = metrics.containerSize.height - max(0, metrics.safeAreaInsets.bottom) - 8
+        return CGRect(x: minX, y: minY, width: max(1, maxX - minX), height: max(1, maxY - minY))
     }
 }
 

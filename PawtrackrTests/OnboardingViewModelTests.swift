@@ -660,6 +660,64 @@ final class OnboardingViewModelTests: XCTestCase {
         let spotlight = try! XCTUnwrap(result.spotlight)
         XCTAssertNotEqual(result.placement, .center)
         XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+        XCTAssertGreaterThanOrEqual(result.cardMaxHeight, 250, "A wide settings card must not force the bubble into a strip too short for its copy.")
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughMacWideDashboardTodaySectionKeepsGuideReadable() {
+        // Step 2/38 regression (macOS, wide window): the full-width "Today" KPI
+        // section used to reject the trailing bubble (its x was capped back inside
+        // the spotlight), then fall back to a cramped strip above the section —
+        // clipping the copy down to a bare Back / Skip / Next bar under the toolbar.
+        let step = WalkthroughStep(
+            id: 1,
+            anchor: .dashKpis,
+            title: "Today at a glance",
+            directive: "Read your live day before opening any list.",
+            purpose: "In Progress, Completed, and Revenue update as you work."
+        )
+        let container = CGSize(width: 1_470, height: 860)
+        let target = CGRect(x: 285, y: 145, width: 650, height: 160)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+        XCTAssertNotEqual(result.placement, .center, "There is ample anchored room around the Today section.")
+        XCTAssertGreaterThanOrEqual(result.cardMaxHeight, 250, "Step copy must stay readable beside a wide dashboard section.")
+        XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
+    }
+
+    func testWalkthroughMacFullscreenSettingsSectionKeepsGuideReadable() {
+        // Steps 33–38 regression (macOS, fullscreen): wide Settings detail cards
+        // (Business, Security, iCloud, About) hit the same trailing-cap rejection
+        // and rendered an empty bubble pinned against the window toolbar.
+        let step = WalkthroughStep(
+            id: 32,
+            anchor: .setBusiness,
+            title: "Business profile",
+            directive: "Brand the workspace.",
+            purpose: "Set your business name, currency, and logo."
+        )
+        let container = CGSize(width: 1_512, height: 945)
+        let target = CGRect(x: 210, y: 130, width: 930, height: 115)
+
+        let result = WalkthroughOverlayLayout.layout(
+            step: step,
+            targetRect: target,
+            containerSize: container,
+            safeAreaInsets: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+        )
+
+        let spotlight = try! XCTUnwrap(result.spotlight)
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+        XCTAssertNotEqual(result.placement, .center, "Fullscreen leaves trailing room next to the settings card.")
+        XCTAssertGreaterThanOrEqual(result.cardMaxHeight, 250)
         XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
     }
 
