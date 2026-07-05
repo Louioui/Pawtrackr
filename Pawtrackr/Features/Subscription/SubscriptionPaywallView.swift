@@ -177,6 +177,7 @@ struct SubscriptionPaywallView: View {
             // A full-color button that silently ignores taps reads as broken;
             // dim it whenever a purchase can't actually start.
             .opacity(canStartPurchase || isProcessing ? 1 : 0.5)
+            .motionAnimation(MotionSystem.fastEaseOut, value: canStartPurchase || isProcessing)
             .padding(.horizontal, 24)
             .accessibilityIdentifier("subscriptionPaywall.subscribe")
 
@@ -191,6 +192,8 @@ struct SubscriptionPaywallView: View {
                     .font(.subheadline.weight(.semibold))
                 }
                 .disabled(isProcessing)
+                .buttonStyle(.plain)
+                .pressScaleStyle(hapticsEnabled: true)
                 .accessibilityIdentifier("subscriptionPaywall.retry")
             }
 

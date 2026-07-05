@@ -110,7 +110,7 @@ struct InsightsView: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: isProLocked)
+        .motionAnimation(MotionSystem.fastEaseOut, value: isProLocked)
         .privacyBlur()
     }
 
