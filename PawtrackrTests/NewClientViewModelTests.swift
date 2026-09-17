@@ -53,6 +53,25 @@ final class NewClientViewModelTests: XCTestCase {
         XCTAssertFalse(vm.isSaving)
     }
 
+    func testCreateClient_withDifferentExistingPhone_createsNewClient() async throws {
+        let existing = Client(firstName: "Existing", lastName: "Owner")
+        existing.setPhone("(323) 534-9990")
+        context.insert(existing)
+        try context.save()
+
+        let vm = NewClientViewModel(modelContext: context)
+        vm.first = "New"
+        vm.last = "Owner"
+        vm.phone = "(323) 817 5565"
+
+        let outcome = await vm.createClient()
+
+        XCTAssertEqual(outcome, .created, "A different valid phone number must not be flagged as a duplicate.")
+        XCTAssertNil(vm.appError)
+        XCTAssertNil(vm.validationError(for: .phone))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<Client>()).count, 2)
+    }
+
     func testCreateClient_emptyFirstName_failsWithError() async throws {
         let vm = NewClientViewModel(modelContext: context)
         vm.first = ""

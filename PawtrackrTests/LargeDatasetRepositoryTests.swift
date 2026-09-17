@@ -45,4 +45,34 @@ final class LargeDatasetRepositoryTests: XCTestCase {
         let inactiveClients = inactivePage.0.compactMap { context.model(for: $0) as? Client }
         XCTAssertFalse(inactiveClients.contains(where: \.hasActiveVisit))
     }
+
+    func testClientRepositoryFindClient_IgnoresDifferentPhoneAndMatchesEquivalentFormats() async throws {
+        let different = Client(firstName: "Different", lastName: "Owner")
+        different.setPhone("(323) 534-9990")
+        context.insert(different)
+
+        let imported = Client(firstName: "Imported", lastName: "Owner", phone: "3238175565")
+        context.insert(imported)
+        try context.save()
+
+        let repository = ClientRepository(modelContainer: container)
+
+        let uniqueLookup = try await repository.findClient(byPhone: "(323) 999-5565")
+        XCTAssertNil(uniqueLookup, "A different phone number should not return an existing client.")
+
+        let equivalentLookup = try await repository.findClient(byPhone: "(323) 817 5565")
+        XCTAssertEqual(equivalentLookup, imported.persistentModelID, "Duplicate detection should match raw imported numbers and formatted input.")
+    }
+
+    func testClientRepositorySearch_MatchesFormattedPhoneAgainstCanonicalStoredPhone() async throws {
+        let client = Client(firstName: "Phone", lastName: "Search")
+        client.setPhone("(323) 817-5565")
+        context.insert(client)
+        try context.save()
+
+        let repository = ClientRepository(modelContainer: container)
+        let (ids, _) = try await repository.fetchInactiveClients(query: "(323) 817 5565", limit: 20, offset: 0)
+
+        XCTAssertEqual(ids, [client.persistentModelID])
+    }
 }

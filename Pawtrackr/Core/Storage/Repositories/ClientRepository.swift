@@ -156,7 +156,6 @@ final actor ClientRepository: ClientRepositoryProtocol {
     private static func matches(client: Client, query: String) -> Bool {
         let fieldMap: [String: String?] = [
             "n": client.fullName,
-            "p": client.phone,
             "f": client.firstName,
             "l": client.lastName,
             "pet": (client.pets ?? []).map { $0.name }.joined(separator: " ")
@@ -168,6 +167,10 @@ final actor ClientRepository: ClientRepositoryProtocol {
             if parts.count == 2 {
                 let prefix = parts[0].lowercased()
                 let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                if prefix == "p" {
+                    return phoneMatches(client.phone, query: value)
+                }
+
                 let needle = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
 
                 if let fieldValue = fieldMap[prefix], let fieldValue = fieldValue {
@@ -178,22 +181,88 @@ final actor ClientRepository: ClientRepositoryProtocol {
             }
         }
 
-        return SearchEngine.matches(query, in: Array(fieldMap.values))
+        return SearchEngine.matches(query, in: Array(fieldMap.values)) || phoneMatches(client.phone, query: trimmed)
+    }
+
+    private static func phoneMatches(_ storedPhone: String?, query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let storedPhone, !storedPhone.isEmpty, !trimmed.isEmpty else { return false }
+
+        let storedTokens = phoneSearchTokens(for: storedPhone)
+        if SearchEngine.matches(trimmed, in: storedTokens) {
+            return true
+        }
+
+        let queryDigits = canonicalPhoneDigits(trimmed)
+        guard !queryDigits.isEmpty else { return false }
+        return storedTokens.contains { token in
+            canonicalPhoneDigits(token).contains(queryDigits)
+        }
+    }
+
+    private static func phoneSearchTokens(for value: String) -> [String] {
+        var tokens: [String] = [value]
+        if let e164 = PhoneUtils.toE164(value) {
+            tokens.append(e164)
+        }
+        if let display = PhoneUtils.display(value) {
+            tokens.append(display)
+        }
+
+        let digits = PhoneUtils.normalize(value)
+        if !digits.isEmpty {
+            tokens.append(digits)
+            if digits.count == 11, digits.first == "1" {
+                tokens.append(String(digits.dropFirst()))
+            }
+        }
+
+        var seen: Set<String> = []
+        return tokens.filter { seen.insert($0).inserted }
+    }
+
+    private static func canonicalPhoneDigits(_ value: String) -> String {
+        let digits = PhoneUtils.normalize(value)
+        if digits.count == 11, digits.first == "1" {
+            return String(digits.dropFirst())
+        }
+        return digits
     }
 
     func findClient(byPhone phone: String) async throws -> PersistentIdentifier? {
+        let lookupPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !lookupPhone.isEmpty else { return nil }
+
         // Try the input as-given first (handles canonical E.164 stored phones).
-        let exact = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == phone })
+        let exact = FetchDescriptor<Client>(predicate: #Predicate<Client> { client in
+            client.phone == lookupPhone
+        })
         if let hit = try modelContext.fetch(exact).first {
             return hit.persistentModelID
         }
+
         // Fall back to normalizing the lookup so we still match clients whose
         // stored phone couldn't be parsed into E.164 at write time.
-        guard let normalized = PhoneUtils.toE164(phone), normalized != phone else {
+        guard let normalized = PhoneUtils.toE164(lookupPhone) else {
             return nil
         }
-        let normalizedDescriptor = FetchDescriptor<Client>(predicate: #Predicate { $0.phone == normalized })
-        return try modelContext.fetch(normalizedDescriptor).first?.persistentModelID
+        if normalized != lookupPhone {
+            let normalizedDescriptor = FetchDescriptor<Client>(predicate: #Predicate<Client> { client in
+                client.phone == normalized
+            })
+            if let hit = try modelContext.fetch(normalizedDescriptor).first {
+                return hit.persistentModelID
+            }
+        }
+
+        let phonesDescriptor = FetchDescriptor<Client>(predicate: #Predicate<Client> { client in
+            client.phone != nil
+        })
+        let normalizedLookupDigits = Self.canonicalPhoneDigits(normalized)
+        return try modelContext.fetch(phonesDescriptor).first { client in
+            guard let storedPhone = client.phone else { return false }
+            return Self.canonicalPhoneDigits(storedPhone) == normalizedLookupDigits
+        }?.persistentModelID
     }
 
     func createClient(
