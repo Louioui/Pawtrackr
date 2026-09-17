@@ -65,6 +65,7 @@ final class EntitlementStore {
         subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr",
         category: "entitlement"
     )
+    private static let pausedAccessStatus: Status = .entitled(inTrial: false, expiration: nil)
 
     init() {}
 
@@ -74,6 +75,10 @@ final class EntitlementStore {
         guard listener == nil else { return }
         if let mockedStatus = AppRuntime.mockedEntitlementStatusForUITesting {
             status = mockedStatus
+            return
+        }
+        guard !AppRuntime.subscriptionSystemPaused else {
+            status = Self.pausedAccessStatus
             return
         }
         listener = Task { [weak self] in
@@ -100,6 +105,12 @@ final class EntitlementStore {
     func refresh() async {
         if let mockedStatus = AppRuntime.mockedEntitlementStatusForUITesting {
             status = mockedStatus
+            return
+        }
+        guard !AppRuntime.subscriptionSystemPaused else {
+            status = Self.pausedAccessStatus
+            expiryRefresh?.cancel()
+            expiryRefresh = nil
             return
         }
         var resolved: Status = .notEntitled
@@ -143,6 +154,10 @@ final class EntitlementStore {
     /// eligible). Returns `true` on a verified purchase. The paywall calls this.
     @discardableResult
     func purchaseMonthly() async throws -> Bool {
+        guard !AppRuntime.subscriptionSystemPaused else {
+            status = Self.pausedAccessStatus
+            return true
+        }
         guard let product = try await StoreKitTimeout.run({
             try await Product.products(for: [Self.monthlyProductID]).first
         }) else {
@@ -164,6 +179,10 @@ final class EntitlementStore {
 
     /// Restores entitlements — the paywall's "Restore Purchases" action (App Review requirement).
     func restore() async {
+        guard !AppRuntime.subscriptionSystemPaused else {
+            status = Self.pausedAccessStatus
+            return
+        }
         try? await AppStore.sync()
         await refresh()
     }

@@ -68,4 +68,26 @@ final class StoreKitTimeoutTests: XCTestCase {
     func testTimedOutIsUserPresentable() {
         XCTAssertFalse(StoreKitTimeout.TimedOut().localizedDescription.isEmpty)
     }
+
+    @MainActor
+    func testPausedSubscriptionSystemGrantsAccessWithoutStoreKit() async throws {
+        XCTAssertTrue(AppRuntime.subscriptionSystemPaused)
+
+        let store = EntitlementStore()
+        store.start()
+
+        XCTAssertTrue(store.isPremium)
+        XCTAssertFalse(store.isInTrial)
+        XCTAssertNil(store.expirationDate)
+
+        await store.refresh()
+        XCTAssertTrue(store.isPremium)
+
+        let purchaseResult = try await store.purchaseMonthly()
+        XCTAssertTrue(purchaseResult)
+        XCTAssertTrue(store.isPremium)
+
+        await store.restore()
+        XCTAssertTrue(store.isPremium)
+    }
 }

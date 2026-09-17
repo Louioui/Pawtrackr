@@ -18,6 +18,15 @@ enum AppRuntime {
     static let mockStoreKitUnknownArgument = "--mock-storekit-unknown"
     static let mockStoreKitNotEntitledArgument = "--mock-storekit-not-entitled"
     static let mockStoreKitPremiumArgument = "--mock-storekit-premium"
+
+    /// Release switch for keeping the StoreKit subscription code dormant.
+    ///
+    /// While true, normal app launches do not query StoreKit, do not show the
+    /// launch paywall, and treat Pro-gated app surfaces as available. Keep the
+    /// code in place so subscriptions can be re-enabled by flipping this to
+    /// false when the product is ready to ship.
+    static let subscriptionSystemPaused = true
+
     /// When set, the UI test seeder will skip inserting a BusinessConfig so the
     /// onboarding flow shows on launch — used to drive onboarding XCUI tests.
     static let onboardingTestArgument = "-pawtrackr-ui-onboarding"
