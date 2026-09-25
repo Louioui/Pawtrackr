@@ -268,11 +268,11 @@ final class BluetoothPeripheralManager: NSObject, @unchecked Sendable {
                 }
 
                 self.pendingConnectionContinuations[id] = continuation
-                let timeoutItem = DispatchWorkItem { [weak self, weak peripheral] in
+                let timeoutItem = DispatchWorkItem { [weak self, id] in
                     guard let self else { return }
                     guard let pending = self.pendingConnectionContinuations.removeValue(forKey: id) else { return }
                     self.pendingConnectionTimeouts[id] = nil
-                    if let peripheral {
+                    if let peripheral = self.discoveredPeripherals[id] {
                         self.centralManager?.cancelPeripheralConnection(peripheral)
                     }
                     pending.resume(throwing: PeripheralError.connectionTimedOut)
