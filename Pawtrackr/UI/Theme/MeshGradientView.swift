@@ -1,5 +1,5 @@
 import SwiftUI
-
+import Combine
 /// Adds a dynamic, interactive MeshGradient background to any view.
 struct MeshGradientView: View {
     @State private var time: Float = 0

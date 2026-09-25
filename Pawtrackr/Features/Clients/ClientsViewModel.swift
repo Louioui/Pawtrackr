@@ -2,9 +2,7 @@
 //  ClientsViewModel.swift
 //  Pawtrackr
 //
-//  Created by Assistant on 2025-08-28.
-//  Updated by Assistant on 2025-09-03
-//
+
 
 import SwiftUI
 import SwiftData
@@ -35,14 +33,20 @@ final class ClientsViewModel {
     }
 
     enum SortOption: String, CaseIterable {
-        case name = "Name"
+        case lastName = "Last Name"
+        case firstName = "First Name"
+        case petName = "Pet's Name"
         case lastVisit = "Last Visit"
         case newest = "Newest"
 
         var displayName: String {
             switch self {
-            case .name:
-                return NSLocalizedString("clients.sort.name", value: "Name", comment: "")
+            case .lastName:
+                return NSLocalizedString("clients.sort.last_name", value: "Last Name", comment: "")
+            case .firstName:
+                return NSLocalizedString("clients.sort.first_name", value: "First Name", comment: "")
+            case .petName:
+                return NSLocalizedString("clients.sort.pet_name", value: "Pet's Name", comment: "")
             case .lastVisit:
                 return NSLocalizedString("clients.sort.last_visit", value: "Last Visit", comment: "")
             case .newest:
@@ -64,7 +68,7 @@ final class ClientsViewModel {
         didSet { fetchClients() }
     }
 
-    var sortOption: SortOption = .name {
+    var sortOption: SortOption = .lastName {
         didSet { fetchClients() }
     }
 
@@ -93,11 +97,6 @@ final class ClientsViewModel {
         self.eventBus = eventBus
         fetchClients() // Initial fetch
 
-        // Listen for specific events that change the client list rather than
-        // every ModelContext.didSave. The previous implementation refetched
-        // on every save anywhere in the app — including unrelated saves
-        // (visit photos, dashboard reloads, summary updates) — causing
-        // 5–10× redundant fetches per checkout.
         let center = NotificationCenter.default
         let names: [Notification.Name] = [.clientDidCreate, .visitDidComplete, .visitDidStart]
         for name in names {
@@ -182,7 +181,7 @@ final class ClientsViewModel {
                 self.otherClients = sortedOthers
                 
                 self.fetchOffset = self.otherClients.count
-                self.canLoadMore = false // For now, we fetch up to 1000 and handle locally for speed with filters
+                self.canLoadMore = false
                 self.isLoadingMore = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -222,10 +221,38 @@ final class ClientsViewModel {
 
     private func sortClients(_ clients: [Client]) -> [Client] {
         switch sortOption {
-        case .name:
-            return clients.sorted { $0.fullName.localizedStandardCompare($1.fullName) == .orderedAscending }
+        case .lastName:
+            return clients.sorted { client1, client2 in
+                let comparison = client1.lastName.localizedStandardCompare(client2.lastName)
+                if comparison == .orderedSame {
+                    return client1.firstName.localizedStandardCompare(client2.firstName) == .orderedAscending
+                }
+                return comparison == .orderedAscending
+            }
+            
+        case .firstName:
+            return clients.sorted { client1, client2 in
+                let comparison = client1.firstName.localizedStandardCompare(client2.firstName)
+                if comparison == .orderedSame {
+                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
+                }
+                return comparison == .orderedAscending
+            }
+            
+        case .petName:
+            return clients.sorted { client1, client2 in
+                let pet1 = client1.pets?.first?.name ?? ""
+                let pet2 = client2.pets?.first?.name ?? ""
+                let comparison = pet1.localizedStandardCompare(pet2)
+                if comparison == .orderedSame {
+                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
+                }
+                return comparison == .orderedAscending
+            }
+            
         case .lastVisit:
             return clients.sorted { ($0.lastVisitDate ?? .distantPast) > ($1.lastVisitDate ?? .distantPast) }
+            
         case .newest:
             return clients.sorted { $0.createdAt > $1.createdAt }
         }

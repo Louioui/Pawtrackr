@@ -2,9 +2,6 @@
 //  ClientsView.swift
 //  Pawtrackr
 //
-//  Client Center: now powered by a ViewModel for performant, debounced searching.
-//  - Live timers are now handled efficiently by TimelineView inside ClientCard.
-//  - Navigation to detail view is now implemented.
 //
 
 import SwiftUI
@@ -73,11 +70,6 @@ struct ClientsView: View {
                     dismissButton: .default(Text(NSLocalizedString("common.ok", comment: "")))
                 )
             }
-            // Modern alert API — stacking two deprecated `Alert`-returning
-            // `.alert(item:)` modifiers on the same view makes SwiftUI
-            // silently drop one (the trash-button confirmation never shows).
-            // The error alert above keeps the deprecated API since only ONE
-            // deprecated alert in the chain is safe.
             .alert(
                 clientToDeleteTitle,
                 isPresented: clientToDeletePresented,
@@ -132,8 +124,6 @@ struct ClientsView: View {
                 }
             }
             .refreshable {
-                // Hop to MainActor to call the isolated VM, then run cloud sync
-                // concurrently with whatever local refresh the VM kicks off.
                 await MainActor.run { viewModel?.fetchClients() }
                 await CloudKitMonitor.shared.forceSync()
             }
@@ -253,10 +243,11 @@ struct ClientsView: View {
 
     private var sortingMenu: some View {
         Menu {
-            Picker(NSLocalizedString("clients.sort_by", value: "Sort By", comment: ""), selection: sortOptionBinding) {
-                ForEach(ClientsViewModel.SortOption.allCases, id: \.self) { option in
+            ForEach(ClientsViewModel.SortOption.allCases, id: \.self) { option in
+                Button {
+                    viewModel?.sortOption = option
+                } label: {
                     Label(option.displayName, systemImage: sortIcon(for: option))
-                        .tag(option)
                 }
             }
         } label: {
@@ -267,7 +258,9 @@ struct ClientsView: View {
 
     private func sortIcon(for option: ClientsViewModel.SortOption) -> String {
         switch option {
-        case .name: return "textformat"
+        case .lastName: return "textformat.abc"
+        case .firstName: return "textformat"
+        case .petName: return "pawprint"
         case .lastVisit: return "clock"
         case .newest: return "calendar.badge.plus"
         }
@@ -275,7 +268,7 @@ struct ClientsView: View {
 
     private var sortOptionBinding: Binding<ClientsViewModel.SortOption> {
         Binding(
-            get: { viewModel?.sortOption ?? .name },
+            get: { viewModel?.sortOption ?? .lastName },
             set: { viewModel?.sortOption = $0 }
         )
     }
@@ -497,10 +490,6 @@ struct ClientsView: View {
     }
 
     private func focusSearch() {
-        // Always consume the pending-focus token here so the `.focusClientSearch`
-        // notification path (which calls focusSearch() directly while the view is
-        // already visible) can't leave a stale token that a later onAppear would
-        // re-trigger focus from.
         UserDefaults.standard.removeObject(forKey: AppMenuCommand.pendingClientSearchFocusKey)
         isSearchPresented = true
         #if os(macOS)
@@ -519,12 +508,6 @@ struct ClientsView: View {
             set: { viewModel?.appError = $0 }
         )
     }
-
-    // MARK: - Delete-client alert helpers
-    //
-    // Extracted out of the body so SourceKit doesn't time out on the
-    // long modifier chain. The alert is wired via these four computed
-    // pieces instead of inline closures.
 
     private var clientToDeleteTitle: String {
         guard let client = clientToDelete else { return "" }
@@ -568,7 +551,6 @@ struct ClientsView: View {
         }
     }
 
-    // MARK: - Notifications UI
     private struct NotificationItem: Identifiable {
         let id = UUID()
         let title: String
