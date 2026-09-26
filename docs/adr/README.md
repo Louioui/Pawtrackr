@@ -31,6 +31,7 @@ Every RTF claim was checked against the source. The reconciliation:
 | RTF claim / proposal | Reality in the codebase | Consequence |
 |---|---|---|
 | "You need a `SchemaMigrationPlan`" | **Already exists** — `Core/Storage/Migrations.swift` (`PawtrackrSchemaV1`, `PawtrackrMigrationPlan`), wired into both container builders with `migrationPlan:`. | Alarm is largely stale; see [ADR-0003](0003-swiftdata-migration-discipline.md). |
+| *(2026-09-25 update)* | The staged plan shipped in 1.0.2 matched no 1.0.1 store (134504) and users reset their data away. Removed. | See [ADR-0004](0004-inferred-lightweight-migration.md). |
 | "SwiftData silently wipes the file" | This app **fails safe**: `PawtrackrApp.swift:96` try/falls back to local-only; never destructive. | A missing V2 → *throws / appears empty*, not "disk erased." |
 | Put `loyaltyPoints` + `LoyaltyHistory` on **Pet** | Loyalty already ships on **Client** — `Client.swift:39 var loyaltyPoints`, `Visit.swift:26 var loyaltyPointsChange`, `LoyaltyEngine`/`LoyaltyService`, accrued in `VisitRepository.applyPoints`. | Pet-based rewrite **rejected**; see [ADR-0002](0002-loyalty-system-evolution.md). |
 | Configurable "points per dollar" | Not present — `LoyaltyEngine.calculatePoints` is **hardcoded 1 pt/$1**. No `LoyaltyConfig`, catalog, or history. | Config/catalog/history are *additions*, gated as premium. |

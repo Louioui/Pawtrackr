@@ -1,6 +1,6 @@
 # ADR-0003: SwiftData migration discipline for structural changes (V2 + stage + CloudKit deploy)
 
-**Status:** Proposed
+**Status:** Superseded in part by [ADR-0004](0004-inferred-lightweight-migration.md) (2026-09-25) — the staged `SchemaMigrationPlan` steps below caused the 1.0.2 data-loss incident. The CloudKit production-deploy and upgrade-test steps still apply.
 **Date:** 2026-07-03
 **Deciders:** Luis (solo developer)
 

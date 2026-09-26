@@ -82,40 +82,87 @@ enum StoreFileMigration {
             let backupDirectory = appSupportURL.appendingPathComponent("PreMigrationBackup-\(safeBuild)-\(stamp)", isDirectory: true)
             try fileManager.createDirectory(at: backupDirectory, withIntermediateDirectories: true)
 
-            var copied = 0
-            for url in storeFiles {
-                try fileManager.copyItem(at: url, to: backupDirectory.appendingPathComponent(url.lastPathComponent))
-                copied += 1
+            do {
+                var copied = 0
+                for url in storeFiles {
+                    try fileManager.copyItem(at: url, to: backupDirectory.appendingPathComponent(url.lastPathComponent))
+                    copied += 1
+                }
+
+                // Photos and logos (@Attribute(.externalStorage)) live beside the
+                // store; a backup without them restores rows with missing images.
+                var copiedSupport: [String] = []
+                for storeName in [currentStoreName, legacyStoreName] {
+                    let supportName = StoreBackupRestore.supportDirectoryName(forStoreNamed: storeName)
+                    let supportURL = appSupportURL.appendingPathComponent(supportName, isDirectory: true)
+                    guard fileManager.fileExists(atPath: supportURL.path) else { continue }
+                    try fileManager.copyItem(at: supportURL, to: backupDirectory.appendingPathComponent(supportName, isDirectory: true))
+                    copiedSupport.append(supportName)
+                }
+
+                let manifest = [
+                    "Pawtrackr automatic pre-update backup",
+                    "Created: \(Date().formatted(date: .complete, time: .standard))",
+                    "App build: \(buildIdentifier)",
+                    "Copied files:",
+                    (storeFiles.map(\.lastPathComponent) + copiedSupport).map { "- \($0)" }.joined(separator: "\n")
+                ].joined(separator: "\n")
+                try manifest.write(
+                    to: backupDirectory.appendingPathComponent("README.txt"),
+                    atomically: true,
+                    encoding: .utf8
+                )
+
+                userDefaults.set(buildIdentifier, forKey: preMigrationBackupBuildKey)
+                log.info("Created pre-update store backup with \(copied, privacy: .public) file(s).")
+                prunePreUpdateBackups(in: appSupportURL, fileManager: fileManager)
+                return BackupOutcome(copiedFiles: copied, backupDirectory: backupDirectory)
+            } catch {
+                // Our own half-written copy: remove it so every later launch
+                // doesn't leave another partial folder behind.
+                try? fileManager.removeItem(at: backupDirectory)
+                throw error
             }
-
-            let manifest = [
-                "Pawtrackr automatic pre-migration backup",
-                "Created: \(Date().formatted(date: .complete, time: .standard))",
-                "App build: \(buildIdentifier)",
-                "Copied files:",
-                storeFiles.map { "- \($0.lastPathComponent)" }.joined(separator: "\n")
-            ].joined(separator: "\n")
-            try manifest.write(
-                to: backupDirectory.appendingPathComponent("README.txt"),
-                atomically: true,
-                encoding: .utf8
-            )
-
-            userDefaults.set(buildIdentifier, forKey: preMigrationBackupBuildKey)
-            log.info("Created pre-migration store backup with \(copied, privacy: .public) file(s).")
-            return BackupOutcome(copiedFiles: copied, backupDirectory: backupDirectory)
         } catch {
-            log.error("Pre-migration store backup failed: \(error.localizedDescription, privacy: .public)")
+            log.error("Pre-update store backup failed: \(error.localizedDescription, privacy: .public)")
             return BackupOutcome(copiedFiles: 0, backupDirectory: nil)
         }
     }
 
-    /// Moves data from SwiftData's old unnamed `default.store` into the named
+    /// Keeps the two newest pre-update backups plus the one with the most
+    /// clients, so a run of builds that each copied an already-empty store can't
+    /// push the last good copy out. Only `PreMigrationBackup-*` folders are ever
+    /// pruned; reset and restore archives are left for the user.
+    static func prunePreUpdateBackups(
+        in appSupportURL: URL,
+        keepNewest: Int = 2,
+        fileManager: FileManager = .default
+    ) {
+        let backups = StoreBackupRestore.candidates(appSupportURL: appSupportURL, fileManager: fileManager)
+            .filter { $0.kind == .preUpdate }
+        guard backups.count > keepNewest else { return }
+
+        var keep = Set(backups.prefix(keepNewest).map(\.directoryName))
+        if let fullest = backups.max(by: { $0.clientCount < $1.clientCount }) {
+            keep.insert(fullest.directoryName)
+        }
+        for backup in backups where !keep.contains(backup.directoryName) {
+            do {
+                try fileManager.removeItem(at: appSupportURL.appendingPathComponent(backup.directoryName, isDirectory: true))
+                log.info("Pruned old pre-update backup \(backup.directoryName, privacy: .public).")
+            } catch {
+                log.error("Couldn't prune \(backup.directoryName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Moves data from SwiftData's unnamed `default.store` into the named
     /// `Pawtrackr.store` before SwiftData can create a fresh empty database.
     ///
-    /// Some builds used the default store name, while current builds configure a
-    /// named store. Updating the app preserves both files, but SwiftData only
-    /// opens the configured name, which makes existing clients appear erased.
+    /// A safeguard only: the store has been named "Pawtrackr" since May 2026,
+    /// before any App Store build, so no shipped user has a `default.store`.
+    /// The 1.0.2 data loss was a migration failure, not a store rename (see
+    /// `PawtrackrSchema` in Migrations.swift).
     @discardableResult
     static func migrateLegacyDefaultStoreIfNeeded(
         appSupportURL overrideAppSupportURL: URL? = nil,
@@ -253,15 +300,7 @@ enum StoreFileMigration {
         guard FileManager.default.fileExists(atPath: storeURL.path) else { return false }
 
         #if canImport(SQLite3)
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(storeURL.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK,
-              let database
-        else {
-            if let database {
-                sqlite3_close(database)
-            }
-            return nil
-        }
+        guard let database = openReadOnlyDatabase(at: storeURL) else { return nil }
         defer { sqlite3_close(database) }
 
         for table in operationalTables where tableExists(table, in: database) {
@@ -274,19 +313,14 @@ enum StoreFileMigration {
         #endif
     }
 
+    /// Number of client rows in a store file, read with SQLite directly so it
+    /// works on stores SwiftData can't (or mustn't yet) open. `nil` means the
+    /// file exists but couldn't be read.
     static func clientRowCount(in storeURL: URL) -> Int? {
         guard FileManager.default.fileExists(atPath: storeURL.path) else { return 0 }
 
         #if canImport(SQLite3)
-        var database: OpaquePointer?
-        guard sqlite3_open_v2(storeURL.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK,
-              let database
-        else {
-            if let database {
-                sqlite3_close(database)
-            }
-            return nil
-        }
+        guard let database = openReadOnlyDatabase(at: storeURL) else { return nil }
         defer { sqlite3_close(database) }
 
         guard tableExists("ZCLIENT", in: database) else { return 0 }
@@ -296,7 +330,35 @@ enum StoreFileMigration {
         #endif
     }
 
-    private static var appBuildIdentifier: String {
+    /// The `uuid` of every client in a store file (SwiftData keeps UUIDs as
+    /// 16-byte blobs). `nil` means the file couldn't be read.
+    static func clientUUIDs(in storeURL: URL) -> Set<UUID>? {
+        guard FileManager.default.fileExists(atPath: storeURL.path) else { return [] }
+
+        #if canImport(SQLite3)
+        guard let database = openReadOnlyDatabase(at: storeURL) else { return nil }
+        defer { sqlite3_close(database) }
+        guard tableExists("ZCLIENT", in: database) else { return [] }
+
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_prepare_v2(database, "SELECT ZUUID FROM ZCLIENT", -1, &statement, nil) == SQLITE_OK else {
+            return nil
+        }
+        var uuids = Set<UUID>()
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard sqlite3_column_bytes(statement, 0) == 16, let bytes = sqlite3_column_blob(statement, 0) else { continue }
+            var raw: uuid_t = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            withUnsafeMutableBytes(of: &raw) { $0.copyMemory(from: UnsafeRawBufferPointer(start: bytes, count: 16)) }
+            uuids.insert(UUID(uuid: raw))
+        }
+        return uuids
+        #else
+        return nil
+        #endif
+    }
+
+    static var appBuildIdentifier: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = info?["CFBundleVersion"] as? String ?? "unknown"
@@ -305,6 +367,50 @@ enum StoreFileMigration {
 
     #if canImport(SQLite3)
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+    /// Opens a store read-only without creating or changing any file.
+    ///
+    /// Core Data stores are in WAL mode, and a plain read-only open of a WAL
+    /// database fails (SQLITE_CANTOPEN) when its `-shm` file is missing, as
+    /// with a lone copied `.store`. In that case, if there's no WAL content
+    /// that could be missed, fall back to `immutable=1`, which reads the main
+    /// file without touching the WAL machinery.
+    private static func openReadOnlyDatabase(at storeURL: URL) -> OpaquePointer? {
+        if let database = openReadable(storeURL.path, flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX) {
+            return database
+        }
+
+        let walSize = (try? FileManager.default.attributesOfItem(atPath: storeURL.path + "-wal")[.size] as? Int) ?? 0
+        guard walSize == 0,
+              let encodedPath = storeURL.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        else {
+            return nil
+        }
+        return openReadable(
+            "file:\(encodedPath)?immutable=1",
+            flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI
+        )
+    }
+
+    /// Opens `filename` and proves it can be read: `sqlite3_open_v2` succeeds
+    /// lazily, and it's the first real read that fails.
+    private static func openReadable(_ filename: String, flags: Int32) -> OpaquePointer? {
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(filename, &database, flags, nil) == SQLITE_OK, let database else {
+            sqlite3_close(database)
+            return nil
+        }
+
+        var statement: OpaquePointer?
+        let readable = sqlite3_prepare_v2(database, "SELECT COUNT(*) FROM sqlite_master", -1, &statement, nil) == SQLITE_OK
+            && sqlite3_step(statement) == SQLITE_ROW
+        sqlite3_finalize(statement)
+        guard readable else {
+            sqlite3_close(database)
+            return nil
+        }
+        return database
+    }
 
     private static func tableExists(_ table: String, in database: OpaquePointer) -> Bool {
         var statement: OpaquePointer?

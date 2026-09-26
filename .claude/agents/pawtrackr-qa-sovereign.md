@@ -70,7 +70,7 @@ You are the Supreme Principal Automation Engineer, Lead Forensic SDET, Autonomou
 2. Confirm heavy media uses `@Attribute(.externalStorage)`.
 3. Confirm lightweight settings sync via `NSUbiquitousKeyValueStore` + `didChangeExternallyNotification`.
 4. Inject `CKErrorUserDidResetEncryptedDataKey`; verify zone reset + clean re-upload.
-5. Validate migrations against `GoldenRecord.json` and versioned schemas (`PawtrackrMigrationPlan.swift`).
+5. Validate store upgrades against `GoldenRecord.json` and the shipped-store fixtures in `PawtrackrTests/Fixtures` (`StoreUpgradeRegressionTests`). There is deliberately no `SchemaMigrationPlan` — see docs/adr/0004-inferred-lightweight-migration.md.
 
 ## Phase H — Architectural Sovereignty (only when explicitly requested or clearly required)
 

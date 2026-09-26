@@ -13,6 +13,10 @@
 
 - `DataStoreService` is the central SwiftData access facade. The production initializer accepts an existing `ModelContainer`; test and QualityControl code can use the `inMemory` initializer.
 - Background fetches must create a detached `ModelContext` from the shared `ModelContainer`; UI-bound fetches remain on the main actor.
+- The store opens WITHOUT a SwiftData `SchemaMigrationPlan` (ADR-0004). 1.0.2 shipped a staged plan built from live model classes, every 1.0.1 store failed with 134504, and users reset their clients away. Keep model changes additive (new models, optional/defaulted properties, `@Attribute(originalName:)` renames); CI fails if `migrationPlan:` reappears.
+- Every release adds its store to `PawtrackrTests/Fixtures` (see `StoreFixtures.md`); `StoreUpgradeRegressionTests` must open all of them. Before shipping, install the previous App Store build, add data, then install the new build over it without deleting.
+- Store-file work (scheduled restore, per-build backup, legacy move) runs only in `PawtrackrApp.init`, before any container opens. Nothing deletes a store: resets and restores move files into `RecoveryBackup-*` / `PreRestoreBackup-*`, which `StoreBackupRestore` can bring back.
+- `DataStoreRecoveryView` must never make a destructive action the primary one or promise that iCloud will restore data.
 
 ## Verification Notes
 

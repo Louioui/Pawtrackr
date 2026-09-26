@@ -95,7 +95,15 @@ final class OnboardingViewModel {
     
     private let draftKey = "com.pawtrackr.onboarding.draft"
 
+    /// True while init assigns initial values and restores the draft. SwiftUI
+    /// builds a new OnboardingViewModel every time RootView re-renders (the
+    /// State's initial value is evaluated on each OnboardingView init), and an
+    /// init that wrote UserDefaults re-invalidated RootView's @AppStorage, which
+    /// re-rendered RootView: an endless loop that froze onboarding on a blank screen.
+    @ObservationIgnored private var isInitializing = true
+
     private func saveDraft() {
+        guard !isInitializing else { return }
         let draft: [String: Any] = [
             "name": name, "email": email, "phone": phone, "address": address,
             "pin": pin, "confirmPin": confirmPin, "pinSkipped": pinSkipped,
@@ -104,6 +112,12 @@ final class OnboardingViewModel {
             "autoLockAfterInactivityEnabled": autoLockAfterInactivityEnabled,
             "currency": currentCurrency
         ]
+        // Unchanged drafts aren't rewritten: every UserDefaults write invalidates
+        // @AppStorage-backed views, so a no-op write is never free.
+        if let saved = UserDefaults.standard.dictionary(forKey: draftKey),
+           NSDictionary(dictionary: saved).isEqual(to: draft) {
+            return
+        }
         UserDefaults.standard.set(draft, forKey: draftKey)
     }
 
@@ -140,6 +154,7 @@ final class OnboardingViewModel {
         } else {
             loadDraft()
         }
+        isInitializing = false
     }
 
     func bindIfNeeded(modelContext: ModelContext, appSettings: AppSettings) {

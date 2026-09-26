@@ -2,81 +2,46 @@
 //  Migrations.swift
 //  Pawtrackr
 //
-//  Schema migration plan and one-time data seeding/coercion.
+//  Store schema (model list) and one-time data seeding/coercion.
 //
 
 import Foundation
 import SwiftData
 import OSLog
 
-// MARK: - Schema Versions
+// MARK: - Schema
 //
-// Schemas are versioned so existing users' on-disk stores can be migrated
-// safely when we change models. The pattern:
+// The store is opened WITHOUT a SwiftData staged migration plan. Upgrades rely
+// on SwiftData's automatic (inferred) lightweight migration, which works from
+// any shipped build because Core Data keeps a copy of each store's model inside
+// the SQLite file (`Z_MODELCACHE`). See docs/adr/0004-inferred-lightweight-migration.md.
 //
-//   1. Each shipped schema is a frozen `VersionedSchema` enum (V1, V2, ...).
-//   2. The newest one is aliased to `PawtrackrSchema` so the rest of the
-//      codebase always points at "current".
-//   3. `PawtrackrMigrationPlan.schemas` lists every version that has ever
-//      shipped, in order.
-//   4. For each transition between versions, add a `MigrationStage` —
-//      `.lightweight` for purely additive changes, `.custom` for renames /
-//      type changes / data backfills.
+// Why not a staged plan: staged migration only opens a store whose on-disk model
+// exactly matches one of the plan's versioned schemas. 1.0.2 shipped a plan that
+// listed the live model classes (and had edited the already-shipped V1), so no
+// 1.0.1 store matched. Every upgrading user hit NSCocoaErrorDomain 134504
+// ("Cannot use staged migration with an unknown model version") and landed on
+// the recovery screen. The store is CloudKit-mirrored, and CloudKit only accepts
+// additive changes anyway, so a staged plan bought nothing but that failure.
 //
-// When you change a model:
-//   - If the change is a property addition with a default → still V1
-//     compatible (lightweight). Bump the version's patch number.
-//   - If the change renames a property, deletes one, or changes a type →
-//     define V2 below, change the typealias, and add a custom stage.
-//
-// IMPORTANT: never delete a version once it has shipped to users; it must
-// remain in the chain so their store can climb forward to the latest.
+// When you change a model, keep the change additive:
+//   - New @Model types, new properties that are optional or have a default,
+//     new optional relationships. Rename with `@Attribute(originalName:)`.
+//     Never delete or retype a property that has shipped.
+//   - Deploy the CloudKit schema to Production before the App Store release.
+//   - `StoreUpgradeRegressionTests` opens real stores captured from shipped
+//     builds. When a release ships, add its store to PawtrackrTests/Fixtures.
 
-/// Always points at the most recent shipped schema. The rest of the app
-/// references this name; only the migration plan distinguishes versions.
-typealias PawtrackrSchema = PawtrackrSchemaV2
-
-enum PawtrackrSchemaV1: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 0, 7)
-
+/// Every model in the store. The rest of the app builds its `Schema` from this.
+enum PawtrackrSchema {
     static var models: [any PersistentModel.Type] {
         [
             Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, User.self,
             DaySummary.self, ServiceDaySummary.self, CategoryDaySummary.self, ClientInsightSummary.self,
             CheckoutTransaction.self, EmergencyContact.self, BusinessConfig.self, MessageTemplate.self,
             InventoryItem.self, InventoryTransaction.self, DeviceMetadata.self, PresenceRecord.self,
-            LoyaltyLedgerEntry.self
-        ]
-    }
-}
-
-enum PawtrackrSchemaV2: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 1, 0)
-
-    static var models: [any PersistentModel.Type] {
-        PawtrackrSchemaV1.models + [
-            LoyaltyConfig.self,
-            LoyaltyRewardTemplate.self
-        ]
-    }
-}
-
-// MARK: - Migration Plan
-
-enum PawtrackrMigrationPlan: SchemaMigrationPlan {
-    /// Ordered list of every schema we've ever shipped. Append new versions;
-    /// never remove or reorder.
-    static var schemas: [any VersionedSchema.Type] {
-        [PawtrackrSchemaV1.self, PawtrackrSchemaV2.self]
-    }
-
-    /// Transitions between adjacent schema versions.
-    static var stages: [MigrationStage] {
-        [
-            .lightweight(
-                fromVersion: PawtrackrSchemaV1.self,
-                toVersion: PawtrackrSchemaV2.self
-            )
+            // Added after 1.0.1 (July 2026). Additive, so inferred migration adds their tables.
+            LoyaltyLedgerEntry.self, LoyaltyConfig.self, LoyaltyRewardTemplate.self
         ]
     }
 }

@@ -273,6 +273,7 @@ private struct SettingsDetailView: View {
     @Binding var showWipeConfirm: Bool
     @Binding var showDiagnostics: Bool
     @State private var showWipeBlockedAlert = false
+    @State private var storeRestoreClientCount: Int?
     @AppStorage(DataSafetyMonitor.suspectedDataLossKey) private var dataLossSuspected = false
 
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
@@ -313,6 +314,12 @@ private struct SettingsDetailView: View {
         .sheet(isPresented: $showChangePIN) {
             ChangePINSheet(isPresented: $showChangePIN)
                 .environment(appSettings)
+        }
+        .sheet(isPresented: Binding(
+            get: { storeRestoreClientCount != nil },
+            set: { if !$0 { storeRestoreClientCount = nil } }
+        )) {
+            StoreRestoreView(currentClientCount: storeRestoreClientCount ?? 0)
         }
         .sheet(isPresented: $showDiagnostics) {
             NavigationStack {
@@ -410,7 +417,9 @@ private struct SettingsDetailView: View {
         case .preferences: PreferencesSectionView(appSettings: appSettings)
         case .loyalty: LoyaltyManagementView()
         case .security: SecuritySectionView(appSettings: appSettings, showChangePIN: $showChangePIN)
-        case .dataExport: DataExportSectionView(modelContext: modelContext)
+        case .dataExport: DataExportSectionView(modelContext: modelContext) {
+            storeRestoreClientCount = (try? modelContext.fetchCount(FetchDescriptor<Client>())) ?? 0
+        }
         case .icloud: ICloudSectionView(showDiagnostics: $showDiagnostics)
         case .help: HelpSectionView(modelContext: modelContext)
         case .devices: DevicesHealthView()
@@ -429,6 +438,7 @@ private struct SettingsDetailView: View {
 
 private struct DataExportSectionView: View {
     let modelContext: ModelContext
+    let onRestoreBackup: () -> Void
     @State private var isExportingClients = false
     @State private var isExportingVisits = false
     @State private var exportDocument: ExportDocument?
@@ -451,6 +461,11 @@ private struct DataExportSectionView: View {
             }
             .accessibilityIdentifier("settings.exportVisits")
             .disabled(isExportingClients || isExportingVisits)
+
+            Button(action: onRestoreBackup) {
+                Label(settingsLocalized("settings.restore_backup", value: "Restore from On-Device Backup"), systemImage: "clock.arrow.circlepath")
+            }
+            .accessibilityIdentifier("settings.restoreBackup")
 
             if isExportingClients || isExportingVisits {
                 ProgressView(settingsLocalized("settings.export.preparing", value: "Preparing export..."))

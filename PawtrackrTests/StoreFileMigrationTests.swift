@@ -94,6 +94,46 @@ final class StoreFileMigrationTests: XCTestCase {
         )
     }
 
+    func testPreUpdateBackupIncludesExternalStorageFolder() throws {
+        let suiteName = "StoreFileMigrationTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        try "current-data".write(to: tempDirectory.appendingPathComponent("Pawtrackr.store"), atomically: true, encoding: .utf8)
+        let blobs = tempDirectory.appendingPathComponent(".Pawtrackr_SUPPORT/_EXTERNAL_DATA", isDirectory: true)
+        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+        try Data("photo".utf8).write(to: blobs.appendingPathComponent("PHOTO-UUID"))
+
+        let outcome = StoreFileMigration.backupStoresForCurrentBuildIfNeeded(appSupportURL: tempDirectory, userDefaults: defaults)
+
+        let backupDirectory = try XCTUnwrap(outcome.backupDirectory)
+        let copiedBlob = backupDirectory.appendingPathComponent(".Pawtrackr_SUPPORT/_EXTERNAL_DATA/PHOTO-UUID")
+        XCTAssertEqual(try String(contentsOf: copiedBlob, encoding: .utf8), "photo")
+    }
+
+    func testPruneKeepsNewestTwoAndTheFullestPreUpdateBackup() throws {
+        let fileManager = FileManager.default
+        func backup(_ name: String, clients: Int, daysAgo: Double) throws {
+            let directory = tempDirectory.appendingPathComponent(name, isDirectory: true)
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            try makeSQLiteStore(at: directory.appendingPathComponent("Pawtrackr.store"), clientRows: clients)
+            try fileManager.setAttributes([.creationDate: Date(timeIntervalSinceNow: -daysAgo * 86_400)], ofItemAtPath: directory.path)
+        }
+        try backup("PreMigrationBackup-oldest-full", clients: 10, daysAgo: 40)
+        try backup("PreMigrationBackup-old", clients: 2, daysAgo: 30)
+        try backup("PreMigrationBackup-newer", clients: 1, daysAgo: 20)
+        try backup("PreMigrationBackup-newest", clients: 0, daysAgo: 10)
+        try backup("RecoveryBackup-ancient", clients: 3, daysAgo: 90)
+
+        StoreFileMigration.prunePreUpdateBackups(in: tempDirectory)
+
+        let remaining = Set(try fileManager.contentsOfDirectory(atPath: tempDirectory.path))
+        XCTAssertEqual(
+            remaining,
+            ["PreMigrationBackup-oldest-full", "PreMigrationBackup-newer", "PreMigrationBackup-newest", "RecoveryBackup-ancient"]
+        )
+    }
+
     private func makeSQLiteStore(at url: URL, clientRows: Int) throws {
         #if canImport(SQLite3)
         var database: OpaquePointer?

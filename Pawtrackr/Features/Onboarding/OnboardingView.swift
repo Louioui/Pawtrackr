@@ -26,6 +26,11 @@ struct OnboardingView: View {
     @State private var welcomeAppeared = false
     @State private var welcomeBreathing = false
     @State private var ctaPulse = false
+    /// Clients left on this device by an earlier store (e.g. the 1.0.2
+    /// recovery-screen reset). Offered here because the onboarding cover hides
+    /// the banner and Settings, and finishing setup would seed sample data first.
+    @State private var restoreOffer: StoreBackupRestore.Offer?
+    @State private var showStoreRestore = false
     
     // Explicitly define PlatformImage based on platform to ensure availability
     #if canImport(UIKit)
@@ -95,6 +100,9 @@ struct OnboardingView: View {
             viewModel.bindIfNeeded(modelContext: modelContext, appSettings: appSettings)
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.85), value: viewModel.currentStep)
+        .sheet(isPresented: $showStoreRestore) {
+            StoreRestoreView(currentClientCount: 0)
+        }
         .alert(NSLocalizedString("onboarding.error.setup_title", value: "Setup Error", comment: ""), isPresented: Binding(
             get: { viewModel.saveError != nil },
             set: { if !$0 { viewModel.saveError = nil } }
@@ -413,6 +421,12 @@ struct OnboardingView: View {
                 .offset(y: welcomeAppeared ? 0 : 12)
                 .animation(.spring(response: 0.45, dampingFraction: 0.8).delay(0.05), value: welcomeAppeared)
 
+                // Above the feature list so it's visible without scrolling: for
+                // someone whose clients vanished, this is the whole point.
+                if let restoreOffer {
+                    restoreFoundCard(restoreOffer)
+                }
+
                 VStack(alignment: .leading, spacing: DS.Spacing.lg) {
                     featureRow(index: 0, icon: "cloud.fill", title: NSLocalizedString("onboarding.feature.icloud.title", value: "iCloud Sync", comment: ""), subtitle: NSLocalizedString("onboarding.feature.icloud.subtitle", value: "Your data stays safe and synced across all your devices.", comment: ""))
                     featureRow(index: 1, icon: "lock.fill", title: NSLocalizedString("onboarding.feature.privacy.title", value: "Privacy First", comment: ""), subtitle: NSLocalizedString("onboarding.feature.privacy.subtitle", value: "End-to-end security with local-first storage and biometric locking.", comment: ""))
@@ -425,6 +439,15 @@ struct OnboardingView: View {
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
+        .task {
+            guard restoreOffer == nil else { return }
+            restoreOffer = await Task.detached(priority: .userInitiated) {
+                // Onboarding means there's no set-up store yet, so any backup's
+                // clients are all missing. Dismissals don't apply: the banner
+                // that records them was never reachable from here.
+                StoreBackupRestore.offer(from: StoreBackupRestore.candidates(), liveClientUUIDs: [], dismissed: [])
+            }.value
+        }
         .onAppear {
             welcomeAppeared = true
             if !welcomeBreathing {
@@ -440,6 +463,38 @@ struct OnboardingView: View {
         }
     }
     
+    private func restoreFoundCard(_ offer: StoreBackupRestore.Offer) -> some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Label(
+                NSLocalizedString("onboarding.restore.title", value: "Your clients are still on this device", comment: ""),
+                systemImage: "clock.arrow.circlepath"
+            )
+            .font(.headline)
+            Text(String(
+                format: NSLocalizedString(
+                    "onboarding.restore.message_fmt",
+                    value: "A backup here has %d clients. Restore them instead of starting over.",
+                    comment: ""
+                ),
+                offer.missingClientCount
+            ))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Button {
+                showStoreRestore = true
+            } label: {
+                Text(NSLocalizedString("onboarding.restore.action", value: "Restore Clients", comment: ""))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("onboarding.restoreClients")
+        }
+        .padding(DS.Spacing.lg)
+        .background(DS.ColorToken.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, DS.Spacing.xl)
+    }
+
     private var businessProfileStep: some View {
         ScrollView {
             VStack(spacing: DS.Spacing.xl) {

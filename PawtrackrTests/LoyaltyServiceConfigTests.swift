@@ -9,11 +9,7 @@ final class LoyaltyServiceConfigTests: XCTestCase {
     override func setUpWithError() throws {
         let schema = Schema(PawtrackrSchema.models)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-        container = try ModelContainer(
-            for: schema,
-            migrationPlan: PawtrackrMigrationPlan.self,
-            configurations: [config]
-        )
+        container = try ModelContainer(for: schema, configurations: [config])
         DataMigrations.ensureLoyaltyDefaults(in: container.mainContext)
     }
 

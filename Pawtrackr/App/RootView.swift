@@ -25,9 +25,8 @@ struct RootView: View {
     @State private var showPrivacyScreen = false
     @State private var showWhatIsNew = false
     @State private var didDismissLaunchSubscriptionPaywall = false
-    @AppStorage(DataSafetyMonitor.suspectedDataLossKey) private var dataLossSuspected = false
-    @AppStorage(DataSafetyMonitor.suspectedDataLossMessageKey) private var dataLossMessage = ""
-    @AppStorage(DataSafetyMonitor.suspectedDataLossRecoveryDetailKey) private var dataLossRecoveryDetail = ""
+    @State private var storeRestoreRequest: StoreRestoreRequest?
+    @State private var restoreResultMessage: String?
 
     var body: some View {
         ZStack {
@@ -71,6 +70,23 @@ struct RootView: View {
                 acknowledgeWhatIsNew()
             }
         }
+        .sheet(item: $storeRestoreRequest) { request in
+            StoreRestoreView(currentClientCount: request.currentClientCount)
+        }
+        .alert(
+            AppLocalization.localized("store_restore.result.title", value: "Restore"),
+            isPresented: Binding(
+                get: { restoreResultMessage != nil },
+                set: { if !$0 { restoreResultMessage = nil } }
+            )
+        ) {
+            Button(AppLocalization.localized("common.ok", value: "OK"), role: .cancel) {
+                // Held back while the result alert was up; SwiftUI presents one at a time.
+                evaluateWhatIsNew()
+            }
+        } message: {
+            Text(restoreResultMessage ?? "")
+        }
         .adaptiveCover(isPresented: $showOnboarding) {
             OnboardingView {
                 showOnboarding = false
@@ -81,7 +97,10 @@ struct RootView: View {
         }
         .task {
             UbiquitousSettingsStore.shared.start(appSettings: appSettings)
-            evaluateWhatIsNew()
+            consumeRestoreResult()
+            if restoreResultMessage == nil {
+                evaluateWhatIsNew()
+            }
             // Show the first-sync gate exactly once: when iCloud is signed in
             // and the user has never seen a successful import yet. It auto-times
             // out after 30s so a stuck account never blocks the user.
@@ -146,11 +165,7 @@ struct RootView: View {
             VStack(spacing: 0) {
                 CloudKitAccountBanner()
                     .animation(.easeInOut(duration: 0.25), value: cloudKitMonitor.accountState)
-                DataSafetyBanner(
-                    isPresented: dataLossSuspected,
-                    message: dataLossMessage,
-                    recoveryDetail: dataLossRecoveryDetail
-                )
+                DataSafetyBannerHost(onReviewRestore: presentStoreRestore)
                 ContentView()
             }
             if showFirstSyncGate {
@@ -234,6 +249,47 @@ struct RootView: View {
         }
     }
 
+    private func presentStoreRestore() {
+        let clientCount = (try? modelContext.fetchCount(FetchDescriptor<Client>())) ?? 0
+        storeRestoreRequest = StoreRestoreRequest(currentClientCount: clientCount)
+    }
+
+    /// A restore scheduled last session ran in PawtrackrApp.init, before this
+    /// view existed; tell the user how it went, once.
+    private func consumeRestoreResult() {
+        let defaults = UserDefaults.standard
+        if let raw = defaults.string(forKey: StoreBackupRestore.lastRestoreFailureKey) {
+            defaults.removeObject(forKey: StoreBackupRestore.lastRestoreFailureKey)
+            switch StoreBackupRestore.FailureReason(rawValue: raw) ?? .failed {
+            case .expired:
+                restoreResultMessage = AppLocalization.localized(
+                    "store_restore.result.expired",
+                    value: "The restore you started earlier wasn't finished, so nothing was changed. Start it again from Restore Clients and reopen Pawtrackr right away."
+                )
+            case .unopenable:
+                restoreResultMessage = AppLocalization.localized(
+                    "store_restore.result.unopenable",
+                    value: "That backup couldn't be opened, so Pawtrackr put your previous data back. Nothing was lost."
+                )
+            case .failed:
+                restoreResultMessage = AppLocalization.localized(
+                    "store_restore.result.failed",
+                    value: "Pawtrackr couldn't restore the backup, and nothing was changed."
+                )
+            }
+        } else if defaults.object(forKey: StoreBackupRestore.lastRestoredClientCountKey) != nil {
+            let count = defaults.integer(forKey: StoreBackupRestore.lastRestoredClientCountKey)
+            defaults.removeObject(forKey: StoreBackupRestore.lastRestoredClientCountKey)
+            restoreResultMessage = String(
+                format: AppLocalization.localized(
+                    "store_restore.result.restored_kept_fmt",
+                    value: "Restored %d clients from the backup on this device. What was here before is kept as “Before your last restore” in Restore Clients."
+                ),
+                count
+            )
+        }
+    }
+
     private func dismissLaunchSubscriptionPaywall() {
         didDismissLaunchSubscriptionPaywall = true
         evaluateWhatIsNew()
@@ -253,5 +309,52 @@ struct RootView: View {
 
     private var shouldBypassLockGate: Bool {
         onboardingIncomplete || showOnboarding || bypassLockForCurrentSession
+    }
+}
+
+/// Identifies one presentation of the restore sheet with the live client count
+/// captured at tap time.
+private struct StoreRestoreRequest: Identifiable {
+    let id = UUID()
+    let currentClientCount: Int
+}
+
+/// Owns the data-safety @AppStorage reads so a UserDefaults write re-renders
+/// only this banner. When RootView held them, every write rebuilt the whole
+/// shell and the onboarding cover — including CloudKitMonitor's writes on each
+/// sync event — and a view model that wrote its draft while being built looped
+/// forever on a blank screen.
+private struct DataSafetyBannerHost: View {
+    let onReviewRestore: () -> Void
+
+    @AppStorage(DataSafetyMonitor.suspectedDataLossKey) private var dataLossSuspected = false
+    @AppStorage(DataSafetyMonitor.suspectedDataLossMessageKey) private var dataLossMessage = ""
+    @AppStorage(StoreBackupRestore.offerDirectoryKey) private var restoreOfferDirectory = ""
+    @AppStorage(StoreBackupRestore.offerClientCountKey) private var restoreOfferClientCount = 0
+    @AppStorage(StoreBackupRestore.scheduledRestoreKey) private var scheduledRestoreDirectory = ""
+    /// Dismissing the empty-store warning only hides it for this session: the
+    /// evidence (and the Start Fresh lock) must survive a stray tap.
+    @State private var dataLossBannerHiddenThisSession = false
+
+    var body: some View {
+        DataSafetyBanner(
+            isRestorePending: !scheduledRestoreDirectory.isEmpty,
+            isDataLossSuspected: dataLossSuspected && !dataLossBannerHiddenThisSession,
+            message: dataLossMessage,
+            restoreOfferClientCount: restoreOfferDirectory.isEmpty ? 0 : restoreOfferClientCount,
+            onReviewRestore: onReviewRestore,
+            onCancelPendingRestore: { StoreBackupRestore.cancelScheduledRestore() },
+            onDismiss: dismiss
+        )
+    }
+
+    private func dismiss() {
+        withAnimation {
+            if !restoreOfferDirectory.isEmpty {
+                StoreBackupRestore.dismissOffer(directoryName: restoreOfferDirectory)
+            } else {
+                dataLossBannerHiddenThisSession = true
+            }
+        }
     }
 }

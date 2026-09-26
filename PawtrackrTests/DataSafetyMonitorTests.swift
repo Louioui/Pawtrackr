@@ -58,18 +58,83 @@ final class DataSafetyMonitorTests: XCTestCase {
         )
     }
 
-    func testPartialDropWithRecoveryCandidateFlagsDataLossWarning() throws {
+    func testPartialDropIsTreatedAsHealthy() throws {
+        // A deleted client or a sync that's still importing lowers the count.
+        // Flagging that used to lock Start Fresh behind a banner that never cleared.
         defaults.set(4, forKey: DataSafetyMonitor.lastKnownClientCountKey)
         context.insert(Client(firstName: "New", lastName: "Client"))
         try context.save()
-        try makeSQLiteStore(at: tempDirectory.appendingPathComponent("default.store"), clientRows: 4)
+        try makeBackup(named: "PreMigrationBackup-1.0.3-4-2026-10-01T10-00-00Z", clientRows: 4)
+
+        DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: tempDirectory, userDefaults: defaults)
+
+        XCTAssertFalse(defaults.bool(forKey: DataSafetyMonitor.suspectedDataLossKey))
+        XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 1)
+        XCTAssertNil(defaults.string(forKey: StoreBackupRestore.offerDirectoryKey))
+    }
+
+    func testDropToZeroNamesTheBackupThatStillHasClients() throws {
+        defaults.set(4, forKey: DataSafetyMonitor.lastKnownClientCountKey)
+        try makeBackup(named: "PreMigrationBackup-1.0.3-4-2026-10-01T10-00-00Z", clientRows: 4)
 
         DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: tempDirectory, userDefaults: defaults)
 
         XCTAssertTrue(defaults.bool(forKey: DataSafetyMonitor.suspectedDataLossKey))
-        XCTAssertTrue((defaults.string(forKey: DataSafetyMonitor.suspectedDataLossMessageKey) ?? "").contains("only 1 client"))
-        XCTAssertTrue((defaults.string(forKey: DataSafetyMonitor.suspectedDataLossRecoveryDetailKey) ?? "").contains("4 client row"))
-        XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 4)
+        XCTAssertEqual(
+            defaults.string(forKey: DataSafetyMonitor.suspectedDataLossRecoveryDetailKey),
+            "PreMigrationBackup-1.0.3-4-2026-10-01T10-00-00Z"
+        )
+        XCTAssertEqual(defaults.integer(forKey: StoreBackupRestore.offerClientCountKey), 4)
+    }
+
+    func testResetBackupIsOfferedWithoutAnyRecordedClientCount() throws {
+        // 1.0.1 and 1.0.2 never wrote lastKnownClientCount, so a user who lost
+        // clients to the 1.0.2 recovery screen reads 0 here. The backup alone
+        // has to be enough to surface the restore.
+        context.insert(Client(firstName: "Nina", lastName: "Afterreset"))
+        try context.save()
+        try makeBackup(named: "RecoveryBackup-2026-09-26T02-50-49Z", clientRows: 3)
+
+        DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: tempDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: StoreBackupRestore.offerDirectoryKey), "RecoveryBackup-2026-09-26T02-50-49Z")
+        XCTAssertEqual(defaults.integer(forKey: StoreBackupRestore.offerClientCountKey), 3)
+        XCTAssertFalse(defaults.bool(forKey: DataSafetyMonitor.suspectedDataLossKey))
+    }
+
+    func testResetBackupIsNotOfferedOnceItsClientsAreBack() throws {
+        // Users whose sync worked got their clients back from iCloud after the
+        // reset; the backup's clients are all in the live store already.
+        let returned = Client(firstName: "Ava", lastName: "Martinez")
+        context.insert(returned)
+        try context.save()
+        let directory = tempDirectory.appendingPathComponent("RecoveryBackup-2026-09-26T02-50-49Z", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try makeSQLiteStore(at: directory.appendingPathComponent("Pawtrackr.store"), clientRows: 0)
+        try insertClientUUID(returned.uuid, into: directory.appendingPathComponent("Pawtrackr.store"))
+
+        DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: tempDirectory, userDefaults: defaults)
+
+        XCTAssertNil(defaults.string(forKey: StoreBackupRestore.offerDirectoryKey))
+    }
+
+    private func makeBackup(named name: String, clientRows: Int) throws {
+        let directory = tempDirectory.appendingPathComponent(name, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try makeSQLiteStore(at: directory.appendingPathComponent("Pawtrackr.store"), clientRows: clientRows)
+    }
+
+    private func insertClientUUID(_ uuid: UUID, into url: URL) throws {
+        #if canImport(SQLite3)
+        var database: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(url.path, &database), SQLITE_OK)
+        guard let database else { return XCTFail("Failed to open \(url.lastPathComponent)") }
+        defer { sqlite3_close(database) }
+        let hex = withUnsafeBytes(of: uuid.uuid) { $0.map { String(format: "%02X", $0) }.joined() }
+        XCTAssertEqual(sqlite3_exec(database, "INSERT INTO ZCLIENT (Z_PK, ZUUID) VALUES (100, X'\(hex)')", nil, nil, nil), SQLITE_OK)
+        #else
+        throw XCTSkip("SQLite3 is unavailable on this platform")
+        #endif
     }
 
     private func makeSQLiteStore(at url: URL, clientRows: Int) throws {
@@ -82,9 +147,9 @@ final class DataSafetyMonitorTests: XCTestCase {
         }
         defer { sqlite3_close(database) }
 
-        XCTAssertEqual(sqlite3_exec(database, "CREATE TABLE ZCLIENT (Z_PK INTEGER PRIMARY KEY)", nil, nil, nil), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(database, "CREATE TABLE ZCLIENT (Z_PK INTEGER PRIMARY KEY, ZUUID BLOB)", nil, nil, nil), SQLITE_OK)
         for index in 0..<clientRows {
-            XCTAssertEqual(sqlite3_exec(database, "INSERT INTO ZCLIENT (Z_PK) VALUES (\(index + 1))", nil, nil, nil), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(database, "INSERT INTO ZCLIENT (Z_PK, ZUUID) VALUES (\(index + 1), randomblob(16))", nil, nil, nil), SQLITE_OK)
         }
         #else
         throw XCTSkip("SQLite3 is unavailable on this platform")

@@ -81,7 +81,24 @@ struct PawtrackrApp: App {
 
         let schema = Schema(PawtrackrSchema.models)
         let containerName = inMemory ? "PawtrackrTests" : "Pawtrackr"
+        var didRestoreThisLaunch = false
+        var restoreArchiveName: String?
         if !inMemory {
+            // A restore the user confirmed last session. It has to swap files
+            // before anything opens the store, and before the per-build backup
+            // copies whatever is live.
+            switch StoreBackupRestore.performScheduledRestoreIfNeeded() {
+            case .restored(let directoryName, let clientCount, let archivedDirectoryName):
+                logger.notice("Restored \(clientCount) clients from \(directoryName, privacy: .public); previous store archived as \(archivedDirectoryName ?? "none", privacy: .public).")
+                CloudKitMonitor.resetPersistedSyncStateForLocalStoreReset()
+                didRestoreThisLaunch = true
+                restoreArchiveName = archivedDirectoryName
+            case .failed(let reason):
+                logger.error("Scheduled store restore didn't run: \(reason.rawValue, privacy: .public)")
+            case .none:
+                break
+            }
+
             let backupOutcome = StoreFileMigration.backupStoresForCurrentBuildIfNeeded()
             if backupOutcome.copiedFiles > 0 {
                 logger.info("Pre-migration SwiftData store backup completed: copied=\(backupOutcome.copiedFiles)")
@@ -104,23 +121,22 @@ struct PawtrackrApp: App {
         // Try CloudKit first (the normal path). If init throws, retry with
         // .none so the user lands in a working local-only app instead of the
         // recovery screen. A banner elsewhere informs them sync is off.
-        var loaded: ModelContainer?
-        var fellBackToLocalOnly = false
-        var firstError: Error?
+        func openStore() -> (container: ModelContainer?, fellBackToLocalOnly: Bool, firstError: Error?) {
+            do {
+                let primaryConfig = ModelConfiguration(
+                    containerName,
+                    schema: schema,
+                    isStoredInMemoryOnly: inMemory,
+                    cloudKitDatabase: wantsCloudKit ? .automatic : .none
+                )
+                return (try ModelContainer(for: schema, configurations: [primaryConfig]), false, nil)
+            } catch {
+                logger.critical("ModelContainer init failed (cloudkit=\(wantsCloudKit)): \(error.localizedDescription, privacy: .public)")
+                guard wantsCloudKit else {
+                    UserDefaults.standard.set(error.localizedDescription, forKey: PawtrackrApp.lastInitErrorKey)
+                    return (nil, false, error)
+                }
 
-        do {
-            let primaryConfig = ModelConfiguration(
-                containerName,
-                schema: schema,
-                isStoredInMemoryOnly: inMemory,
-                cloudKitDatabase: wantsCloudKit ? .automatic : .none
-            )
-            loaded = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self, configurations: [primaryConfig])
-        } catch {
-            firstError = error
-            logger.critical("ModelContainer init failed (cloudkit=\(wantsCloudKit)): \(error.localizedDescription, privacy: .public)")
-
-            if wantsCloudKit {
                 logger.warning("Falling back to local-only ModelContainer so the user can still open the app.")
                 do {
                     let fallbackConfig = ModelConfiguration(
@@ -129,15 +145,22 @@ struct PawtrackrApp: App {
                         isStoredInMemoryOnly: false,
                         cloudKitDatabase: .none
                     )
-                    loaded = try ModelContainer(for: schema, migrationPlan: PawtrackrMigrationPlan.self, configurations: [fallbackConfig])
-                    fellBackToLocalOnly = true
-                } catch {
-                    logger.critical("Local-only fallback also failed: \(error.localizedDescription, privacy: .public)")
-                    UserDefaults.standard.set("CloudKit init failed: \(firstError?.localizedDescription ?? "unknown"). Local-only fallback also failed: \(error.localizedDescription)", forKey: PawtrackrApp.lastInitErrorKey)
+                    return (try ModelContainer(for: schema, configurations: [fallbackConfig]), true, error)
+                } catch let fallbackError {
+                    logger.critical("Local-only fallback also failed: \(fallbackError.localizedDescription, privacy: .public)")
+                    UserDefaults.standard.set("CloudKit init failed: \(error.localizedDescription). Local-only fallback also failed: \(fallbackError.localizedDescription)", forKey: PawtrackrApp.lastInitErrorKey)
+                    return (nil, false, error)
                 }
-            } else {
-                UserDefaults.standard.set(error.localizedDescription, forKey: PawtrackrApp.lastInitErrorKey)
             }
+        }
+
+        var (loaded, fellBackToLocalOnly, firstError) = openStore()
+        if loaded == nil, didRestoreThisLaunch {
+            // The backup we just swapped in can't be opened. Put back the store
+            // that worked before instead of stranding the user on the recovery screen.
+            logger.critical("Restored store failed to open; rolling the restore back.")
+            StoreBackupRestore.rollBackRestore(archivedDirectoryName: restoreArchiveName)
+            (loaded, fellBackToLocalOnly, firstError) = openStore()
         }
 
         if let localContainer = loaded {

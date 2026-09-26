@@ -26,24 +26,16 @@ public final class DataStoreService {
         do {
             let schema = Schema(PawtrackrSchema.models)
             let usesCloudKit = !inMemory && AppRuntime.allowsICloudSync
-            
-            // Intercept and rename old files before SwiftData generates a new empty one
-            if !inMemory {
-                StoreFileMigration.backupStoresForCurrentBuildIfNeeded()
-                StoreFileMigration.migrateLegacyDefaultStoreIfNeeded()
-            }
-            
+            // Store-file work (backup, restore, legacy move) belongs to
+            // PawtrackrApp.init alone: it must run once, before any container
+            // in the process opens the store.
             let config = ModelConfiguration(
                 inMemory ? "PawtrackrTests" : "Pawtrackr",
                 schema: schema,
                 isStoredInMemoryOnly: inMemory,
                 cloudKitDatabase: usesCloudKit ? .automatic : .none
             )
-            let container = try ModelContainer(
-                for: schema,
-                migrationPlan: inMemory ? nil : PawtrackrMigrationPlan.self,
-                configurations: [config]
-            )
+            let container = try ModelContainer(for: schema, configurations: [config])
             self.init(container: container)
         } catch {
             Logger.dataStore.critical("Failed to create DataStoreService container: \(error.localizedDescription, privacy: .public)")

@@ -27,6 +27,32 @@ final class OnboardingViewModelTests: XCTestCase {
         try super.tearDownWithError()
     }
 
+    func testBuildingTheViewModelDoesNotWriteTheDraft() {
+        // SwiftUI builds a new OnboardingViewModel on every RootView render.
+        // An init that wrote UserDefaults re-invalidated @AppStorage-backed
+        // views and looped forever on a blank onboarding screen.
+        let draftKey = "com.pawtrackr.onboarding.draft"
+        UserDefaults.standard.removeObject(forKey: draftKey)
+        defer { UserDefaults.standard.removeObject(forKey: draftKey) }
+
+        _ = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
+        XCTAssertNil(UserDefaults.standard.object(forKey: draftKey))
+
+        let saved: [String: Any] = ["name": "Bark & Bathe", "currency": "€"]
+        UserDefaults.standard.set(saved, forKey: draftKey)
+        let restored = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
+        XCTAssertEqual(restored.name, "Bark & Bathe")
+        XCTAssertEqual(
+            UserDefaults.standard.dictionary(forKey: draftKey) as NSDictionary?,
+            saved as NSDictionary,
+            "Restoring a draft must not rewrite it."
+        )
+
+        restored.name = "Bark & Bathe Co."
+        XCTAssertEqual(UserDefaults.standard.dictionary(forKey: draftKey)?["name"] as? String, "Bark & Bathe Co.",
+                       "Edits after init still save.")
+    }
+
     func testRegionalStepAllowsBlankEmailButRejectsInvalidEmail() {
         let viewModel = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
         viewModel.currentStep = .regional

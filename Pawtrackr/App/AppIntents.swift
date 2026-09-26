@@ -159,11 +159,7 @@ enum IntentContainerProvider {
             isStoredInMemoryOnly: false,
             cloudKitDatabase: AppRuntime.allowsICloudSync ? .automatic : .none
         )
-        let container = try ModelContainer(
-            for: schema,
-            migrationPlan: PawtrackrMigrationPlan.self,
-            configurations: [config]
-        )
+        let container = try ModelContainer(for: schema, configurations: [config])
         cached = container
         return container
     }
