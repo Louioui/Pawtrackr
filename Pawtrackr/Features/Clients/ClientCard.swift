@@ -17,6 +17,7 @@ struct ClientCard: View {
     /// off the in-memory relationship goes stale after a cross-context checkout,
     /// so prefer the caller's query-derived value when available.
     var isInProgressOverride: Bool? = nil
+    var displaysLastNameFirst: Bool = false
 
     private var visualState: VisualState {
         VisualState(client: client, isInProgressOverride: isInProgressOverride)
@@ -25,6 +26,12 @@ struct ClientCard: View {
     private var isAggressive: Bool { visualState.showsAggressiveWarning }
     private var needsAttention: Bool { visualState.needsAttention }
     private var hasMissingInfo: Bool { client.phone == nil || client.email == nil }
+    private var displayName: String { client.displayName(lastNameFirst: displaysLastNameFirst) }
+    private var sortedPets: [Pet] {
+        (client.pets ?? []).sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
     
     @State private var pulse: Bool = false
 
@@ -57,14 +64,14 @@ struct ClientCard: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             if let namespace {
-                AvatarView(.client(name: client.fullName), size: .sm)
+                AvatarView(.client(name: displayName), size: .sm)
                     .matchedGeometryEffect(id: "avatar-\(client.id)", in: namespace)
             } else {
-                AvatarView(.client(name: client.fullName), size: .sm)
+                AvatarView(.client(name: displayName), size: .sm)
             }
             
             VStack(alignment: .leading, spacing: 0) {
-                Text(client.fullName)
+                Text(displayName)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
                     .id("name-\(client.id)")
@@ -115,24 +122,50 @@ struct ClientCard: View {
     }
     
     private var petsInfo: some View {
-        HStack(alignment: .center) {
-            HStack(spacing: -12) { // Tighter stacking for avatars
-                ForEach((client.pets ?? []).prefix(3)) { pet in
-                    AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name), size: .sm, ringWidth: 2)
+        let pets = sortedPets
+
+        return HStack(alignment: .top, spacing: 0) {
+            if pets.isEmpty {
+                Text(NSLocalizedString("clients.no_pets", value: "No pets", comment: ""))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            } else {
+                FlowLayout(spacing: 6, rowSpacing: 6) {
+                    ForEach(pets) { pet in
+                        PetNameLabel(pet: pet)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 1)
             }
-            
-            Text((client.pets ?? []).map(\.name).joined(separator: ", "))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.leading, 16)
-            
+
             Spacer()
         }
     }
 
 
+}
+
+private struct PetNameLabel: View {
+    let pet: Pet
+
+    var body: some View {
+        HStack(spacing: 5) {
+            SpeciesAndGenderIcons.genderDot(for: pet.gender, size: 8, isDecorative: true)
+            Text(pet.name)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 150, alignment: .leading)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 7)
+        .background(DS.ColorToken.gender(pet.gender).opacity(0.10), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(pet.name), \(pet.gender.displayName)")
+    }
 }
 
 extension ClientCard {

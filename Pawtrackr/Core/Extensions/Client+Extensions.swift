@@ -9,6 +9,16 @@ import Foundation
 
 // IMPROVEMENT: Centralize reusable business logic on the model itself.
 extension Client {
+    /// Display name that can follow the current client-list sort mode.
+    func displayName(lastNameFirst: Bool = false) -> String {
+        let first = firstName.trimmed
+        let last = lastName.trimmed
+        let parts = lastNameFirst ? [last, first] : [first, last]
+        return parts
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
     /// A boolean indicating if any of the client's pets are currently checked in for a visit.
     var hasActiveVisit: Bool {
         (pets ?? []).contains { $0.isCheckedIn }

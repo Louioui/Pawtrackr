@@ -31,6 +31,7 @@ final class ClientDetailViewModel {
 
     // MARK: - Outputs
     var pets: [Pet] = []
+    var emergencyContacts: [EmergencyContact] = []
     var recentVisits: [Visit] = []
     /// Maps a pet's persistent ID → its currently-open visit's persistent ID.
     ///
@@ -69,6 +70,7 @@ final class ClientDetailViewModel {
         self.eventBus      = eventBus
         self.visitRepository = VisitRepository(modelContext: modelContext, eventBus: eventBus)
         self.pets          = client.pets ?? []
+        self.emergencyContacts = []
         self.currentLimit  = max(1, initialLimit)
         let clientID = client.persistentModelID
         let token = NotificationCenter.default.addObserver(
@@ -91,6 +93,7 @@ final class ClientDetailViewModel {
             }
         }
         self.visitCompleteObserver = CDVMObserverToken(token)
+        refreshEmergencyContacts()
         refreshActiveVisits()
         refreshRecentVisits()
     }
@@ -114,6 +117,41 @@ final class ClientDetailViewModel {
     func refreshPets() {
         pets = client.pets ?? []
         refreshActiveVisits()
+    }
+
+    func refreshEmergencyContacts() {
+        let relationshipContacts = client.emergencyContacts ?? []
+        let relationshipContactIDs = Set(relationshipContacts.map(\.uuid))
+        let clientID = client.persistentModelID
+
+        var descriptor = FetchDescriptor<EmergencyContact>(
+            sortBy: [
+                SortDescriptor(\.name),
+                SortDescriptor(\.phone)
+            ]
+        )
+        descriptor.fetchLimit = 500
+
+        do {
+            let fetched = try modelContext.fetch(descriptor).filter { contact in
+                contact.owner?.persistentModelID == clientID ||
+                relationshipContactIDs.contains(contact.uuid)
+            }
+            emergencyContacts = Self.sortedEmergencyContacts(fetched)
+        } catch {
+            Logger.clientDetail.error("Failed to fetch emergency contacts: \(String(describing: error))")
+            emergencyContacts = Self.sortedEmergencyContacts(relationshipContacts)
+        }
+    }
+
+    private static func sortedEmergencyContacts(_ contacts: [EmergencyContact]) -> [EmergencyContact] {
+        contacts.sorted { lhs, rhs in
+            let nameComparison = lhs.name.localizedStandardCompare(rhs.name)
+            if nameComparison == .orderedSame {
+                return lhs.phone.localizedStandardCompare(rhs.phone) == .orderedAscending
+            }
+            return nameComparison == .orderedAscending
+        }
     }
 
     /// Re-derive which of this client's pets have an open visit by querying the

@@ -295,11 +295,14 @@ final actor ClientRepository: ClientRepositoryProtocol {
             modelContext.insert(pet)
         }
         
+        var emergencyContacts: [EmergencyContact] = []
         for cd in contacts {
             let contact = EmergencyContact(name: cd.name, relation: cd.relation, phone: cd.phone)
             contact.owner = client
             modelContext.insert(contact)
+            emergencyContacts.append(contact)
         }
+        client.emergencyContacts = emergencyContacts
         
         try modelContext.save()
         let clientUUID = client.uuid

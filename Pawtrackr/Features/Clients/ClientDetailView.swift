@@ -205,7 +205,13 @@ struct ClientDetailView: View {
             .onChange(of: (vm.client.pets ?? []).count) { _, _ in
                 vm.refreshPets()
             }
-            .task { vm.refreshRecentVisits() }
+            .onChange(of: (vm.client.emergencyContacts ?? []).count) { _, _ in
+                vm.refreshEmergencyContacts()
+            }
+            .task {
+                vm.refreshEmergencyContacts()
+                vm.refreshRecentVisits()
+            }
     }
 
     #if os(macOS)
@@ -401,7 +407,7 @@ struct ClientDetailView: View {
                     ownerHeader(client: vm.client)
                         .walkthroughTarget(.cdOwner)
                     clientSafetyBanner(client: vm.client)
-                    emergencyContactsCard(client: vm.client)
+                    emergencyContactsCard(contacts: vm.emergencyContacts)
                         .walkthroughTarget(.cdEmergency)
                     notesCard(client: vm.client)
                     loyaltySection(client: vm.client)
@@ -691,7 +697,7 @@ struct ClientDetailView: View {
     }
 
     @ViewBuilder
-    private func emergencyContactsCard(client: Client) -> some View {
+    private func emergencyContactsCard(contacts: [EmergencyContact]) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
@@ -705,10 +711,10 @@ struct ClientDetailView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(NSLocalizedString("client_detail.add_contact", comment: ""))
                 }
-                if (client.emergencyContacts ?? []).isEmpty {
+                if contacts.isEmpty {
                     Text(NSLocalizedString("client_detail.no_emergency_contacts", comment: "")).font(.footnote).foregroundStyle(.secondary)
                 } else {
-                    ForEach(client.emergencyContacts ?? [], id: \.uuid) { c in
+                    ForEach(contacts, id: \.uuid) { c in
                         HStack(spacing: 10) {
                             Image(systemName: "phone.fill").foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 2) {
@@ -745,7 +751,7 @@ struct ClientDetailView: View {
             Logger.clientDetailView.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting emergency contact")
         }
-        viewModel?.refreshRecentVisits()
+        viewModel?.refreshEmergencyContacts()
     }
 
     private func addOrUpdateContact() {
@@ -772,12 +778,16 @@ struct ClientDetailView: View {
             let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164)
             ec.owner = vm.client
             modelContext.insert(ec)
-            vm.client.emergencyContacts = (vm.client.emergencyContacts ?? []) + [ec]
+            if !(vm.client.emergencyContacts ?? []).contains(where: { $0.uuid == ec.uuid }) {
+                vm.client.emergencyContacts = (vm.client.emergencyContacts ?? []) + [ec]
+            }
         }
         do {
             try modelContext.save()
             CloudKitMonitor.shared.recordLocalChange("Saved emergency contact")
+            vm.refreshEmergencyContacts()
             showContactEditor = false
+            editingContact = nil
             newContactName = ""; newContactRelation = ""; newContactPhone = ""
         } catch {
             Logger.clientDetailView.error("Failed to save contact: \(error.localizedDescription, privacy: .public)")

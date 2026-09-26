@@ -90,6 +90,22 @@ struct SpeciesAndGenderIcons {
             .modifier(_BadgeAX(label: accessibilityLabel(for: species, gender: gender), isDecorative: isDecorative))
     }
 
+    /// Small standalone gender marker for inline pet names.
+    @ViewBuilder
+    static func genderDot(for gender: PetGender?,
+                          size: CGFloat = 8,
+                          isDecorative: Bool = false) -> some View {
+        let resolvedGender = gender ?? .male
+        Circle()
+            .fill(DS.ColorToken.gender(resolvedGender))
+            .frame(width: size, height: size)
+            .overlay(
+                Circle()
+                    .stroke(.primary.opacity(0.08), lineWidth: 1)
+            )
+            .modifier(_BadgeAX(label: Text(resolvedGender.displayName), isDecorative: isDecorative))
+    }
+
     // MARK: - Tints & tokens (single source of truth)
 
     /// Central source of truth for avatar tints used by IconCircle and other badges.

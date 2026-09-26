@@ -37,6 +37,32 @@ final class ClientDetailViewModelTests: XCTestCase {
         XCTAssertEqual(vm.pets.first?.uuid, pet.uuid)
     }
 
+    func testInit_PopulatesEmergencyContactsFromClientRelationship() async throws {
+        let contact = EmergencyContact(name: "Riley Backup", relation: "friend", phone: "+13125550111")
+        contact.owner = client
+        context.insert(contact)
+        client.emergencyContacts = [contact]
+        try context.save()
+
+        let vm = ClientDetailViewModel(client: client, modelContext: context)
+
+        XCTAssertEqual(vm.emergencyContacts.map(\.name), ["Riley Backup"])
+    }
+
+    func testRefreshEmergencyContactsFetchesContactsByOwnerRelationship() async throws {
+        let backgroundContext = ModelContext(container)
+        let backgroundClient = try XCTUnwrap(backgroundContext.model(for: client.persistentModelID) as? Client)
+        let contact = EmergencyContact(name: "Jordan Backup", relation: "sibling", phone: "+13125550112")
+        contact.owner = backgroundClient
+        backgroundContext.insert(contact)
+        try backgroundContext.save()
+
+        let vm = ClientDetailViewModel(client: client, modelContext: context)
+        vm.refreshEmergencyContacts()
+
+        XCTAssertEqual(vm.emergencyContacts.map(\.name), ["Jordan Backup"])
+    }
+
     func testRefreshRecentVisits_ReturnsCompletedVisitsForClient() async throws {
         seedCompletedVisit(at: .now, total: 30)
         seedCompletedVisit(at: .now, total: 45)

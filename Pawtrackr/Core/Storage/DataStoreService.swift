@@ -29,7 +29,7 @@ public final class DataStoreService {
             
             // Intercept and rename old files before SwiftData generates a new empty one
             if !inMemory {
-                Self.migrateOldStoreToNamedStore()
+                StoreFileMigration.migrateLegacyDefaultStoreIfNeeded()
             }
             
             let config = ModelConfiguration(
@@ -49,38 +49,6 @@ public final class DataStoreService {
             preconditionFailure("DataStoreService could not initialize its ModelContainer: \(error.localizedDescription)")
         }
     }
-    
-    /// Migrates the default unnamed SwiftData store to the new "Pawtrackr" named store
-    /// so that users updating from older versions do not lose their local data.
-    private static func migrateOldStoreToNamedStore() {
-        let fileManager = FileManager.default
-        guard let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
-
-        let newStoreURL = appSupportURL.appendingPathComponent("Pawtrackr.store")
-        
-        // If the new named store already exists, do not overwrite it.
-        if fileManager.fileExists(atPath: newStoreURL.path) { return }
-
-        let oldStoreURL = appSupportURL.appendingPathComponent("default.store")
-        
-        // If the old store exists, move it and its auxiliary SQLite files to the new name.
-        if fileManager.fileExists(atPath: oldStoreURL.path) {
-            let extensions = ["", "-shm", "-wal"]
-            for ext in extensions {
-                let oldURL = appSupportURL.appendingPathComponent("default.store\(ext)")
-                let newURL = appSupportURL.appendingPathComponent("Pawtrackr.store\(ext)")
-                
-                if fileManager.fileExists(atPath: oldURL.path) {
-                    do {
-                        try fileManager.moveItem(at: oldURL, to: newURL)
-                    } catch {
-                        Logger.dataStore.error("Failed to move \(ext, privacy: .public) file: \(error.localizedDescription, privacy: .public)")
-                    }
-                }
-            }
-        }
-    }
-
     /// Fetches a list of persistent models with a given predicate and optional sort descriptors.
     @MainActor
     func fetch<T: PersistentModel>(_ predicate: Predicate<T>? = nil, sortBy: [SortDescriptor<T>] = []) throws -> [T] {

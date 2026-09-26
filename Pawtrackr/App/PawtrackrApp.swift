@@ -81,6 +81,21 @@ struct PawtrackrApp: App {
 
         let schema = Schema(PawtrackrSchema.models)
         let containerName = inMemory ? "PawtrackrTests" : "Pawtrackr"
+        if !inMemory {
+            let migrationOutcome = StoreFileMigration.migrateLegacyDefaultStoreIfNeeded()
+            switch migrationOutcome.action {
+            case .migratedToMissingNamedStore, .restoredLegacyOverEmptyNamedStore:
+                logger.info("Legacy SwiftData store migration completed: moved=\(migrationOutcome.movedFiles), backedUp=\(migrationOutcome.backedUpFiles)")
+            case .skippedNamedStoreHasData:
+                logger.info("Legacy SwiftData store migration skipped because current store has data.")
+            case .skippedUnableToVerifyStoreContents:
+                logger.warning("Legacy SwiftData store migration skipped because store contents could not be verified.")
+            case .failed(let message):
+                logger.error("Legacy SwiftData store migration failed: \(message, privacy: .public)")
+            case .none:
+                break
+            }
+        }
 
         // Try CloudKit first (the normal path). If init throws, retry with
         // .none so the user lands in a working local-only app instead of the

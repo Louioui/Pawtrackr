@@ -306,7 +306,12 @@ struct ClientsView: View {
         LazyVGrid(columns: clientGridColumns, spacing: 12) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { router.navigateToClient(client) }) {
-                    ClientCard(client: client, namespace: namespace, isInProgressOverride: isInProgress)
+                    ClientCard(
+                        client: client,
+                        namespace: namespace,
+                        isInProgressOverride: isInProgress,
+                        displaysLastNameFirst: viewModel?.sortOption == .lastName
+                    )
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
