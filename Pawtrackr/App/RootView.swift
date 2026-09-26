@@ -25,6 +25,9 @@ struct RootView: View {
     @State private var showPrivacyScreen = false
     @State private var showWhatIsNew = false
     @State private var didDismissLaunchSubscriptionPaywall = false
+    @AppStorage(DataSafetyMonitor.suspectedDataLossKey) private var dataLossSuspected = false
+    @AppStorage(DataSafetyMonitor.suspectedDataLossMessageKey) private var dataLossMessage = ""
+    @AppStorage(DataSafetyMonitor.suspectedDataLossRecoveryDetailKey) private var dataLossRecoveryDetail = ""
 
     var body: some View {
         ZStack {
@@ -143,6 +146,11 @@ struct RootView: View {
             VStack(spacing: 0) {
                 CloudKitAccountBanner()
                     .animation(.easeInOut(duration: 0.25), value: cloudKitMonitor.accountState)
+                DataSafetyBanner(
+                    isPresented: dataLossSuspected,
+                    message: dataLossMessage,
+                    recoveryDetail: dataLossRecoveryDetail
+                )
                 ContentView()
             }
             if showFirstSyncGate {
@@ -222,6 +230,7 @@ struct RootView: View {
             DataMigrations.ensureLoyaltyDefaults(in: backgroundContext)
             DataMigrations.backfillLoyaltyLedger(in: backgroundContext)
             SummaryUpdater.rebuildAllSummaries(in: backgroundContext)
+            DataSafetyMonitor.evaluateClientStoreState(in: backgroundContext)
         }
     }
 

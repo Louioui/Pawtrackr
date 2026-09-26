@@ -82,6 +82,10 @@ struct PawtrackrApp: App {
         let schema = Schema(PawtrackrSchema.models)
         let containerName = inMemory ? "PawtrackrTests" : "Pawtrackr"
         if !inMemory {
+            let backupOutcome = StoreFileMigration.backupStoresForCurrentBuildIfNeeded()
+            if backupOutcome.copiedFiles > 0 {
+                logger.info("Pre-migration SwiftData store backup completed: copied=\(backupOutcome.copiedFiles)")
+            }
             let migrationOutcome = StoreFileMigration.migrateLegacyDefaultStoreIfNeeded()
             switch migrationOutcome.action {
             case .migratedToMissingNamedStore, .restoredLegacyOverEmptyNamedStore:

@@ -272,6 +272,8 @@ private struct SettingsDetailView: View {
     @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
     @Binding var showDiagnostics: Bool
+    @State private var showWipeBlockedAlert = false
+    @AppStorage(DataSafetyMonitor.suspectedDataLossKey) private var dataLossSuspected = false
 
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
         .setBusiness,
@@ -350,6 +352,17 @@ private struct SettingsDetailView: View {
                 value: "This permanently erases every client, pet, visit, payment, inventory item, and report — including the demo data — and cannot be undone. The wipe also syncs to iCloud and your other devices. Your business profile and service menu are kept."
             ))
         }
+        .alert(
+            settingsLocalized("data_safety.wipe_blocked.title", value: "Start Fresh is locked"),
+            isPresented: $showWipeBlockedAlert
+        ) {
+            Button(settingsLocalized("common.ok", value: "OK"), role: .cancel) {}
+        } message: {
+            Text(settingsLocalized(
+                "data_safety.wipe_blocked.message",
+                value: "Pawtrackr detected that client data may be missing after an update. Export or recover the data before using Start Fresh, because that wipe can sync deletions to iCloud."
+            ))
+        }
     }
 
     private func scrollToWalkthroughAnchorIfNeeded(_ anchor: WalkthroughAnchorID?, proxy: ScrollViewProxy) {
@@ -373,8 +386,14 @@ private struct SettingsDetailView: View {
     /// Erases operational data and re-arms the getting-started checklist. Runs on
     /// the main context; live lists react to the deletions and empty out.
     private func performWipe() {
+        guard !dataLossSuspected else {
+            showWipeBlockedAlert = true
+            return
+        }
+
         do {
             try DataReset.wipeOperationalData(in: modelContext)
+            DataSafetyMonitor.clearAfterIntentionalWipe()
             appSettings.resetForFreshStart()
             #if os(iOS)
             HapticManager.notify(.success)
@@ -395,7 +414,11 @@ private struct SettingsDetailView: View {
         case .icloud: ICloudSectionView(showDiagnostics: $showDiagnostics)
         case .help: HelpSectionView(modelContext: modelContext)
         case .devices: DevicesHealthView()
-        case .about: AboutSectionView(showResetFirstRunConfirm: $showResetFirstRunConfirm, showWipeConfirm: $showWipeConfirm)
+        case .about: AboutSectionView(
+            showResetFirstRunConfirm: $showResetFirstRunConfirm,
+            showWipeConfirm: $showWipeConfirm,
+            dataLossSuspected: dataLossSuspected
+        )
         }
     }
 
@@ -925,6 +948,7 @@ private struct SettingsLabeledField<Content: View>: View {
 private struct AboutSectionView: View {
     @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
+    let dataLossSuspected: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -961,6 +985,18 @@ private struct AboutSectionView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                if dataLossSuspected {
+                    Label(
+                        settingsLocalized(
+                            "data_safety.start_fresh_locked",
+                            value: "Locked while Pawtrackr checks missing client data."
+                        ),
+                        systemImage: "lock.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DS.ColorToken.danger)
+                }
+
                 Button(role: .destructive) {
                     showWipeConfirm = true
                 } label: {
@@ -969,6 +1005,7 @@ private struct AboutSectionView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.red)
+                .disabled(dataLossSuspected)
                 .walkthroughTarget(.setStartFresh)
             }
         }

@@ -66,6 +66,34 @@ final class StoreFileMigrationTests: XCTestCase {
         XCTAssertEqual(try clientRowCount(in: tempDirectory.appendingPathComponent("default.store")), 3)
     }
 
+    func testPreMigrationBackupCopiesCurrentAndLegacyStoresOncePerBuild() throws {
+        let suiteName = "StoreFileMigrationTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        try "current-data".write(to: tempDirectory.appendingPathComponent("Pawtrackr.store"), atomically: true, encoding: .utf8)
+        try "legacy-data".write(to: tempDirectory.appendingPathComponent("default.store"), atomically: true, encoding: .utf8)
+
+        let first = StoreFileMigration.backupStoresForCurrentBuildIfNeeded(appSupportURL: tempDirectory, userDefaults: defaults)
+        let second = StoreFileMigration.backupStoresForCurrentBuildIfNeeded(appSupportURL: tempDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(first.copiedFiles, 2)
+        XCTAssertEqual(second.copiedFiles, 0)
+
+        let backupDirectory = try XCTUnwrap(first.backupDirectory)
+        XCTAssertEqual(
+            try String(contentsOf: backupDirectory.appendingPathComponent("Pawtrackr.store"), encoding: .utf8),
+            "current-data"
+        )
+        XCTAssertEqual(
+            try String(contentsOf: backupDirectory.appendingPathComponent("default.store"), encoding: .utf8),
+            "legacy-data"
+        )
+    }
+
     private func makeSQLiteStore(at url: URL, clientRows: Int) throws {
         #if canImport(SQLite3)
         var database: OpaquePointer?

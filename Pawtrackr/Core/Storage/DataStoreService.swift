@@ -29,6 +29,7 @@ public final class DataStoreService {
             
             // Intercept and rename old files before SwiftData generates a new empty one
             if !inMemory {
+                StoreFileMigration.backupStoresForCurrentBuildIfNeeded()
                 StoreFileMigration.migrateLegacyDefaultStoreIfNeeded()
             }
             

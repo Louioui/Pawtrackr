@@ -28,9 +28,15 @@ enum StoreFileMigration {
         let backedUpFiles: Int
     }
 
+    struct BackupOutcome: Equatable {
+        let copiedFiles: Int
+        let backupDirectory: URL?
+    }
+
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "StoreFileMigration")
     private static let legacyStoreName = "default.store"
     private static let currentStoreName = "Pawtrackr.store"
+    private static let preMigrationBackupBuildKey = "pawtrackr.storeBackup.lastBuild"
     private static let operationalTables = [
         "ZCLIENT",
         "ZPET",
@@ -42,6 +48,67 @@ enum StoreFileMigration {
         "ZINVENTORYTRANSACTION",
         "ZLOYALTYLEDGERENTRY"
     ]
+
+    @discardableResult
+    static func backupStoresForCurrentBuildIfNeeded(
+        appSupportURL overrideAppSupportURL: URL? = nil,
+        fileManager: FileManager = .default,
+        userDefaults: UserDefaults = .standard
+    ) -> BackupOutcome {
+        let buildIdentifier = appBuildIdentifier
+        guard userDefaults.string(forKey: preMigrationBackupBuildKey) != buildIdentifier else {
+            return BackupOutcome(copiedFiles: 0, backupDirectory: nil)
+        }
+
+        do {
+            let appSupportURL = try overrideAppSupportURL ?? fileManager.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+
+            let storeFiles = try existingStoreFamily(for: currentStoreName, in: appSupportURL, fileManager: fileManager)
+                + existingStoreFamily(for: legacyStoreName, in: appSupportURL, fileManager: fileManager)
+            guard !storeFiles.isEmpty else {
+                userDefaults.set(buildIdentifier, forKey: preMigrationBackupBuildKey)
+                return BackupOutcome(copiedFiles: 0, backupDirectory: nil)
+            }
+
+            let stamp = ISO8601DateFormatter()
+                .string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let safeBuild = buildIdentifier.replacingOccurrences(of: "/", with: "-")
+            let backupDirectory = appSupportURL.appendingPathComponent("PreMigrationBackup-\(safeBuild)-\(stamp)", isDirectory: true)
+            try fileManager.createDirectory(at: backupDirectory, withIntermediateDirectories: true)
+
+            var copied = 0
+            for url in storeFiles {
+                try fileManager.copyItem(at: url, to: backupDirectory.appendingPathComponent(url.lastPathComponent))
+                copied += 1
+            }
+
+            let manifest = [
+                "Pawtrackr automatic pre-migration backup",
+                "Created: \(Date().formatted(date: .complete, time: .standard))",
+                "App build: \(buildIdentifier)",
+                "Copied files:",
+                storeFiles.map { "- \($0.lastPathComponent)" }.joined(separator: "\n")
+            ].joined(separator: "\n")
+            try manifest.write(
+                to: backupDirectory.appendingPathComponent("README.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+
+            userDefaults.set(buildIdentifier, forKey: preMigrationBackupBuildKey)
+            log.info("Created pre-migration store backup with \(copied, privacy: .public) file(s).")
+            return BackupOutcome(copiedFiles: copied, backupDirectory: backupDirectory)
+        } catch {
+            log.error("Pre-migration store backup failed: \(error.localizedDescription, privacy: .public)")
+            return BackupOutcome(copiedFiles: 0, backupDirectory: nil)
+        }
+    }
 
     /// Moves data from SwiftData's old unnamed `default.store` into the named
     /// `Pawtrackr.store` before SwiftData can create a fresh empty database.
@@ -205,6 +272,35 @@ enum StoreFileMigration {
         #else
         return nil
         #endif
+    }
+
+    static func clientRowCount(in storeURL: URL) -> Int? {
+        guard FileManager.default.fileExists(atPath: storeURL.path) else { return 0 }
+
+        #if canImport(SQLite3)
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(storeURL.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK,
+              let database
+        else {
+            if let database {
+                sqlite3_close(database)
+            }
+            return nil
+        }
+        defer { sqlite3_close(database) }
+
+        guard tableExists("ZCLIENT", in: database) else { return 0 }
+        return rowCount(in: "ZCLIENT", database: database)
+        #else
+        return nil
+        #endif
+    }
+
+    private static var appBuildIdentifier: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let build = info?["CFBundleVersion"] as? String ?? "unknown"
+        return "\(version)-\(build)"
     }
 
     #if canImport(SQLite3)
