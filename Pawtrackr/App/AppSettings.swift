@@ -229,6 +229,7 @@ final class AppSettings {
     var isLockEnabled: Bool {
         didSet {
             UserDefaults.standard.set(isLockEnabled, forKey: AppSettingsKeys.isLockEnabled)
+            publishSpotlightPolicy()
         }
     }
 
@@ -244,6 +245,7 @@ final class AppSettings {
     private(set) var appPIN: String {
         didSet {
             KeychainStorage.set(appPIN, forKey: AppSettingsKeys.appPINKeychainAccount)
+            publishSpotlightPolicy()
         }
     }
 
@@ -458,6 +460,17 @@ final class AppSettings {
         // Apply saved accent color to ThemeManager so views using
         // DS.ColorToken.primary render with it from the first frame.
         ThemeManager.shared.updateBrandColor(hex: brandColorHex)
+
+        // Before any record can be indexed: with App Lock on and a PIN set,
+        // this removes Pawtrackr's Spotlight items right away.
+        publishSpotlightPolicy()
+    }
+
+    /// Tells the Spotlight indexer whether it may index (see
+    /// `SpotlightPrivacyPolicy`). The indexer acts only when the answer
+    /// changes: lock on removes every item, lock off rebuilds the index.
+    private func publishSpotlightPolicy() {
+        SpotlightIndexer.shared.applyPrivacyPolicy(allowsIndexing: spotlightAllowsIndexing)
     }
 
     // MARK: - PIN Management

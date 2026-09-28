@@ -27,18 +27,22 @@ struct StoreHealthCheck {
         }
     }
 
-    /// Clears auxiliary caches and rebuilds Spotlight index. Does NOT touch the
-    /// SwiftData store itself — if that's unhealthy, callers need a full
-    /// `DataStoreRecoveryView` flow.
-    static func clearAuxiliaryCaches() {
-        log.info("Clearing auxiliary caches and re-indexing Spotlight…")
+    /// Clears the image cache and rebuilds the Spotlight index from the
+    /// store, off the main actor. Only reads the SwiftData store; if that's
+    /// unhealthy, callers need a full `DataStoreRecoveryView` flow. The
+    /// rebuild honours `SpotlightPrivacyPolicy`, so with App Lock on it
+    /// indexes nothing. Returns the rebuild task so callers can await it.
+    @discardableResult
+    static func clearAuxiliaryCaches(
+        container: ModelContainer,
+        spotlight: SpotlightIndexer = .shared
+    ) -> Task<SpotlightRebuildOutcome, Never> {
+        log.info("Clearing auxiliary caches and rebuilding Spotlight…")
         ImageCache.shared.clearCache()
-        SpotlightIndexer.shared.reindexAll()
-        log.info("Auxiliary caches cleared.")
-    }
-
-    @available(*, deprecated, renamed: "clearAuxiliaryCaches", message: "This never repaired the SwiftData store; only cleared image cache and Spotlight.")
-    static func repairStore() {
-        clearAuxiliaryCaches()
+        return Task.detached(priority: .utility) {
+            let outcome = await spotlight.reindexAll(container: container)
+            log.info("Auxiliary caches cleared; Spotlight rebuild: \(String(describing: outcome), privacy: .public)")
+            return outcome
+        }
     }
 }

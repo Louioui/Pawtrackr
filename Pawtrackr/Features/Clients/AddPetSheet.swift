@@ -292,6 +292,10 @@ struct AddPetSheet: View {
         do {
             try modelContext.save()
             CloudKitMonitor.shared.recordLocalChange("Added pet")
+            // setPhotoData indexed the pet before it had an owner, and
+            // assigning client.pets doesn't go through a setter: re-index the
+            // saved client and pets so the pet is found by the owner's phone.
+            SpotlightIndexer.shared.scheduleIndex(client: client, includingPets: true)
             HapticManager.notify(.success)
             dismiss()
         } catch {
@@ -302,6 +306,7 @@ struct AddPetSheet: View {
             // already-mutated list, and the next successful save persists
             // both rows.
             client.pets = (client.pets ?? []).filter { $0.persistentModelID != newPet.persistentModelID }
+            SpotlightIndexer.shared.removePetFromIndex(petID: newPet.uuid)
             modelContext.delete(newPet)
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "adding pet")
             appError = .database(NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)")

@@ -1445,3 +1445,10 @@
 "client_edit.missing" = "This client is no longer on this device, so your changes weren't saved.";
 "presence.recently_open_fmt" = "Recently open on %@";
 "presence.recently_open_unnamed" = "Recently open on another device";
+
+/* Spotlight search results */
+"spotlight.client.kind" = "Client";
+"spotlight.client.no_pets" = "No pets";
+"spotlight.client.one_pet" = "1 pet";
+"spotlight.client.pets_fmt" = "%d pets";
+"spotlight.pet.owner_fmt" = "Owner: %@";

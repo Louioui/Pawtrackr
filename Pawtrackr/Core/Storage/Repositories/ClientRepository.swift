@@ -306,6 +306,10 @@ final actor ClientRepository: ClientRepositoryProtocol {
         
         let changedAt = Date()
         try modelContext.save()
+        // The setters above indexed the client before its pets were attached,
+        // and each pet before it had an owner. Index the saved state so the
+        // client shows its pets and each pet is found by the owner's phone.
+        SpotlightIndexer.shared.scheduleIndex(client: client, includingPets: true)
         let clientUUID = client.uuid
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(

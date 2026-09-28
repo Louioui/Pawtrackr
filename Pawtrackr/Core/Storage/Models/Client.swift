@@ -102,13 +102,13 @@ final class Client {
         let newValue = TextInputLimits.clamped(value, to: TextInputLimits.name)
         guard firstName != newValue else { return }
         firstName = newValue
-        didUpdate()
+        didUpdate(ownerDetailsChanged: true)
     }
     func setLastName(_ value: String) {
         let newValue = TextInputLimits.clamped(value, to: TextInputLimits.name)
         guard lastName != newValue else { return }
         lastName = newValue
-        didUpdate()
+        didUpdate(ownerDetailsChanged: true)
     }
     func setPhone(_ value: String?) {
         let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.phone)
@@ -124,7 +124,7 @@ final class Client {
         guard phone != newValue else { return }
         phone = newValue
         updatePrimaryContact()
-        didUpdate()
+        didUpdate(ownerDetailsChanged: true)
     }
     func setEmail(_ value: String?) {
         let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.email)
@@ -152,7 +152,7 @@ final class Client {
         if !currentPets.contains(where: { $0 === pet }) {
             currentPets.append(pet)
             pets = currentPets
-            didUpdate()
+            didUpdate(ownerDetailsChanged: true)
         }
     }
     func removePet(_ pet: Pet) {
@@ -176,18 +176,15 @@ final class Client {
     }
     
     // MARK: - Private Helpers
-    private func didUpdate() {
+    /// `ownerDetailsChanged`: the name or phone changed, or a pet was added.
+    /// Pet items carry the owner's name and phone, so those re-index too.
+    private func didUpdate(ownerDetailsChanged: Bool = false) {
         updatedAt = .now
         lastModifiedBy = DeviceIdentity.currentID
-        // Spotlight indexing is nonisolated; it self-dispatches to a utility queue
-        // and debounces per-id so a multi-field edit (name + phone + email) only
-        // produces one re-index.
-        let id = uuid
-        let title = fullName
-        let petCount = (pets ?? []).count
-        let petWord = petCount == 1 ? "pet" : "pets"
-        let description = "Client with \(petCount) \(petWord) • Phone: \(phone ?? "N/A")"
-        SpotlightIndexer.shared.scheduleClientIndex(id: id, title: title, description: description)
+        // Snapshots on this thread, then debounces per id on the indexer's
+        // queue, so a multi-field edit (name + phone + email) is one write.
+        // Skipped entirely while App Lock keeps Pawtrackr out of Spotlight.
+        SpotlightIndexer.shared.scheduleIndex(client: self, includingPets: ownerDetailsChanged)
     }
 
     func updateThumbnail() {

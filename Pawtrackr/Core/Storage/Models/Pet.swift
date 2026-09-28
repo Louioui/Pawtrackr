@@ -454,14 +454,10 @@ final class Pet {
     private func didUpdate() {
         updatedAt = .now
         lastModifiedBy = DeviceIdentity.currentID
-        // Spotlight indexing is now nonisolated and self-dispatches to a utility queue,
-        // so we no longer need a Task hop here. Snapshot the values first to avoid
-        // capturing self in the call.
-        let id = uuid
-        let title = name
-        let description = "\(shortDescriptor) • Owner: \(owner?.fullName ?? "Unknown")"
-        let imageData = thumbnailData ?? photoData
-        SpotlightIndexer.shared.schedulePetIndex(id: id, title: title, description: description, thumbnailData: imageData)
+        // Snapshots on this thread (name, owner name and phone, thumbnail
+        // only), then debounces per id on the indexer's queue. Skipped
+        // entirely while App Lock keeps Pawtrackr out of Spotlight.
+        SpotlightIndexer.shared.scheduleIndex(pet: self)
     }
 
     func updateThumbnail() {

@@ -6,27 +6,38 @@ import CoreSpotlight
 final class SpotlightIndexerTests: XCTestCase {
     
     @MainActor
-    func testIndexPet_DoesNotCrash() {
+    func testPetSnapshot_CarriesOwnerNameAndPhoneAndThumbnailOnly() {
+        let owner = Client(firstName: "Charlie", lastName: "Brown", phone: "+15559990000")
         let pet = Pet(name: "Luna", species: .cat)
-        let owner = Client(firstName: "Charlie", lastName: "Brown")
         pet.owner = owner
-        
-        // We can't easily verify the system index, but we can ensure our indexer
-        // processes the model correctly and doesn't crash on background threads.
-        SpotlightIndexer.shared.indexPet(pet)
-        
-        // If we reached here without a crash, the data extraction logic inside indexPet is safe.
-        XCTAssertTrue(true)
+        pet.photoData = Data([1, 2, 3])
+        pet.thumbnailData = nil
+
+        let snapshot = SpotlightPetSnapshot(pet: pet)
+
+        XCTAssertEqual(snapshot.id, pet.uuid)
+        XCTAssertEqual(snapshot.name, "Luna")
+        XCTAssertEqual(snapshot.species, .cat)
+        XCTAssertEqual(snapshot.ownerFirstName, "Charlie")
+        XCTAssertEqual(snapshot.ownerLastName, "Brown")
+        XCTAssertEqual(snapshot.ownerPhone, "+15559990000")
+        XCTAssertNil(snapshot.thumbnailData, "The full photo must never be handed to Spotlight.")
     }
-    
+
     @MainActor
-    func testIndexClient_DoesNotCrash() {
-        let client = Client(firstName: "Lucy", lastName: "Van Pelt")
-        client.phone = "555-999-0000"
-        
-        SpotlightIndexer.shared.indexClient(client)
-        
-        XCTAssertTrue(true)
+    func testClientSnapshot_CarriesPhoneEmailAndPetNames() {
+        let client = Client(firstName: "Lucy", lastName: "Van Pelt", phone: "555-999-0000", email: "Lucy@Example.com")
+        let pet = Pet(name: "Snoopy", species: .dog)
+        client.pets = [pet]
+
+        let snapshot = SpotlightClientSnapshot(client: client)
+
+        XCTAssertEqual(snapshot.id, client.uuid)
+        XCTAssertEqual(snapshot.firstName, "Lucy")
+        XCTAssertEqual(snapshot.lastName, "Van Pelt")
+        XCTAssertEqual(snapshot.phone, "555-999-0000")
+        XCTAssertEqual(snapshot.email, "lucy@example.com")
+        XCTAssertEqual(snapshot.petNames, ["Snoopy"])
     }
 
     func testDeletedClientSearchableIdentifiersIncludeCascadedPets() {

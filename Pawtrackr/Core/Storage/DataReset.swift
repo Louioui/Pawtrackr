@@ -46,9 +46,10 @@ enum DataReset {
             try context.save()
         }
 
-        // Spotlight entries created on client/pet mutations now point at deleted
-        // records — clear the index so stale search results don't linger.
-        SpotlightIndexer.shared.reindexAll()
+        // Every client and pet is gone, so there is nothing to rebuild: remove
+        // all items (and any pending or in-flight indexing) so stale results
+        // don't linger.
+        SpotlightIndexer.shared.removeAllItems()
         log.info("Start Fresh: operational data wiped (catalog + business config preserved).")
     }
 

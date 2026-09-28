@@ -1584,3 +1584,10 @@
 "client_edit.missing" = "Este cliente ya no está en este dispositivo, así que tus cambios no se guardaron.";
 "presence.recently_open_fmt" = "Abierto hace poco en %@";
 "presence.recently_open_unnamed" = "Abierto hace poco en otro dispositivo";
+
+/* Spotlight search results */
+"spotlight.client.kind" = "Cliente";
+"spotlight.client.no_pets" = "Sin mascotas";
+"spotlight.client.one_pet" = "1 mascota";
+"spotlight.client.pets_fmt" = "%d mascotas";
+"spotlight.pet.owner_fmt" = "Propietario: %@";

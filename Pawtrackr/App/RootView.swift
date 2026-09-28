@@ -250,6 +250,10 @@ struct RootView: View {
             DataMigrations.backfillLoyaltyLedger(in: backgroundContext)
             SummaryUpdater.rebuildAllSummaries(in: backgroundContext)
             DataSafetyMonitor.evaluateClientStoreState(in: backgroundContext)
+            // After the first iCloud import, so a new device indexes the
+            // downloaded book. Clears the index if App Lock forbids it, and
+            // rebuilds it once when the item format changes.
+            await SpotlightIndexer.shared.reconcileAtLaunch(container: container)
         }
     }
 

@@ -80,6 +80,15 @@ struct PawtrackrApp: App {
             if isUITesting {
                 try? UITestDataSeeder.seedIfNeeded(in: localContainer.mainContext)
             }
+            if !inMemory {
+                // The store a Spotlight rebuild reads when App Lock is turned
+                // off. The launch check itself runs with startup maintenance.
+                SpotlightIndexer.shared.attach(container: localContainer)
+                if bootstrap.restoredLocalBackup {
+                    // Different records than the index describes: rebuild.
+                    SpotlightIndexer.shared.markIndexStale()
+                }
+            }
 
             initialContainer = localContainer
             initialTasks = inMemory ? nil : ScheduledTasks(modelContainer: localContainer)
@@ -337,18 +346,14 @@ struct PawtrackrApp: App {
     }
 
     private func handleSpotlightActivity(_ activity: NSUserActivity) {
-        guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return }
+        guard let rawIdentifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+              let identifier = SpotlightIdentifier(rawIdentifier) else { return }
 
-        if identifier.hasPrefix("pet-") {
-            let uuidString = identifier.replacingOccurrences(of: "pet-", with: "")
-            if let uuid = UUID(uuidString: uuidString) {
-                requestNavigation(to: .pet, uuid: uuid)
-            }
-        } else if identifier.hasPrefix("client-") {
-            let uuidString = identifier.replacingOccurrences(of: "client-", with: "")
-            if let uuid = UUID(uuidString: uuidString) {
-                requestNavigation(to: .client, uuid: uuid)
-            }
+        switch identifier {
+        case .client(let uuid):
+            requestNavigation(to: .client, uuid: uuid)
+        case .pet(let uuid):
+            requestNavigation(to: .pet, uuid: uuid)
         }
     }
 
