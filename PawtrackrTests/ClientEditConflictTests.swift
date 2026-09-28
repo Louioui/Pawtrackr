@@ -258,7 +258,9 @@ final class ClientEditConflictTests: XCTestCase {
         )
         let saved = try stored(client.uuid)
         XCTAssertEqual(saved.email, "ava.stone@example.com")
-        XCTAssertEqual(saved.phone, "+13125550199", "A stale view object is never the one written.")
+        XCTAssertEqual(saved.phone, "+13125550199", "The edit never saves the stale view object.")
+        // Known limit, outside this saver: the view context still holds that
+        // dirty, stale object, and its own next save puts the old values back.
     }
 
     func testMissingClientIsReportedInsteadOfRecreated() throws {

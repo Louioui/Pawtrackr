@@ -187,8 +187,11 @@ enum ClientEditSaver {
     /// another device's new phone, points or notes would be lost. So the
     /// view's object is re-read first and written only when the re-read
     /// matches the store; that keeps every screen showing this client in
-    /// step. If it doesn't match, the write goes through a fresh context
-    /// instead, so the store is right even if a screen lags.
+    /// step. If it doesn't match (the view's object has unsaved changes, so
+    /// a re-read can't refresh it), the write goes through a fresh context
+    /// instead. That keeps this save from writing stale values, but the view's
+    /// context still holds its stale object, and its own next save will put
+    /// the old values back. Fixing that is outside this saver.
     static func save(
         _ form: ClientEditForm,
         baseline: ClientEditBaseline,
