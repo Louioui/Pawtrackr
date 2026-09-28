@@ -24,13 +24,13 @@ struct CommunicationSheet: View {
         NavigationStack {
             VStack(spacing: 0) {
                 List {
-                    Section("Templates") {
+                    Section(AppLocalization.localized("communication.templates", value: "Templates")) {
                         ForEach(availableTemplates, id: \.title) { template in
                             templateButton(template)
                         }
                     }
 
-                    Section("Message Preview") {
+                    Section(AppLocalization.localized("communication.message_preview", value: "Message Preview")) {
                         TextEditor(text: $customMessage)
                             .frame(minHeight: 120)
                             .accessibilityIdentifier("communication.messagePreview")

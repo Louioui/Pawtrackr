@@ -24,7 +24,7 @@ actor LoyaltyService {
 
         try modelContext.save()
         await recordClientChange(
-            operation: "Applied loyalty points",
+            operation: AppLocalization.localized("cloudkit.change.applied_loyalty_points", value: "Applied loyalty points"),
             client: client,
             changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
         )
@@ -33,11 +33,11 @@ actor LoyaltyService {
     /// Redeems points from a client balance without allowing overdrafts.
     func redeemPoints(client: Client, points: Int, reason: String? = nil) async throws {
         guard points > 0 else {
-            throw AppError.validation(.custom(message: "Loyalty redemption must be greater than zero."))
+            throw AppError.validation(.custom(message: AppLocalization.localized("loyalty.error.redeem_zero", value: "Loyalty redemption must be greater than zero.")))
         }
 
         guard client.loyaltyPoints >= points else {
-            throw AppError.database("Insufficient loyalty points")
+            throw AppError.database(AppLocalization.localized("loyalty.error.insufficient", value: "Insufficient loyalty points"))
         }
 
         client.loyaltyPoints -= points
@@ -45,7 +45,7 @@ actor LoyaltyService {
         recordLedgerEntry(kind: .redeemed, points: -points, client: client, reason: reason)
         try modelContext.save()
         await recordClientChange(
-            operation: "Redeemed loyalty points",
+            operation: AppLocalization.localized("cloudkit.change.redeemed_loyalty_points", value: "Redeemed loyalty points"),
             client: client,
             changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
         )
@@ -54,12 +54,12 @@ actor LoyaltyService {
     /// Applies a staff-entered loyalty balance correction.
     func adjustPoints(client: Client, delta: Int, reason: String? = nil) async throws {
         guard delta != 0 else {
-            throw AppError.validation(.custom(message: "Loyalty adjustment must not be zero."))
+            throw AppError.validation(.custom(message: AppLocalization.localized("loyalty.error.adjust_zero", value: "Loyalty adjustment must not be zero.")))
         }
 
         let adjustedBalance = client.loyaltyPoints + delta
         guard adjustedBalance >= 0 else {
-            throw AppError.database("Loyalty adjustment cannot overdraw the client balance")
+            throw AppError.database(AppLocalization.localized("loyalty.error.overdraw", value: "Loyalty adjustment cannot overdraw the client balance"))
         }
 
         client.loyaltyPoints = adjustedBalance
@@ -67,7 +67,7 @@ actor LoyaltyService {
         recordLedgerEntry(kind: .adjusted, points: delta, client: client, reason: reason)
         try modelContext.save()
         await recordClientChange(
-            operation: "Adjusted loyalty points",
+            operation: AppLocalization.localized("cloudkit.change.adjusted_loyalty_points", value: "Adjusted loyalty points"),
             client: client,
             changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
         )
@@ -81,13 +81,13 @@ actor LoyaltyService {
         isRewardsCatalogEnabled: Bool? = nil
     ) throws {
         if let pointsPerDollar, pointsPerDollar < .zero {
-            throw AppError.validation(.custom(message: "Points per dollar cannot be negative."))
+            throw AppError.validation(.custom(message: AppLocalization.localized("loyalty.error.points_per_dollar_negative", value: "Points per dollar cannot be negative.")))
         }
         if let pointsPerVisit, pointsPerVisit < 0 {
-            throw AppError.validation(.custom(message: "Points per visit cannot be negative."))
+            throw AppError.validation(.custom(message: AppLocalization.localized("loyalty.error.points_per_visit_negative", value: "Points per visit cannot be negative.")))
         }
         if let redemptionThreshold, redemptionThreshold <= 0 {
-            throw AppError.validation(.custom(message: "Reward threshold must be greater than zero."))
+            throw AppError.validation(.custom(message: AppLocalization.localized("loyalty.error.threshold_zero", value: "Reward threshold must be greater than zero.")))
         }
 
         let config = try fetchOrCreateConfig()
@@ -117,7 +117,7 @@ actor LoyaltyService {
         style: LoyaltyReward.Style
     ) throws {
         guard pointCost > 0 else {
-            throw AppError.validation(.custom(message: "Reward cost must be greater than zero."))
+            throw AppError.validation(.custom(message: AppLocalization.localized("loyalty.error.cost_zero", value: "Reward cost must be greater than zero.")))
         }
 
         let templates = try modelContext.fetch(FetchDescriptor<LoyaltyRewardTemplate>())

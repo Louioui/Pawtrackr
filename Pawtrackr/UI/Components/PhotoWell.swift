@@ -47,9 +47,9 @@ struct PhotoWell: View {
                     LazyImageDataImage(data: data, maxDimension: 512)
                 } else {
                     #if os(macOS)
-                    AddPhotoPlaceholder(title: title, subtitle: "Click to add")
+                    AddPhotoPlaceholder(title: title, subtitle: AppLocalization.localized("photo_well.click_to_add", value: "Click to add"))
                     #else
-                    AddPhotoPlaceholder(title: title, subtitle: "Tap to add")
+                    AddPhotoPlaceholder(title: title, subtitle: AppLocalization.localized("photo_well.tap_to_add", value: "Tap to add"))
                     #endif
                 }
             }

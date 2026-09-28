@@ -160,15 +160,15 @@ final class CloudKitMonitor {
 
         var displayLabel: String {
             switch self {
-            case .setup: return "Setup"
-            case .importFromCloud: return "Import"
-            case .exportToCloud: return "Export"
-            case .account: return "Account"
-            case .localChange: return "Local Change"
-            case .remotePush: return "Remote Push"
-            case .recovery: return "Recovery"
-            case .media: return "Media"
-            case .healthCheck: return "Health Check"
+            case .setup: return AppLocalization.localized("cloudkit.event.kind.setup", value: "Setup")
+            case .importFromCloud: return AppLocalization.localized("cloudkit.event.kind.import", value: "Import")
+            case .exportToCloud: return AppLocalization.localized("cloudkit.event.kind.export", value: "Export")
+            case .account: return AppLocalization.localized("cloudkit.event.kind.account", value: "Account")
+            case .localChange: return AppLocalization.localized("cloudkit.event.kind.local_change", value: "Local Change")
+            case .remotePush: return AppLocalization.localized("cloudkit.event.kind.remote_push", value: "Remote Push")
+            case .recovery: return AppLocalization.localized("cloudkit.event.kind.recovery", value: "Recovery")
+            case .media: return AppLocalization.localized("cloudkit.event.kind.media", value: "Media")
+            case .healthCheck: return AppLocalization.localized("cloudkit.event.kind.health_check", value: "Health Check")
             }
         }
     }
@@ -182,11 +182,11 @@ final class CloudKitMonitor {
 
         var displayLabel: String {
             switch self {
-            case .started: return "Started"
-            case .succeeded: return "Succeeded"
-            case .failed: return "Failed"
-            case .noted: return "Noted"
-            case .waiting: return "Waiting"
+            case .started: return AppLocalization.localized("cloudkit.event.status.started", value: "Started")
+            case .succeeded: return AppLocalization.localized("cloudkit.event.status.succeeded", value: "Succeeded")
+            case .failed: return AppLocalization.localized("cloudkit.event.status.failed", value: "Failed")
+            case .noted: return AppLocalization.localized("cloudkit.event.status.noted", value: "Noted")
+            case .waiting: return AppLocalization.localized("cloudkit.event.status.waiting", value: "Waiting")
             }
         }
     }
@@ -558,7 +558,7 @@ final class CloudKitMonitor {
                 errorCode: mapped == .available ? nil : String(describing: status)
             )
             if mapped == .available, networkState.isOnline {
-                flushOfflineMutationBuffer(reason: "iCloud account available")
+                flushOfflineMutationBuffer(reason: AppLocalization.localized("cloudkit.event.reason.account_available", value: "iCloud account available"))
             }
             postChange()
         }
@@ -620,7 +620,7 @@ final class CloudKitMonitor {
                 } else if self.mode.isMirroring, self.accountState.isAvailable {
                     // Heartbeat our device info when we come online
                     self.updateDeviceMetadata()
-                    self.flushOfflineMutationBuffer(reason: "Network restored")
+                    self.flushOfflineMutationBuffer(reason: AppLocalization.localized("cloudkit.event.reason.network_restored", value: "Network restored"))
                     self.runSafeModeDiagnostics()
                 }
                 self.postChange()
@@ -879,7 +879,10 @@ final class CloudKitMonitor {
                 kind: kind,
                 status: .started,
                 startedAt: event.startDate,
-                message: "\(kind.displayLabel) started",
+                message: String(
+                    format: AppLocalization.localized("cloudkit.event.started_fmt", value: "%@ started"),
+                    kind.displayLabel
+                ),
                 errorCode: nil
             )
             postChange()
@@ -913,7 +916,10 @@ final class CloudKitMonitor {
             status: .succeeded,
             startedAt: startedAt,
             endedAt: endedAt,
-            message: "\(kind.displayLabel) finished",
+            message: String(
+                format: AppLocalization.localized("cloudkit.event.finished_fmt", value: "%@ finished"),
+                kind.displayLabel
+            ),
             errorCode: nil
         )
 
@@ -932,7 +938,10 @@ final class CloudKitMonitor {
                 }
                 iCloudAppAccessMayBeDisabled = false
             }
-            clearPendingLocalChanges(reason: "CloudKit export finished", coveredUpTo: startedAt)
+            clearPendingLocalChanges(
+                reason: AppLocalization.localized("cloudkit.event.reason.upload_finished", value: "Upload to iCloud finished"),
+                coveredUpTo: startedAt
+            )
             // An upload went through, so the account works whatever an
             // earlier failure made us assume.
             if !accountState.isAvailable {
@@ -983,7 +992,10 @@ final class CloudKitMonitor {
                 status: .waiting,
                 startedAt: startedAt,
                 endedAt: endedAt,
-                message: "Setup failure held until the iCloud account status is known",
+                message: AppLocalization.localized(
+                    "cloudkit.event.setup_failure_held",
+                    value: "Setup failure held until the iCloud account status is known"
+                ),
                 errorCode: "\(NSCocoaErrorDomain).134400"
             )
             return
@@ -1038,7 +1050,10 @@ final class CloudKitMonitor {
                 status: .noted,
                 startedAt: startedAt,
                 endedAt: endedAt,
-                message: "CloudKit setup skipped because no iCloud account is configured",
+                message: AppLocalization.localized(
+                    "cloudkit.event.setup_skipped_no_account",
+                    value: "iCloud setup skipped because no iCloud account is signed in"
+                ),
                 errorCode: code
             )
             return
@@ -1049,7 +1064,10 @@ final class CloudKitMonitor {
                 status: .noted,
                 startedAt: startedAt,
                 endedAt: endedAt,
-                message: "CloudKit resolved a record conflict and will retry",
+                message: AppLocalization.localized(
+                    "cloudkit.event.conflict_retry",
+                    value: "iCloud resolved a record conflict and will retry"
+                ),
                 errorCode: code
             )
             return
@@ -1183,7 +1201,7 @@ final class CloudKitMonitor {
         appendEvent(
             kind: .healthCheck,
             status: .started,
-            message: "User requested iCloud check",
+            message: AppLocalization.localized("cloudkit.event.user_check", value: "iCloud check requested"),
             errorCode: nil
         )
         if mode.isMirroring, accountState.isAvailable, pendingLocalChangeCount > 0 {
@@ -1200,7 +1218,7 @@ final class CloudKitMonitor {
         appendEvent(
             kind: .remotePush,
             status: .started,
-            message: "Remote iCloud push received",
+            message: AppLocalization.localized("cloudkit.event.remote_push", value: "Change notice received from iCloud"),
             errorCode: nil
         )
         postChange()
@@ -1227,7 +1245,7 @@ final class CloudKitMonitor {
         let message = String(
             format: NSLocalizedString(
                 "cloudkit.error.local_save",
-                value: "Couldn't save %@. Your change may not sync: %@",
+                value: "Couldn't finish %@. Your change may not sync: %@",
                 comment: ""
             ),
             operation,
@@ -1287,11 +1305,15 @@ final class CloudKitMonitor {
         appendEvent(
             kind: .localChange,
             status: .waiting,
-            message: offlineBufferedMutationCount > 0 ? "\(operation) queued for iCloud" : operation,
+            message: offlineBufferedMutationCount > 0
+                ? String(format: AppLocalization.localized("cloudkit.event.queued_fmt", value: "%@ queued for iCloud"), operation)
+                : operation,
             errorCode: nil
         )
         if accountState.isAvailable, networkState.isOnline {
-            flushOfflineMutationBuffer(reason: "Local change recorded while online")
+            flushOfflineMutationBuffer(
+                reason: AppLocalization.localized("cloudkit.event.reason.change_while_online", value: "Change saved while online")
+            )
         }
         postChange()
     }
@@ -1299,11 +1321,17 @@ final class CloudKitMonitor {
     func recordMediaSyncWarningIfNeeded(byteCount: Int, context: String) {
         let warningThreshold = CloudMediaPolicy.largeAssetWarningBytes
         guard byteCount >= warningThreshold else { return }
-        let mb = Double(byteCount) / 1_048_576
         appendEvent(
             kind: .media,
             status: .noted,
-            message: String(format: "%.1f MB media asset prepared for iCloud: %@", mb, context),
+            message: String(
+                format: AppLocalization.localized(
+                    "cloudkit.event.media_prepared_fmt",
+                    value: "Large photo (%1$@) prepared for iCloud: %2$@"
+                ),
+                Int64(byteCount).formatted(.byteCount(style: .file)),
+                context
+            ),
             errorCode: nil
         )
         postChange()
@@ -1325,7 +1353,7 @@ final class CloudKitMonitor {
         appendEvent(
             kind: .importFromCloud,
             status: .succeeded,
-            message: "Initial iCloud restore gate completed",
+            message: AppLocalization.localized("cloudkit.event.first_sync_settled", value: "First iCloud download check finished"),
             errorCode: nil
         )
         postChange()
@@ -1872,7 +1900,13 @@ final class CloudKitMonitor {
         appendEvent(
             kind: .recovery,
             status: .noted,
-            message: "iCloud Safe Mode: changes from \(hours)h ago still haven't uploaded. Re-checking the iCloud account.",
+            message: String(
+                format: AppLocalization.localized(
+                    "cloudkit.event.safe_mode_fmt",
+                    value: "Changes from %d h ago still haven't uploaded. Re-checking the iCloud account."
+                ),
+                hours
+            ),
             errorCode: reducer.state.exportHealth.lastFailureCode
         )
         postChange()
@@ -1988,7 +2022,14 @@ final class CloudKitMonitor {
                 self.appendEvent(
                     kind: .localChange,
                     status: .started,
-                    message: "\(reason): releasing \(batch.count) buffered change(s)",
+                    message: String(
+                        format: AppLocalization.localized(
+                            "cloudkit.event.releasing_buffer_fmt",
+                            value: "%1$@: releasing buffered changes (%2$d)"
+                        ),
+                        reason,
+                        batch.count
+                    ),
                     errorCode: nil
                 )
                 self.eventBus?.publish(.refreshRequired)
@@ -2003,7 +2044,14 @@ final class CloudKitMonitor {
                 self.appendEvent(
                     kind: .localChange,
                     status: .noted,
-                    message: "Buffered change batch released (\(batch.count) max per pass: \(OfflineMutationBuffer.batchLimit))",
+                    message: String(
+                        format: AppLocalization.localized(
+                            "cloudkit.event.buffer_released_fmt",
+                            value: "Buffered changes released: %1$d (up to %2$d per pass)"
+                        ),
+                        batch.count,
+                        OfflineMutationBuffer.batchLimit
+                    ),
                     errorCode: nil
                 )
 
@@ -2104,7 +2152,10 @@ final class CloudKitMonitor {
             self.appendEvent(
                 kind: .healthCheck,
                 status: .noted,
-                message: "No immediate CloudKit event followed the manual check",
+                message: AppLocalization.localized(
+                    "cloudkit.event.manual_check_quiet",
+                    value: "No iCloud activity followed the check right away"
+                ),
                 errorCode: nil
             )
             self.postChange()
@@ -2311,7 +2362,13 @@ final class CloudKitMonitor {
             status: .succeeded,
             startedAt: Date(),
             endedAt: Date(),
-            message: "Archived \(count) local store file(s) before reset",
+            message: String(
+                format: AppLocalization.localized(
+                    "cloudkit.event.reset_archived_fmt",
+                    value: "Store files set aside before the reset: %d"
+                ),
+                count
+            ),
             deviceID: DeviceIdentity.currentID,
             errorCode: nil
         )

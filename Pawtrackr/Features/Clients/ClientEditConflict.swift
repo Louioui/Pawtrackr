@@ -240,13 +240,13 @@ enum ClientEditSaver {
             try targetContext.save()
         } catch {
             Logger.clientEdit.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving client changes")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_client_changes", value: "saving the client changes"))
             return .failed(message: error.localizedDescription)
         }
         if targetContext !== liveContext {
             refresh(baseline.clientUUID, in: liveContext)
         }
-        CloudKitMonitor.shared.recordLocalChange("Saved client changes")
+        CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.saved_client_changes", value: "Saved client changes"))
         return .saved
     }
 

@@ -44,7 +44,7 @@ final class ServiceRepository: ServiceRepositoryProtocol {
         let changedAt = Date()
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Saved service", occurredAt: changedAt)
+            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.saved_service", value: "Saved service"), occurredAt: changedAt)
         }
         // Don't ship the SwiftData model itself across NotificationCenter — it's
         // not Sendable and listeners on other actors can crash or see invalidated
@@ -62,7 +62,7 @@ final class ServiceRepository: ServiceRepositoryProtocol {
         let changedAt = Date()
         try modelContext.save()
         await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange("Deleted service", occurredAt: changedAt)
+            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.deleted_service", value: "Deleted service"), occurredAt: changedAt)
         }
         // Use the same notification for save+delete so existing listeners just
         // refetch on either signal. The serviceID + a `deleted` marker let

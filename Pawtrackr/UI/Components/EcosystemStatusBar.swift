@@ -34,7 +34,7 @@ struct EcosystemStatusBar: View {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
                     .background(Color.secondary.opacity(0.12), in: Capsule())
-                    .accessibilityLabel(Text("\(monitor.offlineBufferedMutationCount) buffered local changes"))
+                    .accessibilityLabel(Text(String(format: AppLocalization.localized("ecosystem.buffered_changes_fmt", value: "%d buffered local changes"), monitor.offlineBufferedMutationCount)))
             }
         }
         .padding(.horizontal, 10)

@@ -215,7 +215,9 @@ final class ClientsViewModel {
 
             try modelContext.save()
             CloudKitMonitor.shared.recordLocalChange(
-                "Recorded \(method) outreach",
+                method == "call"
+                    ? AppLocalization.localized("cloudkit.change.outreach_call", value: "Recorded a follow-up call")
+                    : AppLocalization.localized("cloudkit.change.outreach_message", value: "Recorded a follow-up message"),
                 entityName: "Pet",
                 recordUUID: petsToClear.first?.uuid,
                 changedKeys: ["lastAttentionOutreachAt"]
@@ -226,7 +228,7 @@ final class ClientsViewModel {
             Logger.ui.info("Client list cleared needs-attention flag for \(petsToClear.count, privacy: .public) pet(s) after \(method, privacy: .public)")
         } catch {
             appError = .database(error.localizedDescription)
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "recording attention outreach from client list")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.record_outreach", value: "recording the follow-up"))
             Logger.database.error("Failed to record client-list attention outreach: \(String(describing: error))")
         }
     }

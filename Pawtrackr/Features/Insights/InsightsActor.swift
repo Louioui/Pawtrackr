@@ -46,7 +46,7 @@ public final actor InsightsActor {
         let cal = Calendar.current
         let end = cal.startOfDay(for: .now)
         guard let start = cal.date(byAdding: .day, value: -(periodDays - 1), to: end) else {
-            throw AppError.validation(.custom(message: "Invalid date range"))
+            throw AppError.validation(.custom(message: AppLocalization.localized("validation.invalid_date_range", value: "The selected date range is invalid.")))
         }
         
         var descriptor = FetchDescriptor<DaySummary>(

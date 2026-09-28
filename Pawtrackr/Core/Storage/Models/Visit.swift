@@ -154,7 +154,7 @@ final class Visit {
 
     func setBeforePhoto(_ data: Data?) {
         if let data = data {
-            beforePhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: "visit before photo")
+            beforePhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.visit_before_photo", value: "visit before photo"))
             beforeThumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
         } else {
             beforePhotoData = nil
@@ -165,7 +165,7 @@ final class Visit {
 
     func setAfterPhoto(_ data: Data?) {
         if let data = data {
-            afterPhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: "visit after photo")
+            afterPhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.visit_after_photo", value: "visit after photo"))
             afterThumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
         } else {
             afterPhotoData = nil

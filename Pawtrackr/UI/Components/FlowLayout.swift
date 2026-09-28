@@ -30,7 +30,7 @@ public struct FlowLayout<Content: View>: View {
             content()
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Tag list")
+        .accessibilityLabel(AppLocalization.localized("flow_layout.accessibility", value: "Tag list"))
     }
 }
 

@@ -32,12 +32,12 @@ struct RewardsCatalogView: View {
                     balanceHeader
                 }
 
-                Section("Rewards") {
+                Section(AppLocalization.localized("loyalty.catalog.section", value: "Rewards")) {
                     if visibleRewards.isEmpty {
                         ContentUnavailableView(
-                            "Rewards Paused",
+                            AppLocalization.localized("loyalty.catalog.paused_title", value: "Rewards Paused"),
                             systemImage: "gift",
-                            description: Text("Rewards can be re-enabled in Loyalty settings.")
+                            description: Text(AppLocalization.localized("loyalty.catalog.paused_detail", value: "Rewards can be re-enabled in Loyalty settings."))
                         )
                     } else {
                         ForEach(visibleRewards) { reward in
@@ -47,14 +47,13 @@ struct RewardsCatalogView: View {
                 }
             }
             .rewardsCatalogListStyle()
-            .navigationTitle("Rewards Catalog")
+            .navigationTitle(AppLocalization.localized("loyalty.catalog.title", value: "Rewards Catalog"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityLabel("Done")
+                    Button(AppLocalization.localized("common.done", value: "Done")) { dismiss() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -66,10 +65,10 @@ struct RewardsCatalogView: View {
     private var balanceHeader: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Available Balance")
+                Text(AppLocalization.localized("loyalty.catalog.available_balance", value: "Available Balance"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text("Redeem available loyalty rewards")
+                Text(AppLocalization.localized("loyalty.catalog.redeem_hint", value: "Redeem available loyalty rewards"))
                     .font(.subheadline.weight(.semibold))
             }
 
@@ -78,7 +77,7 @@ struct RewardsCatalogView: View {
             LoyaltyPointsBadge(client: client, scale: .compact)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Available balance, \(client.loyaltyPoints) points")
+        .accessibilityLabel(String(format: AppLocalization.localized("loyalty.catalog.balance_accessibility_fmt", value: "Available balance, %d points"), client.loyaltyPoints))
         .accessibilityIdentifier("rewardsCatalog.balance")
     }
 
@@ -127,7 +126,7 @@ struct RewardsCatalogView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(reward.pointCost) points")
+                Text(LoyaltyCopy.points(reward.pointCost))
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(reward.style.tint)
             }
@@ -143,7 +142,7 @@ struct RewardsCatalogView: View {
                             .controlSize(.small)
                             .tint(.white)
                     } else {
-                        Text(canRedeem ? "Redeem" : "Locked")
+                        Text(canRedeem ? AppLocalization.localized("loyalty.catalog.redeem", value: "Redeem") : AppLocalization.localized("loyalty.catalog.locked", value: "Locked"))
                             .font(.caption.weight(.bold))
                     }
                 }
@@ -158,7 +157,11 @@ struct RewardsCatalogView: View {
             .buttonStyle(.plain)
             .disabled(!canRedeem || redeemingRewardID != nil)
             .pressScaleStyle(hapticsEnabled: true)
-            .accessibilityLabel("\(canRedeem ? "Redeem" : "Locked"), \(reward.title)")
+            .accessibilityLabel(String(
+                format: AppLocalization.localized("loyalty.catalog.reward_accessibility_fmt", value: "%1$@, %2$@"),
+                canRedeem ? AppLocalization.localized("loyalty.catalog.redeem", value: "Redeem") : AppLocalization.localized("loyalty.catalog.locked", value: "Locked"),
+                reward.title
+            ))
             .accessibilityIdentifier("rewardsCatalog.reward.\(reward.id).redeem")
         }
         .padding(.vertical, 4)
@@ -176,7 +179,7 @@ struct RewardsCatalogView: View {
                 let service = LoyaltyService(modelContainer: modelContext.container)
                 try await service.redeemPoints(client: client, points: reward.pointCost, reason: reward.title)
                 withAnimation(MotionSystem.snappy) {
-                    successMessage = "Redeemed \(reward.title)"
+                    successMessage = String(format: AppLocalization.localized("loyalty.catalog.redeemed_fmt", value: "Redeemed %@"), reward.title)
                 }
                 HapticManager.notify(.success)
             } catch {

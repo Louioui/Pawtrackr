@@ -22,15 +22,15 @@ public enum ValidationError: LocalizedError, Identifiable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .emptyField(let fieldName):
-            return "The field \(fieldName) cannot be left blank."
+            return String(format: AppLocalization.localized("validation.empty_field_fmt", value: "The field %@ cannot be left blank."), fieldName)
         case .invalidPhoneNumber:
-            return "Please enter a valid phone number."
+            return AppLocalization.localized("new_client.validation.phone_invalid", value: "Please enter a valid phone number.")
         case .invalidPIN:
-            return "The PIN you entered is not valid."
+            return AppLocalization.localized("validation.invalid_pin", value: "The PIN you entered is not valid.")
         case .invalidAmount:
-            return "Please enter a valid amount."
+            return AppLocalization.localized("validation.invalid_amount", value: "Please enter a valid amount.")
         case .invalidDateRange:
-            return "The selected date range is invalid."
+            return AppLocalization.localized("validation.invalid_date_range", value: "The selected date range is invalid.")
         case .custom(let message):
             return message
         }

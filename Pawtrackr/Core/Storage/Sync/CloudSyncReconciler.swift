@@ -21,23 +21,67 @@ enum CloudSyncReconciler {
         var duplicatePetGroups: Int = 0
 
         var summary: String {
+            // Shown in Salon Activity, so every part is localized.
             var parts: [String] = []
             if duplicateCheckoutTransactionsRemoved > 0 {
-                parts.append("removed \(duplicateCheckoutTransactionsRemoved) duplicate checkout transaction(s)")
+                parts.append(String(
+                    format: AppLocalization.localized(
+                        "cloudkit.reconcile.duplicate_transactions_fmt",
+                        value: "duplicate checkout transactions removed: %d"
+                    ),
+                    duplicateCheckoutTransactionsRemoved
+                ))
             }
             if duplicateVisitsRemoved > 0 {
-                parts.append("merged \(duplicateVisitsRemoved) duplicate visit(s)")
+                parts.append(String(
+                    format: AppLocalization.localized(
+                        "cloudkit.reconcile.duplicate_visits_fmt",
+                        value: "duplicate visits merged: %d"
+                    ),
+                    duplicateVisitsRemoved
+                ))
             }
             if orphanVisitItemCount > 0 {
-                parts.append("found \(orphanVisitItemCount) orphan visit item(s)")
+                parts.append(String(
+                    format: AppLocalization.localized(
+                        "cloudkit.reconcile.orphan_items_fmt",
+                        value: "visit services without a visit: %d"
+                    ),
+                    orphanVisitItemCount
+                ))
             }
             if orphanPaymentCount > 0 {
-                parts.append("found \(orphanPaymentCount) orphan payment(s)")
+                parts.append(String(
+                    format: AppLocalization.localized(
+                        "cloudkit.reconcile.orphan_payments_fmt",
+                        value: "payments without a visit: %d"
+                    ),
+                    orphanPaymentCount
+                ))
             }
             if duplicateClientGroups > 0 || duplicatePetGroups > 0 {
-                parts.append("found \(duplicateClientGroups) duplicated client(s) and \(duplicatePetGroups) duplicated pet(s), left in place")
+                parts.append(String(
+                    format: AppLocalization.localized(
+                        "cloudkit.reconcile.duplicate_records_fmt",
+                        value: "duplicated clients: %1$d, duplicated pets: %2$d, left in place"
+                    ),
+                    duplicateClientGroups,
+                    duplicatePetGroups
+                ))
             }
-            return parts.isEmpty ? "Cloud import reconciliation found no issues" : "Cloud import reconciliation " + parts.joined(separator: ", ")
+            guard !parts.isEmpty else {
+                return AppLocalization.localized(
+                    "cloudkit.reconcile.no_issues",
+                    value: "Checked the iCloud download and found no issues"
+                )
+            }
+            return String(
+                format: AppLocalization.localized(
+                    "cloudkit.reconcile.summary_fmt",
+                    value: "Checked the iCloud download: %@"
+                ),
+                parts.joined(separator: "; ")
+            )
         }
     }
 

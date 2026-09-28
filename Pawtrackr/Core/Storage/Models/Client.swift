@@ -166,7 +166,7 @@ final class Client {
 
     func setPhotoData(_ data: Data?) {
         if let data = data {
-            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: "client profile photo")
+            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.client_photo", value: "client profile photo"))
             updateThumbnail()
         } else {
             photoData = nil

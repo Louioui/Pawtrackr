@@ -69,7 +69,7 @@ final class ServiceManagementViewModel {
                 // fetchServices() call needed here.
             } catch {
                 appError = .database(error.localizedDescription)
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting service")
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_service", value: "deleting the service"))
                 Logger.serviceManagement.error("Failed to delete service: \(String(describing: error))")
             }
         }

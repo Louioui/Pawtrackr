@@ -56,7 +56,7 @@ struct PhotoPreview: View {
                         .onTapGesture(count: 2, perform: toggleZoom)
                         .animation(.spring(response: 0.25, dampingFraction: 0.85), value: scale)
                         .animation(.spring(response: 0.25, dampingFraction: 0.85), value: offset)
-                        .accessibilityLabel(Text("\(title) photo preview"))
+                        .accessibilityLabel(Text(String(format: AppLocalization.localized("photo_preview.accessibility_fmt", value: "%@ photo preview"), title)))
                         .accessibilityHint(Text(AppLocalization.localized("photo_preview.zoom_hint", value: "Pinch with two fingers to zoom")))
                 } else {
                     Text(NSLocalizedString("photo_preview.unable_to_load", comment: ""))

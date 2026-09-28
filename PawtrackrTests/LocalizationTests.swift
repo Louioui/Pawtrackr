@@ -41,6 +41,119 @@ final class LocalizationTests: XCTestCase {
         }
     }
 
+    /// English has its own table too: a key missing there falls back to the
+    /// device language's bundle instead of the code's English text.
+    func testEnglishBundleContainsEverySwiftLocalizationKey() throws {
+        let sourceRoot = try Self.repositoryRoot().appendingPathComponent("Pawtrackr")
+        let keysUsedInSwift = try Self.swiftLocalizationKeys(under: sourceRoot)
+        let localizedKeys = try Self.keys(inStringsFile: Self.stringsURL(locale: "en", sourceRoot: sourceRoot))
+        let missing = keysUsedInSwift.subtracting(localizedKeys).sorted()
+        XCTAssertTrue(missing.isEmpty, "en.lproj is missing localization keys: \(missing.joined(separator: ", "))")
+    }
+
+    /// A translation with a different placeholder list crashes or garbles
+    /// `String(format:)`, so every key must carry the same specifiers in
+    /// en, es and es-419.
+    func testFormatSpecifiersMatchAcrossLocales() throws {
+        let sourceRoot = try Self.repositoryRoot().appendingPathComponent("Pawtrackr")
+        var tables: [String: [String: String]] = [:]
+        for locale in ["en", "es", "es-419"] {
+            let url = Self.stringsURL(locale: locale, sourceRoot: sourceRoot)
+            let data = try Data(contentsOf: url)
+            tables[locale] = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String] ?? [:]
+        }
+        let english = try XCTUnwrap(tables["en"])
+        var mismatches: [String] = []
+        for (key, englishValue) in english {
+            let expected = Self.formatSpecifiers(in: englishValue)
+            for locale in ["es", "es-419"] {
+                guard let value = tables[locale]?[key] else { continue }
+                if Self.formatSpecifiers(in: value) != expected {
+                    mismatches.append("\(locale) \(key)")
+                }
+            }
+        }
+        XCTAssertTrue(mismatches.isEmpty, "Format specifiers differ from English: \(mismatches.sorted().joined(separator: ", "))")
+    }
+
+    func testSpanishTablesCoverTheSameKeys() throws {
+        let sourceRoot = try Self.repositoryRoot().appendingPathComponent("Pawtrackr")
+        let spain = try Self.keys(inStringsFile: Self.stringsURL(locale: "es", sourceRoot: sourceRoot))
+        let latinAmerica = try Self.keys(inStringsFile: Self.stringsURL(locale: "es-419", sourceRoot: sourceRoot))
+        XCTAssertEqual(spain.symmetricDifference(latinAmerica).sorted(), [])
+    }
+
+    func testLoyaltyRoleAndSyncWordingFollowTheAppLanguage() {
+        let defaults = UserDefaults.standard
+        let previous = defaults.string(forKey: AppSettingsKeys.appLanguageOverride)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: AppSettingsKeys.appLanguageOverride)
+            } else {
+                defaults.removeObject(forKey: AppSettingsKeys.appLanguageOverride)
+            }
+        }
+
+        defaults.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        XCTAssertEqual(LoyaltyCopy.points(1), "1 point")
+        XCTAssertEqual(LoyaltyCopy.points(25), "25 points")
+        XCTAssertEqual(LoyaltyTier.gold.displayName, "Gold")
+        XCTAssertEqual(OnboardingRole.frontDeskGroomer.title, "Front Desk / Groomer")
+
+        defaults.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        XCTAssertEqual(LoyaltyCopy.points(1), "1 punto")
+        XCTAssertEqual(LoyaltyCopy.points(25), "25 puntos")
+        XCTAssertEqual(LoyaltyTier.gold.displayName, "Oro")
+        XCTAssertEqual(OnboardingRole.frontDeskGroomer.title, "Recepción o groomer")
+        XCTAssertEqual(CloudKitMonitor.SyncEventKind.exportToCloud.displayLabel, "Exportación")
+    }
+
+    /// The onboarding simulator shows the catalog a new salon is seeded with,
+    /// in the same order and at the same costs.
+    func testLoyaltySimulatorShowsTheSeededCatalog() {
+        let ladder = LoyaltySimulatorCard.rewardLadder
+        XCTAssertEqual(ladder.map(\.points), LoyaltyReward.builtInCatalog.map(\.pointCost))
+        XCTAssertEqual(ladder.count, LoyaltyReward.builtInCatalog.count)
+    }
+
+    private static func stringsURL(locale: String, sourceRoot: URL) -> URL {
+        sourceRoot
+            .appendingPathComponent("App/Navigation/Coordinators/Localizable")
+            .appendingPathComponent("\(locale).lproj")
+            .appendingPathComponent("Localizable.strings")
+    }
+
+    /// Conversion characters in placeholder order, e.g. "%1$d of %2$@" -> ["d", "@"].
+    private static func formatSpecifiers(in value: String) -> [String] {
+        guard let regex = try? NSRegularExpression(
+            // No space flag: "15% Off" is a percent sign, not "% O".
+            pattern: #"%(?:(\d+)\$)?[-+#0]*\d*(?:\.\d+)?(?:ll|l|hh|h|z|q)?([@dDiuUxXoOfFeEgGcCsS%])"#
+        ) else { return [] }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        var positioned: [(Int, String)] = []
+        var sequential = 0
+        for match in regex.matches(in: value, range: range) {
+            guard let conversionRange = Range(match.range(at: 2), in: value) else { continue }
+            var conversion = String(value[conversionRange])
+            if conversion == "%" { continue }
+            switch conversion {
+            case "d", "D", "i", "u", "U", "x", "X", "o", "O", "c", "C": conversion = "d"
+            case "f", "F", "e", "E", "g", "G": conversion = "f"
+            case "s", "S": conversion = "@"
+            default: break
+            }
+            let position: Int
+            if let positionRange = Range(match.range(at: 1), in: value), let explicit = Int(value[positionRange]) {
+                position = explicit
+            } else {
+                sequential += 1
+                position = sequential
+            }
+            positioned.append((position, conversion))
+        }
+        return positioned.sorted { $0.0 < $1.0 }.map(\.1)
+    }
+
     private static func repositoryRoot() throws -> URL {
         var candidate = URL(fileURLWithPath: #filePath)
         while candidate.path != "/" {

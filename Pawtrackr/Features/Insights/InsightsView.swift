@@ -382,7 +382,7 @@ struct InsightsView: View {
                     .contentTransition(.numericText())
 
                 if vm.revenueSeries.isEmpty || vm.totalRevenue == .zero {
-                    emptyState(icon: "chart.bar.xaxis", message: "No revenue recorded in this period")
+                    emptyState(icon: "chart.bar.xaxis", message: localized("insights.revenue.empty", value: "No revenue recorded in this period"))
                 } else {
                     if let selected = selectedRevenuePoint(in: vm) {
                         Text("\(selected.date.formatted(.dateTime.weekday(.wide))): \(selected.amount.moneyString)")

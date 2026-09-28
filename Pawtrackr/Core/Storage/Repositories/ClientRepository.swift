@@ -313,7 +313,7 @@ final actor ClientRepository: ClientRepositoryProtocol {
         let clientUUID = client.uuid
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
-                "Created client",
+                AppLocalization.localized("cloudkit.change.created_client", value: "Created client"),
                 occurredAt: changedAt,
                 entityName: "Client",
                 recordUUID: clientUUID,
@@ -334,7 +334,7 @@ final actor ClientRepository: ClientRepositoryProtocol {
         let clientUUID = client.uuid
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
-                "Saved client",
+                AppLocalization.localized("cloudkit.change.saved_client", value: "Saved client"),
                 occurredAt: changedAt,
                 entityName: "Client",
                 recordUUID: clientUUID,
@@ -359,7 +359,7 @@ final actor ClientRepository: ClientRepositoryProtocol {
         SpotlightIndexer.shared.removeClientAndPetsFromIndex(clientID: clientUUID, petIDs: petUUIDs)
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
-                "Deleted client",
+                AppLocalization.localized("cloudkit.change.deleted_client", value: "Deleted client"),
                 occurredAt: changedAt,
                 entityName: "Client",
                 recordUUID: clientUUID,

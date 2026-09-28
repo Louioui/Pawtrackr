@@ -160,7 +160,7 @@ struct EditServiceView: View {
             } catch let error as ValidationError {
                 viewModel.appError = .validation(error)
             } catch {
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving service")
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_service", value: "saving the service"))
                 viewModel.appError = .database(error.localizedDescription)
             }
         }

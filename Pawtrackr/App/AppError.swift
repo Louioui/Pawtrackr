@@ -27,45 +27,45 @@ enum AppError: LocalizedError, Identifiable, Equatable {
     var errorDescription: String? {
         switch self {
         case .database(let message):
-            return "Database Error: \(message)"
+            return String(format: AppLocalization.localized("app_error.database_fmt", value: "Database Error: %@"), message)
         case .validation(let error):
             return error.localizedDescription
         case .network(let message):
-            return "Network Error: \(message)"
+            return String(format: AppLocalization.localized("app_error.network_fmt", value: "Network Error: %@"), message)
         case .authentication(let message):
-            return "Authentication Error: \(message)"
+            return String(format: AppLocalization.localized("app_error.authentication_fmt", value: "Authentication Error: %@"), message)
         case .unknown(let message):
-            return "An unexpected error occurred: \(message)"
+            return String(format: AppLocalization.localized("app_error.unknown_fmt", value: "An unexpected error occurred: %@"), message)
         }
     }
     
     var failureReason: String? {
         switch self {
         case .database:
-            return "The local database encountered an issue."
+            return AppLocalization.localized("app_error.database_reason", value: "The local database encountered an issue.")
         case .validation:
-            return "The information provided is invalid."
+            return AppLocalization.localized("app_error.validation_reason", value: "The information provided is invalid.")
         case .network:
-            return "There was a problem connecting to the service."
+            return AppLocalization.localized("app_error.network_reason", value: "There was a problem connecting to the service.")
         case .authentication:
-            return "You are not authorized to perform this action."
+            return AppLocalization.localized("app_error.authentication_reason", value: "You are not authorized to perform this action.")
         case .unknown:
-            return "Something went wrong."
+            return AppLocalization.localized("app_error.unknown_reason", value: "Something went wrong.")
         }
     }
     
     var recoverySuggestion: String? {
         switch self {
         case .database:
-            return "Try restarting the app. If the problem persists, contact support."
+            return AppLocalization.localized("app_error.database_recovery", value: "Try restarting the app. If the problem persists, contact support.")
         case .validation:
-            return "Please check the fields and try again."
+            return AppLocalization.localized("app_error.validation_recovery", value: "Please check the fields and try again.")
         case .network:
-            return "Please check your internet connection and try again."
+            return AppLocalization.localized("app_error.network_recovery", value: "Please check your internet connection and try again.")
         case .authentication:
-            return "Please log in again."
+            return AppLocalization.localized("app_error.authentication_recovery", value: "Please log in again.")
         case .unknown:
-            return "Try again later."
+            return AppLocalization.localized("app_error.unknown_recovery", value: "Try again later.")
         }
     }
 }

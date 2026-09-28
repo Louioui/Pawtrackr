@@ -82,7 +82,7 @@ struct RecentHistoryView: View {
                 viewModel?.fetchVisits()
             } catch {
                 HapticManager.notify(.error)
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting visit history")
+                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_visit_history", value: "deleting the visit history"))
                 viewModel?.appError = .database(error.localizedDescription)
             }
         }

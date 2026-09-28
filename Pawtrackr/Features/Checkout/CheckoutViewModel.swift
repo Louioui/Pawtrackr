@@ -583,7 +583,7 @@ final class CheckoutViewModel {
     func processPayment() async {
         guard !isSaving, state != .confirmed else { return }
         guard currentStep == .review else {
-            self.appError = .validation(.custom(message: "Review checkout before confirming payment."))
+            self.appError = .validation(.custom(message: AppLocalization.localized("checkout.error.review_first", value: "Review checkout before confirming payment.")))
             return
         }
 
@@ -598,7 +598,7 @@ final class CheckoutViewModel {
             // Checkout was attempted before `loadServices(modelContext:)` wired up the
             // real ModelContainer. Fail loudly instead of silently writing to a phantom store.
             Logger.checkout.error("CheckoutViewModel: processPayment invoked before transactionActor was initialized")
-            let appErr = AppError.database("Checkout isn't ready yet. Please reopen the screen and try again.")
+            let appErr = AppError.database(AppLocalization.localized("checkout.error.not_ready", value: "Checkout isn't ready yet. Please reopen the screen and try again."))
             state = .failed(appErr)
             appError = appErr
             return
@@ -696,8 +696,8 @@ final class CheckoutViewModel {
             #endif
         } catch {
             Logger.checkout.error("CheckoutViewModel: Persistence failed - \(error.localizedDescription)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving checkout")
-            let appErr = AppError.database("Persistence failed: \(error.localizedDescription)")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_checkout", value: "saving the checkout"))
+            let appErr = AppError.database(String(format: AppLocalization.localized("checkout.error.save_failed_fmt", value: "Persistence failed: %@"), error.localizedDescription))
             state = .failed(appErr)
             appError = appErr
             isSaving = false
@@ -726,14 +726,14 @@ final class CheckoutViewModel {
         switch step {
         case .services:
             guard hasSelectedServices else {
-                throw ValidationError.custom(message: "Select at least one service before continuing.")
+                throw ValidationError.custom(message: AppLocalization.localized("checkout.error.no_services", value: "Select at least one service before continuing."))
             }
         case .details:
             break
         case .payment, .review:
             let total = servicesTotalDecimal
             guard total > 0 else {
-                throw ValidationError.custom(message: "Cannot check out with a total amount of zero.")
+                throw ValidationError.custom(message: AppLocalization.localized("checkout.error.zero_total", value: "Cannot check out with a total amount of zero."))
             }
             if let message = selectedPaymentMethod.validationMessage(for: externalReference) {
                 throw ValidationError.custom(message: message)

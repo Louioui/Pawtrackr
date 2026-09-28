@@ -83,9 +83,9 @@ struct LoyaltyManagementView: View {
                     .background(DS.ColorToken.warning, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Pawtrackr Pro")
+                    Text(AppLocalization.localized("loyalty.settings.pro_title", value: "Pawtrackr Pro"))
                         .font(.headline)
-                    Text("Loyalty configuration is available with active Pro access.")
+                    Text(AppLocalization.localized("loyalty.settings.pro_detail", value: "Loyalty configuration is available with active Pro access."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -98,10 +98,10 @@ struct LoyaltyManagementView: View {
     private var earningRulesCard: some View {
         Card(cornerRadius: 12, accent: .leading(.color(DS.ColorToken.warning))) {
             VStack(alignment: .leading, spacing: 14) {
-                Label("Loyalty Earning Rules", systemImage: "star.circle.fill")
+                Label(AppLocalization.localized("loyalty.settings.earning_rules", value: "Loyalty Earning Rules"), systemImage: "star.circle.fill")
                     .font(.headline)
 
-                Picker("Earning Mode", selection: earnModeBinding) {
+                Picker(AppLocalization.localized("loyalty.settings.earning_mode", value: "Earning Mode"), selection: earnModeBinding) {
                     ForEach(LoyaltyEarnMode.allCases, id: \.self) { mode in
                         Text(mode.displayTitle).tag(mode)
                     }
@@ -113,7 +113,7 @@ struct LoyaltyManagementView: View {
                 case .pointsPerDollar:
                     Stepper(value: pointsPerDollarBinding, in: 0...50, step: 1) {
                         settingsValueRow(
-                            title: "Points per dollar",
+                            title: AppLocalization.localized("loyalty.settings.points_per_dollar", value: "Points per dollar"),
                             value: "\(pointsPerDollarBinding.wrappedValue)"
                         )
                     }
@@ -121,7 +121,7 @@ struct LoyaltyManagementView: View {
                 case .flatPerVisit:
                     Stepper(value: pointsPerVisitBinding, in: 0...500, step: 5) {
                         settingsValueRow(
-                            title: "Flat visit points",
+                            title: AppLocalization.localized("loyalty.settings.flat_visit_points", value: "Flat visit points"),
                             value: "\(pointsPerVisitBinding.wrappedValue)"
                         )
                     }
@@ -130,14 +130,14 @@ struct LoyaltyManagementView: View {
 
                 Stepper(value: thresholdBinding, in: 1...10_000, step: 25) {
                     settingsValueRow(
-                        title: "Reward threshold",
+                        title: AppLocalization.localized("loyalty.settings.reward_threshold", value: "Reward threshold"),
                         value: "\(thresholdBinding.wrappedValue)"
                     )
                 }
                 .accessibilityIdentifier("loyaltySettings.redemptionThreshold")
 
                 Toggle(isOn: catalogEnabledBinding) {
-                    Label("Rewards Catalog", systemImage: "gift.fill")
+                    Label(AppLocalization.localized("loyalty.catalog.title", value: "Rewards Catalog"), systemImage: "gift.fill")
                 }
                 .accessibilityIdentifier("loyaltySettings.catalogEnabled")
             }
@@ -147,7 +147,7 @@ struct LoyaltyManagementView: View {
     private var rewardsCatalogCard: some View {
         Card(cornerRadius: 12, accent: .leading(.color(DS.ColorToken.info))) {
             VStack(alignment: .leading, spacing: 14) {
-                Label("Reward Templates", systemImage: "giftcard.fill")
+                Label(AppLocalization.localized("loyalty.settings.templates", value: "Reward Templates"), systemImage: "giftcard.fill")
                     .font(.headline)
 
                 Button {
@@ -164,9 +164,9 @@ struct LoyaltyManagementView: View {
 
                 if rewards.isEmpty {
                     ContentUnavailableView(
-                        "No Rewards",
+                        AppLocalization.localized("loyalty.settings.no_rewards_title", value: "No Rewards"),
                         systemImage: "gift",
-                        description: Text("Default rewards are added on launch.")
+                        description: Text(AppLocalization.localized("loyalty.settings.no_rewards_detail", value: "Default rewards are added on launch."))
                     )
                     .frame(maxWidth: .infinity)
                 } else {
@@ -186,22 +186,22 @@ struct LoyaltyManagementView: View {
 
     private var addRewardForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("Reward title", text: $newRewardTitle)
+            TextField(AppLocalization.localized("loyalty.settings.reward_title_field", value: "Reward title"), text: $newRewardTitle)
                 .textFieldStyle(.roundedBorder)
                 .textLengthLimit($newRewardTitle, to: TextInputLimits.name)
                 .accessibilityIdentifier("loyaltySettings.newRewardTitle")
 
-            TextField("Reward detail", text: $newRewardDetail)
+            TextField(AppLocalization.localized("loyalty.settings.reward_detail_field", value: "Reward detail"), text: $newRewardDetail)
                 .textFieldStyle(.roundedBorder)
                 .textLengthLimit($newRewardDetail, to: TextInputLimits.notes)
                 .accessibilityIdentifier("loyaltySettings.newRewardDetail")
 
             Stepper(value: $newRewardCost, in: 1...10_000, step: 25) {
-                settingsValueRow(title: "Cost", value: "\(newRewardCost) points")
+                settingsValueRow(title: AppLocalization.localized("loyalty.settings.cost", value: "Cost"), value: LoyaltyCopy.points(newRewardCost))
             }
             .accessibilityIdentifier("loyaltySettings.newRewardCost")
 
-            Picker("Style", selection: $newRewardStyle) {
+            Picker(AppLocalization.localized("loyalty.settings.style", value: "Style"), selection: $newRewardStyle) {
                 ForEach(LoyaltyReward.Style.allCases, id: \.self) { style in
                     Label(style.displayTitle, systemImage: style.systemImage)
                         .tag(style)
@@ -213,7 +213,7 @@ struct LoyaltyManagementView: View {
             Button {
                 createReward()
             } label: {
-                Label("Add Reward", systemImage: "plus.circle.fill")
+                Label(AppLocalization.localized("loyalty.settings.add_reward", value: "Add Reward"), systemImage: "plus.circle.fill")
             }
             .buttonStyle(.borderedProminent)
             .pressScaleStyle(hapticsEnabled: true)
@@ -244,7 +244,7 @@ struct LoyaltyManagementView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(reward.title)
                         .font(.subheadline.weight(.semibold))
-                    Text("\(reward.pointCost) points")
+                    Text(LoyaltyCopy.points(reward.pointCost))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -323,7 +323,9 @@ struct LoyaltyManagementView: View {
 
     private func createReward() {
         let title = newRewardTitle
-        let detail = newRewardDetail.isEmpty ? "Custom loyalty reward." : newRewardDetail
+        let detail = newRewardDetail.isEmpty
+            ? AppLocalization.localized("loyalty.settings.custom_reward_detail", value: "Custom loyalty reward.")
+            : newRewardDetail
         let cost = newRewardCost
         let style = newRewardStyle
 
@@ -371,9 +373,9 @@ private extension LoyaltyEarnMode {
     var displayTitle: String {
         switch self {
         case .pointsPerDollar:
-            "Points per dollar"
+            AppLocalization.localized("loyalty.settings.mode.per_dollar", value: "Points per dollar")
         case .flatPerVisit:
-            "Flat per visit"
+            AppLocalization.localized("loyalty.settings.mode.flat", value: "Flat per visit")
         }
     }
 }
@@ -382,13 +384,13 @@ private extension LoyaltyReward.Style {
     var displayTitle: String {
         switch self {
         case .credit:
-            "Credit"
+            AppLocalization.localized("loyalty.style.credit", value: "Credit")
         case .care:
-            "Care"
+            AppLocalization.localized("loyalty.style.care", value: "Care")
         case .upgrade:
-            "Upgrade"
+            AppLocalization.localized("loyalty.style.upgrade", value: "Upgrade")
         case .vip:
-            "VIP"
+            AppLocalization.localized("loyalty.style.vip", value: "VIP")
         }
     }
 

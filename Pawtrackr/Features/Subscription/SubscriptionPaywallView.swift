@@ -69,7 +69,7 @@ struct SubscriptionPaywallView: View {
                 }
                 .buttonStyle(.plain)
                 .pressScaleStyle(hapticsEnabled: true)
-                .accessibilityLabel("Dismiss")
+                .accessibilityLabel(AppLocalization.localized("common.dismiss", value: "Dismiss"))
                 .accessibilityIdentifier("subscriptionPaywall.dismiss")
                 .padding(.top, 12)
                 .padding(.trailing, 16)
@@ -92,12 +92,12 @@ struct SubscriptionPaywallView: View {
                 .foregroundStyle(Color.orange.gradient)
                 .shadow(color: .orange.opacity(0.3), radius: 10, y: 5)
 
-            Text("Elevate Pawtrackr")
+            Text(AppLocalization.localized("subscription.paywall.headline", value: "Elevate Pawtrackr"))
                 .font(.system(.title, design: .rounded))
                 .fontWeight(.black)
                 .multilineTextAlignment(.center)
 
-            Text("Unlock the loyalty engine, multi-device sync, and advanced insights.")
+            Text(AppLocalization.localized("subscription.paywall.subheadline", value: "Unlock the loyalty engine, multi-device sync, and advanced insights."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -110,18 +110,18 @@ struct SubscriptionPaywallView: View {
         VStack(alignment: .leading, spacing: 16) {
             PaywallFeatureRow(
                 icon: "heart.text.square.fill", tint: .pink,
-                title: "Automated Loyalty & Rewards",
-                detail: "Configurable point rules and a redeemable rewards catalog."
+                title: AppLocalization.localized("subscription.paywall.feature.loyalty_title", value: "Automated Loyalty & Rewards"),
+                detail: AppLocalization.localized("subscription.paywall.feature.loyalty_detail", value: "Configurable point rules and a redeemable rewards catalog.")
             )
             PaywallFeatureRow(
                 icon: "cloud.fill", tint: .blue,
-                title: "Multi-Device CloudKit Sync",
-                detail: "Your salon data stays unified across all your devices."
+                title: AppLocalization.localized("subscription.paywall.feature.sync_title", value: "Multi-Device iCloud Sync"),
+                detail: AppLocalization.localized("subscription.paywall.feature.sync_detail", value: "Your salon data stays unified across all your devices.")
             )
             PaywallFeatureRow(
                 icon: "chart.pie.fill", tint: .green,
-                title: "Advanced Insights & Export",
-                detail: "Deeper revenue dashboards and financial exporting."
+                title: AppLocalization.localized("subscription.paywall.feature.insights_title", value: "Advanced Insights & Export"),
+                detail: AppLocalization.localized("subscription.paywall.feature.insights_detail", value: "Deeper revenue dashboards and financial exporting.")
             )
         }
         .padding(.horizontal, 24)
@@ -133,7 +133,7 @@ struct SubscriptionPaywallView: View {
                 .font(.headline)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
-            Text("Auto-renewable. Cancel anytime in the App Store.")
+            Text(AppLocalization.localized("subscription.paywall.renewal_note", value: "Auto-renewable. Cancel anytime in the App Store."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -164,7 +164,7 @@ struct SubscriptionPaywallView: View {
             Button(action: startPurchase) {
                 HStack(spacing: 8) {
                     if isProcessing { ProgressView().tint(.white) }
-                    Text(isProcessing ? "Connecting to the App Store…" : subscribeTitle)
+                    Text(isProcessing ? AppLocalization.localized("subscription.paywall.connecting", value: "Connecting to the App Store…") : subscribeTitle)
                         .fontWeight(.bold)
                 }
                 .font(.headline)
@@ -186,7 +186,7 @@ struct SubscriptionPaywallView: View {
                     Task { await loadProduct() }
                 } label: {
                     Label(
-                        String(localized: "subscription.paywall.retry", defaultValue: "Try Again"),
+                        AppLocalization.localized("subscription.paywall.retry", value: "Try Again"),
                         systemImage: "arrow.clockwise"
                     )
                     .font(.subheadline.weight(.semibold))
@@ -197,7 +197,7 @@ struct SubscriptionPaywallView: View {
                 .accessibilityIdentifier("subscriptionPaywall.retry")
             }
 
-            Button("Restore Purchases", action: startRestore)
+            Button(AppLocalization.localized("subscription.paywall.restore", value: "Restore Purchases"), action: startRestore)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .disabled(isProcessing)
@@ -206,9 +206,9 @@ struct SubscriptionPaywallView: View {
 
     private var legalFootnote: some View {
         HStack(spacing: 6) {
-            Link("Terms of Use", destination: AppLinks.termsOfUse)
+            Link(AppLocalization.localized("subscription.paywall.terms", value: "Terms of Use"), destination: AppLinks.termsOfUse)
             Text(verbatim: "·").foregroundStyle(.secondary)
-            Link("Privacy Policy", destination: AppLinks.privacyPolicy)
+            Link(AppLocalization.localized("subscription.paywall.privacy", value: "Privacy Policy"), destination: AppLinks.privacyPolicy)
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
@@ -217,8 +217,10 @@ struct SubscriptionPaywallView: View {
 
     // MARK: - Copy derived from the live product
 
-    private var subscribeTitle: LocalizedStringKey {
-        hasFreeTrial ? "Start 7-Day Free Trial" : "Subscribe"
+    private var subscribeTitle: String {
+        hasFreeTrial
+            ? AppLocalization.localized("subscription.paywall.start_trial", value: "Start 7-Day Free Trial")
+            : AppLocalization.localized("subscription.paywall.subscribe", value: "Subscribe")
     }
 
     private var hasFreeTrial: Bool {
@@ -229,19 +231,15 @@ struct SubscriptionPaywallView: View {
     private var priceHeadline: String {
         switch productLoadState {
         case .loading:
-            return String(localized: "subscription.paywall.loading_price",
-                          defaultValue: "Loading subscription…")
+            return AppLocalization.localized("subscription.paywall.loading_price", value: "Loading subscription…")
         case .unavailable:
-            return String(localized: "subscription.paywall.unavailable",
-                          defaultValue: "Subscription is temporarily unavailable.")
+            return AppLocalization.localized("subscription.paywall.unavailable", value: "Subscription is temporarily unavailable.")
         case .ready:
             guard let product else {
-                return String(localized: "subscription.paywall.unavailable",
-                              defaultValue: "Subscription is temporarily unavailable.")
+                return AppLocalization.localized("subscription.paywall.unavailable", value: "Subscription is temporarily unavailable.")
             }
             let perMonth = String(
-                format: String(localized: "subscription.paywall.price_per_month",
-                               defaultValue: "%@ / month"),
+                format: AppLocalization.localized("subscription.paywall.price_per_month", value: "%@ / month"),
                 product.displayPrice
             )
             guard hasFreeTrial, let offer = product.subscription?.introductoryOffer else {
@@ -249,8 +247,7 @@ struct SubscriptionPaywallView: View {
             }
             let trial = Self.periodText(offer.period)
             return String(
-                format: String(localized: "subscription.paywall.trial_then_price",
-                               defaultValue: "%@ free, then %@"),
+                format: AppLocalization.localized("subscription.paywall.trial_then_price", value: "%@ free, then %@"),
                 trial, perMonth
             )
         }
@@ -263,12 +260,24 @@ struct SubscriptionPaywallView: View {
     private static func periodText(_ period: Product.SubscriptionPeriod) -> String {
         let value = period.value
         switch period.unit {
-        case .day:   return "\(value) day\(value == 1 ? "" : "s")"
-        case .week:  return "\(value * 7) days"
-        case .month: return "\(value) month\(value == 1 ? "" : "s")"
-        case .year:  return "\(value) year\(value == 1 ? "" : "s")"
+        case .day:   return dayText(value)
+        case .week:  return dayText(value * 7)
+        case .month:
+            return value == 1
+                ? AppLocalization.localized("subscription.period.month_one", value: "1 month")
+                : String(format: AppLocalization.localized("subscription.period.months_fmt", value: "%d months"), value)
+        case .year:
+            return value == 1
+                ? AppLocalization.localized("subscription.period.year_one", value: "1 year")
+                : String(format: AppLocalization.localized("subscription.period.years_fmt", value: "%d years"), value)
         @unknown default: return "\(value)"
         }
+    }
+
+    private static func dayText(_ days: Int) -> String {
+        days == 1
+            ? AppLocalization.localized("subscription.period.day_one", value: "1 day")
+            : String(format: AppLocalization.localized("subscription.period.days_fmt", value: "%d days"), days)
     }
 
     // MARK: - Actions
@@ -291,20 +300,14 @@ struct SubscriptionPaywallView: View {
         } catch {
             product = nil
             productLoadState = .unavailable
-            errorMessage = String(
-                localized: "subscription.paywall.load_failed",
-                defaultValue: "We could not load the subscription right now. Please try again later."
-            )
+            errorMessage = AppLocalization.localized("subscription.paywall.load_failed", value: "We could not load the subscription right now. Please try again later.")
             logger.error("Failed to load product: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     private func startPurchase() {
         guard productLoadState == .ready, product != nil else {
-            errorMessage = String(
-                localized: "subscription.paywall.unavailable_detail",
-                defaultValue: "Subscription is temporarily unavailable. Please try again later."
-            )
+            errorMessage = AppLocalization.localized("subscription.paywall.unavailable_detail", value: "Subscription is temporarily unavailable. Please try again later.")
             return
         }
         isProcessing = true
@@ -327,10 +330,7 @@ struct SubscriptionPaywallView: View {
         Task {
             await entitlements.restore()
             if !entitlements.isPremium {
-                errorMessage = String(
-                    localized: "subscription.paywall.restore_none",
-                    defaultValue: "No active subscription was found for this Apple ID."
-                )
+                errorMessage = AppLocalization.localized("subscription.paywall.restore_none", value: "No active subscription was found for this Apple ID.")
             }
             isProcessing = false
         }
@@ -342,8 +342,8 @@ struct SubscriptionPaywallView: View {
 private struct PaywallFeatureRow: View {
     let icon: String
     let tint: Color
-    let title: LocalizedStringKey
-    let detail: LocalizedStringKey
+    let title: String
+    let detail: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {

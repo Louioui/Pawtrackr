@@ -227,8 +227,7 @@ private extension Transaction {
 enum StoreKitTimeout {
     struct TimedOut: LocalizedError, Equatable {
         var errorDescription: String? {
-            String(localized: "storekit.timeout",
-                   defaultValue: "The App Store did not respond. Please check your connection and try again.")
+            AppLocalization.localized("storekit.timeout", value: "The App Store did not respond. Please check your connection and try again.")
         }
     }
 

@@ -235,9 +235,9 @@ struct IconCircle: View {
 
     private var defaultAccessibilityLabel: String {
         switch glyphContent {
-        case .initials(let str): return "Avatar with initials \(str)"
+        case .initials(let str): return String(format: AppLocalization.localized("icon_circle.initials_fmt", value: "Avatar with initials %@"), str)
         case .symbol(let name): return name.replacingOccurrences(of: ".", with: " ") + " icon"
-        default: return "Avatar"
+        default: return AppLocalization.localized("icon_circle.avatar", value: "Avatar")
         }
     }
 }

@@ -34,7 +34,7 @@ struct DetachedClientWindow: View {
                 ContentUnavailableView(
                     AppLocalization.localized("client.window.unavailable", value: "Client Unavailable"),
                     systemImage: "person.crop.circle.badge.exclamationmark",
-                    description: Text("This client was deleted or is not available on this device yet.")
+                    description: Text(AppLocalization.localized("client.window.unavailable_detail", value: "This client was deleted or is not available on this device yet."))
                 )
             }
         }

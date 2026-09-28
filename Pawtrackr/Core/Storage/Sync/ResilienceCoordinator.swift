@@ -79,7 +79,7 @@ struct ResilienceCoordinator {
             }
         }
 
-        throw lastError ?? AppError.unknown("Retry operation failed without an error payload.")
+        throw lastError ?? AppError.unknown(AppLocalization.localized("app_error.retry_failed", value: "The operation failed after several tries."))
     }
 
     static func cloudKitDisposition(for error: Error) -> RetryDisposition {

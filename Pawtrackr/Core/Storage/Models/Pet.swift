@@ -246,12 +246,14 @@ final class Pet {
         
         if now > suggested {
             let days = cal.dateComponents([.day], from: suggested, to: now).day ?? 0
-            return days == 0 ? "Due today" : "\(days)d overdue"
+            return days == 0
+                ? AppLocalization.localized("pet.next_visit.due_today", value: "Due today")
+                : String(format: AppLocalization.localized("pet.next_visit.overdue_fmt", value: "%dd overdue"), days)
         } else {
             let days = cal.dateComponents([.day], from: now, to: suggested).day ?? 0
-            if days == 0 { return "Due today" }
-            if days == 1 { return "Due tomorrow" }
-            return "Due in \(days)d"
+            if days == 0 { return AppLocalization.localized("pet.next_visit.due_today", value: "Due today") }
+            if days == 1 { return AppLocalization.localized("pet.next_visit.due_tomorrow", value: "Due tomorrow") }
+            return String(format: AppLocalization.localized("pet.next_visit.due_in_fmt", value: "Due in %dd"), days)
         }
     }
 
@@ -441,7 +443,7 @@ final class Pet {
 
     func setPhotoData(_ data: Data?) {
         if let data = data {
-            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: "pet profile photo")
+            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.pet_photo", value: "pet profile photo"))
             updateThumbnail()
         } else {
             photoData = nil

@@ -60,7 +60,7 @@ struct SidebarView: View {
 
             #if os(macOS)
             if !devices.isEmpty {
-                Section("Worker Devices") {
+                Section(AppLocalization.localized("sidebar.worker_devices", value: "Worker Devices")) {
                     ForEach(devices.prefix(5)) { device in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {

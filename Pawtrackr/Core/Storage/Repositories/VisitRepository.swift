@@ -50,7 +50,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         try modelContext.save()
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
-                "Saved visit",
+                AppLocalization.localized("cloudkit.change.saved_visit", value: "Saved visit"),
                 occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visit.uuid,
@@ -68,7 +68,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         try modelContext.save()
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
-                "Deleted visit",
+                AppLocalization.localized("cloudkit.change.deleted_visit", value: "Deleted visit"),
                 occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visitUUID,
@@ -92,7 +92,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         let petID = pet.persistentModelID
         guard let contextPet = modelContext.model(for: petID) as? Pet else {
              Logger.visits.error("VisitRepository: Could not fetch pet in current context")
-             throw AppError.database("Pet not found in context")
+             throw AppError.database(AppLocalization.localized("visit.error.pet_missing", value: "Pet not found."))
         }
         
         if let existing = try activeVisit(for: contextPet) {
@@ -117,7 +117,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         Logger.visits.info("VisitRepository: Attempting CloudKit recording...")
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
-                "Checked in pet",
+                AppLocalization.localized("cloudkit.change.checked_in_pet", value: "Checked in pet"),
                 occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visit.uuid,
@@ -150,7 +150,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
-                "Checked out visit",
+                AppLocalization.localized("cloudkit.change.checked_out_visit", value: "Checked out visit"),
                 occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visit.uuid,

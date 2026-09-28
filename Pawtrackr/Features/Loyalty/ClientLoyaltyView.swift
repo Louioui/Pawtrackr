@@ -53,7 +53,7 @@ struct ClientLoyaltyView: View {
             .frame(maxWidth: .infinity)
         }
         .background(DS.ColorToken.background)
-        .navigationTitle("Loyalty & Rewards")
+        .navigationTitle(AppLocalization.localized("client_detail.loyalty.title", value: "Loyalty & Rewards"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -90,7 +90,7 @@ struct ClientLoyaltyView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(client.fullName)
                                     .font(.headline)
-                                Text("\(tier.displayName) member • \(tier.earnRateText) earn rate")
+                                Text(String(format: AppLocalization.localized("loyalty.client.member_fmt", value: "%1$@ member • %2$@ earn rate"), tier.displayName, tier.earnRateText))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -107,7 +107,7 @@ struct ClientLoyaltyView: View {
         }
         .padding(.horizontal)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(client.fullName), \(client.loyaltyPoints) loyalty points, \(tier.displayName) tier")
+        .accessibilityLabel(String(format: AppLocalization.localized("loyalty.client.balance_accessibility_fmt", value: "%1$@, %2$d loyalty points, %3$@ tier"), client.fullName, client.loyaltyPoints, tier.displayName))
     }
 
     private var loyaltyCoachMessage: some View {
@@ -133,25 +133,31 @@ struct ClientLoyaltyView: View {
     private var smartStatsGrid: some View {
         LazyVGrid(columns: smartStatColumns, spacing: 10) {
             LoyaltySmartStatCard(
-                title: "Ready Rewards",
+                title: AppLocalization.localized("loyalty.client.stat.ready", value: "Ready Rewards"),
                 value: "\(redeemableRewards.count)",
-                detail: rewardCatalog.isEmpty ? "Catalog paused" : "Can redeem now",
+                detail: rewardCatalog.isEmpty
+                    ? AppLocalization.localized("loyalty.client.stat.catalog_paused", value: "Catalog paused")
+                    : AppLocalization.localized("loyalty.client.stat.can_redeem", value: "Can redeem now"),
                 systemImage: "gift.fill",
                 tint: bestRedeemableReward?.style.tint ?? DS.ColorToken.info
             )
 
             LoyaltySmartStatCard(
-                title: "30-Day Change",
+                title: AppLocalization.localized("loyalty.client.stat.change_30", value: "30-Day Change"),
                 value: signedPointsText(pointsDelta30Days),
-                detail: pointsDelta30Days >= 0 ? "Net points gained" : "Net points spent",
+                detail: pointsDelta30Days >= 0
+                    ? AppLocalization.localized("loyalty.client.stat.net_gained", value: "Net points gained")
+                    : AppLocalization.localized("loyalty.client.stat.net_spent", value: "Net points spent"),
                 systemImage: pointsDelta30Days >= 0 ? "chart.line.uptrend.xyaxis" : "arrow.down.circle.fill",
                 tint: pointsDelta30Days >= 0 ? DS.ColorToken.success : DS.ColorToken.danger
             )
 
             LoyaltySmartStatCard(
-                title: "Avg Earn",
+                title: AppLocalization.localized("loyalty.client.stat.avg_earn", value: "Avg Earn"),
                 value: averageEarnedPerVisit > 0 ? "\(averageEarnedPerVisit)" : "—",
-                detail: averageEarnedPerVisit > 0 ? "Points per visit" : "No visits yet",
+                detail: averageEarnedPerVisit > 0
+                    ? AppLocalization.localized("loyalty.client.stat.points_per_visit", value: "Points per visit")
+                    : AppLocalization.localized("loyalty.client.stat.no_visits", value: "No visits yet"),
                 systemImage: "pawprint.fill",
                 tint: tier.tint
             )
@@ -189,7 +195,7 @@ struct ClientLoyaltyView: View {
                     Spacer(minLength: 8)
 
                     if let nextReward {
-                        Text("\(max(0, nextReward.pointCost - client.loyaltyPoints)) pts")
+                        Text(String(format: AppLocalization.localized("loyalty.client.points_short_fmt", value: "%d pts"), max(0, nextReward.pointCost - client.loyaltyPoints)))
                             .font(.caption.weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(rewardProgressTint)
@@ -227,9 +233,9 @@ struct ClientLoyaltyView: View {
                         .background(tier.tint.gradient, in: Circle())
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("\(tier.displayName) Tier")
+                        Text(String(format: AppLocalization.localized("loyalty.client.tier_title_fmt", value: "%@ Tier"), tier.displayName))
                             .font(.subheadline.weight(.bold))
-                        Text("Every visit earns \(tier.earnRateText) points")
+                        Text(String(format: AppLocalization.localized("loyalty.client.tier_earn_fmt", value: "Every visit earns %@ points"), tier.earnRateText))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -278,8 +284,8 @@ struct ClientLoyaltyView: View {
             ForEach(LoyaltyTier.allCases, id: \.self) { ladderTier in
                 let isCurrentOrUnlocked = lifetimeEarned >= ladderTier.threshold
                 let accessibilityDetail = isCurrentOrUnlocked
-                    ? "unlocked"
-                    : "\(max(0, ladderTier.threshold - lifetimeEarned)) points away"
+                    ? AppLocalization.localized("loyalty.client.ladder_unlocked", value: "unlocked")
+                    : String(format: AppLocalization.localized("loyalty.client.points_away_fmt", value: "%d points away"), max(0, ladderTier.threshold - lifetimeEarned))
                 HStack(spacing: 6) {
                     Image(systemName: ladderTier.systemImage)
                         .font(.caption2.weight(.bold))
@@ -296,7 +302,7 @@ struct ClientLoyaltyView: View {
                     isCurrentOrUnlocked ? ladderTier.tint : ladderTier.tint.opacity(0.12),
                     in: Capsule()
                 )
-                .accessibilityLabel("\(ladderTier.displayName) tier, \(accessibilityDetail)")
+                .accessibilityLabel(String(format: AppLocalization.localized("loyalty.client.ladder_accessibility_fmt", value: "%1$@ tier, %2$@"), ladderTier.displayName, accessibilityDetail))
             }
         }
     }
@@ -306,7 +312,12 @@ struct ClientLoyaltyView: View {
             Button {
                 sheetDestination = .catalog
             } label: {
-                Label(bestRedeemableReward == nil ? "View Rewards" : "Redeem Best Reward", systemImage: "gift.fill")
+                Label(
+                    bestRedeemableReward == nil
+                        ? AppLocalization.localized("loyalty.client.view_rewards", value: "View Rewards")
+                        : AppLocalization.localized("loyalty.client.redeem_best", value: "Redeem Best Reward"),
+                    systemImage: "gift.fill"
+                )
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -315,13 +326,13 @@ struct ClientLoyaltyView: View {
             }
             .buttonStyle(.plain)
             .pressScaleStyle(hapticsEnabled: true)
-            .accessibilityLabel("Redeem rewards")
+            .accessibilityLabel(AppLocalization.localized("loyalty.client.redeem_rewards_accessibility", value: "Redeem rewards"))
             .accessibilityIdentifier("clientLoyalty.redeemRewards")
 
             Button {
                 sheetDestination = .adjustment
             } label: {
-                Label("Adjust Balance", systemImage: "slider.horizontal.3")
+                Label(AppLocalization.localized("loyalty.client.adjust_balance", value: "Adjust Balance"), systemImage: "slider.horizontal.3")
                     .font(.subheadline.weight(.semibold))
                     .frame(minWidth: 104)
                     .padding(.vertical, 12)
@@ -330,7 +341,7 @@ struct ClientLoyaltyView: View {
             }
             .buttonStyle(.plain)
             .pressScaleStyle(hapticsEnabled: true)
-            .accessibilityLabel("Adjust loyalty points")
+            .accessibilityLabel(AppLocalization.localized("loyalty.client.adjust_accessibility", value: "Adjust loyalty points"))
             .accessibilityIdentifier("clientLoyalty.adjustPoints")
         }
         .padding(.horizontal)
@@ -339,7 +350,7 @@ struct ClientLoyaltyView: View {
     private var ledgerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Points Ledger")
+                Text(AppLocalization.localized("loyalty.client.ledger_title", value: "Points Ledger"))
                     .font(.headline)
                 Spacer()
                 Text("\(ledgerEntries.count)")
@@ -353,9 +364,9 @@ struct ClientLoyaltyView: View {
 
             if ledgerEntries.isEmpty {
                 ContentUnavailableView(
-                    "No Loyalty History",
+                    AppLocalization.localized("loyalty.client.ledger_empty_title", value: "No Loyalty History"),
                     systemImage: "clock.arrow.2.circlepath",
-                    description: Text("Earned points, redemptions, and adjustments will appear here.")
+                    description: Text(AppLocalization.localized("loyalty.client.ledger_empty_detail", value: "Earned points, redemptions, and adjustments will appear here."))
                 )
                 .padding(.vertical, 28)
             } else {
@@ -380,16 +391,16 @@ struct ClientLoyaltyView: View {
 
     private var tierProgressText: String {
         if let next = tier.next, let remaining = LoyaltyEngine.pointsUntilNextTier(lifetimeEarned: lifetimeEarned) {
-            return "\(remaining) earned points until \(next.displayName) (\(next.earnRateText) earn rate)"
+            return String(format: AppLocalization.localized("loyalty.client.tier_progress_fmt", value: "%1$d earned points until %2$@ (%3$@ earn rate)"), remaining, next.displayName, next.earnRateText)
         }
-        return "Top tier reached — every visit earns \(tier.earnRateText) points"
+        return String(format: AppLocalization.localized("loyalty.client.top_tier_fmt", value: "Top tier reached. Every visit earns %@ points."), tier.earnRateText)
     }
 
     private var tierAccessibilityLabel: String {
         if let next = tier.next, let remaining = LoyaltyEngine.pointsUntilNextTier(lifetimeEarned: lifetimeEarned) {
-            return "\(tier.displayName) tier, \(remaining) points until \(next.displayName)"
+            return String(format: AppLocalization.localized("loyalty.client.tier_accessibility_fmt", value: "%1$@ tier, %2$d points until %3$@"), tier.displayName, remaining, next.displayName)
         }
-        return "\(tier.displayName) tier, top tier"
+        return String(format: AppLocalization.localized("loyalty.client.top_tier_accessibility_fmt", value: "%@ tier, top tier"), tier.displayName)
     }
 
     private var rewardCatalog: [LoyaltyReward] {
@@ -432,13 +443,13 @@ struct ClientLoyaltyView: View {
 
     private var nextRewardText: String {
         if rewardCatalog.isEmpty {
-            return "Rewards are paused in Loyalty settings"
+            return AppLocalization.localized("loyalty.client.rewards_paused_settings", value: "Rewards are paused in Loyalty settings")
         }
         if let nextReward {
             let remaining = max(0, nextReward.pointCost - client.loyaltyPoints)
-            return "\(remaining) points until \(nextReward.title)"
+            return String(format: AppLocalization.localized("loyalty.client.points_until_fmt", value: "%1$d points until %2$@"), remaining, nextReward.title)
         }
-        return "Every active reward is unlocked"
+        return AppLocalization.localized("loyalty.client.all_unlocked", value: "Every active reward is unlocked")
     }
 
     private var pointsDelta30Days: Int {
@@ -481,29 +492,32 @@ struct ClientLoyaltyView: View {
     }
 
     private var loyaltyCoachTitle: String {
-        if rewardCatalog.isEmpty { return "Rewards paused" }
-        if bestRedeemableReward != nil { return "Ready to reward" }
-        if let nextReward { return "Next up: \(nextReward.title)" }
-        return "VIP-ready balance"
+        if rewardCatalog.isEmpty { return AppLocalization.localized("loyalty.client.coach.paused_title", value: "Rewards paused") }
+        if bestRedeemableReward != nil { return AppLocalization.localized("loyalty.client.coach.ready_title", value: "Ready to reward") }
+        if let nextReward { return String(format: AppLocalization.localized("loyalty.client.coach.next_title_fmt", value: "Next up: %@"), nextReward.title) }
+        return AppLocalization.localized("loyalty.client.coach.vip_title", value: "VIP-ready balance")
     }
 
     private var loyaltyCoachBody: String {
         if rewardCatalog.isEmpty {
-            return "Turn the catalog back on in Loyalty settings when the shop is ready."
+            return AppLocalization.localized("loyalty.client.coach.paused_body", value: "Turn the catalog back on in Loyalty settings when the shop is ready.")
         }
         if let bestRedeemableReward {
             let remainingAfterRedeem = max(0, client.loyaltyPoints - bestRedeemableReward.pointCost)
-            return "\(client.firstName) can redeem \(bestRedeemableReward.title) now and keep \(remainingAfterRedeem) points."
+            return String(format: AppLocalization.localized("loyalty.client.coach.ready_body_fmt", value: "%1$@ can redeem %2$@ now and keep %3$d points."), client.firstName, bestRedeemableReward.title, remainingAfterRedeem)
         }
         guard let nextReward else {
-            return "\(client.firstName) has enough points for every active reward."
+            return String(format: AppLocalization.localized("loyalty.client.coach.all_body_fmt", value: "%@ has enough points for every active reward."), client.firstName)
         }
 
         let remaining = max(0, nextReward.pointCost - client.loyaltyPoints)
         if let projectedVisitsToNextReward {
-            return "\(remaining) more points, roughly \(projectedVisitsToNextReward) visit\(projectedVisitsToNextReward == 1 ? "" : "s") at the current pace."
+            if projectedVisitsToNextReward == 1 {
+                return String(format: AppLocalization.localized("loyalty.client.coach.pace_one_fmt", value: "%d more points, roughly 1 visit at the current pace."), remaining)
+            }
+            return String(format: AppLocalization.localized("loyalty.client.coach.pace_fmt", value: "%1$d more points, roughly %2$d visits at the current pace."), remaining, projectedVisitsToNextReward)
         }
-        return "\(remaining) more points needed. Complete a checkout to start projecting visit pace."
+        return String(format: AppLocalization.localized("loyalty.client.coach.no_pace_fmt", value: "%d more points needed. Complete a checkout to start projecting visit pace."), remaining)
     }
 
     private var rewardProgressTint: Color {
@@ -517,27 +531,30 @@ struct ClientLoyaltyView: View {
     }
 
     private var rewardProgressTitle: String {
-        if rewardCatalog.isEmpty { return "Rewards catalog is paused" }
-        if let bestRedeemableReward { return "\(bestRedeemableReward.title) is ready" }
-        if let nextReward { return "Progress to \(nextReward.title)" }
-        return "All active rewards unlocked"
+        if rewardCatalog.isEmpty { return AppLocalization.localized("loyalty.client.progress.paused_title", value: "Rewards catalog is paused") }
+        if let bestRedeemableReward { return String(format: AppLocalization.localized("loyalty.client.progress.ready_title_fmt", value: "%@ is ready"), bestRedeemableReward.title) }
+        if let nextReward { return String(format: AppLocalization.localized("loyalty.client.progress.next_title_fmt", value: "Progress to %@"), nextReward.title) }
+        return AppLocalization.localized("loyalty.client.progress.all_title", value: "All active rewards unlocked")
     }
 
     private var rewardProgressDetail: String {
         if rewardCatalog.isEmpty {
-            return "Clients can still earn points, but reward redemption is hidden until the catalog is enabled."
+            return AppLocalization.localized("loyalty.client.progress.paused_detail", value: "Clients can still earn points, but reward redemption is hidden until the catalog is enabled.")
         }
         if let bestRedeemableReward {
             let otherReadyCount = max(0, redeemableRewards.count - 1)
             if otherReadyCount > 0 {
-                return "\(client.firstName) has \(otherReadyCount + 1) rewards available. The highest-value option costs \(bestRedeemableReward.pointCost) points."
+                return String(format: AppLocalization.localized("loyalty.client.progress.several_ready_fmt", value: "%1$@ has %2$d rewards available. The highest-value option costs %3$d points."), client.firstName, otherReadyCount + 1, bestRedeemableReward.pointCost)
             }
-            return "\(client.firstName) can redeem this reward from the catalog now."
+            return String(format: AppLocalization.localized("loyalty.client.progress.one_ready_fmt", value: "%@ can redeem this reward from the catalog now."), client.firstName)
         }
         if let projectedVisitsToNextReward {
-            return "At about \(averageEarnedPerVisit) points per earning visit, this is around \(projectedVisitsToNextReward) visit\(projectedVisitsToNextReward == 1 ? "" : "s") away."
+            if projectedVisitsToNextReward == 1 {
+                return String(format: AppLocalization.localized("loyalty.client.progress.pace_one_fmt", value: "At about %d points per earning visit, this is around 1 visit away."), averageEarnedPerVisit)
+            }
+            return String(format: AppLocalization.localized("loyalty.client.progress.pace_fmt", value: "At about %1$d points per earning visit, this is around %2$d visits away."), averageEarnedPerVisit, projectedVisitsToNextReward)
         }
-        return "No earning history yet, so the next reward projection will appear after a checkout."
+        return AppLocalization.localized("loyalty.client.progress.no_history", value: "No earning history yet, so the next reward projection will appear after a checkout.")
     }
 }
 
@@ -602,7 +619,7 @@ private struct LoyaltyLedgerEntryRow: View {
                         Text(Formatters.dateOnly.string(from: entry.createdAt))
                         if let balance = entry.balanceAfter {
                             Text("•")
-                            Text("Balance \(balance)")
+                            Text(String(format: AppLocalization.localized("loyalty.ledger.balance_fmt", value: "Balance %d"), balance))
                         }
                     }
                     .font(.caption)
@@ -622,11 +639,12 @@ private struct LoyaltyLedgerEntryRow: View {
     private var title: String {
         switch entry.kind {
         case .earned:
-            entry.reason.map { "Visit — \($0)" } ?? "Visit checkout"
+            entry.reason.map { String(format: AppLocalization.localized("loyalty.ledger.visit_fmt", value: "Visit — %@"), $0) }
+                ?? AppLocalization.localized("loyalty.ledger.visit_checkout", value: "Visit checkout")
         case .redeemed:
-            entry.reason ?? "Reward redeemed"
+            entry.reason ?? AppLocalization.localized("loyalty.ledger.redeemed", value: "Reward redeemed")
         case .adjusted:
-            entry.reason ?? "Manual adjustment"
+            entry.reason ?? AppLocalization.localized("loyalty.ledger.adjusted", value: "Manual adjustment")
         }
     }
 
@@ -675,9 +693,9 @@ private struct LoyaltyAdjustmentSheet: View {
         var title: String {
             switch self {
             case .add:
-                "Add"
+                AppLocalization.localized("loyalty.adjust.add", value: "Add")
             case .deduct:
-                "Deduct"
+                AppLocalization.localized("loyalty.adjust.deduct", value: "Deduct")
             }
         }
     }
@@ -694,15 +712,15 @@ private struct LoyaltyAdjustmentSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Adjustment") {
-                    Picker("Mode", selection: $mode) {
+                Section(AppLocalization.localized("loyalty.adjust.section", value: "Adjustment")) {
+                    Picker(AppLocalization.localized("loyalty.adjust.mode", value: "Mode"), selection: $mode) {
                         ForEach(Mode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
 
-                    TextField("Points", text: $amountText)
+                    TextField(AppLocalization.localized("loyalty.adjust.points_field", value: "Points"), text: $amountText)
                         #if os(iOS)
                         .keyboardType(.numberPad)
                         #endif
@@ -711,16 +729,16 @@ private struct LoyaltyAdjustmentSheet: View {
 
                 Section {
                     HStack {
-                        Text("Current Balance")
+                        Text(AppLocalization.localized("loyalty.adjust.current_balance", value: "Current Balance"))
                         Spacer()
-                        Text("\(client.loyaltyPoints) points")
+                        Text(LoyaltyCopy.points(client.loyaltyPoints))
                             .foregroundStyle(.secondary)
                     }
                     if let previewDelta {
                         HStack {
-                            Text("New Balance")
+                            Text(AppLocalization.localized("loyalty.adjust.new_balance", value: "New Balance"))
                             Spacer()
-                            Text("\(client.loyaltyPoints + previewDelta) points")
+                            Text(LoyaltyCopy.points(client.loyaltyPoints + previewDelta))
                                 .foregroundStyle(previewDelta < 0 && abs(previewDelta) > client.loyaltyPoints ? DS.ColorToken.danger : .secondary)
                         }
                     }
@@ -734,17 +752,17 @@ private struct LoyaltyAdjustmentSheet: View {
                     }
                 }
             }
-            .navigationTitle("Adjust Points")
+            .navigationTitle(AppLocalization.localized("loyalty.adjust.title", value: "Adjust Points"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(AppLocalization.localized("common.cancel", value: "Cancel")) { dismiss() }
                         .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSaving ? "Saving" : "Apply") {
+                    Button(isSaving ? AppLocalization.localized("loyalty.adjust.saving", value: "Saving") : AppLocalization.localized("loyalty.adjust.apply", value: "Apply")) {
                         applyAdjustment()
                     }
                     .disabled(!canApply || isSaving)

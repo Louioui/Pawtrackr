@@ -807,10 +807,10 @@ struct ClientDetailView: View {
         modelContext.delete(contact)
         do {
             try modelContext.save()
-            CloudKitMonitor.shared.recordLocalChange("Deleted emergency contact")
+            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.deleted_emergency_contact", value: "Deleted emergency contact"))
         } catch {
             Logger.clientDetailView.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting emergency contact")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_emergency_contact", value: "deleting the emergency contact"))
         }
         viewModel?.refreshEmergencyContacts()
     }
@@ -1129,7 +1129,7 @@ struct ClientDetailView: View {
         do {
             try modelContext.save()
             SpotlightIndexer.shared.removeClientAndPetsFromIndex(clientID: clientUUID, petIDs: petUUIDs)
-            CloudKitMonitor.shared.recordLocalChange("Deleted client")
+            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.deleted_client", value: "Deleted client"))
 
             // Rebuild summaries for affected days
             let cal = Calendar.current
@@ -1148,7 +1148,7 @@ struct ClientDetailView: View {
             isDeleting = false
             let message = String(describing: error)
             Logger.clientDetailView.error("Failed to delete client: \(message, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "deleting client")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_client", value: "deleting the client"))
             alertDestination = .deleteError(message)
         }
     }

@@ -109,7 +109,7 @@ final actor CheckoutTransactionActor {
             let transactionUUID = transaction.uuid
             await MainActor.run {
                 CloudKitMonitor.shared.recordLocalChange(
-                    "Completed checkout",
+                    AppLocalization.localized("cloudkit.change.completed_checkout", value: "Completed checkout"),
                     occurredAt: changedAt,
                     entityName: "CheckoutTransaction",
                     recordUUID: transactionUUID,
@@ -128,7 +128,7 @@ final actor CheckoutTransactionActor {
             if let loyaltyClientUUID {
                 await MainActor.run {
                     CloudKitMonitor.shared.recordLocalChange(
-                        "Applied checkout loyalty points",
+                        AppLocalization.localized("cloudkit.change.checkout_loyalty_points", value: "Applied checkout loyalty points"),
                         occurredAt: changedAt,
                         entityName: "Client",
                         recordUUID: loyaltyClientUUID,
@@ -209,16 +209,16 @@ final actor CheckoutTransactionActor {
         )
         descriptor.fetchLimit = 1
         guard let pet = try modelContext.fetch(descriptor).first else {
-            throw AppError.database("Pet not found for checkout.")
+            throw AppError.database(AppLocalization.localized("checkout.error.pet_missing", value: "Pet not found for checkout."))
         }
         return pet
     }
     
     private func processImages(before: Data?, after: Data?) async -> (Data?, Data?, Data?, Data?) {
         await Task.detached(priority: .userInitiated) {
-            let b = before.flatMap { CloudMediaPolicy.optimizedFullImageData($0, context: "before visit photo") }
+            let b = before.flatMap { CloudMediaPolicy.optimizedFullImageData($0, context: AppLocalization.localized("cloudkit.media.visit_before_photo", value: "visit before photo")) }
             let bt = before.flatMap { CloudMediaPolicy.optimizedThumbnailData($0) }
-            let a = after.flatMap  { CloudMediaPolicy.optimizedFullImageData($0, context: "after visit photo") }
+            let a = after.flatMap  { CloudMediaPolicy.optimizedFullImageData($0, context: AppLocalization.localized("cloudkit.media.visit_after_photo", value: "visit after photo")) }
             let at = after.flatMap  { CloudMediaPolicy.optimizedThumbnailData($0) }
             return (b, bt, a, at)
         }.value
@@ -317,7 +317,7 @@ final actor CheckoutTransactionActor {
         )
         descriptor.fetchLimit = 1
         guard let visit = try modelContext.fetch(descriptor).first else {
-            throw AppError.database("Visit disappeared after successful checkout.")
+            throw AppError.database(AppLocalization.localized("checkout.error.visit_missing", value: "Visit disappeared after successful checkout."))
         }
         return CheckoutResult(
             visitID: visit.persistentModelID,

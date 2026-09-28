@@ -322,9 +322,9 @@ struct CloudKitDiagnosticsView: View {
 
     private var syncStateText: String {
         switch monitor.syncState {
-        case .idle: return "Idle"
-        case .syncing: return "Syncing"
-        case .error(let msg): return "Error: \(msg)"
+        case .idle: return AppLocalization.localized("cloudkit.diagnostics.sync_state.idle", value: "Idle")
+        case .syncing: return AppLocalization.localized("cloudkit.diagnostics.sync_state.syncing", value: "Syncing")
+        case .error(let msg): return String(format: AppLocalization.localized("cloudkit.diagnostics.sync_state.error_fmt", value: "Error: %@"), msg)
         }
     }
 
@@ -419,8 +419,8 @@ struct CloudKitDiagnosticsView: View {
 
         lastSummaryRebuildDate = UserDefaults.standard.object(forKey: "lastSummaryRebuildDate") as? Date
         rebuildMessage = lastSummaryRebuildDate.map {
-            "Insights cache rebuilt at \($0.formatted(date: .omitted, time: .standard))."
-        } ?? "Insights cache rebuild finished."
+            String(format: AppLocalization.localized("cloudkit.diagnostics.insights_rebuilt_fmt", value: "Insights cache rebuilt at %@."), $0.formatted(date: .omitted, time: .standard))
+        } ?? AppLocalization.localized("cloudkit.diagnostics.insights_rebuild_finished", value: "Insights cache rebuild finished.")
         isRebuildingInsights = false
     }
 
