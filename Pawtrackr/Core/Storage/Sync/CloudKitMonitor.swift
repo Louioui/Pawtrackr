@@ -318,6 +318,9 @@ final class CloudKitMonitor {
     private var hasStarted = false
     private var hasStartedNetworkMonitor = false
     private var modelContainer: ModelContainer?
+    /// The record this device last asked to show as open (nil: none).
+    @ObservationIgnored private var requestedPresenceRecordID: UUID?
+    @ObservationIgnored private var presenceWriteTask: Task<Void, Never>?
     private var eventBus: GlobalEventBus?
     private var reducer: SyncHealthReducer
     private var lastErrorSource: ErrorSource?
@@ -685,38 +688,56 @@ final class CloudKitMonitor {
 
     // MARK: - Presence
 
-    /// Updates the current device's presence record.
+    /// Says which client or pet this device has open, for the "Recently open
+    /// on <device>" chip on the others. Writes go through PresencePolicy, so
+    /// a repeat call with nothing changed writes nothing and a heartbeat only
+    /// moves the stamp when one is due. Writes are serialized, so a quick
+    /// client → pet → client hop can't insert two records for this device.
     func setPresence(viewingRecordID: UUID?, recordType: String?) {
-        guard let modelContainer, accountState.isAvailable else { return }
-        
-        Task.detached(priority: .utility) {
+        requestedPresenceRecordID = viewingRecordID
+        // A local-only store uploads nothing, so presence would reach no one.
+        guard mode.isMirroring, let modelContainer, accountState.isAvailable else { return }
+
+        let deviceID = DeviceIdentity.currentID
+        let deviceName = presenceDeviceName
+        let previous = presenceWriteTask
+        presenceWriteTask = Task.detached(priority: .utility) {
+            await previous?.value
             let context = ModelContext(modelContainer)
-            let deviceID = DeviceIdentity.currentID
-            let descriptor = FetchDescriptor<PresenceRecord>(
-                predicate: #Predicate<PresenceRecord> { $0.deviceID == deviceID }
-            )
-            
             do {
-                let deviceName = UserDefaults.standard.string(forKey: "deviceName") ?? "Unknown Device"
-                let existing = try context.fetch(descriptor).first
-                
-                if let presence = existing {
-                    presence.deviceName = deviceName
-                    presence.viewingRecordID = viewingRecordID
-                    presence.recordType = recordType
-                    presence.updatedAt = .now
-                } else {
-                    let presence = PresenceRecord(deviceID: deviceID, deviceName: deviceName)
-                    presence.viewingRecordID = viewingRecordID
-                    presence.recordType = recordType
-                    context.insert(presence)
-                }
-                
-                try context.save()
+                try PresencePolicy.apply(
+                    in: context,
+                    deviceID: deviceID,
+                    deviceName: deviceName,
+                    viewingRecordID: viewingRecordID,
+                    recordType: recordType,
+                    now: Date()
+                )
             } catch {
                 Logger.cloudKit.error("Failed to update presence: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+
+    /// Clears this device's presence when a details screen closes, but only
+    /// if it still points at that screen's record: pushing Pet details from
+    /// Client details can close the client screen after the pet one opened.
+    func clearPresence(ifViewing recordID: UUID) {
+        guard requestedPresenceRecordID == recordID else { return }
+        setPresence(viewingRecordID: nil, recordType: nil)
+    }
+
+    private var presenceDeviceName: String {
+        let saved = UserDefaults.standard.string(forKey: AppSettingsKeys.deviceName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !saved.isEmpty { return saved }
+        #if os(iOS)
+        return UIDevice.current.model
+        #elseif os(macOS)
+        return "Mac"
+        #else
+        return ""
+        #endif
     }
 
     /// Periodically cleans up stale presence records (older than 10 minutes).

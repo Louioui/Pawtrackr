@@ -1437,3 +1437,11 @@
 "client_detail.missing_fmt" = "Missing: %@";
 "client_detail.add_emergency_contact" = "Add emergency contact";
 "client_detail.emergency_empty_hint" = "Add a backup person staff can call if the owner is unreachable.";
+"client_edit.conflict.title" = "Changed on Another Device";
+"client_edit.conflict.save_mine" = "Save My Changes";
+"client_edit.conflict.discard_mine" = "Discard My Changes";
+"client_edit.conflict.message_fmt" = "%@ was changed on another device while you were editing. Save My Changes keeps any fields you didn't edit as the other device left them.";
+"client_edit.conflict.this_client" = "This client";
+"client_edit.missing" = "This client is no longer on this device, so your changes weren't saved.";
+"presence.recently_open_fmt" = "Recently open on %@";
+"presence.recently_open_unnamed" = "Recently open on another device";

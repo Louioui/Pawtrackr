@@ -92,40 +92,59 @@ final class Client {
     }
 
     // MARK: - Mutating API (keeps timestamps correct without property observers)
+    //
+    // Each setter compares before assigning. SwiftData marks a row changed on
+    // any assignment, even of the same value, and every changed row uploads to
+    // iCloud and imports on every other device. A no-op Save would also stamp
+    // updatedAt/lastModifiedBy and look like a real edit from this device to
+    // the edit-conflict check on the others.
     func setFirstName(_ value: String) {
-        firstName = TextInputLimits.clamped(value, to: TextInputLimits.name)
+        let newValue = TextInputLimits.clamped(value, to: TextInputLimits.name)
+        guard firstName != newValue else { return }
+        firstName = newValue
         didUpdate()
     }
     func setLastName(_ value: String) {
-        lastName = TextInputLimits.clamped(value, to: TextInputLimits.name)
+        let newValue = TextInputLimits.clamped(value, to: TextInputLimits.name)
+        guard lastName != newValue else { return }
+        lastName = newValue
         didUpdate()
     }
     func setPhone(_ value: String?) {
         let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.phone)
+        let newValue: String?
         if let t = trimmed, !t.isEmpty {
             // Prefer canonical E.164. If the input doesn't parse, fall back to
             // the user's literal text — but `findClient(byPhone:)` normalizes
             // both stored and lookup values, so unparseable phones still match.
-            phone = PhoneUtils.toE164(t) ?? t
+            newValue = PhoneUtils.toE164(t) ?? t
         } else {
-            phone = nil
+            newValue = nil
         }
+        guard phone != newValue else { return }
+        phone = newValue
         updatePrimaryContact()
         didUpdate()
     }
     func setEmail(_ value: String?) {
         let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.email)
-        email = trimmed?.isEmpty == false ? trimmed?.lowercased() : nil
+        let newValue = trimmed?.isEmpty == false ? trimmed?.lowercased() : nil
+        guard email != newValue else { return }
+        email = newValue
         updatePrimaryContact()
         didUpdate()
     }
     func setAddress(_ value: String?) {
         let trimmed = TextInputLimits.clampedOptional(value, to: TextInputLimits.address)
-        address = trimmed?.isEmpty == false ? trimmed : nil
+        let newValue = trimmed?.isEmpty == false ? trimmed : nil
+        guard address != newValue else { return }
+        address = newValue
         didUpdate()
     }
     func setNotes(_ value: String?) {
-        notes = TextInputLimits.clampedOptional(value, to: TextInputLimits.notes)
+        let newValue = TextInputLimits.clampedOptional(value, to: TextInputLimits.notes)
+        guard notes != newValue else { return }
+        notes = newValue
         didUpdate()
     }
     func addPet(_ pet: Pet) {
@@ -183,6 +202,7 @@ final class Client {
 
     private func updatePrimaryContact() {
         let parts = [phone?.trimmed, email?.trimmed].compactMap { $0 }.filter { !$0.isEmpty }
-        primaryContactInfo = parts.first ?? ""
+        let newValue = parts.first ?? ""
+        if primaryContactInfo != newValue { primaryContactInfo = newValue }
     }
 }

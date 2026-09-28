@@ -190,6 +190,7 @@ struct PetDetailView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         header(vm)
+                            .showsRecentlyOpenElsewhere(recordID: vm.pet.uuid)
                         actionRow(vm)
                         quickStats(vm)
                         transformationGallery(vm)
@@ -207,6 +208,7 @@ struct PetDetailView: View {
                     activity.userInfo = ["petID": vm.pet.uuid.uuidString]
                     activity.isEligibleForHandoff = true
                 }
+                .tracksPresence(recordID: vm.pet.uuid, recordType: "pet")
                 .sheet(item: $bvm.sheetDestination) { destination in
                     switch destination {
                     case .checkout(let petForCheckout, let activeVisit):

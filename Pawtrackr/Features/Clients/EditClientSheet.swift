@@ -24,6 +24,9 @@ struct EditClientSheet: View {
     // Alerts
     @State private var appError: AppError? = nil
     @State private var attemptedSubmit = false
+    /// What the form opened with, for the changed-on-another-device check.
+    @State private var baseline: ClientEditBaseline? = nil
+    @State private var showsConflictAlert = false
 
     init(client: Client) {
         self.client = client
@@ -95,52 +98,91 @@ struct EditClientSheet: View {
             }
             .onAppear(perform: loadFromClient)
         }
+        // Kept off the Form, which already hosts the error alert: two alerts
+        // on one view can stop the second from presenting.
+        .alert(
+            AppLocalization.localized("client_edit.conflict.title", value: "Changed on Another Device"),
+            isPresented: $showsConflictAlert
+        ) {
+            Button(AppLocalization.localized("client_edit.conflict.save_mine", value: "Save My Changes")) {
+                save(overwrite: true)
+            }
+            Button(AppLocalization.localized("client_edit.conflict.discard_mine", value: "Discard My Changes"), role: .destructive) {
+                dismiss()
+            }
+        } message: {
+            Text(String(
+                format: AppLocalization.localized(
+                    "client_edit.conflict.message_fmt",
+                    value: "%@ was changed on another device while you were editing. Save My Changes keeps any fields you didn't edit as the other device left them."
+                ),
+                conflictName
+            ))
+        }
+    }
+
+    private var conflictName: String {
+        let name = [baseline?.fields.firstName ?? client.firstName, baseline?.fields.lastName ?? client.lastName]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return name.isEmpty ? AppLocalization.localized("client_edit.conflict.this_client", value: "This client") : name
     }
 
     private func loadFromClient() {
-        firstName = client.firstName
-        lastName = client.lastName
-        phone = client.phone.flatMap { PhoneUtils.display($0) } ?? ""
-        email = client.email ?? ""
-        address = client.address ?? ""
+        // Once per presentation: onAppear can run again, and re-capturing the
+        // baseline then would hide a change made elsewhere in between.
+        guard baseline == nil else { return }
+        ClientEditSaver.refresh(client)
+        let opened = ClientEditBaseline(client)
+        baseline = opened
+        firstName = opened.fields.firstName
+        lastName = opened.fields.lastName
+        phone = ClientContactFields.formPhoneText(opened.fields.phone)
+        email = opened.fields.email ?? ""
+        address = opened.fields.address ?? ""
         // Notes not editable here.
+    }
+
+    private var form: ClientEditForm {
+        ClientEditForm(firstName: firstName, lastName: lastName, phone: phone, email: email, address: address)
     }
 
     private var isValid: Bool {
         !firstName.trimmed.isEmpty &&
         !lastName.trimmed.isEmpty &&
-        (phone.trimmed.isEmpty || PhoneUtils.toE164(phone) != nil) &&
+        form.proposedFields(original: (baseline ?? ClientEditBaseline(client)).fields) != nil &&
         (email.trimmed.isEmpty || isValidEmail(email))
     }
 
-    private func save() {
-        var e164: String? = nil
-        if !phone.trimmed.isEmpty {
-            guard let valid = PhoneUtils.toE164(phone) else {
-                appError = .validation(.invalidPhoneNumber)
-                return
-            }
-            e164 = valid
-        }
+    private func save(overwrite: Bool = false) {
+        guard let baseline else { return }
         if !email.trimmed.isEmpty && !isValidEmail(email) {
             appError = .validation(.custom(message: NSLocalizedString("new_client.error.email_invalid_long", comment: "")))
             return
         }
 
-        // Apply updates
-        client.setFirstName(firstName)
-        client.setLastName(lastName)
-        client.setPhone(e164)
-        client.setEmail(email.trimmed.isEmpty ? nil : email.trimmed)
-        client.setAddress(address.trimmed.isEmpty ? nil : address.trimmed)
-        // Notes not modified here.
-
-        do {
-            try ctx.save()
-            CloudKitMonitor.shared.recordLocalChange("Saved client")
+        let outcome = ClientEditSaver.save(
+            form,
+            baseline: baseline,
+            container: ctx.container,
+            refreshing: client.modelContext ?? ctx,
+            overwrite: overwrite
+        )
+        switch outcome {
+        case .saved, .unchanged:
             dismiss()
-        } catch {
-            appError = .database(String(format: NSLocalizedString("common.save_failed", comment: ""), error.localizedDescription))
+        case .changedElsewhere:
+            showsConflictAlert = true
+        case .invalidPhone:
+            appError = .validation(.invalidPhoneNumber)
+        case .missing:
+            appError = .database(AppLocalization.localized(
+                "client_edit.missing",
+                value: "This client is no longer on this device, so your changes weren't saved."
+            ))
+        case .failed(let message):
+            appError = .database(String(format: NSLocalizedString("common.save_failed", comment: ""), message))
         }
     }
 

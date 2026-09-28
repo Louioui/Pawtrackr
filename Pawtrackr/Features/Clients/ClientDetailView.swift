@@ -66,6 +66,8 @@ struct ClientDetailView: View {
         case deleteClient
         case deleteError(String)
         case deleteContact(EmergencyContact)
+        case inlineEditConflict(name: String)
+        case inlineEditFailed(String)
 
         var id: String {
             switch self {
@@ -84,6 +86,10 @@ struct ClientDetailView: View {
                 // silently never fires (the original cause of the trash
                 // button looking broken).
                 return "deleteContact"
+            case .inlineEditConflict:
+                return "inlineEditConflict"
+            case .inlineEditFailed:
+                return "inlineEditFailed"
             }
         }
     }
@@ -105,6 +111,8 @@ struct ClientDetailView: View {
     @State private var editLast: String = ""
     @State private var editPhone: String = ""
     @State private var editEmail: String = ""
+    /// What the inline edit opened with, for the changed-on-another-device check.
+    @State private var inlineEditBaseline: ClientEditBaseline? = nil
 
     @Environment(NavigationRouter.self) private var router
     @Query private var devices: [DeviceMetadata]
@@ -213,6 +221,7 @@ struct ClientDetailView: View {
                 vm.refreshEmergencyContacts()
                 vm.refreshRecentVisits()
             }
+            .tracksPresence(recordID: vm.client.uuid, recordType: "client")
     }
 
     #if os(macOS)
@@ -358,6 +367,10 @@ struct ClientDetailView: View {
             return Text(NSLocalizedString("clients.delete_failed", comment: ""))
         case .deleteContact:
             return Text(NSLocalizedString("client_detail.delete_contact_title", comment: ""))
+        case .inlineEditConflict:
+            return Text(AppLocalization.localized("client_edit.conflict.title", value: "Changed on Another Device"))
+        case .inlineEditFailed:
+            return Text(AppLocalization.localized("common.error", value: "Error"))
         case .none:
             return Text("")
         }
@@ -387,6 +400,15 @@ struct ClientDetailView: View {
                 confirmDeleteContact(contact)
             }
             Button(NSLocalizedString("common.cancel", value: "Cancel", comment: ""), role: .cancel) {}
+        case .inlineEditConflict:
+            Button(AppLocalization.localized("client_edit.conflict.save_mine", value: "Save My Changes")) {
+                saveInlineEdit(vm.client, overwrite: true)
+            }
+            Button(AppLocalization.localized("client_edit.conflict.discard_mine", value: "Discard My Changes"), role: .destructive) {
+                cancelInlineEdit(vm.client)
+            }
+        case .inlineEditFailed:
+            Button(NSLocalizedString("common.ok", comment: ""), role: .cancel) {}
         }
     }
 
@@ -401,6 +423,16 @@ struct ClientDetailView: View {
             Text(message)
         case .deleteContact:
             Text(NSLocalizedString("client_detail.delete_contact_message", comment: ""))
+        case .inlineEditConflict(let name):
+            Text(String(
+                format: AppLocalization.localized(
+                    "client_edit.conflict.message_fmt",
+                    value: "%@ was changed on another device while you were editing. Save My Changes keeps any fields you didn't edit as the other device left them."
+                ),
+                name
+            ))
+        case .inlineEditFailed(let message):
+            Text(message)
         }
     }
 
@@ -410,6 +442,7 @@ struct ClientDetailView: View {
                 VStack(spacing: 16) {
                     ownerHeader(client: vm.client, primaryEmergencyContact: vm.primaryEmergencyContact)
                         .walkthroughTarget(.cdOwner)
+                        .showsRecentlyOpenElsewhere(recordID: vm.client.uuid)
                     clientSafetyBanner(client: vm.client)
                     emergencyContactsCard(contacts: vm.emergencyContacts)
                         .walkthroughTarget(.cdEmergency)
@@ -586,7 +619,7 @@ struct ClientDetailView: View {
                                 .disabled(
                                     editFirst.trimmed.isEmpty ||
                                     editLast.trimmed.isEmpty ||
-                                    (!editPhone.trimmed.isEmpty && PhoneUtils.toE164(editPhone) == nil)
+                                    inlineEditForm.proposedFields(original: (inlineEditBaseline ?? ClientEditBaseline(client)).fields) == nil
                                 )
                                 .accessibilityIdentifier("clientDetail.inlineEdit.save")
                         }
@@ -1107,36 +1140,66 @@ struct ClientDetailView: View {
     }
 
     private func beginInlineEdit(_ client: Client) {
-        editFirst = TextInputLimits.limited(client.firstName, to: TextInputLimits.name)
-        editLast = TextInputLimits.limited(client.lastName, to: TextInputLimits.name)
-        editPhone = TextInputLimits.limited(PhoneUtils.display(client.phone ?? "") ?? (client.phone ?? ""), to: TextInputLimits.phone)
-        editEmail = TextInputLimits.limited(client.email ?? "", to: TextInputLimits.email)
+        ClientEditSaver.refresh(client)
+        let opened = ClientEditBaseline(client)
+        inlineEditBaseline = opened
+        editFirst = TextInputLimits.limited(opened.fields.firstName, to: TextInputLimits.name)
+        editLast = TextInputLimits.limited(opened.fields.lastName, to: TextInputLimits.name)
+        editPhone = TextInputLimits.limited(ClientContactFields.formPhoneText(opened.fields.phone), to: TextInputLimits.phone)
+        editEmail = TextInputLimits.limited(opened.fields.email ?? "", to: TextInputLimits.email)
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = true }
     }
 
     private func cancelInlineEdit(_ client: Client) {
+        inlineEditBaseline = nil
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }
     }
 
-    private func saveInlineEdit(_ client: Client) {
-        client.setFirstName(editFirst)
-        client.setLastName(editLast)
-        if editPhone.trimmed.isEmpty {
-            client.setPhone(nil)
-        } else if let e164 = PhoneUtils.toE164(editPhone) {
-            client.setPhone(e164)
-        } else {
+    /// The inline edit has no address field, so the stored address is kept.
+    private var inlineEditForm: ClientEditForm {
+        ClientEditForm(firstName: editFirst, lastName: editLast, phone: editPhone, email: editEmail, address: nil)
+    }
+
+    private func saveInlineEdit(_ client: Client, overwrite: Bool = false) {
+        guard let baseline = inlineEditBaseline else { return }
+        let outcome = ClientEditSaver.save(
+            inlineEditForm,
+            baseline: baseline,
+            container: modelContext.container,
+            refreshing: client.modelContext ?? modelContext,
+            overwrite: overwrite
+        )
+        switch outcome {
+        case .saved:
+            break
+        case .unchanged:
+            cancelInlineEdit(client)
+            return
+        case .changedElsewhere:
+            let name = [baseline.fields.firstName, baseline.fields.lastName]
+                .map(\.trimmed)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            alertDestination = .inlineEditConflict(
+                name: name.isEmpty ? AppLocalization.localized("client_edit.conflict.this_client", value: "This client") : name
+            )
+            return
+        case .invalidPhone:
+            return
+        case .missing:
+            alertDestination = .inlineEditFailed(AppLocalization.localized(
+                "client_edit.missing",
+                value: "This client is no longer on this device, so your changes weren't saved."
+            ))
+            return
+        case .failed(let message):
+            alertDestination = .inlineEditFailed(String(
+                format: AppLocalization.localized("common.save_failed", value: "Save failed. Please try again.\n\n%@"),
+                message
+            ))
             return
         }
-        client.setEmail(editEmail.trimmed.isEmpty ? nil : editEmail)
-        do {
-            try modelContext.save()
-            CloudKitMonitor.shared.recordLocalChange("Saved client changes")
-        } catch {
-            Logger.clientDetailView.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving client changes")
-            return
-        }
+        inlineEditBaseline = nil
         withAnimation(Animations.fastEaseOut) { isEditingClientInline = false }
         // Optional: show a small saved toast for inline edits
         withAnimation(Animations.fastEaseOut) { showSavedToast = true }

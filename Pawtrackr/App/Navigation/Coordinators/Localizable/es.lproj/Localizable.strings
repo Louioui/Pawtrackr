@@ -1576,3 +1576,11 @@
 "client_detail.missing_fmt" = "Falta: %@";
 "client_detail.add_emergency_contact" = "Agregar contacto de emergencia";
 "client_detail.emergency_empty_hint" = "Agrega a una persona de respaldo a quien el equipo pueda llamar si no localiza al dueño.";
+"client_edit.conflict.title" = "Cambiado en otro dispositivo";
+"client_edit.conflict.save_mine" = "Guardar mis cambios";
+"client_edit.conflict.discard_mine" = "Descartar mis cambios";
+"client_edit.conflict.message_fmt" = "%@ se cambió en otro dispositivo mientras editabas. Guardar mis cambios deja los campos que no editaste como los dejó el otro dispositivo.";
+"client_edit.conflict.this_client" = "Este cliente";
+"client_edit.missing" = "Este cliente ya no está en este dispositivo, así que tus cambios no se guardaron.";
+"presence.recently_open_fmt" = "Abierto hace poco en %@";
+"presence.recently_open_unnamed" = "Abierto hace poco en otro dispositivo";
