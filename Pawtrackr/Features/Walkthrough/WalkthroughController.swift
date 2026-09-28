@@ -27,6 +27,7 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case dashNeedsAttention
     case dashRecentClients
     case dashRevenue
+    case setupChecklist
     // Insights content cards
     case insKpis
     case insRevenue
@@ -42,6 +43,8 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case cdOwner
     case cdEmergency
     case cdPets
+    case petGenderDots
+    case emergencyContactBadges
     case cdAddPet
     case cdCheckIn
     case cdCheckOut
@@ -60,6 +63,8 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case setICloud
     case setAbout
     case setStartFresh
+    case clientFilters
+    case loyaltySimulator
 }
 
 /// A modal the deep-dive tour opens to walk through its contents. The host
@@ -344,6 +349,23 @@ extension WalkthroughController {
         #endif
     }
 
+    static func tour(for role: OnboardingRole) -> [WalkthroughStep] {
+        let allSteps = fullTour()
+        switch role {
+        case .ownerManager:
+            return allSteps
+        case .frontDeskGroomer:
+            let frontDeskAnchors: Set<WalkthroughAnchorID> = [
+                .dashboard, .dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients,
+                .clients, .clientFilters, .ncOwner, .ncPets, .ncSave,
+                .cdOwner, .cdEmergency, .emergencyContactBadges, .cdPets, .petGenderDots, .cdAddPet,
+                .cdCheckIn, .cdCheckOut, .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
+                .cdPetHistory, .cdHistory, .setICloud
+            ]
+            return allSteps.filter { frontDeskAnchors.contains($0.anchor) }
+        }
+    }
+
     /// The full guided deep-dive a new user sees: it walks the four primary
     /// screens AND every key section inside the Dashboard and Insights, driving
     /// navigation and scrolling each target into view. Section-level steps keep
@@ -425,6 +447,15 @@ extension WalkthroughController {
                 coachTip: AppLocalization.localized("tour.nav.clients.tip", value: "One client can have many pets, so multi-pet families stay together."),
                 icon: "person.3.fill", fallback: .tabBarItem(index: 1, count: 4)
             ),
+            WalkthroughStep(
+                id: next(), anchor: .clientFilters, surface: .clients,
+                title: AppLocalization.localized("tour.clients.filters.title", value: "Client Filters"),
+                directive: AppLocalization.localized("tour.clients.filters.directive", value: "Switch between everyone, active visits, overdue pets, and missing info."),
+                purpose: AppLocalization.localized("tour.clients.filters.purpose", value: "Filters turn a large client book into a working queue, so the front desk can find what needs action right now."),
+                lesson: .dailyWorkflow,
+                coachTip: AppLocalization.localized("tour.clients.filters.tip", value: "Missing Info helps clean up incomplete phone and email records before they cause pickup problems."),
+                icon: "line.3.horizontal.decrease.circle.fill"
+            ),
             // MARK: Create a client (opens the New Client sheet)
             WalkthroughStep(
                 id: next(), anchor: .ncOwner, surface: .clients,
@@ -478,6 +509,14 @@ extension WalkthroughController {
                 icon: "phone.badge.plus"
             ),
             WalkthroughStep(
+                id: next(), anchor: .emergencyContactBadges, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.emergency_badges.title", value: "Call-Ready Backup"),
+                directive: AppLocalization.localized("tour.cd.emergency_badges.directive", value: "Use the emergency contact card before a problem gets stressful."),
+                purpose: AppLocalization.localized("tour.cd.emergency_badges.purpose", value: "The card surfaces name, relation, phone, call, message, copy, and missing-info prompts so staff do not hunt through notes."),
+                lesson: .clientRecords,
+                icon: "person.crop.circle.badge.exclamationmark.fill"
+            ),
+            WalkthroughStep(
                 id: next(), anchor: .cdPets, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.pets.title", value: "Pet Actions"),
                 directive: AppLocalization.localized("tour.cd.pets.directive", value: "This row is where the visit work starts."),
@@ -485,6 +524,14 @@ extension WalkthroughController {
                 lesson: .dailyWorkflow,
                 coachTip: AppLocalization.localized("tour.cd.pets.tip", value: "Each owner can have multiple pets, and every pet keeps its own status and visit history."),
                 icon: "pawprint.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .petGenderDots, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.gender_dots.title", value: "Gender Dots"),
+                directive: AppLocalization.localized("tour.cd.gender_dots.directive", value: "Read the household mix at a glance."),
+                purpose: AppLocalization.localized("tour.cd.gender_dots.purpose", value: "Color-coded pet markers make multi-pet homes easier to scan when staff are juggling intake, safety notes, and pickup timing."),
+                lesson: .clientRecords,
+                icon: "circle.grid.cross.fill"
             ),
             WalkthroughStep(
                 id: next(), anchor: .cdAddPet, surface: .clients, route: .demoClientDetail,

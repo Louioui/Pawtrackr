@@ -41,15 +41,7 @@ struct ClientRow: View {
             if let pet = primaryPet {
                 IconCircle(size: .md, style: .auto(species: pet.species, gender: pet.gender), lineWidth: 1)
 
-                HStack(spacing: 6) {
-                    SpeciesAndGenderIcons.genderDot(for: pet.gender, size: 9, isDecorative: true)
-                    Text(pet.name)
-                        .lineLimit(1)
-                }
-                .font(.system(.headline, design: .rounded, weight: .semibold))
-                .foregroundStyle(.primary)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(pet.name), \(pet.gender.displayName)")
+                PetGenderNameBadge(pet: pet, maxNameWidth: 180)
             } else {
                 // Fallback if no pets exist for the client
                 Text(client.displayName())

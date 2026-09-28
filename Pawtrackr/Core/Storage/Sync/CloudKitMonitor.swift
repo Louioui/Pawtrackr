@@ -109,6 +109,20 @@ final class CloudKitMonitor {
         }
     }
 
+    enum SyncGovernorState: Equatable {
+        case normal
+        case offlineFirstLocalMode
+        case probing
+
+        var displayLabel: String {
+            switch self {
+            case .normal: return "Automatic"
+            case .offlineFirstLocalMode: return "Offline-First Local Mode"
+            case .probing: return "Checking"
+            }
+        }
+    }
+
     enum NetworkState: Equatable {
         case unknown
         case online(isExpensive: Bool, isConstrained: Bool)
@@ -118,6 +132,13 @@ final class CloudKitMonitor {
         var isOnline: Bool {
             if case .online = self { return true }
             return false
+        }
+
+        var slowsBackgroundWork: Bool {
+            if case .online(let expensive, let constrained) = self {
+                return expensive || constrained || ProcessInfo.processInfo.isLowPowerModeEnabled
+            }
+            return !isOnline
         }
 
         var displayLabel: String {
@@ -241,6 +262,9 @@ final class CloudKitMonitor {
     private(set) var pendingLocalChangeDescription: String?
     private(set) var offlineBufferedMutationCount: Int = 0
     private(set) var manualCheckRemainingSeconds: Int = 0
+    private(set) var syncGovernorState: SyncGovernorState = .normal
+    private(set) var offlineLocalModeReason: String?
+    private(set) var nextProbeDate: Date?
     /// CloudKit is moving data right now. Activity only: it never says
     /// anything about health, so it can't hide a failure.
     private(set) var isActivelySyncing: Bool = false
@@ -257,7 +281,9 @@ final class CloudKitMonitor {
     private(set) var restoredLocalBackupThisLaunch = false
 
     var canForceSync: Bool {
-        manualCheckRemainingSeconds == 0
+        guard manualCheckRemainingSeconds == 0 else { return false }
+        guard case .open(let until, _, _) = circuitBreaker.state else { return true }
+        return Date() >= until
     }
 
     /// Container identifier from the entitlements file. Surfaced for the
@@ -314,6 +340,7 @@ final class CloudKitMonitor {
     ])
     @ObservationIgnored private var heldFailures: [HeldFailure] = []
     @ObservationIgnored private var inFlightEvents: [UUID: Date] = [:]
+    @ObservationIgnored private var circuitBreaker = SyncCircuitBreaker()
     @ObservationIgnored private var activityHolds: Set<ActivityHold> = []
     @ObservationIgnored private var statusDeadlineTask: Task<Void, Never>?
     @ObservationIgnored private var scheduledStatusDeadline: Date?
@@ -583,6 +610,7 @@ final class CloudKitMonitor {
             Task { @MainActor [weak self] in
                 guard let self, self.networkState != next else { return }
                 self.networkState = next
+                self.updateSyncGovernorForNetworkChange()
                 if !next.isOnline {
                     self.appendEvent(
                         kind: .healthCheck,
@@ -590,7 +618,7 @@ final class CloudKitMonitor {
                         message: next.displayLabel,
                         errorCode: nil
                     )
-                } else if self.mode.isMirroring, self.accountState.isAvailable {
+                } else if self.mode.isMirroring, self.accountState.isAvailable, self.allowsAggressiveSyncWork {
                     // Heartbeat our device info when we come online
                     self.updateDeviceMetadata()
                     self.flushOfflineMutationBuffer(reason: "Network restored")
@@ -607,7 +635,7 @@ final class CloudKitMonitor {
     /// Heartbeats the current device's metadata to iCloud.
     /// This allows the business owner to see which worker devices are active.
     func updateDeviceMetadata() {
-        guard mode.isMirroring, let modelContainer, accountState.isAvailable, networkState.isOnline else { return }
+        guard mode.isMirroring, let modelContainer, accountState.isAvailable, networkState.isOnline, allowsAggressiveSyncWork else { return }
 
         #if os(iOS)
         let deviceModel = UIDevice.current.model
@@ -693,7 +721,7 @@ final class CloudKitMonitor {
 
     /// Periodically cleans up stale presence records (older than 10 minutes).
     func cleanupStalePresence() {
-        guard let modelContainer, networkState.isOnline else { return }
+        guard let modelContainer, networkState.isOnline, allowsAggressiveSyncWork else { return }
         
         Task.detached(priority: .utility) {
             let context = ModelContext(modelContainer)
@@ -870,6 +898,8 @@ final class CloudKitMonitor {
 
         switch reducerKind {
         case .export:
+            circuitBreaker.recordSuccess()
+            publishCircuitBreakerState()
             lastExportDate = endedAt
             UserDefaults.standard.set(lastExportDate, forKey: DefaultsKey.lastExportDate)
             // An older success arriving late leaves a newer failure standing.
@@ -888,6 +918,10 @@ final class CloudKitMonitor {
                 Task { await refreshAccountStatus() }
             }
         case .import:
+            if pendingLocalChangeCount == 0 {
+                circuitBreaker.recordSuccess()
+                publishCircuitBreakerState()
+            }
             lastImportDate = endedAt
             UserDefaults.standard.set(lastImportDate, forKey: DefaultsKey.lastImportDate)
             if lastErrorSource == .download {
@@ -1061,6 +1095,8 @@ final class CloudKitMonitor {
         }
 
         failureReporter.reportIfNeeded(classification)
+        circuitBreaker.recordFailure(reason: .cloudKitFailure, now: endedAt, constrained: networkState.slowsBackgroundWork)
+        publishCircuitBreakerState()
         appendEvent(
             kind: kind,
             status: .failed,
@@ -1080,6 +1116,19 @@ final class CloudKitMonitor {
     /// therefore avoid claiming success here; real health is driven by
     /// NSPersistentCloudKitContainer events.
     func forceSync() async {
+        guard circuitBreaker.beginProbeIfAllowed(now: Date()) else {
+            publishCircuitBreakerState()
+            appendEvent(
+                kind: .healthCheck,
+                status: .waiting,
+                message: offlineLocalModeReason ?? "iCloud checks are paused briefly while Pawtrackr protects battery in Offline-First Local Mode.",
+                errorCode: nil
+            )
+            postChange()
+            return
+        }
+        publishCircuitBreakerState()
+
         guard canForceSync else {
             appendEvent(
                 kind: .healthCheck,
@@ -1106,7 +1155,7 @@ final class CloudKitMonitor {
             message: "User requested iCloud check",
             errorCode: nil
         )
-        if mode.isMirroring, accountState.isAvailable, pendingLocalChangeCount > 0 {
+        if mode.isMirroring, accountState.isAvailable, pendingLocalChangeCount > 0, allowsAggressiveSyncWork {
             hold(.manualCheck)
             startForceSyncWatchdog()
         }
@@ -1569,6 +1618,15 @@ final class CloudKitMonitor {
             ))
         }
 
+        if syncGovernorState == .offlineFirstLocalMode, let offlineLocalModeReason {
+            issues.append(SyncHealthIssue(
+                id: "syncGovernor.offlineFirst",
+                severity: .warning,
+                title: AppLocalization.localized("cloudkit.health.offline_first.title", value: "Offline-First Local Mode"),
+                detail: offlineLocalModeReason
+            ))
+        }
+
         if hasUploadsPendingPastGrace, accountState.isAvailable {
             issues.append(SyncHealthIssue(
                 id: "pending",
@@ -1700,6 +1758,32 @@ final class CloudKitMonitor {
         }
     }
 
+    private var allowsAggressiveSyncWork: Bool {
+        circuitBreaker.allowsAggressiveWork
+    }
+
+    private func updateSyncGovernorForNetworkChange() {
+        circuitBreaker.observeNetwork(NetworkCondition(networkState: networkState), now: Date())
+        publishCircuitBreakerState()
+    }
+
+    private func publishCircuitBreakerState() {
+        switch circuitBreaker.state {
+        case .closed:
+            syncGovernorState = .normal
+            offlineLocalModeReason = nil
+            nextProbeDate = nil
+        case .open(let until, let reason, _):
+            syncGovernorState = .offlineFirstLocalMode
+            offlineLocalModeReason = reason.displayText
+            nextProbeDate = until
+        case .halfOpen(_, let reason, _):
+            syncGovernorState = .probing
+            offlineLocalModeReason = reason.displayText
+            nextProbeDate = nil
+        }
+    }
+
     private func recordSyncAttempt() {
         lastAttemptDate = Date()
         UserDefaults.standard.set(lastAttemptDate, forKey: DefaultsKey.lastAttemptDate)
@@ -1751,6 +1835,8 @@ final class CloudKitMonitor {
 
         let hours = Int(waiting / 3600)
         Logger.cloudKit.warning("iCloud Safe Mode: local changes have waited \(hours)h for an upload")
+        circuitBreaker.recordPendingStall(now: Date(), constrained: networkState.slowsBackgroundWork)
+        publishCircuitBreakerState()
         appendEvent(
             kind: .recovery,
             status: .noted,
@@ -1758,6 +1844,7 @@ final class CloudKitMonitor {
             errorCode: reducer.state.exportHealth.lastFailureCode
         )
         postChange()
+        guard allowsAggressiveSyncWork else { return }
         Task { await refreshAccountStatus() }
     }
 
@@ -1848,7 +1935,7 @@ final class CloudKitMonitor {
     /// never touches the pending counter: releasing the buffer uploads
     /// nothing, only an export does.
     private func flushOfflineMutationBuffer(reason: String) {
-        guard mode.isMirroring, accountState.isAvailable, networkState.isOnline else { return }
+        guard mode.isMirroring, accountState.isAvailable, networkState.isOnline, allowsAggressiveSyncWork else { return }
         offlineBufferedMutationCount = OfflineMutationBuffer.count
         guard offlineBufferedMutationCount > 0 else { return }
 
@@ -2200,6 +2287,21 @@ final class CloudKitMonitor {
         let next = Array(([event] + existing).prefix(25))
         if let data = try? JSONEncoder().encode(next) {
             UserDefaults.standard.set(data, forKey: DefaultsKey.syncEvents)
+        }
+    }
+}
+
+private extension NetworkCondition {
+    init(networkState: CloudKitMonitor.NetworkState) {
+        switch networkState {
+        case .unknown:
+            self.init(status: .unknown, isExpensive: false, isConstrained: false)
+        case .online(let expensive, let constrained):
+            self.init(status: .online, isExpensive: expensive, isConstrained: constrained)
+        case .offline:
+            self.init(status: .offline, isExpensive: false, isConstrained: false)
+        case .requiresConnection:
+            self.init(status: .requiresConnection, isExpensive: false, isConstrained: false)
         }
     }
 }

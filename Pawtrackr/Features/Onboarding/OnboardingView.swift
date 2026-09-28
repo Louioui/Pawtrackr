@@ -74,10 +74,12 @@ struct OnboardingView: View {
                 ZStack {
                     switch viewModel.currentStep {
                     case .welcome: welcomeStep
+                    case .role: roleStep
                     case .businessProfile: businessProfileStep
                     case .regional: regionalStep
                     case .security: securityStep
                     case .permissions: permissionsStep
+                    case .loyalty: loyaltyStep
                     case .warmStart: warmStartStep
                     }
                 }
@@ -216,12 +218,76 @@ struct OnboardingView: View {
     private func subtitle(for step: OnboardingViewModel.Step) -> String {
         switch step {
         case .welcome: return NSLocalizedString("onboarding.subtitle.welcome", value: "Let's configure your workspace.", comment: "")
+        case .role: return NSLocalizedString("onboarding.subtitle.role", value: "Choose the tour style that fits your day-to-day work.", comment: "")
         case .businessProfile: return NSLocalizedString("onboarding.subtitle.business_profile", value: "Tell us about your grooming business.", comment: "")
         case .regional: return NSLocalizedString("onboarding.subtitle.regional", value: "Set your local currency and contact details.", comment: "")
         case .security: return NSLocalizedString("onboarding.subtitle.security", value: "Secure your business data with a PIN.", comment: "")
         case .permissions: return NSLocalizedString("onboarding.subtitle.permissions", value: "Set your app preferences and unlock method.", comment: "")
+        case .loyalty: return NSLocalizedString("onboarding.subtitle.loyalty", value: "See how points build automatically after each completed visit.", comment: "")
         case .warmStart: return NSLocalizedString("onboarding.subtitle.finish", value: "You are all set to start grooming!", comment: "")
         }
+    }
+
+    private var roleStep: some View {
+        ScrollView {
+            VStack(spacing: DS.Spacing.xl) {
+                Image(systemName: "person.2.badge.gearshape.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .symbolEffect(.bounce, value: viewModel.currentStep)
+
+                VStack(spacing: DS.Spacing.md) {
+                    ForEach(OnboardingRole.allCases) { role in
+                        Button {
+                            viewModel.selectedRole = role
+                            HapticManager.impact(.light)
+                        } label: {
+                            HStack(spacing: DS.Spacing.md) {
+                                Image(systemName: role == .ownerManager ? "chart.line.uptrend.xyaxis.circle.fill" : "person.text.rectangle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(role == viewModel.selectedRole ? .white : DS.ColorToken.primary)
+                                    .frame(width: 42, height: 42)
+                                    .background(
+                                        Circle()
+                                            .fill(role == viewModel.selectedRole ? DS.ColorToken.primary : DS.ColorToken.primary.opacity(0.12))
+                                    )
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(role.title)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    Text(role.subtitle)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+
+                                Spacer(minLength: DS.Spacing.md)
+
+                                Image(systemName: role == viewModel.selectedRole ? "checkmark.circle.fill" : "circle")
+                                    .font(.title3)
+                                    .foregroundStyle(role == viewModel.selectedRole ? DS.ColorToken.primary : .secondary)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .hairlineBorder(role == viewModel.selectedRole ? DS.ColorToken.primary : DS.ColorToken.border, cornerRadius: 14)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("onboarding.role.\(role.rawValue)")
+                    }
+                }
+                .padding(.horizontal, DS.Spacing.xxl)
+
+                Text(NSLocalizedString("onboarding.role.note", value: "This only changes the guided tour. You can still use every Pawtrackr feature.", comment: ""))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, DS.Spacing.xxl)
+            }
+            .padding(.top, DS.Spacing.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var permissionsStep: some View {
@@ -722,6 +788,36 @@ struct OnboardingView: View {
         }
     }
 
+    private var loyaltyStep: some View {
+        ScrollView {
+            VStack(spacing: DS.Spacing.xl) {
+                Image(systemName: "giftcard.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .symbolEffect(.pulse, value: viewModel.currentStep)
+
+                VStack(spacing: DS.Spacing.sm) {
+                    Text(NSLocalizedString("onboarding.loyalty.title", value: "Rewards without extra math", comment: ""))
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                    Text(NSLocalizedString("onboarding.loyalty.message", value: "Move the ticket total and watch points appear the same way they will under a client's profile after checkout.", comment: ""))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, DS.Spacing.xxl)
+
+                LoyaltySimulatorCard()
+                    .walkthroughTarget(.loyaltySimulator)
+                    .padding(.horizontal, DS.Spacing.xxl)
+            }
+            .padding(.top, DS.Spacing.xl)
+            .padding(.bottom, DS.Spacing.xl)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
     private func pinEntryView(title: String, text: Binding<String>, field: FocusField) -> some View {
         VStack(spacing: 8) {
             Text(title)
@@ -795,6 +891,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(NSLocalizedString("onboarding.summary.title", value: "Workspace Summary", comment: ""))
                     .font(.headline)
+                Label(viewModel.selectedRole.title, systemImage: "person.crop.circle.badge.checkmark")
                 Label(viewModel.name.trimmed.isEmpty ? NSLocalizedString("onboarding.summary.business_pending", value: "Business name will be added in setup", comment: "") : viewModel.name.trimmed, systemImage: "building.2")
                 Label(String(format: NSLocalizedString("onboarding.summary.currency_fmt", value: "Currency: %@", comment: ""), viewModel.currencySymbol), systemImage: "dollarsign.circle")
                 if viewModel.pinSkipped {

@@ -239,6 +239,7 @@ struct ClientsView: View {
             }
             .padding(.horizontal)
         }
+        .walkthroughTarget(.clientFilters)
     }
 
     private var sortingMenu: some View {

@@ -14,6 +14,7 @@ struct LoyaltyManagementView: View {
     @State private var newRewardDetail = ""
     @State private var newRewardCost = 100
     @State private var newRewardStyle: LoyaltyReward.Style = .credit
+    @State private var showResetCatalogConfirmation = false
 
     private var config: LoyaltyConfig? {
         configs.first
@@ -44,6 +45,18 @@ struct LoyaltyManagementView: View {
         }
         .task {
             DataMigrations.ensureLoyaltyDefaults(in: modelContext)
+        }
+        .confirmationDialog(
+            "Reset rewards to Discount Ladder?",
+            isPresented: $showResetCatalogConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset to Discount Ladder", role: .destructive) {
+                resetToDiscountLadder()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This replaces the current reward templates with the five default discount-credit rewards. Client point balances stay unchanged.")
         }
     }
 
@@ -123,6 +136,15 @@ struct LoyaltyManagementView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label("Reward Templates", systemImage: "giftcard.fill")
                     .font(.headline)
+
+                Button {
+                    showResetCatalogConfirmation = true
+                } label: {
+                    Label("Reset to Discount Ladder", systemImage: "arrow.counterclockwise.circle.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(rewards.isEmpty)
 
                 if rewards.isEmpty {
                     ContentUnavailableView(
@@ -301,6 +323,12 @@ struct LoyaltyManagementView: View {
             newRewardDetail = ""
             newRewardCost = 100
             newRewardStyle = .credit
+        }
+    }
+
+    private func resetToDiscountLadder() {
+        mutate { service in
+            try await service.resetRewardTemplatesToDiscountLadder()
         }
     }
 

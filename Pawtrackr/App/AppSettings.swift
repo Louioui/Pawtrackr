@@ -37,6 +37,7 @@ enum AppSettingsKeys {
     static let optimizeMediaForICloud = CloudMediaPolicy.optimizedMediaDefaultsKey
     static let deviceName = "deviceName"
     static let idleLockMinutes = "idleLockMinutes"
+    static let onboardingRole = "onboardingRole"
 }
 
 /// User-selected app language. `system` defers to the device language.
@@ -171,6 +172,7 @@ final class AppSettings {
         static let defaultLaunchTab = "dashboard"
         static let appLanguageOverride = AppLanguageOverride.system.rawValue
         static let optimizeMediaForICloud = true
+        static let onboardingRole = OnboardingRole.ownerManager.rawValue
     }
 
     // MARK: - Properties
@@ -341,6 +343,12 @@ final class AppSettings {
         }
     }
 
+    var onboardingRole: OnboardingRole {
+        didSet {
+            UserDefaults.standard.set(onboardingRole.rawValue, forKey: AppSettingsKeys.onboardingRole)
+        }
+    }
+
     // MARK: - Init
 
     init() {
@@ -376,7 +384,8 @@ final class AppSettings {
             AppSettingsKeys.defaultLaunchTab: Defaults.defaultLaunchTab,
             AppSettingsKeys.appLanguageOverride: Defaults.appLanguageOverride,
             AppSettingsKeys.optimizeMediaForICloud: Defaults.optimizeMediaForICloud,
-            AppSettingsKeys.idleLockMinutes: Defaults.idleLockMinutes
+            AppSettingsKeys.idleLockMinutes: Defaults.idleLockMinutes,
+            AppSettingsKeys.onboardingRole: Defaults.onboardingRole
         ])
 
         // Read values
@@ -410,6 +419,8 @@ final class AppSettings {
         let storedLanguageRaw = UserDefaults.standard.string(forKey: AppSettingsKeys.appLanguageOverride) ?? Defaults.appLanguageOverride
         self.appLanguageOverride = AppLanguageOverride(rawValue: storedLanguageRaw) ?? .system
         self.optimizeMediaForICloud = UserDefaults.standard.bool(forKey: AppSettingsKeys.optimizeMediaForICloud)
+        let storedOnboardingRole = UserDefaults.standard.string(forKey: AppSettingsKeys.onboardingRole) ?? Defaults.onboardingRole
+        self.onboardingRole = OnboardingRole(rawValue: storedOnboardingRole) ?? .ownerManager
         
         #if os(iOS)
         let defaultDeviceName = UIDevice.current.model

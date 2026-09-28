@@ -472,7 +472,9 @@ private struct DataExportSectionView: View {
     let onRestoreBackup: () -> Void
     @State private var isExportingClients = false
     @State private var isExportingVisits = false
+    @State private var isCreatingEncryptedBackup = false
     @State private var exportDocument: ExportDocument?
+    @State private var encryptedBackupURL: URL?
     @State private var exportError: String?
 
     var body: some View {
@@ -498,7 +500,15 @@ private struct DataExportSectionView: View {
             }
             .accessibilityIdentifier("settings.restoreBackup")
 
-            if isExportingClients || isExportingVisits {
+            Button {
+                Task { await createEncryptedBackup() }
+            } label: {
+                Label(settingsLocalized("settings.export.encrypted_backup", value: "Create Encrypted Local Backup"), systemImage: "lock.doc.fill")
+            }
+            .accessibilityIdentifier("settings.createEncryptedBackup")
+            .disabled(isExportingClients || isExportingVisits || isCreatingEncryptedBackup)
+
+            if isExportingClients || isExportingVisits || isCreatingEncryptedBackup {
                 ProgressView(settingsLocalized("settings.export.preparing", value: "Preparing export..."))
             }
 
@@ -513,6 +523,24 @@ private struct DataExportSectionView: View {
                     )
                 }
                 .buttonStyle(.borderedProminent)
+            }
+
+            if let encryptedBackupURL {
+                ShareLink(item: encryptedBackupURL) {
+                    Label(
+                        settingsLocalized("settings.export.share_encrypted_backup", value: "Share Encrypted Backup"),
+                        systemImage: "square.and.arrow.up"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+
+                Text(settingsLocalized(
+                    "settings.export.encrypted_backup_note",
+                    value: "Encrypted backups use a Keychain key on this device. They are meant for same-device recovery."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             if let exportError {
@@ -548,6 +576,20 @@ private struct DataExportSectionView: View {
             case .visits:
                 exportDocument = try ExportService.shared.exportVisitsToCSV(modelContext: modelContext)
             }
+        } catch {
+            exportError = String(format: settingsLocalized("settings.export.failed_fmt", value: "Export failed: %@"), error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func createEncryptedBackup() async {
+        isCreatingEncryptedBackup = true
+        exportError = nil
+        encryptedBackupURL = nil
+        defer { isCreatingEncryptedBackup = false }
+
+        do {
+            encryptedBackupURL = try await SecureStoreSnapshotExporter.shared.exportSnapshot()
         } catch {
             exportError = String(format: settingsLocalized("settings.export.failed_fmt", value: "Export failed: %@"), error.localizedDescription)
         }

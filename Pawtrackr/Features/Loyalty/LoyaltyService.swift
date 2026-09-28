@@ -139,6 +139,17 @@ actor LoyaltyService {
         try modelContext.save()
     }
 
+    func resetRewardTemplatesToDiscountLadder() throws {
+        let existing = try modelContext.fetch(FetchDescriptor<LoyaltyRewardTemplate>())
+        for reward in existing {
+            modelContext.delete(reward)
+        }
+        for template in LoyaltyRewardTemplate.seedTemplates() {
+            modelContext.insert(template)
+        }
+        try modelContext.save()
+    }
+
     private func recordLedgerEntry(kind: LoyaltyLedgerEntry.Kind, points: Int, client: Client, reason: String?) {
         let entry = LoyaltyLedgerEntry(
             kind: kind,

@@ -15,12 +15,14 @@ final class OnboardingViewModel {
     private var appSettings: AppSettings?
 
     enum Step: Int, CaseIterable {
-        case welcome, businessProfile, regional, security, permissions, warmStart
+        case welcome, role, businessProfile, regional, security, permissions, loyalty, warmStart
         
         var title: String {
             switch self {
             case .welcome:
                 return NSLocalizedString("onboarding.step.welcome", value: "Welcome", comment: "")
+            case .role:
+                return NSLocalizedString("onboarding.step.role", value: "Your Role", comment: "")
             case .businessProfile:
                 return NSLocalizedString("onboarding.step.business_profile", value: "Business Profile", comment: "")
             case .regional:
@@ -29,6 +31,8 @@ final class OnboardingViewModel {
                 return NSLocalizedString("onboarding.step.security", value: "Security", comment: "")
             case .permissions:
                 return NSLocalizedString("onboarding.step.permissions", value: "Permissions", comment: "")
+            case .loyalty:
+                return NSLocalizedString("onboarding.step.loyalty", value: "Loyalty Points", comment: "")
             case .warmStart:
                 return NSLocalizedString("onboarding.step.finish", value: "Finish", comment: "")
             }
@@ -78,6 +82,7 @@ final class OnboardingViewModel {
         }
     }
     var confirmPin: String = "" { didSet { saveDraft() } }
+    var selectedRole: OnboardingRole = .ownerManager { didSet { saveDraft() } }
     /// User chose to set up the app without a PIN (passcode-free). Defaults false so
     /// existing validation/tests still require a matching 4-digit PIN by default.
     var pinSkipped: Bool = false { didSet { saveDraft() } }
@@ -110,7 +115,8 @@ final class OnboardingViewModel {
             "biometricsEnabled": biometricsEnabled,
             "lockOnBackgroundEnabled": lockOnBackgroundEnabled,
             "autoLockAfterInactivityEnabled": autoLockAfterInactivityEnabled,
-            "currency": currentCurrency
+            "currency": currentCurrency,
+            "selectedRole": selectedRole.rawValue
         ]
         // Unchanged drafts aren't rewritten: every UserDefaults write invalidates
         // @AppStorage-backed views, so a no-op write is never free.
@@ -129,6 +135,9 @@ final class OnboardingViewModel {
         address = draft["address"] as? String ?? ""
         pin = draft["pin"] as? String ?? ""
         confirmPin = draft["confirmPin"] as? String ?? ""
+        if let rawRole = draft["selectedRole"] as? String, let role = OnboardingRole(rawValue: rawRole) {
+            selectedRole = role
+        }
         pinSkipped = draft["pinSkipped"] as? Bool ?? false
         biometricsEnabled = draft["biometricsEnabled"] as? Bool ?? false
         lockOnBackgroundEnabled = draft["lockOnBackgroundEnabled"] as? Bool ?? true
@@ -148,6 +157,7 @@ final class OnboardingViewModel {
         self.lockOnBackgroundEnabled = appSettings?.autoLockOnBackground ?? true
         self.autoLockAfterInactivityEnabled = appSettings?.autoLockAfterInactivity ?? false
         self.biometricsEnabled = (appSettings?.isBiometricLockEnabled ?? false) && isBiometricsAvailable
+        self.selectedRole = appSettings?.onboardingRole ?? .ownerManager
 
         if AppRuntime.isOnboardingTestMode {
             clearDraft()
@@ -168,6 +178,7 @@ final class OnboardingViewModel {
         lockOnBackgroundEnabled = appSettings.autoLockOnBackground
         autoLockAfterInactivityEnabled = appSettings.autoLockAfterInactivity
         biometricsEnabled = appSettings.isBiometricLockEnabled && isBiometricsAvailable
+        selectedRole = appSettings.onboardingRole
 
         do {
             var descriptor = FetchDescriptor<BusinessConfig>()
@@ -230,7 +241,7 @@ final class OnboardingViewModel {
     
     var canGoNext: Bool {
         switch currentStep {
-        case .welcome:
+        case .welcome, .role:
             return true
         case .businessProfile:
             return businessNameValidationMessage == nil
@@ -241,7 +252,7 @@ final class OnboardingViewModel {
             let normalizedPIN = pin.filter(\.isNumber)
             let normalizedConfirm = confirmPin.filter(\.isNumber)
             return AppSettings.isValidPIN(normalizedPIN) && normalizedPIN == normalizedConfirm
-        case .permissions:
+        case .permissions, .loyalty:
             return true
         case .warmStart:
             return true
@@ -252,7 +263,7 @@ final class OnboardingViewModel {
         switch currentStep {
         case .welcome:
             return NSLocalizedString("onboarding.action.get_started", value: "Get Started", comment: "")
-        case .permissions:
+        case .loyalty:
             return NSLocalizedString("onboarding.action.review_setup", value: "Review Setup", comment: "")
         default:
             return NSLocalizedString("common.continue", value: "Continue", comment: "")
@@ -432,6 +443,7 @@ final class OnboardingViewModel {
             settings.hasAddedFirstClient = seedSampleData
             settings.hasCompletedFirstVisit = seedSampleData
             settings.hasSeenAppTour = false
+            settings.onboardingRole = selectedRole
 
             if !pinSkipped {
                 guard settings.changePIN(to: currentPIN) else {
@@ -474,7 +486,10 @@ final class OnboardingViewModel {
                 }
             }
 
-            TelemetryService.shared.track(event: "onboarding_finished", parameters: ["seedSampleData": String(seedSampleData)])
+            TelemetryService.shared.track(event: "onboarding_finished", parameters: [
+                "seedSampleData": String(seedSampleData),
+                "role": selectedRole.rawValue
+            ])
 
             clearDraft()
             Formatters.updateCurrencySymbol(currentCurrency)

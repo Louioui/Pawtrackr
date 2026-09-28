@@ -193,6 +193,9 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.currentStep, .welcome)
 
         viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .role)
+
+        viewModel.nextStep()
         XCTAssertEqual(viewModel.currentStep, .businessProfile)
 
         // Business profile blocks until name is set.
@@ -217,6 +220,9 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.currentStep, .permissions)
 
         viewModel.nextStep()
+        XCTAssertEqual(viewModel.currentStep, .loyalty)
+
+        viewModel.nextStep()
         XCTAssertEqual(viewModel.currentStep, .warmStart)
 
         // Warm start is the last step — nextStep beyond it should be a no-op.
@@ -230,6 +236,9 @@ final class OnboardingViewModelTests: XCTestCase {
 
         viewModel.previousStep()
         XCTAssertEqual(viewModel.currentStep, .businessProfile)
+
+        viewModel.previousStep()
+        XCTAssertEqual(viewModel.currentStep, .role)
 
         viewModel.previousStep()
         XCTAssertEqual(viewModel.currentStep, .welcome)
@@ -261,8 +270,11 @@ final class OnboardingViewModelTests: XCTestCase {
         viewModel.currentStep = .businessProfile
         XCTAssertEqual(viewModel.primaryActionTitle, "Continue")
 
-        viewModel.currentStep = .permissions
+        viewModel.currentStep = .loyalty
         XCTAssertEqual(viewModel.primaryActionTitle, "Review Setup")
+
+        viewModel.currentStep = .permissions
+        XCTAssertEqual(viewModel.primaryActionTitle, "Continue")
 
         viewModel.currentStep = .warmStart
         XCTAssertEqual(viewModel.primaryActionTitle, "Continue")

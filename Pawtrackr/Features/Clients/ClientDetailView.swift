@@ -158,7 +158,6 @@ struct ClientDetailView: View {
             .toolbar {
                 toolbarContent(vm)
                 macAddPetToolbarItem
-                proWindowToolbarItems
             }
             #if os(iOS)
             .fabOverlay { addPetFab }
@@ -229,22 +228,6 @@ struct ClientDetailView: View {
         EmptyToolbarContent()
     }
     #endif
-
-    @ToolbarContentBuilder
-    private var proWindowToolbarItems: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            if supportsMultipleWindows {
-                Button {
-                    openClientWindow(.loyalty)
-                } label: {
-                    Label(
-                        NSLocalizedString("client.action.open_loyalty_window", value: "Open Loyalty Window", comment: ""),
-                        systemImage: "star.circle"
-                    )
-                }
-            }
-        }
-    }
 
     #if os(iOS)
     private var usesFloatingAddPetAction: Bool {
@@ -400,6 +383,7 @@ struct ClientDetailView: View {
                     clientSafetyBanner(client: vm.client)
                     emergencyContactsCard(contacts: vm.emergencyContacts)
                         .walkthroughTarget(.cdEmergency)
+                        .walkthroughTarget(.emergencyContactBadges)
                     notesCard(client: vm.client)
                     loyaltySection(client: vm.client)
                     petsSection(vm: vm)
@@ -689,47 +673,24 @@ struct ClientDetailView: View {
 
     @ViewBuilder
     private func emergencyContactsCard(contacts: [EmergencyContact]) -> some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(NSLocalizedString("client_detail.emergency_contacts", comment: "")).font(.headline)
-                    Spacer()
-                    Button {
-                        editingContact = nil
-                        newContactName = ""; newContactRelation = ""; newContactPhone = ""
-                        showContactEditor = true
-                    } label: { Image(systemName: "plus.circle.fill").font(.headline) }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(NSLocalizedString("client_detail.add_contact", comment: ""))
-                }
-                if contacts.isEmpty {
-                    Text(NSLocalizedString("client_detail.no_emergency_contacts", comment: "")).font(.footnote).foregroundStyle(.secondary)
-                } else {
-                    ForEach(contacts, id: \.uuid) { c in
-                        HStack(spacing: 10) {
-                            Image(systemName: "phone.fill").foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(c.name).font(.subheadline.weight(.semibold))
-                                HStack(spacing: 6) {
-                                    if let rel = c.relation, !rel.isEmpty { Text(rel).font(.caption).foregroundStyle(.secondary) }
-                                    Text(PhoneUtils.display(c.phone) ?? c.phone).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                            #if canImport(UIKit)
-                            if let tel = PhoneUtils.telURLString(c.phone), let url = URL(string: tel) {
-                                Link(destination: url) { Image(systemName: "phone.arrow.up.right").font(.body) }
-                            }
-                            #endif
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button { beginEditContact(c) } label: { Label(AppLocalization.localized("common.edit", value: "Edit"), systemImage: "pencil") }
-                            Button(role: .destructive) { alertDestination = .deleteContact(c) } label: { Label(NSLocalizedString("common.delete", comment: ""), systemImage: "trash") }
-                        }
-                    }
-                }
+        EmergencyContactSummaryCard(
+            contacts: contacts,
+            ownerPhone: client.phone,
+            ownerEmail: client.email,
+            onAdd: {
+                editingContact = nil
+                newContactName = ""
+                newContactRelation = ""
+                newContactPhone = ""
+                showContactEditor = true
+            },
+            onEdit: { contact in
+                beginEditContact(contact)
+            },
+            onDelete: { contact in
+                alertDestination = .deleteContact(contact)
             }
-        }
+        )
         .padding(.horizontal)
     }
 
@@ -878,9 +839,10 @@ struct ClientDetailView: View {
                             AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .md, ringWidth: 3)
                             VStack(alignment: .leading, spacing: 6) {
                                 if pet.isAggressive { aggressivePetBadge }
-                                HStack {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(pet.name).font(.headline)
+                                        PetGenderNameBadge(pet: pet, maxNameWidth: 220)
+                                            .walkthroughTarget(.petGenderDots)
                                         Text(pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
                                     }
                                     Spacer()

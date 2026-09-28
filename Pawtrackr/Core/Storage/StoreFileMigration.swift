@@ -68,8 +68,9 @@ enum StoreFileMigration {
                 create: true
             )
 
-            let storeFiles = try existingStoreFamily(for: currentStoreName, in: appSupportURL, fileManager: fileManager)
-                + existingStoreFamily(for: legacyStoreName, in: appSupportURL, fileManager: fileManager)
+            return try StoreFileLockCoordinator.withStoreLock(in: appSupportURL, reason: "pre-update backup", fileManager: fileManager) {
+                let storeFiles = try existingStoreFamily(for: currentStoreName, in: appSupportURL, fileManager: fileManager)
+                    + existingStoreFamily(for: legacyStoreName, in: appSupportURL, fileManager: fileManager)
             guard !storeFiles.isEmpty else {
                 userDefaults.set(buildIdentifier, forKey: preMigrationBackupBuildKey)
                 return BackupOutcome(copiedFiles: 0, backupDirectory: nil)
@@ -122,6 +123,7 @@ enum StoreFileMigration {
                 // doesn't leave another partial folder behind.
                 try? fileManager.removeItem(at: backupDirectory)
                 throw error
+            }
             }
         } catch {
             log.error("Pre-update store backup failed: \(error.localizedDescription, privacy: .public)")
@@ -176,6 +178,9 @@ enum StoreFileMigration {
                 create: true
             )
 
+            return try StoreFileLockCoordinator.withStoreLock(in: appSupportURL, reason: "legacy default.store migration", fileManager: fileManager) {
+                StoreMigrationJournal.recoverIfPossible(in: appSupportURL, fileManager: fileManager)
+
             let legacyFamily = try existingStoreFamily(for: legacyStoreName, in: appSupportURL, fileManager: fileManager)
             guard !legacyFamily.isEmpty else {
                 return Outcome(action: .none, movedFiles: 0, backedUpFiles: 0)
@@ -210,6 +215,7 @@ enum StoreFileMigration {
             let moved = try moveStoreFamily(legacyFamily, from: legacyStoreName, to: currentStoreName, in: appSupportURL, fileManager: fileManager)
             log.info("Restored legacy default.store over an empty Pawtrackr.store backup.")
             return Outcome(action: .restoredLegacyOverEmptyNamedStore, movedFiles: moved, backedUpFiles: backedUp)
+            }
         } catch {
             log.error("Legacy store migration failed: \(error.localizedDescription, privacy: .public)")
             return Outcome(action: .failed(error.localizedDescription), movedFiles: 0, backedUpFiles: 0)
@@ -257,12 +263,38 @@ enum StoreFileMigration {
         in appSupportURL: URL,
         fileManager: FileManager
     ) throws -> Int {
+        let journalEntries = urls.map { url in
+            StoreMigrationJournal.Entry(
+                source: url.lastPathComponent,
+                destination: renamedStoreFamilyMember(url.lastPathComponent, from: oldBaseName, to: newBaseName)
+            )
+        }
+        var journal = StoreMigrationJournal(
+            id: UUID(),
+            phase: .prepared,
+            reason: "Move \(oldBaseName) to \(newBaseName)",
+            createdAt: Date(),
+            entries: journalEntries
+        )
+        try journal.save(in: appSupportURL)
+
         var moved = 0
-        for url in urls {
-            let newName = renamedStoreFamilyMember(url.lastPathComponent, from: oldBaseName, to: newBaseName)
+        journal.phase = .moving
+        try journal.save(in: appSupportURL)
+
+        do {
+            for url in urls {
+                let newName = renamedStoreFamilyMember(url.lastPathComponent, from: oldBaseName, to: newBaseName)
             let destination = appSupportURL.appendingPathComponent(newName)
             try fileManager.moveItem(at: url, to: destination)
             moved += 1
+        }
+            journal.phase = .completed
+            try journal.save(in: appSupportURL)
+            StoreMigrationJournal.clear(in: appSupportURL, fileManager: fileManager)
+        } catch {
+            log.error("Store family move failed after \(moved, privacy: .public) file(s): \(error.localizedDescription, privacy: .public)")
+            throw error
         }
         return moved
     }
@@ -376,20 +408,10 @@ enum StoreFileMigration {
     /// that could be missed, fall back to `immutable=1`, which reads the main
     /// file without touching the WAL machinery.
     private static func openReadOnlyDatabase(at storeURL: URL) -> OpaquePointer? {
-        if let database = openReadable(storeURL.path, flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX) {
+        if let database = SQLiteStoreFileSet.openReadOnlyDatabase(at: storeURL) {
             return database
         }
-
-        let walSize = (try? FileManager.default.attributesOfItem(atPath: storeURL.path + "-wal")[.size] as? Int) ?? 0
-        guard walSize == 0,
-              let encodedPath = storeURL.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
-        else {
-            return nil
-        }
-        return openReadable(
-            "file:\(encodedPath)?immutable=1",
-            flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI
-        )
+        return nil
     }
 
     /// Opens `filename` and proves it can be read: `sqlite3_open_v2` succeeds
@@ -400,6 +422,8 @@ enum StoreFileMigration {
             sqlite3_close(database)
             return nil
         }
+
+        sqlite3_busy_timeout(database, 2_500)
 
         var statement: OpaquePointer?
         let readable = sqlite3_prepare_v2(database, "SELECT COUNT(*) FROM sqlite_master", -1, &statement, nil) == SQLITE_OK

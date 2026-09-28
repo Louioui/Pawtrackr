@@ -902,13 +902,34 @@
 
 // Bilingual enforcement: keys used by Swift but previously missing from this locale.
 "checklist.branding" = "Agrega la imagen de tu negocio";
+"checklist.services" = "Revisa servicios y precios";
 "checklist.client" = "Agrega tu primer cliente";
+"checklist.backup" = "Confirma la protección de respaldo";
 "checklist.hint.complete" = "Abre la pantalla para completar este paso";
 "checklist.hint.review" = "Abre esta sección para revisar";
 "checklist.start_fresh.hint" = "Abre Ajustes, donde puedes borrar los datos de demo";
 "checklist.start_fresh.subtitle" = "Borra los datos de ejemplo y empieza desde cero con tu negocio real.";
 "checklist.start_fresh.title" = "¿Ya terminaste de explorar el demo?";
 "checklist.visit" = "Inicia tu primera visita";
+
+"onboarding.step.role" = "Tu rol";
+"onboarding.step.loyalty" = "Puntos de lealtad";
+"onboarding.subtitle.role" = "Elige el recorrido que mejor coincide con tu trabajo diario.";
+"onboarding.subtitle.loyalty" = "Mira cómo los puntos se acumulan automáticamente después de cada visita completada.";
+"onboarding.role.note" = "Esto solo cambia el recorrido guiado. Puedes seguir usando todas las funciones de Pawtrackr.";
+"onboarding.loyalty.title" = "Recompensas sin hacer cuentas";
+"onboarding.loyalty.message" = "Mueve el total del ticket y mira cómo aparecen los puntos, igual que bajo el perfil del cliente después del checkout.";
+
+"tour.clients.filters.title" = "Filtros de clientes";
+"tour.clients.filters.directive" = "Cambia entre todos, visitas activas, mascotas atrasadas y datos faltantes.";
+"tour.clients.filters.purpose" = "Los filtros convierten una libreta grande de clientes en una fila de trabajo para que recepción encuentre lo que necesita acción ahora.";
+"tour.clients.filters.tip" = "Datos faltantes ayuda a limpiar teléfonos y correos incompletos antes de que causen problemas de recogida.";
+"tour.cd.emergency_badges.title" = "Respaldo listo para llamar";
+"tour.cd.emergency_badges.directive" = "Usa la tarjeta de contacto de emergencia antes de que un problema se vuelva estresante.";
+"tour.cd.emergency_badges.purpose" = "La tarjeta muestra nombre, relación, teléfono, llamada, mensaje, copiar y avisos de datos faltantes para que el equipo no busque entre notas.";
+"tour.cd.gender_dots.title" = "Puntos de sexo";
+"tour.cd.gender_dots.directive" = "Lee la mezcla del hogar de un vistazo.";
+"tour.cd.gender_dots.purpose" = "Los marcadores de color hacen que los hogares con varias mascotas sean más fáciles de revisar durante entrada, notas de seguridad y horarios de recogida.";
 "checkout.no_active_session_message" = "Esta mascota no está registrada en una visita ahora. Inicia una visita antes de abrir el cobro.";
 "checkout.no_active_session_title" = "No hay sesión activa";
 "checkout.safety_alert.aggressive" = "Se seleccionó comportamiento agresivo. Avisa al equipo antes de manipularla, usa una segunda persona si es necesario y evita movimientos apresurados.";

@@ -19,10 +19,13 @@ final class SpotlightIndexer: @unchecked Sendable {
     private struct PendingClientPayload {
         let title: String
         let description: String
+        let keywords: [String]
     }
     private struct PendingPetPayload {
         let title: String
         let description: String
+        let keywords: [String]
+        let relatedClientID: UUID?
         let thumbnailData: Data?
     }
     private var pendingClients: [UUID: PendingClientPayload] = [:]
@@ -38,19 +41,19 @@ final class SpotlightIndexer: @unchecked Sendable {
     }
 
     /// Coalesces rapid Client edits into a single Spotlight write per id.
-    nonisolated func scheduleClientIndex(id: UUID, title: String, description: String) {
+    nonisolated func scheduleClientIndex(id: UUID, title: String, description: String, keywords: [String] = []) {
         queue.async { [weak self] in
             guard let self else { return }
-            self.pendingClients[id] = PendingClientPayload(title: title, description: description)
+            self.pendingClients[id] = PendingClientPayload(title: title, description: description, keywords: keywords)
             self.scheduleFlushLocked()
         }
     }
 
     /// Coalesces rapid Pet edits into a single Spotlight write per id.
-    nonisolated func schedulePetIndex(id: UUID, title: String, description: String, thumbnailData: Data?) {
+    nonisolated func schedulePetIndex(id: UUID, title: String, description: String, keywords: [String] = [], relatedClientID: UUID? = nil, thumbnailData: Data?) {
         queue.async { [weak self] in
             guard let self else { return }
-            self.pendingPets[id] = PendingPetPayload(title: title, description: description, thumbnailData: thumbnailData)
+            self.pendingPets[id] = PendingPetPayload(title: title, description: description, keywords: keywords, relatedClientID: relatedClientID, thumbnailData: thumbnailData)
             self.scheduleFlushLocked()
         }
     }
@@ -79,14 +82,18 @@ final class SpotlightIndexer: @unchecked Sendable {
             let attr = CSSearchableItemAttributeSet(itemContentType: UTType.item.identifier)
             attr.title = payload.title
             attr.contentDescription = payload.description
-            attr.keywords = ["client", "customer", "owner", payload.title]
+            attr.keywords = Self.uniqueKeywords(["client", "customer", "owner", payload.title] + payload.keywords)
+            attr.relatedUniqueIdentifier = "client-\(id.uuidString)"
+            attr.contentURL = URL(string: "pawtrackr://client/\(id.uuidString)")
             items.append(CSSearchableItem(uniqueIdentifier: "client-\(id.uuidString)", domainIdentifier: "com.pawtrackr.clients", attributeSet: attr))
         }
         for (id, payload) in pets {
             let attr = CSSearchableItemAttributeSet(itemContentType: UTType.item.identifier)
             attr.title = payload.title
             attr.contentDescription = payload.description
-            attr.keywords = ["pet", "grooming", "animal", payload.title]
+            attr.keywords = Self.uniqueKeywords(["pet", "grooming", "animal", payload.title] + payload.keywords)
+            attr.relatedUniqueIdentifier = payload.relatedClientID.map { "client-\($0.uuidString)" } ?? "pet-\(id.uuidString)"
+            attr.contentURL = URL(string: "pawtrackr://pet/\(id.uuidString)")
             if let data = payload.thumbnailData { attr.thumbnailData = data }
             items.append(CSSearchableItem(uniqueIdentifier: "pet-\(id.uuidString)", domainIdentifier: "com.pawtrackr.pets", attributeSet: attr))
         }
@@ -100,14 +107,16 @@ final class SpotlightIndexer: @unchecked Sendable {
         }
     }
 
-    nonisolated func indexPet(id: UUID, title: String, description: String, thumbnailData: Data?) {
+    nonisolated func indexPet(id: UUID, title: String, description: String, keywords: [String] = [], relatedClientID: UUID? = nil, thumbnailData: Data?) {
         let identifier = "pet-\(id.uuidString)"
         let domain = "com.pawtrackr.pets"
         queue.async { [log] in
             let attributeSet = CSSearchableItemAttributeSet(itemContentType: UTType.item.identifier)
             attributeSet.title = title
             attributeSet.contentDescription = description
-            attributeSet.keywords = ["pet", "grooming", "animal", title]
+            attributeSet.keywords = Self.uniqueKeywords(["pet", "grooming", "animal", title] + keywords)
+            attributeSet.relatedUniqueIdentifier = relatedClientID.map { "client-\($0.uuidString)" } ?? identifier
+            attributeSet.contentURL = URL(string: "pawtrackr://pet/\(id.uuidString)")
             if let data = thumbnailData {
                 attributeSet.thumbnailData = data
             }
@@ -126,18 +135,22 @@ final class SpotlightIndexer: @unchecked Sendable {
             id: pet.uuid,
             title: pet.name,
             description: "\(pet.shortDescriptor) • Owner: \(pet.owner?.fullName ?? "Unknown")",
+            keywords: Self.petKeywords(pet),
+            relatedClientID: pet.owner?.uuid,
             thumbnailData: pet.thumbnailData ?? pet.photoData
         )
     }
 
-    nonisolated func indexClient(id: UUID, title: String, description: String) {
+    nonisolated func indexClient(id: UUID, title: String, description: String, keywords: [String] = []) {
         let identifier = "client-\(id.uuidString)"
         let domain = "com.pawtrackr.clients"
         queue.async { [log] in
             let attributeSet = CSSearchableItemAttributeSet(itemContentType: UTType.item.identifier)
             attributeSet.title = title
             attributeSet.contentDescription = description
-            attributeSet.keywords = ["client", "customer", "owner", title]
+            attributeSet.keywords = Self.uniqueKeywords(["client", "customer", "owner", title] + keywords)
+            attributeSet.relatedUniqueIdentifier = identifier
+            attributeSet.contentURL = URL(string: "pawtrackr://client/\(id.uuidString)")
             let item = CSSearchableItem(uniqueIdentifier: identifier, domainIdentifier: domain, attributeSet: attributeSet)
             CSSearchableIndex.default().indexSearchableItems([item]) { error in
                 if let error = error {
@@ -152,7 +165,8 @@ final class SpotlightIndexer: @unchecked Sendable {
         indexClient(
             id: client.uuid,
             title: client.fullName,
-            description: "Client with \((client.pets ?? []).count) pets • Phone: \(client.phone ?? "N/A")"
+            description: "Client with \((client.pets ?? []).count) pets • Phone: \(client.phone ?? "N/A")",
+            keywords: Self.clientKeywords(client)
         )
     }
 
@@ -186,7 +200,103 @@ final class SpotlightIndexer: @unchecked Sendable {
                     self.log.error("Failed to clear Spotlight index: \(error.localizedDescription, privacy: .public)")
                 }
             }
-            // In a real app, you would then iterate and re-index all records here.
         }
+    }
+
+    nonisolated func reindexAll(modelContainer: ModelContainer, batchSize: Int = 200) {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            await self.reindexAllDetached(modelContainer: modelContainer, batchSize: batchSize)
+        }
+    }
+
+    private func reindexAllDetached(modelContainer: ModelContainer, batchSize: Int) async {
+        CSSearchableIndex.default().deleteAllSearchableItems { [log] error in
+            if let error {
+                log.error("Failed to clear Spotlight index: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        let context = ModelContext(modelContainer)
+        var offset = 0
+        while true {
+            do {
+                var descriptor = FetchDescriptor<Client>(
+                    sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
+                )
+                descriptor.fetchLimit = batchSize
+                descriptor.fetchOffset = offset
+                descriptor.relationshipKeyPathsForPrefetching = [\Client.pets]
+                let clients = try context.fetch(descriptor)
+                guard !clients.isEmpty else { break }
+                for client in clients {
+                    let pets = client.pets ?? []
+                    scheduleClientIndex(
+                        id: client.uuid,
+                        title: client.fullName,
+                        description: "Client with \(pets.count) pets • Phone: \(client.phone ?? "N/A")",
+                        keywords: Self.clientKeywords(client)
+                    )
+                    for pet in pets {
+                        schedulePetIndex(
+                            id: pet.uuid,
+                            title: pet.name,
+                            description: "\(pet.shortDescriptor) • Owner: \(client.fullName)",
+                            keywords: Self.petKeywords(pet),
+                            relatedClientID: client.uuid,
+                            thumbnailData: pet.thumbnailData ?? pet.photoData
+                        )
+                    }
+                }
+                offset += clients.count
+                if clients.count < batchSize { break }
+            } catch {
+                log.error("Spotlight full reindex failed at offset \(offset, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                break
+            }
+        }
+    }
+
+    private static func clientKeywords(_ client: Client) -> [String] {
+        var keywords = [client.firstName, client.lastName, client.fullName]
+        if let phone = client.phone {
+            keywords.append(contentsOf: phoneSearchTokens(for: phone))
+        }
+        if let email = client.email { keywords.append(email) }
+        keywords.append(contentsOf: (client.pets ?? []).map(\.name))
+        return uniqueKeywords(keywords)
+    }
+
+    private static func petKeywords(_ pet: Pet) -> [String] {
+        uniqueKeywords([
+            pet.name,
+            pet.owner?.fullName,
+            pet.species.rawValue,
+            pet.gender.displayName,
+            pet.breed,
+            pet.color
+        ].compactMap { $0 })
+    }
+
+    private static func phoneSearchTokens(for value: String) -> [String] {
+        var tokens = [value]
+        if let e164 = PhoneUtils.toE164(value) { tokens.append(e164) }
+        if let display = PhoneUtils.display(value) { tokens.append(display) }
+        let digits = PhoneUtils.normalize(value)
+        if !digits.isEmpty {
+            tokens.append(digits)
+            if digits.count == 11, digits.first == "1" {
+                tokens.append(String(digits.dropFirst()))
+            }
+        }
+        return tokens
+    }
+
+    private static func uniqueKeywords(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.lowercased()).inserted }
     }
 }

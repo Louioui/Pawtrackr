@@ -133,7 +133,7 @@ struct ClientCard: View {
             } else {
                 FlowLayout(spacing: 6, rowSpacing: 6) {
                     ForEach(pets) { pet in
-                        PetNameLabel(pet: pet)
+                        PetGenderNameBadge(pet: pet, maxNameWidth: 150)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -146,28 +146,6 @@ struct ClientCard: View {
 
 
 }
-
-private struct PetNameLabel: View {
-    let pet: Pet
-
-    var body: some View {
-        HStack(spacing: 5) {
-            SpeciesAndGenderIcons.genderDot(for: pet.gender, size: 8, isDecorative: true)
-            Text(pet.name)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: 150, alignment: .leading)
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.vertical, 3)
-        .padding(.horizontal, 7)
-        .background(DS.ColorToken.gender(pet.gender).opacity(0.10), in: Capsule())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(pet.name), \(pet.gender.displayName)")
-    }
-}
-
 extension ClientCard {
     struct VisualState: Equatable {
         enum AccentKind: String, Equatable {

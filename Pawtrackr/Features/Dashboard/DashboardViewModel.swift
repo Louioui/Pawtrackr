@@ -55,8 +55,10 @@ final class DashboardViewModel {
     /// it stays free of SwiftUI view state.
     enum ChecklistAction: Sendable {
         case branding      // Business profile lives in Settings
+        case services      // Service prices live in Settings
         case addClient     // Present the New Client sheet
         case firstVisit    // Present Quick Check-In
+        case iCloudBackup  // iCloud and local backup tools live in Settings
     }
 
     struct ChecklistItem: Identifiable, Sendable {
@@ -193,7 +195,7 @@ final class DashboardViewModel {
         // that aren't yet in the repository.
         let container = dataStore.container
         do {
-            let (isBrandingComplete, hasClient, hasVisit) = try await Task.detached {
+            let (isBrandingComplete, hasPrices, hasClient, hasVisit, hasBackupSignal) = try await Task.detached {
                 let context = ModelContext(container)
 
                 let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
@@ -201,14 +203,20 @@ final class DashboardViewModel {
 
                 let clientCount = try context.fetchCount(FetchDescriptor<Client>())
                 let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
+                let hasPrices = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasConfiguredPrices)
+                let uploadRecord = CloudKitMonitor.persistedOrMigratedSyncHealth()
+                let hasCloudBackup = uploadRecord.lastSuccessfulExportEndedAt != nil
+                let hasLocalBackup = SecureStoreSnapshotExporter.hasSuccessfulSnapshotOnThisDevice
 
-                return (branding, clientCount > 0, visitCount > 0)
+                return (branding, hasPrices, clientCount > 0, visitCount > 0, hasCloudBackup || hasLocalBackup)
             }.value
 
             checklist = [
                 ChecklistItem(title: AppLocalization.localized("checklist.branding", value: "Add Business Branding"), isCompleted: isBrandingComplete, action: .branding),
+                ChecklistItem(title: AppLocalization.localized("checklist.services", value: "Review Services & Prices"), isCompleted: hasPrices, action: .services),
                 ChecklistItem(title: AppLocalization.localized("checklist.client", value: "Add Your First Client"), isCompleted: hasClient, action: .addClient),
-                ChecklistItem(title: AppLocalization.localized("checklist.visit", value: "Start Your First Visit"), isCompleted: hasVisit, action: .firstVisit)
+                ChecklistItem(title: AppLocalization.localized("checklist.visit", value: "Start Your First Visit"), isCompleted: hasVisit, action: .firstVisit),
+                ChecklistItem(title: AppLocalization.localized("checklist.backup", value: "Confirm Backup Protection"), isCompleted: hasBackupSignal, action: .iCloudBackup)
             ]
         } catch {
             dashboardLog.error("Checklist fetch failed: \(error)")

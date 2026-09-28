@@ -19,35 +19,43 @@ struct LoyaltyReward: Identifiable, Hashable, Sendable {
     /// The starter catalog used until configurable rewards land in the V2 loyalty schema.
     static let builtInCatalog: [LoyaltyReward] = [
         LoyaltyReward(
-            id: "salon-credit-10",
-            title: "$10 Salon Credit",
-            detail: "Apply toward the next completed checkout.",
-            pointCost: 100,
+            id: "visit-credit-5",
+            title: "$5 Visit Credit",
+            detail: "Apply a small thank-you discount at checkout.",
+            pointCost: 50,
             systemImage: "ticket.fill",
             style: .credit
         ),
         LoyaltyReward(
-            id: "deep-conditioning",
-            title: "Deep-Conditioning Treatment",
-            detail: "A premium coat-care add-on for a returning client.",
-            pointCost: 200,
-            systemImage: "drop.fill",
-            style: .care
+            id: "visit-credit-10",
+            title: "$10 Visit Credit",
+            detail: "Reward regular clients with credit toward any groom.",
+            pointCost: 100,
+            systemImage: "banknote.fill",
+            style: .credit
         ),
         LoyaltyReward(
-            id: "deshedding-upgrade",
-            title: "Deshedding Upgrade",
-            detail: "A complimentary seasonal shed-control upgrade.",
-            pointCost: 350,
-            systemImage: "scissors",
+            id: "addon-discount-15",
+            title: "15% Off Add-On",
+            detail: "Discount a nail grind, blueberry facial, or similar add-on.",
+            pointCost: 150,
+            systemImage: "percent",
             style: .upgrade
         ),
         LoyaltyReward(
-            id: "vip-spa-package",
-            title: "VIP Spa Package",
-            detail: "Bundle a high-value add-on into the client's next visit.",
+            id: "groom-credit-20",
+            title: "$20 Groom Credit",
+            detail: "A higher-value credit for loyal repeat clients.",
+            pointCost: 200,
+            systemImage: "creditcard.fill",
+            style: .credit
+        ),
+        LoyaltyReward(
+            id: "basic-groom-credit",
+            title: "Free Basic Groom Credit",
+            detail: "A premium reward that covers a future basic groom credit.",
             pointCost: 500,
-            systemImage: "sparkles",
+            systemImage: "crown.fill",
             style: .vip
         )
     ]

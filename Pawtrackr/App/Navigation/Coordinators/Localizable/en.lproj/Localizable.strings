@@ -901,13 +901,34 @@
 
 // Bilingual enforcement: keys used by Swift but previously missing from this locale.
 "checklist.branding" = "Add Business Branding";
+"checklist.services" = "Review Services & Prices";
 "checklist.client" = "Add Your First Client";
+"checklist.backup" = "Confirm Backup Protection";
 "checklist.hint.complete" = "Opens the screen to finish this step";
 "checklist.hint.review" = "Opens this section to review";
 "checklist.start_fresh.hint" = "Opens Settings where you can wipe demo data";
 "checklist.start_fresh.subtitle" = "Clear the sample data and start fresh with your real business.";
 "checklist.start_fresh.title" = "Done exploring the demo?";
 "checklist.visit" = "Start Your First Visit";
+
+"onboarding.step.role" = "Your Role";
+"onboarding.step.loyalty" = "Loyalty Points";
+"onboarding.subtitle.role" = "Choose the tour style that fits your day-to-day work.";
+"onboarding.subtitle.loyalty" = "See how points build automatically after each completed visit.";
+"onboarding.role.note" = "This only changes the guided tour. You can still use every Pawtrackr feature.";
+"onboarding.loyalty.title" = "Rewards without extra math";
+"onboarding.loyalty.message" = "Move the ticket total and watch points appear the same way they will under a client's profile after checkout.";
+
+"tour.clients.filters.title" = "Client Filters";
+"tour.clients.filters.directive" = "Switch between everyone, active visits, overdue pets, and missing info.";
+"tour.clients.filters.purpose" = "Filters turn a large client book into a working queue, so the front desk can find what needs action right now.";
+"tour.clients.filters.tip" = "Missing Info helps clean up incomplete phone and email records before they cause pickup problems.";
+"tour.cd.emergency_badges.title" = "Call-Ready Backup";
+"tour.cd.emergency_badges.directive" = "Use the emergency contact card before a problem gets stressful.";
+"tour.cd.emergency_badges.purpose" = "The card surfaces name, relation, phone, call, message, copy, and missing-info prompts so staff do not hunt through notes.";
+"tour.cd.gender_dots.title" = "Gender Dots";
+"tour.cd.gender_dots.directive" = "Read the household mix at a glance.";
+"tour.cd.gender_dots.purpose" = "Color-coded pet markers make multi-pet homes easier to scan when staff are juggling intake, safety notes, and pickup timing.";
 "checkout.no_active_session_message" = "This pet is not checked in right now. Start a visit before opening checkout.";
 "checkout.no_active_session_title" = "No Active Session";
 "checkout.safety_alert.aggressive" = "Aggressive behavior selected. Warn the team before handling, use a second worker if needed, and avoid rushed movements.";

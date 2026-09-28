@@ -319,12 +319,8 @@ enum DataMigrations {
             }
 
             let existingRewards = try context.fetch(FetchDescriptor<LoyaltyRewardTemplate>())
-            let existingTitles = Set(
-                existingRewards.map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            )
-            for template in LoyaltyRewardTemplate.seedTemplates() {
-                let key = template.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if !existingTitles.contains(key) {
+            if existingRewards.isEmpty {
+                for template in LoyaltyRewardTemplate.seedTemplates() {
                     context.insert(template)
                     didChange = true
                 }

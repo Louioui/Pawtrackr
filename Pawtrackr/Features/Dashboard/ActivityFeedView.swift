@@ -78,6 +78,14 @@ struct ActivityFeedView: View {
             )
 
             ActivityMetricCard(
+                title: AppLocalization.localized("dashboard.activity.local_mode", value: "Local Mode"),
+                value: monitor.syncGovernorState.displayLabel,
+                detail: governorDetail,
+                systemImage: monitor.syncGovernorState == .normal ? "bolt.badge.checkmark.fill" : "leaf.fill",
+                tint: monitor.syncGovernorState == .normal ? DS.ColorToken.success : DS.ColorToken.warning
+            )
+
+            ActivityMetricCard(
                 title: AppLocalization.localized("dashboard.activity.devices", value: "Devices"),
                 value: "\(visibleDevices.count)",
                 detail: devicesOverview,
@@ -85,6 +93,17 @@ struct ActivityFeedView: View {
                 tint: DS.ColorToken.info
             )
         }
+    }
+
+    private var governorDetail: String {
+        if let date = monitor.nextProbeDate {
+            return String(
+                format: AppLocalization.localized("dashboard.activity.next_probe_fmt", value: "Next probe %@"),
+                relativeText(for: date)
+            )
+        }
+        return monitor.offlineLocalModeReason
+            ?? AppLocalization.localized("dashboard.activity.local_mode_ready", value: "Background checks are available")
     }
 
     private var syncHealthCard: some View {

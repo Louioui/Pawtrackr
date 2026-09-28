@@ -55,7 +55,7 @@ final class DashboardViewModelTests: XCTestCase {
         let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
         await vm.refresh()
 
-        XCTAssertEqual(vm.checklist.count, 3)
+        XCTAssertEqual(vm.checklist.count, 5)
         XCTAssertTrue(vm.checklist.allSatisfy { !$0.isCompleted },
                       "Empty store: every checklist step should be incomplete.")
     }

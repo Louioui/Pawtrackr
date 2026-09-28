@@ -225,7 +225,7 @@ struct ContentView: View {
             selectSurface(.dashboard, resetPath: true)
             revealSplitSidebarForWalkthroughIfNeeded()
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.start(WalkthroughController.fullTour())
+            walkthrough.start(WalkthroughController.tour(for: appSettings.onboardingRole))
         }
     }
 
@@ -246,7 +246,7 @@ struct ContentView: View {
             guard !Task.isCancelled else { return }
             guard presentedSheet == nil else { return }
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.restart(WalkthroughController.fullTour())
+            walkthrough.restart(WalkthroughController.tour(for: appSettings.onboardingRole))
         }
     }
 

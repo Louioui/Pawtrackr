@@ -130,6 +130,7 @@ struct DashboardView: View {
 
                     if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
                         checklistSection(vm)
+                            .walkthroughTarget(.setupChecklist)
                     }
 
                     ViewThatFits(in: .horizontal) {
@@ -406,11 +407,15 @@ struct DashboardView: View {
         case .branding:
             // Business branding lives under Settings.
             selectSurface(.settings, resetPath: true)
+        case .services:
+            selectSurface(.settings, resetPath: true)
         case .addClient:
             showNewClient = true
         case .firstVisit:
             // Starting a visit happens from a client/pet in the Clients tab.
             selectSurface(.clients, resetPath: true)
+        case .iCloudBackup:
+            selectSurface(.settings, resetPath: true)
         }
     }
 
@@ -455,7 +460,7 @@ struct DashboardView: View {
                 HStack {
                     AvatarView(.pet(species: pet.species, gender: pet.gender, name: pet.name, imageData: pet.photoData), size: .sm)
                     VStack(alignment: .leading) {
-                        Text(pet.name).font(.subheadline.weight(.bold))
+                        PetGenderNameBadge(pet: pet, maxNameWidth: 150)
                         Text(pet.owner?.fullName ?? "").font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -695,9 +700,8 @@ struct DashboardView: View {
 
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(pet.name)
-                                    .font(.subheadline.weight(.bold))
-                                    .lineLimit(1)
+                                PetGenderNameBadge(pet: pet, maxNameWidth: 150)
+                                    .walkthroughTarget(.petGenderDots)
                                 Spacer(minLength: 8)
                                 if let status = pet.nextVisitStatus {
                                     Chip(status, style: .tinted, size: .xs, tint: attentionTint(for: pet))

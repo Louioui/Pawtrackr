@@ -18,7 +18,12 @@ enum KeychainStorage {
     @discardableResult
     static func set(_ value: String, forKey key: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
+        return set(data, forKey: key)
+    }
 
+    /// Writes (or replaces) binary data under `key`.
+    @discardableResult
+    static func set(_ data: Data, forKey key: String) -> Bool {
         let baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -43,8 +48,8 @@ enum KeychainStorage {
         return true
     }
 
-    /// Reads a string under `key`, or `nil` if not present / unreadable.
-    static func string(forKey key: String) -> String? {
+    /// Reads binary data under `key`, or `nil` if not present / unreadable.
+    static func data(forKey key: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -56,10 +61,16 @@ enum KeychainStorage {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else {
             if status != errSecItemNotFound {
-                Logger.security.error("KeychainStorage.string failed for key=\(key, privacy: .public) status=\(status)")
+                Logger.security.error("KeychainStorage.data failed for key=\(key, privacy: .public) status=\(status)")
             }
             return nil
         }
+        return data
+    }
+
+    /// Reads a string under `key`, or `nil` if not present / unreadable.
+    static func string(forKey key: String) -> String? {
+        guard let data = data(forKey: key) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 

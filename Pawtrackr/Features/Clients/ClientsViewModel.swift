@@ -147,7 +147,7 @@ final class ClientsViewModel {
                 var inProgress = inProgressIDs.compactMap { self.modelContext.model(for: $0) as? Client }
 
                 // 2. Fetch Others based on filter
-                let (pageIDs, _) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: 1000, offset: 0)
+                let (pageIDs, hasMore) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: pageSize, offset: 0)
                 guard !Task.isCancelled else { return }
                 
                 var others = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
@@ -180,8 +180,8 @@ final class ClientsViewModel {
                 self.inProgressClients = sortedInProgress
                 self.otherClients = sortedOthers
                 
-                self.fetchOffset = self.otherClients.count
-                self.canLoadMore = false
+                self.fetchOffset = pageIDs.count
+                self.canLoadMore = selectedFilter == .active ? false : hasMore
                 self.isLoadingMore = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -278,15 +278,28 @@ final class ClientsViewModel {
 
         do {
             let (pageIDs, hasMore) = try await repository.fetchInactiveClients(query: query, limit: pageSize, offset: fetchOffset)
-            let newPage = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+            var newPage = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+
+            switch selectedFilter {
+            case .all:
+                break
+            case .active:
+                newPage = []
+            case .overdue:
+                newPage = newPage.filter { client in
+                    (client.pets ?? []).contains { $0.needsAttention }
+                }
+            case .missingInfo:
+                newPage = newPage.filter { $0.phone == nil || $0.email == nil }
+            }
             
             if resetOffset {
-                otherClients = newPage
+                otherClients = sortClients(newPage)
             } else {
-                otherClients += newPage
+                otherClients = sortClients(otherClients + newPage)
             }
 
-            fetchOffset += newPage.count
+            fetchOffset += pageIDs.count
             canLoadMore = hasMore
             isLoadingMore = false
         } catch {
