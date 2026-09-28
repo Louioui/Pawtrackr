@@ -1118,13 +1118,22 @@ final class CloudKitMonitor {
     func forceSync() async {
         guard circuitBreaker.beginProbeIfAllowed(now: Date()) else {
             publishManualCheckPause()
-            let until = circuitBreaker.manualCheckAvailableAt()?.formatted(date: .omitted, time: .shortened) ?? "-"
-            appendEvent(
-                kind: .healthCheck,
-                status: .waiting,
-                message: "Manual iCloud check skipped: paused after an iCloud error until \(until)",
-                errorCode: nil
-            )
+            let message: String
+            if let until = circuitBreaker.manualCheckAvailableAt() {
+                message = String(
+                    format: AppLocalization.localized(
+                        "cloudkit.manual_check.paused_event_fmt",
+                        value: "Manual iCloud check paused after an iCloud error. Try again at %@"
+                    ),
+                    until.formatted(date: .omitted, time: .shortened)
+                )
+            } else {
+                message = AppLocalization.localized(
+                    "cloudkit.manual_check.paused_event",
+                    value: "Manual iCloud check paused after an iCloud error."
+                )
+            }
+            appendEvent(kind: .healthCheck, status: .waiting, message: message, errorCode: nil)
             postChange()
             return
         }

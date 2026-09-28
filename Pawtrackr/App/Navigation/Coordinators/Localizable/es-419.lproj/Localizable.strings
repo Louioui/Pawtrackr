@@ -1485,7 +1485,7 @@
 "settings.export.encrypted_backup_note" = "Este paquete solo se puede abrir en este dispositivo, y Pawtrackr aún no puede restaurar desde él.";
 
 /* iCloud status labels, the manual-check pause, and device heartbeat/presence wording. Heartbeats and presence arrive by CloudKit import, so they say "recently", never "live" or "online". */
-"cloudkit.action.check_paused_fmt" = "En pausa tras un error de iCloud. Revisa de nuevo a partir de %@";
+"cloudkit.action.check_paused_fmt" = "Revisa de nuevo a partir de %@ (error de iCloud)";
 "cloudkit.status.backed_up" = "Con copia";
 "cloudkit.status.uploading" = "Subiendo";
 "cloudkit.status.not_backed_up" = "Aún sin copia";
@@ -1526,3 +1526,5 @@
 "settings.preferences.device_status" = "Etiqueta del dispositivo";
 "settings.preferences.device_name_missing" = "Agrega un nombre para identificar fácilmente los dispositivos sincronizados.";
 "settings.preferences.device_name_sync_fmt" = "%@ aparecerá en el diagnóstico de iCloud.";
+"cloudkit.manual_check.paused_event_fmt" = "Revisión manual de iCloud en pausa tras un error de iCloud. Vuelve a intentarlo a partir de %@";
+"cloudkit.manual_check.paused_event" = "Revisión manual de iCloud en pausa tras un error de iCloud.";

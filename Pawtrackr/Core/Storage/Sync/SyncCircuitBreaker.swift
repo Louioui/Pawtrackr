@@ -185,7 +185,8 @@ enum ManualCheckAvailability: Equatable, Sendable {
             return String(
                 format: AppLocalization.localized(
                     "cloudkit.action.check_paused_fmt",
-                    value: "Paused after an iCloud error. Check again at %@"
+                    // Time first: a single-line macOS button truncates the end.
+                    value: "Check again at %@ (iCloud error)"
                 ),
                 until.formatted(date: .omitted, time: .shortened)
             )
