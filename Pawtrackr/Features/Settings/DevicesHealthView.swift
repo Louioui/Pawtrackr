@@ -19,9 +19,6 @@ struct DevicesHealthView: View {
     @State private var monitor = CloudKitMonitor.shared
     @State private var isRefreshing = false
 
-    private let freshnessWindow: TimeInterval = 600
-    private let recentWindow: TimeInterval = 86_400
-
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             DevicesCard {
@@ -101,9 +98,9 @@ struct DevicesHealthView: View {
                             SyncedDeviceRow(
                                 name: displayName(for: device),
                                 subtitle: deviceSubtitle(for: device),
-                                status: deviceStatusTitle(for: device),
-                                statusTint: statusTint(for: device),
-                                statusIcon: statusIcon(for: device),
+                                status: rowStatusTitle(for: device),
+                                statusTint: rowStatusTint(for: device),
+                                statusIcon: rowStatusIcon(for: device),
                                 lastSeen: relativeText(for: device.lastSyncAt),
                                 isCurrentDevice: device.deviceID == DeviceIdentity.currentID
                             )
@@ -119,29 +116,32 @@ struct DevicesHealthView: View {
 
             DevicesCard {
                 SectionHeader(
-                    title: devicesLocalized("settings.devices.live_presence", value: "Live Presence"),
-                    systemImage: "person.crop.circle.badge.checkmark"
+                    title: devicesLocalized("settings.devices.recently_open_title", value: "Recently Open Elsewhere"),
+                    systemImage: "person.crop.circle"
                 )
 
-                if activePresenceRecords.isEmpty {
+                if recentlyOpenElsewhere.isEmpty {
                     DevicesEmptyState(
-                        title: devicesLocalized("settings.devices.no_active_presence", value: "No active record viewers"),
+                        title: devicesLocalized("settings.devices.no_recent_presence", value: "Nothing open elsewhere recently"),
                         detail: devicesLocalized(
-                            "settings.devices.no_active_presence_detail",
-                            value: "When another synced device opens a client or pet record, its activity appears here for quick coordination."
+                            "settings.devices.no_recent_presence_detail",
+                            value: "When another device opens a client or pet, it shows here once iCloud delivers that update."
                         ),
                         systemImage: "eye.slash"
                     )
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(activePresenceRecords) { record in
+                        ForEach(recentlyOpenElsewhere) { record in
                             PresenceRow(
                                 deviceName: presenceName(for: record),
-                                detail: presenceDetail(for: record),
+                                detail: DeviceActivityPolicy.presenceSummary(
+                                    deviceName: record.deviceName,
+                                    recordType: record.recordType
+                                ),
                                 updatedText: relativeText(for: record.updatedAt)
                             )
 
-                            if record.deviceID != activePresenceRecords.last?.deviceID {
+                            if record.deviceID != recentlyOpenElsewhere.last?.deviceID {
                                 Divider()
                                     .padding(.leading, 42)
                             }
@@ -166,17 +166,12 @@ struct DevicesHealthView: View {
             }
     }
 
-    private var activePresenceRecords: [PresenceRecord] {
-        let cutoff = Date().addingTimeInterval(-freshnessWindow)
-        var seen = Set<UUID>()
-        return presenceRecords
-            .filter { $0.updatedAt >= cutoff }
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .filter { record in
-                guard !seen.contains(record.deviceID) else { return false }
-                seen.insert(record.deviceID)
-                return true
-            }
+    private var recentlyOpenElsewhere: [PresenceRecord] {
+        DeviceActivityPolicy.recentlyOpenElsewhere(
+            presenceRecords,
+            currentDeviceID: DeviceIdentity.currentID,
+            now: Date()
+        )
     }
 
     private var devicesSummary: String {
@@ -188,16 +183,19 @@ struct DevicesHealthView: View {
         }
 
         return devicesLocalizedFormat(
-            "settings.devices.summary_fmt",
-            value: "%d synced device(s) - %d online - %d active now",
+            "settings.devices.summary_recent_fmt",
+            value: "%1$d device(s), %2$d other(s) seen recently",
             visibleDevices.count,
-            onlineDeviceCount,
-            activePresenceRecords.count
+            otherDevicesSeenRecently
         )
     }
 
-    private var onlineDeviceCount: Int {
-        visibleDevices.filter { freshness(for: $0.lastSyncAt) == .online }.count
+    /// This device's own heartbeat is written locally, so only other
+    /// devices count.
+    private var otherDevicesSeenRecently: Int {
+        visibleDevices.filter {
+            $0.deviceID != DeviceIdentity.currentID && heartbeatAge(for: $0) == .recent
+        }.count
     }
 
     private var currentDevice: DeviceMetadata? {
@@ -233,30 +231,23 @@ struct DevicesHealthView: View {
         return currentDevice.lastSyncAt.formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// This device's status is its backup status. Its heartbeat is written
+    /// locally before anything uploads, so it can't vouch for iCloud.
     private var currentStatusTitle: String {
-        guard let currentDevice else {
-            return monitor.accountState.isAvailable
-                ? devicesLocalized("settings.devices.recent", value: "Ready")
-                : monitor.accountState.displayLabel
-        }
-
-        return deviceStatusTitle(for: currentDevice)
+        monitor.statusLabel.title
     }
 
     private var currentStatusTint: Color {
-        guard let currentDevice else {
-            return monitor.accountState.isAvailable ? .blue : .orange
+        switch monitor.statusTint {
+        case .success: return .green
+        case .neutral: return .blue
+        case .warning: return .orange
+        case .danger: return .red
         }
-
-        return statusTint(for: currentDevice)
     }
 
     private var currentStatusIcon: String {
-        guard let currentDevice else {
-            return monitor.accountState.isAvailable ? "wave.3.right.circle.fill" : "exclamationmark.triangle.fill"
-        }
-
-        return statusIcon(for: currentDevice)
+        monitor.statusIconName
     }
 
     private var deviceRefreshTitle: String {
@@ -319,6 +310,10 @@ struct DevicesHealthView: View {
             : trimmed
     }
 
+    private func heartbeatAge(for device: DeviceMetadata) -> DeviceActivityPolicy.HeartbeatAge {
+        DeviceActivityPolicy.HeartbeatAge(lastSeen: device.lastSyncAt, now: Date())
+    }
+
     private func deviceSubtitle(for device: DeviceMetadata) -> String {
         let model = device.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let os = device.osVersion.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -327,47 +322,25 @@ struct DevicesHealthView: View {
         return "\(displayModel) - \(displayOS)"
     }
 
-    private func deviceStatusTitle(for device: DeviceMetadata) -> String {
-        switch freshness(for: device.lastSyncAt) {
-        case .online:
-            return devicesLocalized("settings.devices.online", value: "Online")
-        case .recent:
-            return devicesLocalized("settings.devices.recently_seen", value: "Recently Seen")
-        case .stale:
-            return devicesLocalized("settings.devices.needs_check", value: "Needs Check")
-        }
+    private func rowStatusTitle(for device: DeviceMetadata) -> String {
+        device.deviceID == DeviceIdentity.currentID ? currentStatusTitle : heartbeatAge(for: device).title
     }
 
-    private func statusTint(for device: DeviceMetadata) -> Color {
-        switch freshness(for: device.lastSyncAt) {
-        case .online: return .green
-        case .recent: return .blue
+    /// Other devices are never green: a heartbeat is not a backup.
+    private func rowStatusTint(for device: DeviceMetadata) -> Color {
+        guard device.deviceID != DeviceIdentity.currentID else { return currentStatusTint }
+        switch heartbeatAge(for: device) {
+        case .recent, .lastDay: return .blue
         case .stale: return .orange
         }
     }
 
-    private func statusIcon(for device: DeviceMetadata) -> String {
-        switch freshness(for: device.lastSyncAt) {
-        case .online: return "checkmark.circle.fill"
-        case .recent: return "clock.circle.fill"
+    private func rowStatusIcon(for device: DeviceMetadata) -> String {
+        guard device.deviceID != DeviceIdentity.currentID else { return currentStatusIcon }
+        switch heartbeatAge(for: device) {
+        case .recent, .lastDay: return "clock"
         case .stale: return "exclamationmark.triangle.fill"
         }
-    }
-
-    private func freshness(for date: Date) -> DeviceFreshness {
-        let age = Date().timeIntervalSince(date)
-        if age < freshnessWindow { return .online }
-        if age < recentWindow { return .recent }
-        return .stale
-    }
-
-    private func presenceDetail(for record: PresenceRecord) -> String {
-        guard let recordType = record.recordType,
-              !recordType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return devicesLocalized("settings.devices.not_viewing", value: "Not viewing a record")
-        }
-
-        return devicesLocalizedFormat("settings.devices.viewing_fmt", value: "Viewing %@", recordType.capitalized)
     }
 
     private func relativeText(for date: Date) -> String {
@@ -379,12 +352,6 @@ struct DevicesHealthView: View {
     private func shortID(_ id: UUID) -> String {
         String(id.uuidString.prefix(8))
     }
-}
-
-private enum DeviceFreshness: Equatable {
-    case online
-    case recent
-    case stale
 }
 
 private struct DevicesCard<Content: View>: View {

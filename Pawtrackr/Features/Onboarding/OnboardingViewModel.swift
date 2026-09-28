@@ -107,6 +107,13 @@ final class OnboardingViewModel {
     /// re-rendered RootView: an endless loop that froze onboarding on a blank screen.
     @ObservationIgnored private var isInitializing = true
 
+    /// Draft fields init restored. bindIfNeeded runs afterwards with the real
+    /// AppSettings, whose values for these are still the registered defaults
+    /// (onboarding writes them only in finish), so it must leave them alone:
+    /// otherwise someone who picked Front Desk and came back got the owner
+    /// tour, and the draft was rewritten with the wrong role.
+    @ObservationIgnored private var restoredDraftFields: Set<String> = []
+
     private func saveDraft() {
         guard !isInitializing else { return }
         let draft: [String: Any] = [
@@ -137,12 +144,19 @@ final class OnboardingViewModel {
         confirmPin = draft["confirmPin"] as? String ?? ""
         if let rawRole = draft["selectedRole"] as? String, let role = OnboardingRole(rawValue: rawRole) {
             selectedRole = role
+            restoredDraftFields.insert("selectedRole")
         }
         pinSkipped = draft["pinSkipped"] as? Bool ?? false
         biometricsEnabled = draft["biometricsEnabled"] as? Bool ?? false
         lockOnBackgroundEnabled = draft["lockOnBackgroundEnabled"] as? Bool ?? true
         autoLockAfterInactivityEnabled = draft["autoLockAfterInactivityEnabled"] as? Bool ?? false
         currentCurrency = draft["currency"] as? String ?? "$"
+        for key in ["biometricsEnabled", "lockOnBackgroundEnabled", "autoLockAfterInactivityEnabled"] where draft[key] is Bool {
+            restoredDraftFields.insert(key)
+        }
+        if draft["currency"] is String {
+            restoredDraftFields.insert("currency")
+        }
     }
 
     private func clearDraft() {
@@ -174,11 +188,21 @@ final class OnboardingViewModel {
         guard !hasLoadedInitialState else { return }
         hasLoadedInitialState = true
 
-        currentCurrency = appSettings.currencySymbol
-        lockOnBackgroundEnabled = appSettings.autoLockOnBackground
-        autoLockAfterInactivityEnabled = appSettings.autoLockAfterInactivity
-        biometricsEnabled = appSettings.isBiometricLockEnabled && isBiometricsAvailable
-        selectedRole = appSettings.onboardingRole
+        if !restoredDraftFields.contains("currency") {
+            currentCurrency = appSettings.currencySymbol
+        }
+        if !restoredDraftFields.contains("lockOnBackgroundEnabled") {
+            lockOnBackgroundEnabled = appSettings.autoLockOnBackground
+        }
+        if !restoredDraftFields.contains("autoLockAfterInactivityEnabled") {
+            autoLockAfterInactivityEnabled = appSettings.autoLockAfterInactivity
+        }
+        if !restoredDraftFields.contains("biometricsEnabled") {
+            biometricsEnabled = appSettings.isBiometricLockEnabled && isBiometricsAvailable
+        }
+        if !restoredDraftFields.contains("selectedRole") {
+            selectedRole = appSettings.onboardingRole
+        }
 
         do {
             var descriptor = FetchDescriptor<BusinessConfig>()

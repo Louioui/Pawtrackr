@@ -109,20 +109,6 @@ final class CloudKitMonitor {
         }
     }
 
-    enum SyncGovernorState: Equatable {
-        case normal
-        case offlineFirstLocalMode
-        case probing
-
-        var displayLabel: String {
-            switch self {
-            case .normal: return "Automatic"
-            case .offlineFirstLocalMode: return "Offline-First Local Mode"
-            case .probing: return "Checking"
-            }
-        }
-    }
-
     enum NetworkState: Equatable {
         case unknown
         case online(isExpensive: Bool, isConstrained: Bool)
@@ -262,9 +248,10 @@ final class CloudKitMonitor {
     private(set) var pendingLocalChangeDescription: String?
     private(set) var offlineBufferedMutationCount: Int = 0
     private(set) var manualCheckRemainingSeconds: Int = 0
-    private(set) var syncGovernorState: SyncGovernorState = .normal
-    private(set) var offlineLocalModeReason: String?
-    private(set) var nextProbeDate: Date?
+    /// Manual checks are backed off until then after a CloudKit failure.
+    /// Stored (not read from the breaker) so the buttons re-render when it
+    /// passes; a wake-up task clears it.
+    private(set) var manualCheckPausedUntil: Date?
     /// CloudKit is moving data right now. Activity only: it never says
     /// anything about health, so it can't hide a failure.
     private(set) var isActivelySyncing: Bool = false
@@ -280,10 +267,16 @@ final class CloudKitMonitor {
     /// the first-sync wait itself still runs.
     private(set) var restoredLocalBackupThisLaunch = false
 
+    var manualCheckAvailability: ManualCheckAvailability {
+        ManualCheckAvailability.resolve(
+            cooldownSeconds: manualCheckRemainingSeconds,
+            pausedUntil: manualCheckPausedUntil,
+            now: Date()
+        )
+    }
+
     var canForceSync: Bool {
-        guard manualCheckRemainingSeconds == 0 else { return false }
-        guard case .open(let until, _, _) = circuitBreaker.state else { return true }
-        return Date() >= until
+        manualCheckAvailability.isAvailable
     }
 
     /// Container identifier from the entitlements file. Surfaced for the
@@ -340,7 +333,9 @@ final class CloudKitMonitor {
     ])
     @ObservationIgnored private var heldFailures: [HeldFailure] = []
     @ObservationIgnored private var inFlightEvents: [UUID: Date] = [:]
+    /// Backs off manual checks only. See SyncCircuitBreaker.
     @ObservationIgnored private var circuitBreaker = SyncCircuitBreaker()
+    @ObservationIgnored private var manualCheckResumeTask: Task<Void, Never>?
     @ObservationIgnored private var activityHolds: Set<ActivityHold> = []
     @ObservationIgnored private var statusDeadlineTask: Task<Void, Never>?
     @ObservationIgnored private var scheduledStatusDeadline: Date?
@@ -610,7 +605,8 @@ final class CloudKitMonitor {
             Task { @MainActor [weak self] in
                 guard let self, self.networkState != next else { return }
                 self.networkState = next
-                self.updateSyncGovernorForNetworkChange()
+                self.circuitBreaker.observeNetwork(NetworkCondition(networkState: next), now: Date())
+                self.publishManualCheckPause()
                 if !next.isOnline {
                     self.appendEvent(
                         kind: .healthCheck,
@@ -618,7 +614,7 @@ final class CloudKitMonitor {
                         message: next.displayLabel,
                         errorCode: nil
                     )
-                } else if self.mode.isMirroring, self.accountState.isAvailable, self.allowsAggressiveSyncWork {
+                } else if self.mode.isMirroring, self.accountState.isAvailable {
                     // Heartbeat our device info when we come online
                     self.updateDeviceMetadata()
                     self.flushOfflineMutationBuffer(reason: "Network restored")
@@ -635,7 +631,7 @@ final class CloudKitMonitor {
     /// Heartbeats the current device's metadata to iCloud.
     /// This allows the business owner to see which worker devices are active.
     func updateDeviceMetadata() {
-        guard mode.isMirroring, let modelContainer, accountState.isAvailable, networkState.isOnline, allowsAggressiveSyncWork else { return }
+        guard mode.isMirroring, let modelContainer, accountState.isAvailable, networkState.isOnline else { return }
 
         #if os(iOS)
         let deviceModel = UIDevice.current.model
@@ -660,9 +656,13 @@ final class CloudKitMonitor {
                 let existing = try context.fetch(descriptor).first
                 
                 if let meta = existing {
-                    meta.name = deviceName
-                    meta.model = deviceModel
-                    meta.osVersion = osVersion
+                    // Compared first: an assignment marks the row changed even
+                    // when the value is the same. The heartbeat stamp itself
+                    // is the point of the write (the first upload after an
+                    // update relies on it), so it always moves.
+                    if meta.name != deviceName { meta.name = deviceName }
+                    if meta.model != deviceModel { meta.model = deviceModel }
+                    if meta.osVersion != osVersion { meta.osVersion = osVersion }
                     meta.lastSyncAt = .now
                 } else {
                     let meta = DeviceMetadata(
@@ -721,7 +721,7 @@ final class CloudKitMonitor {
 
     /// Periodically cleans up stale presence records (older than 10 minutes).
     func cleanupStalePresence() {
-        guard let modelContainer, networkState.isOnline, allowsAggressiveSyncWork else { return }
+        guard let modelContainer, networkState.isOnline else { return }
         
         Task.detached(priority: .utility) {
             let context = ModelContext(modelContainer)
@@ -899,7 +899,7 @@ final class CloudKitMonitor {
         switch reducerKind {
         case .export:
             circuitBreaker.recordSuccess()
-            publishCircuitBreakerState()
+            publishManualCheckPause()
             lastExportDate = endedAt
             UserDefaults.standard.set(lastExportDate, forKey: DefaultsKey.lastExportDate)
             // An older success arriving late leaves a newer failure standing.
@@ -920,7 +920,7 @@ final class CloudKitMonitor {
         case .import:
             if pendingLocalChangeCount == 0 {
                 circuitBreaker.recordSuccess()
-                publishCircuitBreakerState()
+                publishManualCheckPause()
             }
             lastImportDate = endedAt
             UserDefaults.standard.set(lastImportDate, forKey: DefaultsKey.lastImportDate)
@@ -1095,8 +1095,8 @@ final class CloudKitMonitor {
         }
 
         failureReporter.reportIfNeeded(classification)
-        circuitBreaker.recordFailure(reason: .cloudKitFailure, now: endedAt, constrained: networkState.slowsBackgroundWork)
-        publishCircuitBreakerState()
+        circuitBreaker.recordFailure(now: endedAt, constrained: networkState.slowsBackgroundWork)
+        publishManualCheckPause()
         appendEvent(
             kind: kind,
             status: .failed,
@@ -1117,17 +1117,18 @@ final class CloudKitMonitor {
     /// NSPersistentCloudKitContainer events.
     func forceSync() async {
         guard circuitBreaker.beginProbeIfAllowed(now: Date()) else {
-            publishCircuitBreakerState()
+            publishManualCheckPause()
+            let until = circuitBreaker.manualCheckAvailableAt()?.formatted(date: .omitted, time: .shortened) ?? "-"
             appendEvent(
                 kind: .healthCheck,
                 status: .waiting,
-                message: offlineLocalModeReason ?? "iCloud checks are paused briefly while Pawtrackr protects battery in Offline-First Local Mode.",
+                message: "Manual iCloud check skipped: paused after an iCloud error until \(until)",
                 errorCode: nil
             )
             postChange()
             return
         }
-        publishCircuitBreakerState()
+        publishManualCheckPause()
 
         guard canForceSync else {
             appendEvent(
@@ -1155,7 +1156,7 @@ final class CloudKitMonitor {
             message: "User requested iCloud check",
             errorCode: nil
         )
-        if mode.isMirroring, accountState.isAvailable, pendingLocalChangeCount > 0, allowsAggressiveSyncWork {
+        if mode.isMirroring, accountState.isAvailable, pendingLocalChangeCount > 0 {
             hold(.manualCheck)
             startForceSyncWatchdog()
         }
@@ -1427,6 +1428,24 @@ final class CloudKitMonitor {
         }
     }
 
+    /// Short label for pills and cards beside the headline.
+    var statusLabel: BackupStatusLabel {
+        BackupStatusLabel(backupStatus)
+    }
+
+    /// Local changes no upload has covered yet, as the Pending counters show it.
+    var waitingChangeCount: Int {
+        max(pendingLocalChangeCount, offlineBufferedMutationCount)
+    }
+
+    var pendingTint: SyncStatusTint {
+        SyncStatusPolicy.pendingTint(
+            waitingCount: waitingChangeCount,
+            isMirroring: mode.isMirroring,
+            status: backupStatus
+        )
+    }
+
     /// Spoken by VoiceOver on the toolbar icon, so it says what the icon shows.
     var statusAccessibilityLabel: String {
         healthHeadline
@@ -1618,15 +1637,6 @@ final class CloudKitMonitor {
             ))
         }
 
-        if syncGovernorState == .offlineFirstLocalMode, let offlineLocalModeReason {
-            issues.append(SyncHealthIssue(
-                id: "syncGovernor.offlineFirst",
-                severity: .warning,
-                title: AppLocalization.localized("cloudkit.health.offline_first.title", value: "Offline-First Local Mode"),
-                detail: offlineLocalModeReason
-            ))
-        }
-
         if hasUploadsPendingPastGrace, accountState.isAvailable {
             issues.append(SyncHealthIssue(
                 id: "pending",
@@ -1758,29 +1768,23 @@ final class CloudKitMonitor {
         }
     }
 
-    private var allowsAggressiveSyncWork: Bool {
-        circuitBreaker.allowsAggressiveWork
-    }
-
-    private func updateSyncGovernorForNetworkChange() {
-        circuitBreaker.observeNetwork(NetworkCondition(networkState: networkState), now: Date())
-        publishCircuitBreakerState()
-    }
-
-    private func publishCircuitBreakerState() {
-        switch circuitBreaker.state {
-        case .closed:
-            syncGovernorState = .normal
-            offlineLocalModeReason = nil
-            nextProbeDate = nil
-        case .open(let until, let reason, _):
-            syncGovernorState = .offlineFirstLocalMode
-            offlineLocalModeReason = reason.displayText
-            nextProbeDate = until
-        case .halfOpen(_, let reason, _):
-            syncGovernorState = .probing
-            offlineLocalModeReason = reason.displayText
-            nextProbeDate = nil
+    /// Copies the breaker's deadline into the observed property and wakes up
+    /// once when it passes, so disabled "Check iCloud" buttons come back on
+    /// their own instead of waiting for an unrelated re-render.
+    private func publishManualCheckPause() {
+        let until = circuitBreaker.manualCheckAvailableAt(now: Date())
+        guard until != manualCheckPausedUntil else { return }
+        manualCheckPausedUntil = until
+        manualCheckResumeTask?.cancel()
+        guard let until else {
+            manualCheckResumeTask = nil
+            return
+        }
+        manualCheckResumeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow)))
+            guard let self, !Task.isCancelled, self.manualCheckPausedUntil == until else { return }
+            self.manualCheckPausedUntil = nil
+            self.postChange()
         }
     }
 
@@ -1835,8 +1839,6 @@ final class CloudKitMonitor {
 
         let hours = Int(waiting / 3600)
         Logger.cloudKit.warning("iCloud Safe Mode: local changes have waited \(hours)h for an upload")
-        circuitBreaker.recordPendingStall(now: Date(), constrained: networkState.slowsBackgroundWork)
-        publishCircuitBreakerState()
         appendEvent(
             kind: .recovery,
             status: .noted,
@@ -1844,7 +1846,6 @@ final class CloudKitMonitor {
             errorCode: reducer.state.exportHealth.lastFailureCode
         )
         postChange()
-        guard allowsAggressiveSyncWork else { return }
         Task { await refreshAccountStatus() }
     }
 
@@ -1935,7 +1936,7 @@ final class CloudKitMonitor {
     /// never touches the pending counter: releasing the buffer uploads
     /// nothing, only an export does.
     private func flushOfflineMutationBuffer(reason: String) {
-        guard mode.isMirroring, accountState.isAvailable, networkState.isOnline, allowsAggressiveSyncWork else { return }
+        guard mode.isMirroring, accountState.isAvailable, networkState.isOnline else { return }
         offlineBufferedMutationCount = OfflineMutationBuffer.count
         guard offlineBufferedMutationCount > 0 else { return }
 

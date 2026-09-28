@@ -53,6 +53,62 @@ final class OnboardingViewModelTests: XCTestCase {
                        "Edits after init still save.")
     }
 
+    func testResumingOnboardingKeepsTheDraftRoleAndChoices() {
+        // OnboardingView builds the view model with nil settings, then binds
+        // the real AppSettings in .task. Those still hold the registered
+        // defaults (onboarding writes them only in finish), so binding used
+        // to reset a resumed Front Desk user to the owner tour.
+        let draftKey = "com.pawtrackr.onboarding.draft"
+        UserDefaults.standard.removeObject(forKey: AppSettingsKeys.onboardingRole)
+        UserDefaults.standard.set([
+            "name": "Bark & Bathe",
+            "selectedRole": OnboardingRole.frontDeskGroomer.rawValue,
+            "currency": "€",
+            "lockOnBackgroundEnabled": false,
+            "autoLockAfterInactivityEnabled": true
+        ] as [String: Any], forKey: draftKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: draftKey)
+            UserDefaults.standard.removeObject(forKey: AppSettingsKeys.onboardingRole)
+        }
+
+        let viewModel = OnboardingViewModel(modelContext: nil, appSettings: nil)
+        XCTAssertEqual(viewModel.selectedRole, .frontDeskGroomer)
+
+        let settings = AppSettings()
+        XCTAssertEqual(settings.onboardingRole, .ownerManager, "Precondition: settings still hold the default role.")
+        viewModel.bindIfNeeded(modelContext: context, appSettings: settings)
+
+        XCTAssertEqual(viewModel.selectedRole, .frontDeskGroomer)
+        XCTAssertEqual(viewModel.currentCurrency, "€")
+        XCTAssertFalse(viewModel.lockOnBackgroundEnabled)
+        XCTAssertTrue(viewModel.autoLockAfterInactivityEnabled)
+        XCTAssertEqual(
+            UserDefaults.standard.dictionary(forKey: draftKey)?["selectedRole"] as? String,
+            OnboardingRole.frontDeskGroomer.rawValue,
+            "Binding must not rewrite the draft with the default role."
+        )
+    }
+
+    func testBindingWithoutADraftStillReadsTheSettings() {
+        let draftKey = "com.pawtrackr.onboarding.draft"
+        UserDefaults.standard.removeObject(forKey: draftKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: draftKey)
+            UserDefaults.standard.removeObject(forKey: AppSettingsKeys.onboardingRole)
+        }
+
+        let settings = AppSettings()
+        settings.onboardingRole = .frontDeskGroomer
+        settings.currencySymbol = "€"
+
+        let viewModel = OnboardingViewModel(modelContext: nil, appSettings: nil)
+        viewModel.bindIfNeeded(modelContext: context, appSettings: settings)
+
+        XCTAssertEqual(viewModel.selectedRole, .frontDeskGroomer)
+        XCTAssertEqual(viewModel.currentCurrency, "€")
+    }
+
     func testRegionalStepAllowsBlankEmailButRejectsInvalidEmail() {
         let viewModel = OnboardingViewModel(modelContext: context, appSettings: AppSettings())
         viewModel.currentStep = .regional

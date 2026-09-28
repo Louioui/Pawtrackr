@@ -2,7 +2,7 @@
 //  SyncCircuitBreaker.swift
 //  Pawtrackr
 //
-//  Battery-aware app-level governor around manual CloudKit probes.
+//  Backoff for the manual "Check iCloud" action after CloudKit failures.
 //
 
 import Foundation
@@ -75,90 +75,60 @@ extension NetworkCondition {
     }
 }
 
+/// Backs off the groomer's manual "Check iCloud" after CloudKit reports a
+/// failure. That is all it governs: NSPersistentCloudKitContainer schedules
+/// its own uploads and retries and can't be paused, so heartbeats, the
+/// offline buffer and the account re-checks run regardless, and nothing here
+/// changes what the status says. Network drops don't open it (a check while
+/// offline just re-reads the account); coming back online lets a check
+/// through straight away.
 struct SyncCircuitBreaker: Equatable, Sendable {
-    enum Reason: String, Codable, Equatable, Sendable {
-        case uploadStalled
-        case networkUnavailable
-        case cloudKitFailure
-        case constrainedNetwork
-        case lowPower
-
-        var displayText: String {
-            switch self {
-            case .uploadStalled:
-                return "Cloud uploads are stalled, so Pawtrackr is protecting battery and staying local-first."
-            case .networkUnavailable:
-                return "Network is unavailable. Changes stay safe on this device."
-            case .cloudKitFailure:
-                return "iCloud rejected the last sync attempt. Pawtrackr will retry with backoff."
-            case .constrainedNetwork:
-                return "Network is constrained or expensive. Pawtrackr is reducing background sync checks."
-            case .lowPower:
-                return "Low Power Mode is on, so Pawtrackr is reducing background sync checks."
-            }
-        }
-    }
-
     enum State: Equatable, Sendable {
         case closed
-        case open(until: Date, reason: Reason, failures: Int)
-        case halfOpen(probeStartedAt: Date, reason: Reason, failures: Int)
+        /// Manual checks wait until `until`.
+        case open(until: Date, failures: Int)
+        /// One check is allowed through; the next CloudKit result decides.
+        case halfOpen(probeStartedAt: Date, failures: Int)
 
         var isOpen: Bool {
             if case .open = self { return true }
             return false
-        }
-
-        var nextProbeDate: Date? {
-            if case .open(let until, _, _) = self { return until }
-            return nil
-        }
-
-        var reason: Reason? {
-            switch self {
-            case .closed:
-                return nil
-            case .open(_, let reason, _), .halfOpen(_, let reason, _):
-                return reason
-            }
         }
     }
 
     struct Configuration: Equatable, Sendable {
         var baseDelay: TimeInterval = 30
         var multiplier: Double = 2
-        var maximumDelay: TimeInterval = 30 * 60
+        /// A groomer who just freed iCloud storage shouldn't wait half an hour
+        /// to see whether it worked.
+        var maximumDelay: TimeInterval = 5 * 60
         var constrainedMultiplier: Double = 2
-        var jitterRatio: Double = 0.15
     }
 
     private(set) var state: State = .closed
     private(set) var consecutiveFailures = 0
     var configuration = Configuration()
 
-    var allowsAggressiveWork: Bool {
-        switch state {
-        case .closed, .halfOpen:
-            return true
-        case .open:
-            return false
-        }
+    /// When a manual check is allowed again, or nil if it is allowed now.
+    func manualCheckAvailableAt(now: Date = Date()) -> Date? {
+        guard case .open(let until, _) = state, now < until else { return nil }
+        return until
     }
 
+    /// Conditions changed, so the last failure says less about the next try.
     mutating func observeNetwork(_ condition: NetworkCondition, now: Date = Date()) {
-        if !condition.isOnline {
-            open(reason: .networkUnavailable, now: now, constrained: condition.slowsBackgroundWork)
-        } else if case .open(let until, _, _) = state, now >= until {
-            state = .halfOpen(probeStartedAt: now, reason: state.reason ?? .cloudKitFailure, failures: consecutiveFailures)
+        guard condition.isOnline, state.isOpen else { return }
+        state = .halfOpen(probeStartedAt: now, failures: consecutiveFailures)
+    }
+
+    mutating func recordFailure(now: Date = Date(), constrained: Bool = false) {
+        consecutiveFailures = min(consecutiveFailures + 1, 10)
+        var delay = configuration.baseDelay * pow(configuration.multiplier, Double(max(0, consecutiveFailures - 1)))
+        if constrained {
+            delay *= configuration.constrainedMultiplier
         }
-    }
-
-    mutating func recordPendingStall(now: Date = Date(), constrained: Bool = false) {
-        open(reason: constrained ? .constrainedNetwork : .uploadStalled, now: now, constrained: constrained)
-    }
-
-    mutating func recordFailure(reason: Reason = .cloudKitFailure, now: Date = Date(), constrained: Bool = false) {
-        open(reason: reason, now: now, constrained: constrained)
+        delay = min(delay, configuration.maximumDelay)
+        state = .open(until: now.addingTimeInterval(delay), failures: consecutiveFailures)
     }
 
     mutating func recordSuccess() {
@@ -166,28 +136,59 @@ struct SyncCircuitBreaker: Equatable, Sendable {
         state = .closed
     }
 
+    /// True when a manual check may run now; moves an expired `.open` to
+    /// `.halfOpen`.
     mutating func beginProbeIfAllowed(now: Date = Date()) -> Bool {
         switch state {
-        case .closed:
+        case .closed, .halfOpen:
             return true
-        case .halfOpen:
-            return true
-        case .open(let until, let reason, _):
+        case .open(let until, _):
             guard now >= until else { return false }
-            state = .halfOpen(probeStartedAt: now, reason: reason, failures: consecutiveFailures)
+            state = .halfOpen(probeStartedAt: now, failures: consecutiveFailures)
             return true
         }
     }
+}
 
-    private mutating func open(reason: Reason, now: Date, constrained: Bool) {
-        consecutiveFailures = min(consecutiveFailures + 1, 10)
-        var delay = configuration.baseDelay * pow(configuration.multiplier, Double(max(0, consecutiveFailures - 1)))
-        delay = min(delay, configuration.maximumDelay)
-        if constrained {
-            delay = min(delay * configuration.constrainedMultiplier, configuration.maximumDelay)
+/// What a "Check iCloud" button can do right now. Never a zero-second wait:
+/// a pause that has run out is `.available`.
+enum ManualCheckAvailability: Equatable, Sendable {
+    case available
+    /// The 30-second cooldown after the last manual check.
+    case coolingDown(seconds: Int)
+    /// Backing off after an iCloud error.
+    case pausedAfterError(until: Date)
+
+    static func resolve(cooldownSeconds: Int, pausedUntil: Date?, now: Date) -> ManualCheckAvailability {
+        if cooldownSeconds > 0 {
+            return .coolingDown(seconds: cooldownSeconds)
         }
-        let jitter = delay * configuration.jitterRatio
-        let deterministicJitter = Double(abs(reason.rawValue.hashValue % 1_000)) / 1_000.0 * jitter
-        state = .open(until: now.addingTimeInterval(delay + deterministicJitter), reason: reason, failures: consecutiveFailures)
+        if let pausedUntil, now < pausedUntil {
+            return .pausedAfterError(until: pausedUntil)
+        }
+        return .available
+    }
+
+    var isAvailable: Bool { self == .available }
+
+    /// The button title. "Check iCloud" when a check can run.
+    var buttonTitle: String {
+        switch self {
+        case .available:
+            return AppLocalization.localized("cloudkit.action.check_status", value: "Check iCloud")
+        case .coolingDown(let seconds):
+            return String(
+                format: AppLocalization.localized("cloudkit.action.check_status_wait_fmt", value: "Check again in %ds"),
+                seconds
+            )
+        case .pausedAfterError(let until):
+            return String(
+                format: AppLocalization.localized(
+                    "cloudkit.action.check_paused_fmt",
+                    value: "Paused after an iCloud error. Check again at %@"
+                ),
+                until.formatted(date: .omitted, time: .shortened)
+            )
+        }
     }
 }

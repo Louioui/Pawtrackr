@@ -144,17 +144,7 @@ private struct CloudKitStatusPopover: View {
     }
 
     private var manualCheckTitle: String {
-        guard !monitor.canForceSync else {
-            return NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: "")
-        }
-        return String(
-            format: NSLocalizedString(
-                "cloudkit.action.check_status_wait_fmt",
-                value: "Check again in %ds",
-                comment: ""
-            ),
-            monitor.manualCheckRemainingSeconds
-        )
+        monitor.manualCheckAvailability.buttonTitle
     }
 
     private var tint: Color {

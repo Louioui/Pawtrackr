@@ -467,17 +467,7 @@ struct CloudKitDiagnosticsView: View {
         if isCheckingICloud {
             return NSLocalizedString("settings.icloud.checking", value: "Checking iCloud...", comment: "")
         }
-        guard !monitor.canForceSync else {
-            return NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: "")
-        }
-        return String(
-            format: NSLocalizedString(
-                "cloudkit.action.check_status_wait_fmt",
-                value: "Check again in %ds",
-                comment: ""
-            ),
-            monitor.manualCheckRemainingSeconds
-        )
+        return monitor.manualCheckAvailability.buttonTitle
     }
 }
 

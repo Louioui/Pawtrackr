@@ -71,8 +71,9 @@ struct SidebarView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
+                            // Blue, not green: a recent heartbeat isn't a backup.
                             Circle()
-                                .fill(isOnline(device) ? .green : .secondary)
+                                .fill(isOnline(device) ? DS.ColorToken.info : .secondary)
                                 .frame(width: 8, height: 8)
                         }
                     }

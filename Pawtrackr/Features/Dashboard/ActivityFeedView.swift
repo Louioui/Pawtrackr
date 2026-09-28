@@ -2,7 +2,9 @@
 //  ActivityFeedView.swift
 //  Pawtrackr
 //
-//  Live stream of salon activity and iCloud sync events.
+//  Salon activity and iCloud sync events. Every status here comes from
+//  CloudKitMonitor.backupStatus; other devices' heartbeats and presence
+//  arrive by CloudKit import, so they're worded as "recently", never "live".
 //
 
 import SwiftUI
@@ -15,9 +17,6 @@ struct ActivityFeedView: View {
     @Query(sort: \DeviceMetadata.lastSyncAt, order: .reverse) private var devices: [DeviceMetadata]
     @Query(sort: \PresenceRecord.updatedAt, order: .reverse) private var presenceRecords: [PresenceRecord]
 
-    private let freshnessWindow: TimeInterval = 600
-    private let recentWindow: TimeInterval = 86_400
-    
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -52,7 +51,11 @@ struct ActivityFeedView: View {
                 }
             }
         }
+        #if os(macOS)
+        // iOS sizes sheets itself; a minimum width wider than an iPhone
+        // pushed Close and Check Now off-screen.
         .frame(minWidth: 600, idealWidth: 720, maxWidth: 820, minHeight: 540, idealHeight: 680, maxHeight: 820)
+        #endif
         .task {
             await refreshActivityContext()
         }
@@ -62,7 +65,7 @@ struct ActivityFeedView: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
             ActivityMetricCard(
                 title: AppLocalization.localized("dashboard.activity.icloud", value: "iCloud"),
-                value: syncStateTitle,
+                value: monitor.statusLabel.title,
                 detail: monitor.networkState.displayLabel,
                 systemImage: monitor.statusIconName,
                 tint: syncTint
@@ -70,19 +73,18 @@ struct ActivityFeedView: View {
 
             ActivityMetricCard(
                 title: AppLocalization.localized("dashboard.activity.pending", value: "Pending"),
-                value: "\(max(monitor.pendingLocalChangeCount, monitor.offlineBufferedMutationCount))",
-                detail: monitor.pendingChangesSummary
-                    ?? AppLocalization.localized("dashboard.activity.pending_clear", value: "No waiting changes"),
+                value: "\(monitor.waitingChangeCount)",
+                detail: pendingDetail,
                 systemImage: "tray.and.arrow.up.fill",
-                tint: monitor.pendingChangesSummary == nil ? DS.ColorToken.success : DS.ColorToken.warning
+                tint: color(for: monitor.pendingTint)
             )
 
             ActivityMetricCard(
-                title: AppLocalization.localized("dashboard.activity.local_mode", value: "Local Mode"),
-                value: monitor.syncGovernorState.displayLabel,
-                detail: governorDetail,
-                systemImage: monitor.syncGovernorState == .normal ? "bolt.badge.checkmark.fill" : "leaf.fill",
-                tint: monitor.syncGovernorState == .normal ? DS.ColorToken.success : DS.ColorToken.warning
+                title: AppLocalization.localized("settings.icloud.last_backup", value: "Last iCloud backup"),
+                value: lastBackupValue,
+                detail: lastBackupDetail,
+                systemImage: "icloud.and.arrow.up",
+                tint: syncTint
             )
 
             ActivityMetricCard(
@@ -95,15 +97,33 @@ struct ActivityFeedView: View {
         }
     }
 
-    private var governorDetail: String {
-        if let date = monitor.nextProbeDate {
-            return String(
-                format: AppLocalization.localized("dashboard.activity.next_probe_fmt", value: "Next probe %@"),
-                relativeText(for: date)
+    private var pendingDetail: String {
+        guard monitor.mode.isMirroring else {
+            return AppLocalization.localized(
+                "dashboard.activity.pending_not_uploading",
+                value: "iCloud backup is off on this device, so nothing uploads."
             )
         }
-        return monitor.offlineLocalModeReason
-            ?? AppLocalization.localized("dashboard.activity.local_mode_ready", value: "Background checks are available")
+        return monitor.pendingChangesSummary
+            ?? AppLocalization.localized("dashboard.activity.pending_clear", value: "No waiting changes")
+    }
+
+    /// Short enough for the card's one line; the detail says the rest.
+    private var lastBackupValue: String {
+        guard let date = monitor.syncHealth.lastSuccessfulExportEndedAt else {
+            return AppLocalization.localized("dashboard.activity.last_backup_never", value: "Never")
+        }
+        return relativeText(for: date)
+    }
+
+    private var lastBackupDetail: String {
+        guard monitor.syncHealth.lastSuccessfulExportEndedAt != nil else {
+            return AppLocalization.localized("cloudkit.last_backup.never", value: "No iCloud backup from this device yet")
+        }
+        return String(
+            format: AppLocalization.localized("dashboard.activity.last_download_fmt", value: "Last download: %@"),
+            monitor.lastDownloadValue
+        )
     }
 
     private var syncHealthCard: some View {
@@ -119,7 +139,7 @@ struct ActivityFeedView: View {
                         Text(monitor.healthHeadline)
                             .font(.headline)
                         Spacer(minLength: 12)
-                        ActivityPill(title: syncStateTitle, tint: syncTint)
+                        ActivityPill(title: monitor.statusLabel.title, tint: syncTint)
                     }
 
                     Text(monitor.healthDetail)
@@ -155,30 +175,31 @@ struct ActivityFeedView: View {
     private var devicesCard: some View {
         ActivityCard(accent: DS.ColorToken.info) {
             ActivityCardHeader(
-                title: AppLocalization.localized("dashboard.activity.devices_title", value: "Synced Devices"),
+                title: AppLocalization.localized("dashboard.activity.devices_title", value: "Devices on This Account"),
                 detail: devicesOverview,
                 systemImage: "antenna.radiowaves.left.and.right"
             )
 
             if visibleDevices.isEmpty {
                 ActivityEmptyState(
-                    title: AppLocalization.localized("dashboard.activity.no_devices", value: "No synced devices yet"),
+                    title: AppLocalization.localized("dashboard.activity.no_devices", value: "No devices yet"),
                     detail: AppLocalization.localized(
                         "dashboard.activity.no_devices_detail",
-                        value: "The current device appears here after iCloud finishes its first heartbeat."
+                        value: "Devices appear here after their first heartbeat, sent while iCloud is on and the device is online."
                     ),
                     systemImage: "icloud.slash"
                 )
             } else {
                 VStack(spacing: 0) {
                     ForEach(visibleDevices.prefix(4)) { device in
+                        let isCurrent = device.deviceID == DeviceIdentity.currentID
                         ActivityDeviceRow(
                             name: displayName(for: device),
                             detail: deviceSubtitle(for: device),
-                            status: deviceStatusTitle(for: device),
-                            statusTint: statusTint(for: device),
+                            status: isCurrent ? monitor.statusLabel.title : heartbeatAge(for: device).title,
+                            statusTint: isCurrent ? syncTint : statusTint(for: device),
                             lastSeen: relativeText(for: device.lastSyncAt),
-                            isCurrent: device.deviceID == DeviceIdentity.currentID
+                            isCurrent: isCurrent
                         )
 
                         if device.deviceID != visibleDevices.prefix(4).last?.deviceID {
@@ -188,13 +209,13 @@ struct ActivityFeedView: View {
                 }
             }
 
-            if !activePresenceRecords.isEmpty {
+            if !recentlyOpenElsewhere.isEmpty {
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(AppLocalization.localized("dashboard.activity.live_presence", value: "Live Presence"))
+                    Text(AppLocalization.localized("settings.devices.recently_open_title", value: "Recently Open Elsewhere"))
                         .font(.subheadline.weight(.semibold))
-                    ForEach(activePresenceRecords.prefix(3)) { record in
-                        Label(presenceSummary(for: record), systemImage: "eye.fill")
+                    ForEach(recentlyOpenElsewhere.prefix(3)) { record in
+                        Label(presenceSummary(for: record), systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -242,34 +263,20 @@ struct ActivityFeedView: View {
             }
     }
 
-    private var activePresenceRecords: [PresenceRecord] {
-        let cutoff = Date().addingTimeInterval(-freshnessWindow)
-        var seen = Set<UUID>()
-        return presenceRecords
-            .filter { $0.updatedAt >= cutoff }
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .filter { record in
-                guard !seen.contains(record.deviceID) else { return false }
-                seen.insert(record.deviceID)
-                return true
-            }
-    }
-
-    private var syncStateTitle: String {
-        switch monitor.syncState {
-        case .idle:
-            return monitor.pendingChangesSummary == nil
-                ? AppLocalization.localized("dashboard.activity.synced", value: "Ready")
-                : AppLocalization.localized("dashboard.activity.waiting", value: "Waiting")
-        case .syncing:
-            return AppLocalization.localized("dashboard.activity.syncing", value: "Syncing")
-        case .error:
-            return AppLocalization.localized("dashboard.activity.needs_attention", value: "Needs Attention")
-        }
+    private var recentlyOpenElsewhere: [PresenceRecord] {
+        DeviceActivityPolicy.recentlyOpenElsewhere(
+            presenceRecords,
+            currentDeviceID: DeviceIdentity.currentID,
+            now: Date()
+        )
     }
 
     private var syncTint: Color {
-        switch monitor.statusTint {
+        color(for: monitor.statusTint)
+    }
+
+    private func color(for tint: CloudKitMonitor.SyncStatusTint) -> Color {
+        switch tint {
         case .success: return DS.ColorToken.success
         case .neutral: return DS.ColorToken.info
         case .warning: return DS.ColorToken.warning
@@ -277,20 +284,23 @@ struct ActivityFeedView: View {
         }
     }
 
+    /// Counts other devices whose heartbeat arrived recently. This device's
+    /// own heartbeat is written locally, so it proves nothing about iCloud.
     private var devicesOverview: String {
         guard !visibleDevices.isEmpty else {
             return AppLocalization.localized("dashboard.activity.devices_waiting", value: "Waiting for first heartbeat")
         }
 
-        let online = visibleDevices.filter { freshness(for: $0.lastSyncAt) == .online }.count
-        let active = activePresenceRecords.count
+        let seenRecently = visibleDevices.filter {
+            $0.deviceID != DeviceIdentity.currentID && heartbeatAge(for: $0) == .recent
+        }.count
         return String.localizedStringWithFormat(
             AppLocalization.localized(
-                "dashboard.activity.devices_summary_fmt",
-                value: "%d online, %d active now"
+                "dashboard.activity.devices_recent_fmt",
+                value: "%1$d device(s), %2$d other(s) seen recently"
             ),
-            online,
-            active
+            visibleDevices.count,
+            seenRecently
         )
     }
 
@@ -300,7 +310,7 @@ struct ActivityFeedView: View {
         }
 
         return String(
-            format: AppLocalization.localized("dashboard.activity.last_event_fmt", value: "Latest %@"),
+            format: AppLocalization.localized("dashboard.activity.last_event_fmt", value: "Last event %@"),
             relativeText(for: first.startedAt)
         )
     }
@@ -341,38 +351,21 @@ struct ActivityFeedView: View {
         return "\(displayModel) - \(displayOS)"
     }
 
-    private func deviceStatusTitle(for device: DeviceMetadata) -> String {
-        switch freshness(for: device.lastSyncAt) {
-        case .online: return AppLocalization.localized("settings.devices.online", value: "Online")
-        case .recent: return AppLocalization.localized("settings.devices.recently_seen", value: "Recently Seen")
-        case .stale: return AppLocalization.localized("settings.devices.needs_check", value: "Needs Check")
-        }
+    private func heartbeatAge(for device: DeviceMetadata) -> DeviceActivityPolicy.HeartbeatAge {
+        DeviceActivityPolicy.HeartbeatAge(lastSeen: device.lastSyncAt, now: Date())
     }
 
+    /// Never green: a heartbeat is not a backup.
     private func statusTint(for device: DeviceMetadata) -> Color {
-        switch freshness(for: device.lastSyncAt) {
-        case .online: return DS.ColorToken.success
-        case .recent: return DS.ColorToken.info
+        switch heartbeatAge(for: device) {
+        case .recent, .lastDay: return DS.ColorToken.info
         case .stale: return DS.ColorToken.warning
         }
     }
 
-    private func freshness(for date: Date) -> ActivityDeviceFreshness {
-        let age = Date().timeIntervalSince(date)
-        if age < freshnessWindow { return .online }
-        if age < recentWindow { return .recent }
-        return .stale
-    }
-
     private func presenceSummary(for record: PresenceRecord) -> String {
-        let deviceName = record.deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? AppLocalization.localized("common.unknown_device", value: "Unknown Device")
-            : record.deviceName
-        let recordType = record.recordType?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let viewing = recordType?.isEmpty == false
-            ? String(format: AppLocalization.localized("dashboard.activity.viewing_fmt", value: "viewing %@"), recordType!.capitalized)
-            : AppLocalization.localized("dashboard.activity.active_now", value: "active now")
-        return "\(deviceName) \(viewing) - \(relativeText(for: record.updatedAt))"
+        DeviceActivityPolicy.presenceSummary(deviceName: record.deviceName, recordType: record.recordType)
+            + " · " + relativeText(for: record.updatedAt)
     }
 
     private func issueIcon(for issue: CloudKitMonitor.SyncHealthIssue) -> String {
@@ -463,12 +456,6 @@ struct ActivityRow: View {
         case .noted: return .secondary
         }
     }
-}
-
-private enum ActivityDeviceFreshness {
-    case online
-    case recent
-    case stale
 }
 
 private struct ActivityCard<Content: View>: View {

@@ -360,7 +360,11 @@ private struct SettingsDetailView: View {
                         }
                     }
             }
+            #if os(macOS)
+            // iOS sizes sheets itself; a minimum wider than an iPhone clipped
+            // the Close button and the diagnostics text.
             .frame(minWidth: 560, idealWidth: 680, maxWidth: 760, minHeight: 520, idealHeight: 700, maxHeight: 820)
+            #endif
         }
         .alert(
             settingsLocalized("settings.reset_guide.title", value: "Replay Getting Started?"),
@@ -727,17 +731,10 @@ private struct ICloudSectionView: View {
         }
     }
 
+    /// From the backup status, never from the tint: a neutral tint covers
+    /// "not backed up yet", which isn't something being checked.
     private var statusTitle: String {
-        switch monitor.statusTint {
-        case .success:
-            return settingsLocalized("settings.icloud.status.healthy", value: "Healthy")
-        case .neutral:
-            return settingsLocalized("settings.icloud.status.checking", value: "Checking")
-        case .warning:
-            return settingsLocalized("settings.icloud.status.needs_check", value: "Needs Check")
-        case .danger:
-            return settingsLocalized("settings.icloud.status.error", value: "Error")
-        }
+        monitor.statusLabel.title
     }
 
     private var manualCheckIcon: String {
@@ -749,13 +746,11 @@ private struct ICloudSectionView: View {
         if isCheckingICloud {
             return settingsLocalized("settings.icloud.checking", value: "Checking iCloud...")
         }
-        guard !monitor.canForceSync else {
+        let availability = monitor.manualCheckAvailability
+        guard !availability.isAvailable else {
             return settingsLocalized("settings.icloud.check", value: "Check iCloud")
         }
-        return String(
-            format: settingsLocalized("cloudkit.action.check_status_wait_fmt", value: "Check again in %ds"),
-            monitor.manualCheckRemainingSeconds
-        )
+        return availability.buttonTitle
     }
 
     private func formattedDate(_ date: Date?) -> String {
@@ -1037,11 +1032,13 @@ private struct PreferencesSectionView: View {
                         .textLengthLimit($appSettings.deviceName, to: TextInputLimits.shortText)
                 }
 
+                // A name, not a sync state: checkmark.icloud and green are kept
+                // for a confirmed upload.
                 SettingsSmartStatusRow(
-                    title: settingsLocalized("settings.preferences.device_status", value: "Sync Label"),
+                    title: settingsLocalized("settings.preferences.device_status", value: "Device Label"),
                     value: deviceNameSummary,
-                    systemImage: "checkmark.icloud.fill",
-                    tint: appSettings.deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? DS.ColorToken.warning : DS.ColorToken.success
+                    systemImage: "tag.fill",
+                    tint: appSettings.deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? DS.ColorToken.warning : DS.ColorToken.info
                 )
             }
 
@@ -1090,8 +1087,9 @@ private struct PreferencesSectionView: View {
                     value: appSettings.optimizeMediaForICloud
                         ? settingsLocalized("settings.preferences.media_optimized", value: "Optimized for iCloud sync")
                         : settingsLocalized("settings.preferences.media_originals", value: "Keep originals on this device"),
-                    systemImage: appSettings.optimizeMediaForICloud ? "icloud.and.arrow.up.fill" : "externaldrive.fill",
-                    tint: appSettings.optimizeMediaForICloud ? DS.ColorToken.success : DS.ColorToken.info
+                    // Describes the setting, not whether photos uploaded.
+                    systemImage: appSettings.optimizeMediaForICloud ? "photo.stack" : "externaldrive.fill",
+                    tint: DS.ColorToken.info
                 )
             }
         }

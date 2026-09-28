@@ -44,7 +44,10 @@ struct CommunicationSheet: View {
                 format: AppLocalization.localized("communication.title_fmt", value: "Message %@"),
                 pet.owner?.firstName ?? AppLocalization.localized("communication.fallback_client", value: "Client")
             ))
+            #if os(macOS)
+            // A 420pt minimum overflowed a 390pt iPhone sheet.
             .frame(minWidth: 420, idealWidth: 520, maxWidth: 620, minHeight: 460, idealHeight: 560)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(NSLocalizedString("common.cancel", comment: "")) { dismiss() }

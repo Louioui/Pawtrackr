@@ -180,6 +180,21 @@ enum SyncStatusPolicy {
         return candidates.filter { $0 > now }.min()
     }
 
+    // MARK: - Pending changes
+
+    /// Tint for a "waiting changes" count. Zero waiting only earns the
+    /// success color when uploads are running and the last one covered
+    /// everything: with iCloud off, or nothing confirmed yet, an empty queue
+    /// proves nothing.
+    static func pendingTint(
+        waitingCount: Int,
+        isMirroring: Bool,
+        status: BackupStatus
+    ) -> CloudKitMonitor.SyncStatusTint {
+        if waitingCount > 0 { return .warning }
+        return isMirroring && status.isBackedUp ? .success : .neutral
+    }
+
     // MARK: - Failure log
 
     /// Newest first, capped, so the failures survive the 25-entry event ring
@@ -351,6 +366,46 @@ enum SyncFailureCopy {
             "cloudkit.signed_out.message",
             value: "iCloud is off. Clients already uploaded come back when you sign in with the same Apple Account. Changes made now stay on this device."
         )
+    }
+}
+
+/// The short label beside the status headline: pills and metric cards.
+/// It comes from the backup status alone, so it can't say "Ready" or
+/// "Healthy" while the headline says nothing has reached iCloud.
+enum BackupStatusLabel: Equatable, Sendable {
+    case backedUp
+    case uploading
+    case notBackedUp
+    case needsAttention
+    case iCloudOff
+    case checkingAccount
+
+    init(_ status: BackupStatus) {
+        switch status {
+        case .backedUp: self = .backedUp
+        case .uploading: self = .uploading
+        case .notBackedUp: self = .notBackedUp
+        case .failing: self = .needsAttention
+        case .signedOut, .localOnly: self = .iCloudOff
+        case .unknown: self = .checkingAccount
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .backedUp:
+            return AppLocalization.localized("cloudkit.status.backed_up", value: "Backed up")
+        case .uploading:
+            return AppLocalization.localized("cloudkit.status.uploading", value: "Uploading")
+        case .notBackedUp:
+            return AppLocalization.localized("cloudkit.status.not_backed_up", value: "Not backed up yet")
+        case .needsAttention:
+            return AppLocalization.localized("cloudkit.status.needs_attention", value: "Needs attention")
+        case .iCloudOff:
+            return AppLocalization.localized("cloudkit.status.icloud_off", value: "iCloud off")
+        case .checkingAccount:
+            return AppLocalization.localized("cloudkit.status.checking_account", value: "Checking account")
+        }
     }
 }
 
