@@ -8,9 +8,65 @@ final class MigrationsTests: XCTestCase {
 
     override func setUpWithError() throws {
         let schema = Schema(PawtrackrSchema.models)
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, configurations: [config])
         context = ModelContext(container)
+    }
+
+    func testMigrationPlanPreservesShippedSchemaChain() {
+        XCTAssertEqual(PawtrackrSchemaV1.versionIdentifier, Schema.Version(1, 0, 6))
+        XCTAssertEqual(PawtrackrSchemaV2.versionIdentifier, Schema.Version(1, 0, 7))
+        XCTAssertEqual(PawtrackrSchemaV3.versionIdentifier, Schema.Version(1, 1, 0))
+        XCTAssertEqual(PawtrackrSchemaV1.models.count, 19)
+        XCTAssertEqual(PawtrackrSchemaV2.models.count, 20)
+        XCTAssertEqual(PawtrackrSchemaV3.models.count, 22)
+        XCTAssertEqual(PawtrackrMigrationPlan.schemas.count, 3)
+        XCTAssertEqual(PawtrackrMigrationPlan.stages.count, 2)
+    }
+
+    func testCurrentMigrationPlanOpensShippedV1StoreWithClients() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PawtrackrMigrationTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let storeURL = directory.appendingPathComponent("Pawtrackr.store")
+
+        try autoreleasepool {
+            let oldSchema = Schema(PawtrackrSchemaV1.models)
+            let oldConfig = ModelConfiguration(
+                "Pawtrackr",
+                schema: oldSchema,
+                url: storeURL,
+                cloudKitDatabase: .none
+            )
+            let oldContainer = try ModelContainer(for: oldSchema, configurations: [oldConfig])
+            let oldContext = ModelContext(oldContainer)
+            oldContext.insert(Client(firstName: "Legacy", lastName: "Client", phone: "555-0100"))
+            try oldContext.save()
+        }
+
+        try autoreleasepool {
+            let currentSchema = Schema(PawtrackrSchema.models)
+            let currentConfig = ModelConfiguration(
+                "Pawtrackr",
+                schema: currentSchema,
+                url: storeURL,
+                cloudKitDatabase: .none
+            )
+            let migratedContainer = try ModelContainer(
+                for: currentSchema,
+                migrationPlan: PawtrackrMigrationPlan.self,
+                configurations: [currentConfig]
+            )
+            let migratedContext = ModelContext(migratedContainer)
+            let clients = try migratedContext.fetch(FetchDescriptor<Client>())
+
+            XCTAssertEqual(clients.map(\.fullName), ["Legacy Client"])
+            XCTAssertEqual(try migratedContext.fetchCount(FetchDescriptor<LoyaltyLedgerEntry>()), 0)
+            XCTAssertEqual(try migratedContext.fetchCount(FetchDescriptor<LoyaltyConfig>()), 0)
+            XCTAssertEqual(try migratedContext.fetchCount(FetchDescriptor<LoyaltyRewardTemplate>()), 0)
+        }
     }
 
     func testEnsureServiceCatalog_CreatesDefaults() throws {
@@ -136,16 +192,17 @@ final class MigrationsTests: XCTestCase {
     }
     
     func testCoercePets_StandardizesGenders() throws {
+        let client = Client(firstName: "Test", lastName: "Owner")
         let pet = Pet(name: "Test", species: .dog)
-        // Manually set a 'bad' state if possible (though enum prevents it, 
-        // older data might have been different)
-        context.insert(pet)
+        pet.genderRaw = "legacy-invalid"
+        pet.owner = client
+        client.pets = [pet]
+        context.insert(client)
         try context.save()
-        
+
         DataMigrations.coercePets(in: context)
         
-        // Refresh and verify
         let fetched = try context.fetch(FetchDescriptor<Pet>()).first!
-        XCTAssertTrue(fetched.gender == .male || fetched.gender == .female)
+        XCTAssertEqual(fetched.genderRaw, PetGender.male.rawValue)
     }
 }

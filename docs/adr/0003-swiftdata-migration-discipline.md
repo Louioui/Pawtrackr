@@ -1,19 +1,18 @@
-# ADR-0003: SwiftData migration discipline for structural changes (V2 + stage + CloudKit deploy)
+# ADR-0003: SwiftData migration discipline for structural changes
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-03
 **Deciders:** Luis (solo developer)
 
 ## Context
 
-The RTF's most urgent thread is a **data wipe** after adding `loyaltyPoints` + a `LoyaltyHistory`
-relationship. Reconciled against the code:
+The RTF's most urgent thread was a **data wipe** after adding `loyaltyPoints` + a
+`LoyaltyHistory` relationship. The original 1.0.1 reconciliation showed:
 
-- Migration infrastructure **already exists** — `Core/Storage/Migrations.swift` defines
+- Migration infrastructure existed — `Core/Storage/Migrations.swift` defined
   `PawtrackrSchemaV1` (`versionIdentifier 1.0.6`, all 19 models) and `PawtrackrMigrationPlan`,
-  wired into both container builders (`DataStoreService.swift:37`, `PawtrackrApp.swift:96/110`,
-  `AppIntents.swift:164`) via `migrationPlan:`.
-- The plan is **frozen at V1**: `schemas: [PawtrackrSchemaV1.self]`, `stages: []`.
+  wired into the app container builders via `migrationPlan:`.
+- The 1.0.1 plan was **frozen at V1**: `schemas: [PawtrackrSchemaV1.self]`, `stages: []`.
 - The documented convention is: *"property addition with a default → still V1 compatible
   (lightweight), bump the patch."* That is why `Client.loyaltyPoints: Int = 0` was safe — an
   additive scalar SwiftData auto-migrates.
@@ -22,24 +21,23 @@ relationship. Reconciled against the code:
   does a destructive recreate. (`DataStoreService`'s convenience init instead
   `preconditionFailure`s — a hard crash, not a wipe.)
 - CloudKit is `.automatic` (private DB) when `AppRuntime.allowsICloudSync`.
-- **No evidence a wipe shipped**: marketing version 1.0.1; the shipped schema is safe additive
-  scalars; there is no `LoyaltyHistory` in the tree and no migration/wipe/hotfix commit. The
-  RTF's episode was almost certainly a dev-branch experience with the (rejected) Pet-based code.
+- A 1.0.2-era regression later violated this ADR: the shipped V1 was edited in place from
+  `1.0.6`/19 models to `1.0.7`/20 models by adding `LoyaltyLedgerEntry`, then the current schema
+  added `LoyaltyConfig` and `LoyaltyRewardTemplate`. A real 1.0.1 store no longer matched any
+  schema in the migration chain, so SwiftData could refuse to open it or the app could appear
+  empty after update even though the SQLite file still existed.
 
-The gap: the "additive scalar → stay on V1" convention is safe for scalars but is **not a safe
-assumption for new relationships, renames, or type changes** — nor for the **CloudKit production
-schema deploy** any new type requires. A new *standalone* model is often auto-migrated as
-lightweight; what reliably bites is (a) new/changed **relationships** (the RTF's
-`Pet ↔ LoyaltyHistory` is the exact case that broke), and (b) forgetting to **deploy the schema to
-CloudKit Production** — after which a synced store can't reconcile the new type and users see an
-*empty* app, which is how the "wipe" reads. [ADR-0002](0002-loyalty-system-evolution.md)
-(`LoyaltyConfig`/`LoyaltyHistory`/`LoyaltyReward`) is squarely in this territory.
+The gap: the "additive scalar → stay on V1" convention is safe for scalars but is **not safe for
+new `@Model` types, new relationships, renames, or type changes**. Any new type also requires a
+CloudKit production schema deploy before App Store release. The 1.0.2 regression proved the
+procedural rule matters: never edit a shipped schema in place.
 
 ## Decision
 
 Codify a **structural-change protocol**. A change is *structural* if it adds/removes a `@Model`
 type, adds/removes/renames a **relationship**, renames a property, or changes a property's type.
-Additive **scalar** properties *with defaults* remain lightweight (bump the patch, stay V1).
+Additive **scalar** properties *with defaults* can remain in the current schema version only until
+that version ships. Once shipped, freeze it forever.
 
 Any **structural** change requires, before shipping:
 
@@ -53,8 +51,14 @@ Any **structural** change requires, before shipping:
 5. **CloudKit:** new relationships must be **optional or defaulted**; **no `@Attribute(.unique)`**
    (the codebase already forbids it — `VisitItem.swift:17`); then **Deploy Schema Changes to
    Production** in the CloudKit Console before the App Store release.
-6. Run the **upgrade test** (already in the RTF checklist and `CLAUDE.md`): install the *old*
-   build, create records, then run the *new* build **without deleting** — data must survive.
+6. Run the **upgrade test**: create/open an old store with real records, then run the new build
+   **without deleting the app** — data must survive.
+
+Current chain:
+
+- `PawtrackrSchemaV1` = `1.0.6`, 19 models, shipped in 1.0.1.
+- `PawtrackrSchemaV2` = `1.0.7`, adds `LoyaltyLedgerEntry`.
+- `PawtrackrSchemaV3` = `1.1.0`, adds `LoyaltyConfig` and `LoyaltyRewardTemplate`.
 
 ## Options Considered
 
@@ -98,10 +102,9 @@ for no reason.
 
 ## Action Items
 
-1. [ ] When loyalty models land (ADR-0002): create `PawtrackrSchemaV2` (V1 models + `LoyaltyConfig`
-       [+ `LoyaltyHistory`, `LoyaltyReward`]), add a `.lightweight` stage V1→V2, re-point the typealias.
-2. [ ] Confirm new models use plain `UUID` ids (no `.unique`) and optional/defaulted relationships.
-3. [ ] Add "Deploy CloudKit schema to Production" to the release checklist
-       (`docs/XcodeCloudDeployment.md` already lists "migration plan presence" — extend it).
-4. [ ] Add the old-build → new-build upgrade test to CI or the pre-release ritual.
-5. [ ] Keep monetization schema-free: entitlement stays in StoreKit + a `UserDefaults`/Keychain cache.
+1. [x] Restore shipped V1 as `1.0.6` with 19 models.
+2. [x] Split loyalty additions into additive V2/V3 stages.
+3. [x] Add a unit regression that opens a V1 store with clients through the current migration plan.
+4. [ ] Deploy CloudKit schema changes to Production before App Store release.
+5. [ ] Run the real-device old-build -> new-build upgrade test before submitting.
+6. [ ] Keep monetization schema-free: entitlement stays in StoreKit + a `UserDefaults`/Keychain cache.

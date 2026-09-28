@@ -27,34 +27,48 @@ import OSLog
 //   - If the change is a property addition with a default → still V1
 //     compatible (lightweight). Bump the version's patch number.
 //   - If the change renames a property, deletes one, or changes a type →
-//     define V2 below, change the typealias, and add a custom stage.
+//     define the next schema below, change the typealias, and add a stage.
 //
 // IMPORTANT: never delete a version once it has shipped to users; it must
 // remain in the chain so their store can climb forward to the latest.
+// Also never edit a shipped schema in place; add a new version instead.
 
 /// Always points at the most recent shipped schema. The rest of the app
 /// references this name; only the migration plan distinguishes versions.
-typealias PawtrackrSchema = PawtrackrSchemaV2
+typealias PawtrackrSchema = PawtrackrSchemaV3
 
 enum PawtrackrSchemaV1: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 0, 7)
+    // Shipped in Pawtrackr 1.0.1 (build 2). Keep this exact model list so
+    // those stores can be recognized and migrated by later app versions.
+    static var versionIdentifier: Schema.Version = .init(1, 0, 6)
 
     static var models: [any PersistentModel.Type] {
         [
             Client.self, Pet.self, Visit.self, VisitItem.self, Service.self, Payment.self, User.self,
             DaySummary.self, ServiceDaySummary.self, CategoryDaySummary.self, ClientInsightSummary.self,
             CheckoutTransaction.self, EmergencyContact.self, BusinessConfig.self, MessageTemplate.self,
-            InventoryItem.self, InventoryTransaction.self, DeviceMetadata.self, PresenceRecord.self,
-            LoyaltyLedgerEntry.self
+            InventoryItem.self, InventoryTransaction.self, DeviceMetadata.self, PresenceRecord.self
         ]
     }
 }
 
 enum PawtrackrSchemaV2: VersionedSchema {
-    static var versionIdentifier: Schema.Version = .init(1, 1, 0)
+    // First loyalty ledger schema. This is separate from V1 because 1.0.1
+    // stores were created before LoyaltyLedgerEntry existed.
+    static var versionIdentifier: Schema.Version = .init(1, 0, 7)
 
     static var models: [any PersistentModel.Type] {
         PawtrackrSchemaV1.models + [
+            LoyaltyLedgerEntry.self
+        ]
+    }
+}
+
+enum PawtrackrSchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version = .init(1, 1, 0)
+
+    static var models: [any PersistentModel.Type] {
+        PawtrackrSchemaV2.models + [
             LoyaltyConfig.self,
             LoyaltyRewardTemplate.self
         ]
@@ -67,7 +81,7 @@ enum PawtrackrMigrationPlan: SchemaMigrationPlan {
     /// Ordered list of every schema we've ever shipped. Append new versions;
     /// never remove or reorder.
     static var schemas: [any VersionedSchema.Type] {
-        [PawtrackrSchemaV1.self, PawtrackrSchemaV2.self]
+        [PawtrackrSchemaV1.self, PawtrackrSchemaV2.self, PawtrackrSchemaV3.self]
     }
 
     /// Transitions between adjacent schema versions.
@@ -76,6 +90,10 @@ enum PawtrackrMigrationPlan: SchemaMigrationPlan {
             .lightweight(
                 fromVersion: PawtrackrSchemaV1.self,
                 toVersion: PawtrackrSchemaV2.self
+            ),
+            .lightweight(
+                fromVersion: PawtrackrSchemaV2.self,
+                toVersion: PawtrackrSchemaV3.self
             )
         ]
     }
@@ -122,10 +140,10 @@ enum DataMigrations {
                 var batchChanged = false
                 for pet in pets {
                     var changed = false
-                    // Species is already constrained to .dog/.cat at type level now.
-                    // Gender: ensure either .male or .female. If not, default to .male.
-                    if pet.gender != .male && pet.gender != .female {
-                        pet.gender = .male
+                    // Validate the raw value because the transient wrapper
+                    // falls back to `.male` and would hide legacy bad data.
+                    if PetGender(rawValue: pet.genderRaw) == nil {
+                        pet.genderRaw = PetGender.male.rawValue
                         changed = true
                     }
 

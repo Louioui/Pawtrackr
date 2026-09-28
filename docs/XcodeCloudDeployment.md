@@ -39,3 +39,11 @@ The scripts currently enforce:
 - QualityControl chaos test source presence
 
 The Xcode Cloud workflow should own the actual test/archive/TestFlight execution so Apple can attach result bundles, logs, and TestFlight distribution status to the build report.
+
+## Manual Release Checks
+
+Before submitting a build that changes SwiftData models:
+
+- run the old-build -> new-build upgrade test on a real device without deleting the app
+- deploy CloudKit schema changes to Production in CloudKit Console
+- confirm the migration chain still includes every shipped `PawtrackrSchemaV*`

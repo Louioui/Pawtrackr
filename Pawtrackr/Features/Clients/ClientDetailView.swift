@@ -235,15 +235,6 @@ struct ClientDetailView: View {
         ToolbarItemGroup(placement: .primaryAction) {
             if supportsMultipleWindows {
                 Button {
-                    openClientWindow(.detail)
-                } label: {
-                    Label(
-                        NSLocalizedString("client.action.open_client_window", value: "Open Client Window", comment: ""),
-                        systemImage: "rectangle.on.rectangle"
-                    )
-                }
-
-                Button {
                     openClientWindow(.loyalty)
                 } label: {
                     Label(

@@ -14,16 +14,22 @@ import CloudKit
 import SwiftData
 
 struct CloudKitDiagnosticsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(DataStoreService.self) private var dataStore
     @Query(sort: \DeviceMetadata.lastSyncAt, order: .reverse) private var devices: [DeviceMetadata]
     @State private var monitor = CloudKitMonitor.shared
     @State private var copySuccessTimestamp: Date?
+    @State private var isCheckingICloud = false
     @State private var isRebuildingInsights = false
     @State private var rebuildMessage: String?
     @State private var lastSummaryRebuildDate = UserDefaults.standard.object(forKey: "lastSummaryRebuildDate") as? Date
 
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            diagnosticsHeader
+            Divider()
+
+            Form {
             Section(NSLocalizedString("cloudkit.diagnostics.account", value: "Account", comment: "")) {
                 row(NSLocalizedString("cloudkit.diagnostics.account_status", value: "Account Status", comment: ""),
                     monitor.accountState.displayLabel)
@@ -152,12 +158,12 @@ struct CloudKitDiagnosticsView: View {
 
             Section {
                 Button {
-                    Task { await monitor.forceSync() }
+                    Task { await runICloudCheck() }
                 } label: {
                     Label(manualCheckTitle,
-                          systemImage: monitor.canForceSync ? "arrow.clockwise.icloud" : "timer")
+                          systemImage: manualCheckIcon)
                 }
-                .disabled(!monitor.canForceSync)
+                .disabled(isCheckingICloud || !monitor.canForceSync)
 
                 Button {
                     Task { await monitor.refreshAccountStatus() }
@@ -189,8 +195,41 @@ struct CloudKitDiagnosticsView: View {
                     Label(copyLabel, systemImage: "doc.on.doc")
                 }
             }
+            }
         }
         .navigationTitle(NSLocalizedString("cloudkit.diagnostics.title", value: "iCloud Diagnostics", comment: ""))
+    }
+
+    private var diagnosticsHeader: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: monitor.statusIconName)
+                .font(.title2)
+                .foregroundStyle(statusColor)
+                .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NSLocalizedString("cloudkit.diagnostics.title", value: "iCloud Diagnostics", comment: ""))
+                    .font(.headline)
+                Text(monitor.healthDetail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Button {
+                dismiss()
+            } label: {
+                Label(NSLocalizedString("common.close", value: "Close", comment: ""), systemImage: "xmark")
+            }
+            .buttonStyle(.bordered)
+            .keyboardShortcut(.cancelAction)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(.regularMaterial)
     }
 
     @ViewBuilder
@@ -224,6 +263,31 @@ struct CloudKitDiagnosticsView: View {
             return NSLocalizedString("common.copied", value: "Copied!", comment: "")
         }
         return NSLocalizedString("cloudkit.diagnostics.copy", value: "Copy Diagnostics", comment: "")
+    }
+
+    private var statusColor: Color {
+        switch monitor.statusTint {
+        case .success: return .green
+        case .neutral: return .blue
+        case .warning: return .orange
+        case .danger: return .red
+        }
+    }
+
+    private var manualCheckIcon: String {
+        if isCheckingICloud { return "hourglass" }
+        return monitor.canForceSync ? "arrow.clockwise.icloud" : "timer"
+    }
+
+    @MainActor
+    private func runICloudCheck() async {
+        guard !isCheckingICloud else { return }
+        isCheckingICloud = true
+        defer { isCheckingICloud = false }
+
+        await monitor.forceSync()
+        monitor.updateDeviceMetadata()
+        monitor.cleanupStalePresence()
     }
 
     private func copyDiagnostics() {
@@ -324,6 +388,9 @@ struct CloudKitDiagnosticsView: View {
     }
 
     private var manualCheckTitle: String {
+        if isCheckingICloud {
+            return NSLocalizedString("settings.icloud.checking", value: "Checking iCloud...", comment: "")
+        }
         guard !monitor.canForceSync else {
             return NSLocalizedString("cloudkit.action.check_status", value: "Check iCloud", comment: "")
         }

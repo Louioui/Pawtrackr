@@ -1097,7 +1097,11 @@ final class CloudKitMonitor {
                 id: "pending",
                 severity: .warning,
                 title: NSLocalizedString("cloudkit.health.pending.title", value: "Changes are waiting to upload", comment: ""),
-                detail: pendingChangesSummary ?? NSLocalizedString("cloudkit.health.pending.detail", value: "iCloud will upload them automatically.", comment: "")
+                detail: NSLocalizedString(
+                    "cloudkit.health.pending.detail",
+                    value: "Saved locally. Pawtrackr will retry the upload automatically when iCloud is ready.",
+                    comment: ""
+                )
             ))
         }
 
