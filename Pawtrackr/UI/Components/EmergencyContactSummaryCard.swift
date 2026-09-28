@@ -15,32 +15,54 @@ struct EmergencyContactSummaryCard: View {
 
     private var missingItems: [String] {
         var values: [String] = []
-        if contacts.isEmpty { values.append("Emergency contact") }
-        if (ownerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { values.append("Owner phone") }
-        if (ownerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { values.append("Owner email") }
+        if contacts.isEmpty {
+            values.append(AppLocalization.localized("client_detail.missing.emergency_contact", value: "Emergency contact"))
+        }
+        if (ownerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            values.append(AppLocalization.localized("client_detail.missing.owner_phone", value: "Owner phone"))
+        }
+        if (ownerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            values.append(AppLocalization.localized("client_detail.missing.owner_email", value: "Owner email"))
+        }
         return values
+    }
+
+    private var missingSummary: String {
+        let formatter = ListFormatter()
+        formatter.locale = AppLocalization.currentLocale
+        let list = formatter.string(from: missingItems) ?? missingItems.joined(separator: ", ")
+        return String(
+            format: AppLocalization.localized("client_detail.missing_fmt", value: "Missing: %@"),
+            list
+        )
     }
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
-                    Label("Emergency Contacts", systemImage: "cross.case.fill")
-                        .font(.headline)
+                    Label(
+                        AppLocalization.localized("client_detail.emergency_contacts", value: "Emergency Contacts"),
+                        systemImage: "cross.case.fill"
+                    )
+                    .font(.headline)
                     Spacer()
                     Button(action: onAdd) {
-                        Label("Add Contact", systemImage: "plus.circle.fill")
+                        Label(
+                            AppLocalization.localized("client_detail.add_contact", value: "Add Contact"),
+                            systemImage: "plus.circle.fill"
+                        )
                     }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Add emergency contact")
+                    .accessibilityLabel(AppLocalization.localized("client_detail.add_emergency_contact", value: "Add emergency contact"))
                 }
 
                 if !missingItems.isEmpty {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(DS.ColorToken.warning)
-                        Text("Missing: \(missingItems.joined(separator: ", "))")
+                        Text(missingSummary)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -48,12 +70,16 @@ struct EmergencyContactSummaryCard: View {
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(DS.ColorToken.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityElement(children: .combine)
                 }
 
                 if contacts.isEmpty {
-                    Text("Add a backup person staff can call if the owner is unreachable.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    Text(AppLocalization.localized(
+                        "client_detail.emergency_empty_hint",
+                        value: "Add a backup person staff can call if the owner is unreachable."
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 } else {
                     VStack(spacing: 8) {
                         ForEach(contacts, id: \.uuid) { contact in
@@ -67,60 +93,106 @@ struct EmergencyContactSummaryCard: View {
     }
 
     private func emergencyContactRow(_ contact: EmergencyContact) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "phone.circle.fill")
-                .font(.title3)
-                .foregroundStyle(DS.ColorToken.success)
-                .frame(width: 28)
+        let telURL = PhoneUtils.telURLString(contact.phone).flatMap { URL(string: $0) }
+        let smsURL = PhoneUtils.smsURLString(contact.phone).flatMap { URL(string: $0) }
+        let displayPhone = EmergencyContactRules.displayPhone(contact.phone)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(contact.name)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Text(contactSubtitle(contact))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        return HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: telURL == nil ? "person.crop.circle.fill" : "phone.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(telURL == nil ? Color.secondary : DS.ColorToken.success)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(contact.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text(contactSubtitle(contact, displayPhone: displayPhone))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
+            .accessibilityElement(children: .combine)
 
             Spacer(minLength: 8)
 
-            HStack(spacing: 8) {
-                if let urlString = PhoneUtils.telURLString(contact.phone), let url = URL(string: urlString) {
+            HStack(spacing: 12) {
+                if let telURL {
                     Button {
-                        URLOpener.open(url)
+                        URLOpener.open(telURL)
                     } label: {
                         Image(systemName: "phone.fill")
                     }
-                    .accessibilityLabel("Call \(contact.name)")
+                    .accessibilityLabel(localized("client_detail.call_contact_fmt", value: "Call %@", contact.name))
                 }
 
-                Button {
-                    onEdit(contact)
+                Menu {
+                    if let smsURL {
+                        Button {
+                            URLOpener.open(smsURL)
+                        } label: {
+                            Label(localized("client_detail.message_contact_fmt", value: "Message %@", contact.name), systemImage: "message")
+                        }
+                    }
+                    if !displayPhone.isEmpty {
+                        Button {
+                            PasteboardWriter.copy(displayPhone)
+                        } label: {
+                            Label(AppLocalization.localized("client_detail.copy_phone", value: "Copy Phone"), systemImage: "doc.on.doc")
+                        }
+                    }
+                    Button {
+                        onEdit(contact)
+                    } label: {
+                        Label(localized("client_detail.edit_contact_fmt", value: "Edit %@", contact.name), systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        onDelete(contact)
+                    } label: {
+                        Label(localized("client_detail.delete_contact_fmt", value: "Delete %@", contact.name), systemImage: "trash")
+                    }
                 } label: {
-                    Image(systemName: "pencil")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("Edit \(contact.name)")
-
-                Button(role: .destructive) {
-                    onDelete(contact)
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .accessibilityLabel("Delete \(contact.name)")
+                #if os(macOS)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                #endif
+                .accessibilityLabel(localized("client_detail.contact_actions_fmt", value: "Actions for %@", contact.name))
             }
             .buttonStyle(.borderless)
         }
         .padding(10)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .accessibilityElement(children: .combine)
+        .contextMenu {
+            Button {
+                onEdit(contact)
+            } label: {
+                Label(localized("client_detail.edit_contact_fmt", value: "Edit %@", contact.name), systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                onDelete(contact)
+            } label: {
+                Label(localized("client_detail.delete_contact_fmt", value: "Delete %@", contact.name), systemImage: "trash")
+            }
+        }
     }
 
-    private func contactSubtitle(_ contact: EmergencyContact) -> String {
-        let phone = PhoneUtils.display(contact.phone) ?? contact.phone
+    private func contactSubtitle(_ contact: EmergencyContact, displayPhone: String) -> String {
+        let phone = displayPhone.isEmpty
+            ? AppLocalization.localized("client_detail.contact_no_phone", value: "No phone number")
+            : displayPhone
         if let relation = contact.relation?.trimmingCharacters(in: .whitespacesAndNewlines), !relation.isEmpty {
             return "\(relation) • \(phone)"
         }
         return phone
+    }
+
+    private func localized(_ key: String, value: String, _ argument: String) -> String {
+        String(format: AppLocalization.localized(key, value: value), argument)
     }
 }

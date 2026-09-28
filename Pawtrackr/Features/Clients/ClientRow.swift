@@ -21,10 +21,20 @@ import UIKit
 struct ClientRow: View {
     let client: Client
     var inProgress: Bool
+    /// True on a client list sorted by last name, so the name reads the way
+    /// the list is ordered ("Cullen Alien"). Everywhere else (headers,
+    /// receipts, messages, Recent Clients) stays first-name-first.
+    var displaysLastNameFirst: Bool
     var onTap: (() -> Void)?
 
-    init(client: Client, inProgress: Bool? = nil, onTap: (() -> Void)? = nil) {
+    init(
+        client: Client,
+        inProgress: Bool? = nil,
+        displaysLastNameFirst: Bool = false,
+        onTap: (() -> Void)? = nil
+    ) {
         self.client = client
+        self.displaysLastNameFirst = displaysLastNameFirst
         // If explicit flag not provided, infer from any active visit among this client's pets
         if let inProgress = inProgress {
             self.inProgress = inProgress
@@ -44,7 +54,7 @@ struct ClientRow: View {
                 PetGenderNameBadge(pet: pet, maxNameWidth: 180)
             } else {
                 // Fallback if no pets exist for the client
-                Text(client.displayName())
+                Text(client.displayName(lastNameFirst: displaysLastNameFirst))
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .foregroundStyle(.secondary)
             }

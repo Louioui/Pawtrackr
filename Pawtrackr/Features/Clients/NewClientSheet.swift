@@ -166,17 +166,23 @@ struct NewClientSheet: View {
                                     inputField(
                                         NSLocalizedString("new_client.contact_name", comment: ""),
                                         text: $contact.name,
+                                        accessibilityIdentifier: "newClient.contactName",
+                                        validationError: viewModel.contactValidationError(for: contact.id, field: .name),
                                         focus: .contactName(contact.id),
                                         nextFocus: .contactPhone(contact.id)
                                     )
+                                    .onChange(of: contact.name) { _, _ in viewModel.clearContactValidationErrors(for: contact.id) }
                                     inputField(
                                         NSLocalizedString("new_client.contact_phone", comment: ""),
                                         text: $contact.phone,
+                                        accessibilityIdentifier: "newClient.contactPhone",
+                                        validationError: viewModel.contactValidationError(for: contact.id, field: .phone),
                                         focus: .contactPhone(contact.id),
                                         nextFocus: firstPetFocus(in: viewModel),
                                         maxLength: TextInputLimits.phone
                                     )
                                         .phoneFieldFormatting($contact.phone)
+                                        .onChange(of: contact.phone) { _, _ in viewModel.clearContactValidationErrors(for: contact.id) }
                                 }
                                 .padding()
                                 .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

@@ -57,7 +57,7 @@ enum SettingSection: String, CaseIterable, Identifiable {
         case .help:
             return settingsLocalized("settings.section.help.subtitle", value: "Support tools and quick recovery guidance for day-to-day salon operation.")
         case .devices:
-            return settingsLocalized("settings.section.devices.subtitle", value: "See which iPhones, iPads, and Macs are synced or currently active.")
+            return settingsLocalized("settings.section.devices.subtitle", value: "See which iPhones, iPads, and Macs share this iCloud data and when each was last seen.")
         case .about:
             return settingsLocalized("settings.section.about.subtitle", value: "Version details, guided setup, and the protected fresh-start control.")
         }

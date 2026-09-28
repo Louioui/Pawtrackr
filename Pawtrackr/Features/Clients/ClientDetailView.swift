@@ -95,6 +95,8 @@ struct ClientDetailView: View {
     @State private var newContactRelation: String = ""
     @State private var newContactPhone: String = ""
     @State private var validationError: String? = nil
+    @State private var contactNameError: String? = nil
+    @State private var contactPhoneError: String? = nil
     @FocusState private var contactNameFocused: Bool
 
     // Inline client edit state
@@ -295,19 +297,34 @@ struct ClientDetailView: View {
                     TextField(NSLocalizedString("form.name", comment: ""), text: $newContactName)
                         .focused($contactNameFocused)
                         .textLengthLimit($newContactName, to: TextInputLimits.name)
+                        .accessibilityIdentifier("contactEditor.name")
+                    if let contactNameError {
+                        contactFieldError(contactNameError, identifier: "contactEditor.name.error")
+                    }
                     TextField(NSLocalizedString("form.relation", comment: ""), text: $newContactRelation)
                         .textLengthLimit($newContactRelation, to: TextInputLimits.shortText)
                     TextField(NSLocalizedString("form.phone", comment: ""), text: $newContactPhone)
                         .phoneFieldFormatting($newContactPhone)
                         .textLengthLimit($newContactPhone, to: TextInputLimits.phone)
+                        .accessibilityIdentifier("contactEditor.phone")
+                    if let contactPhoneError {
+                        contactFieldError(contactPhoneError, identifier: "contactEditor.phone.error")
+                    }
                 }
+                .onChange(of: newContactName) { _, _ in clearContactFieldErrors() }
+                .onChange(of: newContactPhone) { _, _ in clearContactFieldErrors() }
             }
             .navigationTitle(editingContact == nil ? NSLocalizedString("client_detail.add_contact", comment: "") : NSLocalizedString("client_detail.edit_contact", comment: ""))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(NSLocalizedString("common.cancel", comment: "")) { showContactEditor = false } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(NSLocalizedString("common.cancel", comment: "")) {
+                        clearContactFieldErrors()
+                        showContactEditor = false
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) { Button(NSLocalizedString("common.save", comment: "")) { addOrUpdateContact() } }
             }
-            .alert(AppLocalization.localized("common.validation_error", value: "Validation Error"), isPresented: Binding(get: { validationError != nil }, set: { if !$0 { validationError = nil } })) {
+            .alert(AppLocalization.localized("common.error", value: "Error"), isPresented: Binding(get: { validationError != nil }, set: { if !$0 { validationError = nil } })) {
                 Button(NSLocalizedString("common.ok", comment: "")) { validationError = nil }
             } message: {
                 if let error = validationError {
@@ -316,6 +333,19 @@ struct ClientDetailView: View {
             }
             .task { contactNameFocused = true }
         }
+    }
+
+    private func contactFieldError(_ message: String, identifier: String) -> some View {
+        Text(message)
+            .font(.caption)
+            .foregroundStyle(DS.ColorToken.danger)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier(identifier)
+    }
+
+    private func clearContactFieldErrors() {
+        contactNameError = nil
+        contactPhoneError = nil
     }
 
     private func alertTitleText(for destination: AlertDestination?, vm: ClientDetailViewModel) -> Text {
@@ -378,7 +408,7 @@ struct ClientDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 16) {
-                    ownerHeader(client: vm.client)
+                    ownerHeader(client: vm.client, primaryEmergencyContact: vm.primaryEmergencyContact)
                         .walkthroughTarget(.cdOwner)
                     clientSafetyBanner(client: vm.client)
                     emergencyContactsCard(contacts: vm.emergencyContacts)
@@ -535,7 +565,7 @@ struct ClientDetailView: View {
     }
 
     // MARK: - Subviews
-    private func ownerHeader(client: Client) -> some View {
+    private func ownerHeader(client: Client, primaryEmergencyContact: EmergencyContact?) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
@@ -640,11 +670,45 @@ struct ClientDetailView: View {
                                 Button { URLOpener.open(url) } label: { Image(systemName: "map.fill") }
                             }
                         }
+                        if let primaryEmergencyContact {
+                            primaryEmergencyContactRow(primaryEmergencyContact)
+                        }
                     }
                 }
             }
         }
         .padding(.horizontal)
+    }
+
+    /// "Emergency: Maria (sister) · (555) 123-4567" under the owner's own
+    /// contact rows, so staff reach the backup person without scrolling to
+    /// the full card further down.
+    private func primaryEmergencyContactRow(_ contact: EmergencyContact) -> some View {
+        let summary = EmergencyContactRules.summaryLine(name: contact.name, relation: contact.relation, phone: contact.phone)
+        let text = String(
+            format: AppLocalization.localized("client_detail.emergency_primary_fmt", value: "Emergency: %@"),
+            summary
+        )
+        let telURL = PhoneUtils.telURLString(contact.phone).flatMap { URL(string: $0) }
+        return contactRow(icon: "cross.case.fill", text: text) {
+            if let telURL { URLOpener.open(telURL) }
+        } trailing: {
+            #if os(macOS)
+            if !contact.phone.trimmed.isEmpty {
+                Button { PasteboardWriter.copy(EmergencyContactRules.displayPhone(contact.phone)) } label: { Image(systemName: "doc.on.doc") }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(AppLocalization.localized("client_detail.copy_phone", value: "Copy Phone"))
+            }
+            #endif
+            if let telURL {
+                Button { URLOpener.open(telURL) } label: { Image(systemName: "phone.fill") }
+                    .accessibilityLabel(String(
+                        format: AppLocalization.localized("client_detail.call_contact_fmt", value: "Call %@"),
+                        contact.name
+                    ))
+            }
+        }
+        .accessibilityIdentifier("clientDetail.primaryEmergencyContact")
     }
 
     @ViewBuilder
@@ -682,6 +746,7 @@ struct ClientDetailView: View {
                 newContactName = ""
                 newContactRelation = ""
                 newContactPhone = ""
+                clearContactFieldErrors()
                 showContactEditor = true
             },
             onEdit: { contact in
@@ -708,43 +773,26 @@ struct ClientDetailView: View {
 
     private func addOrUpdateContact() {
         guard let vm = viewModel else { return }
-        let name = TextInputLimits.clamped(newContactName, to: TextInputLimits.name)
-        let relation = TextInputLimits.clamped(newContactRelation, to: TextInputLimits.shortText)
-        let phone = TextInputLimits.clamped(newContactPhone, to: TextInputLimits.phone)
-        
-        guard !name.isEmpty else {
-            validationError = "Name is required."
-            return
-        }
-        
-        guard let e164 = PhoneUtils.toE164(phone) else {
-            validationError = "A valid 10-digit US phone number is required."
-            return
-        }
-
-        if let editing = editingContact {
-            editing.name = name
-            editing.relation = relation.isEmpty ? nil : relation
-            editing.phone = e164
-        } else {
-            let ec = EmergencyContact(name: name, relation: relation.isEmpty ? nil : relation, phone: e164)
-            ec.owner = vm.client
-            modelContext.insert(ec)
-            if !(vm.client.emergencyContacts ?? []).contains(where: { $0.uuid == ec.uuid }) {
-                vm.client.emergencyContacts = (vm.client.emergencyContacts ?? []) + [ec]
-            }
-        }
-        do {
-            try modelContext.save()
-            CloudKitMonitor.shared.recordLocalChange("Saved emergency contact")
-            vm.refreshEmergencyContacts()
+        clearContactFieldErrors()
+        let result = vm.saveEmergencyContact(
+            editing: editingContact,
+            name: newContactName,
+            relation: newContactRelation,
+            phone: newContactPhone
+        )
+        switch result {
+        case .saved, .unchanged:
             showContactEditor = false
             editingContact = nil
             newContactName = ""; newContactRelation = ""; newContactPhone = ""
-        } catch {
-            Logger.clientDetailView.error("Failed to save contact: \(error.localizedDescription, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving emergency contact")
-            validationError = "Failed to save to database."
+        case .invalid(.name, let message):
+            contactNameError = message
+            HapticManager.notify(.error)
+        case .invalid(.phone, let message):
+            contactPhoneError = message
+            HapticManager.notify(.error)
+        case .failed(let message):
+            validationError = message
         }
     }
 
@@ -753,6 +801,7 @@ struct ClientDetailView: View {
         newContactName = TextInputLimits.limited(c.name, to: TextInputLimits.name)
         newContactRelation = TextInputLimits.limited(c.relation ?? "", to: TextInputLimits.shortText)
         newContactPhone = TextInputLimits.limited(PhoneUtils.display(c.phone) ?? c.phone, to: TextInputLimits.phone)
+        clearContactFieldErrors()
         showContactEditor = true
     }
 

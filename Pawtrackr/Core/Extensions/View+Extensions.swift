@@ -30,6 +30,19 @@ enum URLOpener {
     }
 }
 
+/// Cross-platform "copy to clipboard" for short text such as a phone number.
+@MainActor
+enum PasteboardWriter {
+    static func copy(_ text: String) {
+        #if canImport(UIKit) && !targetEnvironment(macCatalyst)
+        UIPasteboard.general.string = text
+        #elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
+    }
+}
+
 extension View {
     /// Presents a full screen cover on iOS and a standard sheet on macOS.
     /// This ensures a high-impact experience on mobile while respecting macOS windowing conventions.

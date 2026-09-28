@@ -47,6 +47,13 @@ final class NewClientViewModel {
     var duplicateClientID: PersistentIdentifier? = nil
     private(set) var createdClientID: PersistentIdentifier? = nil
     private(set) var fieldErrors: [Field: String] = [:]
+    /// Inline errors for emergency contact rows, keyed by the row's id.
+    private(set) var contactFieldErrors: [ContactFieldKey: String] = [:]
+
+    struct ContactFieldKey: Hashable {
+        let contactID: UUID
+        let field: EmergencyContactRules.Field
+    }
 
     @ObservationIgnored private let modelContext: ModelContext
     @ObservationIgnored private let repository: ClientRepositoryProtocol
@@ -120,17 +127,7 @@ final class NewClientViewModel {
                 )
             }
 
-            let newContacts = contacts.compactMap { c -> NewContactData? in
-                let name = c.name.capitalizedName
-                let relation = c.relation.trimmed.lowercased()
-                let ph = c.phone.trimmed
-                guard !name.isEmpty, let e164c = PhoneUtils.toE164(ph) else { return nil }
-                return NewContactData(
-                    name: TextInputLimits.limited(name, to: TextInputLimits.name),
-                    relation: TextInputLimits.clampedOptional(relation, to: TextInputLimits.shortText),
-                    phone: e164c
-                )
-            }
+            let newContacts = try Self.contactData(from: contacts)
 
             let clientID = try await repository.createClient(
                 firstName: TextInputLimits.clamped(first.capitalizedName, to: TextInputLimits.name),
@@ -182,8 +179,38 @@ final class NewClientViewModel {
             fieldErrors[.email] = NSLocalizedString("new_client.validation.email_invalid", value: "Please enter a valid email address.", comment: "")
         }
 
-        if let firstError = fieldErrors[.first] ?? fieldErrors[.last] ?? fieldErrors[.phone] ?? fieldErrors[.email] {
+        contactFieldErrors.removeAll()
+        var firstContactError: String?
+        for contact in contacts {
+            if case let .invalid(field, message) = EmergencyContactRules.evaluate(name: contact.name, phone: contact.phone) {
+                contactFieldErrors[ContactFieldKey(contactID: contact.id, field: field)] = message
+                if firstContactError == nil { firstContactError = message }
+            }
+        }
+
+        if let firstError = fieldErrors[.first] ?? fieldErrors[.last] ?? fieldErrors[.phone] ?? fieldErrors[.email] ?? firstContactError {
             throw ValidationError.custom(message: firstError)
+        }
+    }
+
+    /// Every contact row the groomer typed becomes a contact. An empty row is
+    /// skipped. A row that isn't valid throws rather than being left out, so
+    /// the client never saves without a contact that was on the form.
+    static func contactData(from rows: [TempContact]) throws -> [NewContactData] {
+        try rows.compactMap { row -> NewContactData? in
+            switch EmergencyContactRules.evaluate(name: row.name, phone: row.phone) {
+            case .blank:
+                return nil
+            case .invalid(_, let message):
+                throw ValidationError.custom(message: message)
+            case .valid(let storedPhone):
+                let relation = row.relation.trimmed.lowercased()
+                return NewContactData(
+                    name: TextInputLimits.limited(row.name.capitalizedName, to: TextInputLimits.name),
+                    relation: TextInputLimits.clampedOptional(relation, to: TextInputLimits.shortText),
+                    phone: storedPhone
+                )
+            }
         }
     }
 
@@ -193,6 +220,17 @@ final class NewClientViewModel {
 
     func clearValidationError(for field: Field) {
         fieldErrors[field] = nil
+    }
+
+    func contactValidationError(for contactID: UUID, field: EmergencyContactRules.Field) -> String? {
+        contactFieldErrors[ContactFieldKey(contactID: contactID, field: field)]
+    }
+
+    /// Editing either field of a row can fix either message (a name fixes
+    /// "add a name", clearing the phone fixes it too), so both are cleared.
+    func clearContactValidationErrors(for contactID: UUID) {
+        contactFieldErrors[ContactFieldKey(contactID: contactID, field: .name)] = nil
+        contactFieldErrors[ContactFieldKey(contactID: contactID, field: .phone)] = nil
     }
 
     private func isValidEmail(_ raw: String) -> Bool {

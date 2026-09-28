@@ -144,6 +144,82 @@ final class ClientDetailViewModel {
         }
     }
 
+    /// The contact shown in the client header: the first in the card's order.
+    var primaryEmergencyContact: EmergencyContact? {
+        emergencyContacts.first
+    }
+
+    enum EmergencyContactSaveResult: Equatable {
+        case saved
+        /// Nothing differed from what's stored, so nothing was written.
+        case unchanged
+        case invalid(EmergencyContactRules.Field, message: String)
+        case failed(message: String)
+    }
+
+    /// Adds a contact, or updates `editing`, under the same rules New Client
+    /// uses: a name alone is enough, and a phone that can't be read stops
+    /// Save with a message on the phone field. An existing phone that wasn't
+    /// touched is kept as stored even if it predates these rules. Only fields
+    /// that differ are assigned: an assignment alone marks the row changed
+    /// and uploads it to every device.
+    func saveEmergencyContact(
+        editing: EmergencyContact?,
+        name rawName: String,
+        relation rawRelation: String,
+        phone rawPhone: String
+    ) -> EmergencyContactSaveResult {
+        let name = TextInputLimits.clamped(rawName, to: TextInputLimits.name)
+        let relation = TextInputLimits.clampedOptional(rawRelation, to: TextInputLimits.shortText)
+        let phoneText = TextInputLimits.clamped(rawPhone, to: TextInputLimits.phone)
+
+        let storedPhone: String
+        if let editing, !phoneText.isEmpty, phoneText == editing.phone.trimmed {
+            guard !name.isEmpty else {
+                return .invalid(.name, message: EmergencyContactRules.nameMissingMessage)
+            }
+            storedPhone = editing.phone
+        } else {
+            switch EmergencyContactRules.evaluate(name: name, phone: phoneText) {
+            case .blank:
+                return .invalid(.name, message: EmergencyContactRules.nameMissingMessage)
+            case .invalid(let field, let message):
+                return .invalid(field, message: message)
+            case .valid(let phone):
+                storedPhone = phone
+            }
+        }
+
+        if let editing {
+            var changed = false
+            if editing.name != name { editing.name = name; changed = true }
+            if editing.relation != relation { editing.relation = relation; changed = true }
+            if editing.phone != storedPhone { editing.phone = storedPhone; changed = true }
+            guard changed else { return .unchanged }
+        } else {
+            let contact = EmergencyContact(name: name, relation: relation, phone: storedPhone)
+            contact.owner = client
+            modelContext.insert(contact)
+            if !(client.emergencyContacts ?? []).contains(where: { $0.uuid == contact.uuid }) {
+                client.emergencyContacts = (client.emergencyContacts ?? []) + [contact]
+            }
+        }
+
+        do {
+            try modelContext.save()
+            CloudKitMonitor.shared.recordLocalChange("Saved emergency contact")
+            refreshEmergencyContacts()
+            return .saved
+        } catch {
+            Logger.clientDetail.error("Failed to save emergency contact: \(error.localizedDescription, privacy: .public)")
+            CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving emergency contact")
+            return .failed(message: String(
+                format: AppLocalization.localized("common.save_failed", value: "Save failed. Please try again.\n\n%@"),
+                error.localizedDescription
+            ))
+        }
+    }
+
     private static func sortedEmergencyContacts(_ contacts: [EmergencyContact]) -> [EmergencyContact] {
         contacts.sorted { lhs, rhs in
             let nameComparison = lhs.name.localizedStandardCompare(rhs.name)
