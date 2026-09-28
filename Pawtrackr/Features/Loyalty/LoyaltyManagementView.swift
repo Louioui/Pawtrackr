@@ -57,16 +57,19 @@ struct LoyaltyManagementView: View {
             DataMigrations.ensureLoyaltyDefaults(in: modelContext)
         }
         .confirmationDialog(
-            "Reset rewards to Discount Ladder?",
+            AppLocalization.localized("loyalty.reset_ladder.title", value: "Reset rewards to Discount Ladder?"),
             isPresented: $showResetCatalogConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Reset to Discount Ladder", role: .destructive) {
+            Button(AppLocalization.localized("loyalty.reset_ladder.action", value: "Reset to Discount Ladder"), role: .destructive) {
                 resetToDiscountLadder()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(AppLocalization.localized("common.cancel", value: "Cancel"), role: .cancel) {}
         } message: {
-            Text("This replaces the current reward templates with the five default discount-credit rewards. Client point balances stay unchanged.")
+            Text(AppLocalization.localized(
+                "loyalty.reset_ladder.message",
+                value: "This replaces the current reward templates with the five default discount-credit rewards. Client point balances stay unchanged."
+            ))
         }
     }
 
@@ -150,7 +153,10 @@ struct LoyaltyManagementView: View {
                 Button {
                     showResetCatalogConfirmation = true
                 } label: {
-                    Label("Reset to Discount Ladder", systemImage: "arrow.counterclockwise.circle.fill")
+                    Label(
+                        AppLocalization.localized("loyalty.reset_ladder.action", value: "Reset to Discount Ladder"),
+                        systemImage: "arrow.counterclockwise.circle.fill"
+                    )
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)

@@ -304,7 +304,7 @@
 "settings.security.biometric_unlock" = "Desbloqueo biométrico";
 "settings.security.lock_on_background" = "Bloquear al cerrar la app";
 "settings.security.lock_after_inactivity" = "Bloquear por inactividad";
-"settings.security.lock_after_inactivity_detail_fmt" = "Cuando está activo, Pawtrackr se bloquea después de %d minutos sin interacción.";
+"settings.security.lock_after_inactivity_detail_fmt" = "Se bloquea después de %d minutos sin interacción.";
 "settings.about.version" = "Versión";
 "settings.data_management.title" = "Gestión de datos";
 "settings.data_management.footer" = "Para ahorrar espacio, los registros de visitas antiguos se pueden eliminar permanentemente. Esta acción no se puede deshacer.";
@@ -918,7 +918,7 @@
 "onboarding.subtitle.loyalty" = "Mira cómo los puntos se acumulan automáticamente después de cada visita completada.";
 "onboarding.role.note" = "Esto solo cambia el recorrido guiado. Puedes seguir usando todas las funciones de Pawtrackr.";
 "onboarding.loyalty.title" = "Recompensas sin hacer cuentas";
-"onboarding.loyalty.message" = "Mueve el total del ticket y mira cómo aparecen los puntos, igual que bajo el perfil del cliente después del checkout.";
+"onboarding.loyalty.message" = "Mueve el total del ticket para ver los puntos que gana un cliente nuevo con las reglas predeterminadas. Puedes cambiar las reglas después en Ajustes.";
 
 "tour.clients.filters.title" = "Filtros de clientes";
 "tour.clients.filters.directive" = "Cambia entre todos, visitas activas, mascotas atrasadas y datos faltantes.";
@@ -1591,3 +1591,40 @@
 "spotlight.client.one_pet" = "1 mascota";
 "spotlight.client.pets_fmt" = "%d mascotas";
 "spotlight.pet.owner_fmt" = "Propietario: %@";
+
+/* Onboarding role and loyalty simulator, loyalty tiers and reset, client loyalty row, Handoff, paywall */
+"subscription.paywall.retry" = "Intentar de nuevo";
+"subscription.paywall.loading_price" = "Cargando suscripción…";
+"subscription.paywall.unavailable" = "La suscripción no está disponible por el momento.";
+"subscription.paywall.price_per_month" = "%@ / mes";
+"subscription.paywall.trial_then_price" = "%@ gratis, luego %@";
+"storekit.timeout" = "El App Store no respondió. Revisa tu conexión e inténtalo de nuevo.";
+"onboarding.role.owner.title" = "Dueño o gerente del salón";
+"onboarding.role.owner.subtitle" = "Configuración, precios, reportes, respaldos y protección con iCloud.";
+"onboarding.role.front_desk.title" = "Recepción o groomer";
+"onboarding.role.front_desk.subtitle" = "Registro de entrada, cobro, notas de seguridad, contactos y trabajo en curso.";
+"onboarding.loyalty_sim.title" = "Puntos de lealtad";
+"onboarding.loyalty_sim.explainer_fmt" = "Cada visita completada suma puntos según el total del ticket, 1 punto por cada %@ de forma predeterminada. Los clientes cambian sus puntos por créditos para visitas y descuentos en complementos.";
+"onboarding.loyalty_sim.ticket" = "Ticket";
+"onboarding.loyalty_sim.points_fmt" = "%d puntos";
+"onboarding.loyalty_sim.no_extra_math" = "Sin hacer cuentas";
+"onboarding.loyalty_sim.reward.visit_credit_5" = "Crédito de $5 para una visita";
+"onboarding.loyalty_sim.reward.visit_credit_10" = "Crédito de $10 para una visita";
+"onboarding.loyalty_sim.reward.addon_discount_15" = "15% de descuento en un complemento";
+"onboarding.loyalty_sim.reward.groom_credit_20" = "Crédito de $20 en grooming";
+"onboarding.loyalty_sim.reward.basic_groom_credit" = "Crédito para un grooming básico gratis";
+"loyalty.reset_ladder.title" = "¿Restablecer las recompensas a la escalera de descuentos?";
+"loyalty.reset_ladder.action" = "Restablecer escalera de descuentos";
+"loyalty.reset_ladder.message" = "Esto reemplaza las plantillas de recompensas actuales por las cinco recompensas predeterminadas de crédito y descuento. Los saldos de puntos de los clientes no cambian.";
+"loyalty.tier.bronze" = "Bronce";
+"loyalty.tier.silver" = "Plata";
+"loyalty.tier.gold" = "Oro";
+"loyalty.tier.platinum" = "Platino";
+"loyalty.badge.points" = "puntos";
+"loyalty.badge.accessibility_fmt" = "%1$d puntos de lealtad, nivel %2$@";
+"client_detail.loyalty.title" = "Lealtad y recompensas";
+"client_detail.loyalty.subtitle" = "Administra saldo, recompensas y puntos ganados en visitas";
+"client_detail.loyalty.locked_subtitle" = "Herramientas premium para retener clientes";
+"client_detail.loyalty.accessibility_fmt" = "Lealtad y recompensas, %d puntos";
+"client_detail.loyalty.locked_accessibility_fmt" = "Lealtad y recompensas bloqueadas, %d puntos";
+"handoff.viewing_fmt" = "Viendo a %@";

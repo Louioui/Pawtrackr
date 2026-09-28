@@ -150,7 +150,11 @@ struct LoyaltyPointsBadge: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(client.loyaltyPoints) loyalty points, \(tier.displayName) tier")
+        .accessibilityLabel(String(
+            format: AppLocalization.localized("loyalty.badge.accessibility_fmt", value: "%1$d loyalty points, %2$@ tier"),
+            client.loyaltyPoints,
+            tier.displayName
+        ))
         .accessibilityIdentifier("loyaltyPointsBadge")
         .onChange(of: client.loyaltyPoints) { oldValue, newValue in
             pointsDidChange(by: newValue - oldValue)
@@ -177,7 +181,7 @@ struct LoyaltyPointsBadge: View {
                     .contentTransition(.numericText(value: Double(client.loyaltyPoints)))
                     .monospacedDigit()
                 if scale == .prominent {
-                    Text("points")
+                    Text(AppLocalization.localized("loyalty.badge.points", value: "points"))
                         .font(scale.labelFont)
                         .foregroundStyle(.white.opacity(0.78))
                 }

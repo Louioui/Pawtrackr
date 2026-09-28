@@ -43,10 +43,10 @@ enum LoyaltyTier: String, CaseIterable, Sendable {
 
     var displayName: String {
         switch self {
-        case .bronze: "Bronze"
-        case .silver: "Silver"
-        case .gold: "Gold"
-        case .platinum: "Platinum"
+        case .bronze: AppLocalization.localized("loyalty.tier.bronze", value: "Bronze")
+        case .silver: AppLocalization.localized("loyalty.tier.silver", value: "Silver")
+        case .gold: AppLocalization.localized("loyalty.tier.gold", value: "Gold")
+        case .platinum: AppLocalization.localized("loyalty.tier.platinum", value: "Platinum")
         }
     }
 

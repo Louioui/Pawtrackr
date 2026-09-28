@@ -68,7 +68,7 @@ struct HouseholdGenderStrip: View {
     }
 
     private var accessibilitySummary: String {
-        guard !pets.isEmpty else { return "No pets" }
+        guard !pets.isEmpty else { return AppLocalization.localized("clients.no_pets", value: "No pets") }
         let grouped = Dictionary(grouping: pets, by: { $0.gender.displayName })
         return grouped
             .map { "\($0.value.count) \($0.key)" }

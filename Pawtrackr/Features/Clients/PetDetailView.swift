@@ -204,7 +204,10 @@ struct PetDetailView: View {
                 .navigationBarTitleDisplayMode(.inline)
 #endif
                 .userActivity("com.pawtrackr.viewPet") { activity in
-                    activity.title = "Viewing \(vm.pet.name)"
+                    activity.title = String(
+                        format: AppLocalization.localized("handoff.viewing_fmt", value: "Viewing %@"),
+                        vm.pet.name
+                    )
                     activity.userInfo = ["petID": vm.pet.uuid.uuidString]
                     activity.isEligibleForHandoff = true
                 }
@@ -268,8 +271,8 @@ struct PetDetailView: View {
                             let item = history[idx]
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 4) {
-                                    photoBox(data: item.before, label: "Before")
-                                    photoBox(data: item.after, label: "After")
+                                    photoBox(data: item.before, label: AppLocalization.localized("checkout.photo.before", value: "Before"))
+                                    photoBox(data: item.after, label: AppLocalization.localized("checkout.photo.after", value: "After"))
                                 }
                                 Text(item.date, style: .date)
                                     .font(.caption2.bold())

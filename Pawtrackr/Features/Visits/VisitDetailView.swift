@@ -132,7 +132,8 @@ struct VisitDetailView: View {
         HStack {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                let name = devices.first { $0.deviceID == visit.lastModifiedBy }?.name ?? "Unknown Device"
+                let name = devices.first { $0.deviceID == visit.lastModifiedBy }?.name
+                    ?? AppLocalization.localized("common.unknown_device", value: "Unknown Device")
                 Text(String(format: NSLocalizedString("visit.metadata.last_modified_by_fmt", value: "Last modified by %@", comment: ""), name))
                 Text(String(format: NSLocalizedString("visit.metadata.at_fmt", value: "at %@", comment: ""), visit.lastModifiedAt.formatted(date: .abbreviated, time: .shortened)))
             }

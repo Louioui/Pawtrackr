@@ -161,7 +161,10 @@ struct ClientDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .userActivity("com.pawtrackr.viewClient") { activity in
-                activity.title = "Viewing \(client.fullName)"
+                activity.title = String(
+                    format: AppLocalization.localized("handoff.viewing_fmt", value: "Viewing %@"),
+                    client.fullName
+                )
                 activity.userInfo = ["clientID": client.uuid.uuidString]
                 activity.isEligibleForHandoff = true
             }
@@ -535,10 +538,12 @@ struct ClientDetailView: View {
                 .background(DS.ColorToken.warning.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Loyalty & Rewards")
+                Text(AppLocalization.localized("client_detail.loyalty.title", value: "Loyalty & Rewards"))
                     .font(.headline)
                     .foregroundStyle(.primary)
-                Text(isLocked ? "Premium client retention tools" : "Manage balance, rewards, and visit-earned points")
+                Text(isLocked
+                     ? AppLocalization.localized("client_detail.loyalty.locked_subtitle", value: "Premium client retention tools")
+                     : AppLocalization.localized("client_detail.loyalty.subtitle", value: "Manage balance, rewards, and visit-earned points"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -553,7 +558,12 @@ struct ClientDetailView: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(isLocked ? "Loyalty and rewards locked, \(client.loyaltyPoints) points" : "Loyalty and rewards, \(client.loyaltyPoints) points")
+        .accessibilityLabel(String(
+            format: isLocked
+                ? AppLocalization.localized("client_detail.loyalty.locked_accessibility_fmt", value: "Loyalty and rewards locked, %d points")
+                : AppLocalization.localized("client_detail.loyalty.accessibility_fmt", value: "Loyalty and rewards, %d points"),
+            client.loyaltyPoints
+        ))
     }
 
     private var clientDetailContentMaxWidth: CGFloat {
@@ -586,7 +596,8 @@ struct ClientDetailView: View {
         HStack {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                let name = devices.first { $0.deviceID == client.lastModifiedBy }?.name ?? "Unknown Device"
+                let name = devices.first { $0.deviceID == client.lastModifiedBy }?.name
+                    ?? AppLocalization.localized("common.unknown_device", value: "Unknown Device")
                 Text(String(format: NSLocalizedString("client.metadata.last_modified_by_fmt", value: "Last modified by %@", comment: ""), name))
                 Text(String(format: NSLocalizedString("client.metadata.at_fmt", value: "at %@", comment: ""), client.updatedAt.formatted(date: .abbreviated, time: .shortened)))
             }

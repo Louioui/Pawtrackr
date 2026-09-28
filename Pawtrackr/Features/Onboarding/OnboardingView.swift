@@ -800,7 +800,7 @@ struct OnboardingView: View {
                     Text(NSLocalizedString("onboarding.loyalty.title", value: "Rewards without extra math", comment: ""))
                         .font(.title2.bold())
                         .multilineTextAlignment(.center)
-                    Text(NSLocalizedString("onboarding.loyalty.message", value: "Move the ticket total and watch points appear the same way they will under a client's profile after checkout.", comment: ""))
+                    Text(NSLocalizedString("onboarding.loyalty.message", value: "Move the ticket total to see the points a new client earns with the default rules. You can change the rules later in Settings.", comment: ""))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

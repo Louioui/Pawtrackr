@@ -13,17 +13,25 @@ enum OnboardingRole: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .ownerManager: return "Salon Owner / Manager"
-        case .frontDeskGroomer: return "Front Desk / Groomer"
+        case .ownerManager:
+            return AppLocalization.localized("onboarding.role.owner.title", value: "Salon Owner / Manager")
+        case .frontDeskGroomer:
+            return AppLocalization.localized("onboarding.role.front_desk.title", value: "Front Desk / Groomer")
         }
     }
 
     var subtitle: String {
         switch self {
         case .ownerManager:
-            return "Setup, pricing, reports, backups, and iCloud protection."
+            return AppLocalization.localized(
+                "onboarding.role.owner.subtitle",
+                value: "Setup, pricing, reports, backups, and iCloud protection."
+            )
         case .frontDeskGroomer:
-            return "Check-in, check-out, safety notes, contacts, and active work."
+            return AppLocalization.localized(
+                "onboarding.role.front_desk.subtitle",
+                value: "Check-in, check-out, safety notes, contacts, and active work."
+            )
         }
     }
 }
