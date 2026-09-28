@@ -1232,7 +1232,7 @@
 "store_restore.result.title" = "Restore";
 "recovery.body_safe" = "Your data is still saved on this device — Pawtrackr just couldn't open it. Please don't delete the app. Send the details below to support so we can get you back in.";
 "recovery.clients_on_device_fmt" = "%d clients are saved on this device.";
-"recovery.share_details" = "Send Details to Support";
+"recovery.share_details" = "Share Support Report";
 "recovery.advanced" = "Advanced";
 "recovery.reset_warning" = "Only reset if Pawtrackr support asks you to. It starts an empty database; your current data is moved to a backup on this device.";
 "recovery.reset_confirm.title" = "Reset local data?";
@@ -1261,12 +1261,13 @@
 
 /* iCloud backup status from confirmed uploads (1.0.3) */
 "cloudkit.banner.action.export_clients" = "Export clients";
-"cloudkit.banner.action.send_support" = "Send details to support";
+"cloudkit.banner.action.send_support" = "Share support report";
 "cloudkit.banner.local_only.title" = "iCloud backup is off on this device";
 "cloudkit.banner.local_only.message" = "Pawtrackr couldn't start iCloud sync, so your clients are saved only here.";
 "cloudkit.banner.quota.steps_ios" = "To free up space, open Settings, tap your name, then iCloud > Manage Account Storage.";
 "cloudkit.banner.quota.steps_mac" = "To free up space, open System Settings, click your name, then iCloud > Manage.";
 "cloudkit.banner.rejected.title" = "iCloud isn't accepting Pawtrackr's data";
+"cloudkit.banner.failing.title" = "iCloud uploads keep failing";
 "cloudkit.banner.rejected.message" = "Your clients are on this device but are NOT backed up. Don't delete the app.";
 "cloudkit.diagnostics.failures" = "Recent iCloud Failures";
 "cloudkit.diagnostics.last_backup" = "Last iCloud Backup";

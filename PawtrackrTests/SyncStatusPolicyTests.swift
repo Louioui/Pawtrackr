@@ -68,11 +68,19 @@ final class SyncStatusPolicyTests: XCTestCase {
         XCTAssertFalse(Policy.isSevereFailure(streak, isOnline: false, now: minute(5)))
     }
 
-    func testAnHourOfFailuresGoesRedOnlyWhileOnline() {
-        let failing = health(failures: 1, since: 0, disposition: .unknown)
-        XCTAssertFalse(Policy.isSevereFailure(failing, isOnline: true, now: minute(59)))
+    func testAnHourOfObservedFailuresGoesRedOnlyWhileOnline() {
+        var failing = health(failures: 2, since: 0, disposition: .unknown)
+        failing.lastFailureAt = minute(59)
+        XCTAssertFalse(Policy.isSevereFailure(failing, isOnline: true, now: minute(90)))
+        failing.lastFailureAt = minute(60)
         XCTAssertTrue(Policy.isSevereFailure(failing, isOnline: true, now: minute(60)))
         XCTAssertFalse(Policy.isSevereFailure(failing, isOnline: false, now: minute(120)))
+    }
+
+    /// Restored at launch from last night: nothing has been retried yet.
+    func testALoneFailureNeverAgesIntoRed() {
+        let lone = health(failures: 1, since: 0, disposition: .transient)
+        XCTAssertFalse(Policy.isSevereFailure(lone, isOnline: true, now: minute(12 * 60)))
     }
 
     func testNoFailureIsNeverSevere() {
@@ -370,6 +378,19 @@ final class SyncStatusPolicyTests: XCTestCase {
 
         reducer.apply(.failed(.export, startedAt: minute(5), endedAt: minute(6), disposition: .transient, code: nil))
         XCTAssertTrue(Policy.lacksRecentUpload(reducer.state, now: minute(10)), "A failure since the upload")
+    }
+
+    func testRecoveryWarnsAboutEditsNoUploadCoveredAndLocalOnly() {
+        var reducer = SyncHealthReducer()
+        reducer.apply(.succeeded(.export, startedAt: minute(0), endedAt: minute(1)))
+        XCTAssertFalse(Policy.lacksRecentUpload(reducer.state, now: minute(60)))
+        XCTAssertTrue(Policy.lacksRecentUpload(reducer.state, isLocalOnlyFallback: true, now: minute(60)), "Local-only since")
+
+        reducer.recordLocalChange(at: minute(30))
+        XCTAssertTrue(Policy.lacksRecentUpload(reducer.state, now: minute(60)), "A checkout after the last upload")
+
+        reducer.apply(.succeeded(.export, startedAt: minute(31), endedAt: minute(32)))
+        XCTAssertFalse(Policy.lacksRecentUpload(reducer.state, now: minute(60)), "Covered by the next upload")
     }
 
     func testRecoveryReadsTheOldKeysWhenNoRecordWasWritten() {

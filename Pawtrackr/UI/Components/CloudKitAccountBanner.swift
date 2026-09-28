@@ -7,7 +7,7 @@
 //  dismissed), then full iCloud storage, then account problems, then changes
 //  that have waited past the upload grace period.
 //
-//  The red banners carry Export clients and Send details to support, because
+//  The red banners carry Export clients and Share support report, because
 //  at that point the device holds the only copy. Account banners open
 //  Settings (iOS) / System Settings (macOS) so the groomer can fix them.
 //
@@ -81,7 +81,7 @@ struct CloudKitAccountBanner: View {
                     alignment: .bottom
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
-                // Prepared up front so "Send details to support" is one tap.
+                // Prepared up front so "Share support report" is one tap.
                 .task(id: info.fingerprint) {
                     guard info.offersDataActions else { return }
                     supportReport = await SupportService.shared.generateReport(context: modelContext).content
@@ -139,7 +139,7 @@ struct CloudKitAccountBanner: View {
             if let supportReport {
                 ShareLink(item: supportReport) {
                     Label(
-                        AppLocalization.localized("cloudkit.banner.action.send_support", value: "Send details to support"),
+                        AppLocalization.localized("cloudkit.banner.action.send_support", value: "Share support report"),
                         systemImage: "lifepreserver"
                     )
                     .font(.caption.weight(.semibold))
@@ -180,12 +180,30 @@ struct CloudKitAccountBanner: View {
             )
         }
 
-        if monitor.isShowingUploadRejection {
+        // Signed in, but iCloud refuses Pawtrackr: almost always the per-app
+        // iCloud switch. Red like a rejection, but with the switch to check.
+        if monitor.isShowingUploadRejection, monitor.iCloudAppAccessMayBeDisabled {
+            return BannerInfo(
+                fingerprint: "appAccessBlocked",
+                icon: "exclamationmark.icloud.fill",
+                tint: .red,
+                title: NSLocalizedString("cloudkit.banner.app_access.title", value: "Check iCloud access", comment: ""),
+                message: AppLocalization.localized(
+                    "cloudkit.error.setup_failed",
+                    value: "iCloud sync couldn't start even though you're signed in. Check that Pawtrackr is turned on for iCloud in Settings, then reopen the app."
+                ),
+                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
+                isDismissible: false,
+                offersDataActions: true
+            )
+        }
+
+        if monitor.isShowingUploadRejection, case .failing(_, let disposition) = monitor.backupStatus {
             return BannerInfo(
                 fingerprint: "uploadRejected",
                 icon: "xmark.icloud.fill",
                 tint: .red,
-                title: AppLocalization.localized("cloudkit.banner.rejected.title", value: "iCloud isn't accepting Pawtrackr's data"),
+                title: SyncFailureCopy.severeTitle(for: disposition),
                 message: AppLocalization.localized(
                     "cloudkit.banner.rejected.message",
                     value: "Your clients are on this device but are NOT backed up. Don't delete the app."

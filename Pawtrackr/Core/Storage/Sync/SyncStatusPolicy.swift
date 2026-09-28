@@ -70,7 +70,12 @@ enum SyncStatusPolicy {
         }
         guard isOnline else { return false }
         if health.consecutiveFailures >= severeFailureStreak { return true }
-        if let since = health.firstFailureAt, now.timeIntervalSince(since) >= severeFailureDuration {
+        // Only failing that was seen counts toward the hour. A single failure
+        // left over from last night would otherwise go red at the next launch
+        // before this session had retried anything.
+        if health.consecutiveFailures >= 2,
+           let first = health.firstFailureAt, let last = health.lastFailureAt,
+           last.timeIntervalSince(first) >= severeFailureDuration {
             return true
         }
         return false
@@ -110,12 +115,19 @@ enum SyncStatusPolicy {
 
     /// Whether the recovery screen warns that a reset leaves the app empty.
     /// There's no account or network to check there, only the persisted
-    /// record, so anything short of a recent, unchallenged upload warns.
-    /// A recent upload still only says some export succeeded, not that every
-    /// client made it, which is why the copy says "from this device".
-    static func lacksRecentUpload(_ state: SyncHealthReducer.State, now: Date) -> Bool {
+    /// record, so anything short of a recent, unchallenged upload warns:
+    /// a failure since, edits no upload has covered, or a device that fell
+    /// back to local-only. A recent upload still only says some export
+    /// succeeded, not that every client made it, which is why the copy says
+    /// "from this device".
+    static func lacksRecentUpload(
+        _ state: SyncHealthReducer.State,
+        isLocalOnlyFallback: Bool = false,
+        now: Date
+    ) -> Bool {
         guard let uploadedAt = state.lastSuccessfulExportEndedAt else { return true }
-        if state.exportHealth.isFailing { return true }
+        if isLocalOnlyFallback || state.exportHealth.isFailing { return true }
+        if SyncHealthReducer(state: state).oldestUncoveredLocalChange != nil { return true }
         return now.timeIntervalSince(uploadedAt) > recentUploadAge
     }
 
@@ -262,6 +274,14 @@ struct SyncFailureRecord: Codable, Equatable, Identifiable, Sendable {
 /// `SyncErrorClassifier.Classification.userMessageKey`; they're spelled out
 /// here so the localization check can see them.
 enum SyncFailureCopy {
+    /// Title for the red state. "Isn't accepting" is only true for a
+    /// rejection; a streak of timeouts or throttling that went red says so.
+    static func severeTitle(for disposition: SyncHealthReducer.FailureDisposition) -> String {
+        SyncStatusPolicy.isRejection(disposition)
+            ? AppLocalization.localized("cloudkit.banner.rejected.title", value: "iCloud isn't accepting Pawtrackr's data")
+            : AppLocalization.localized("cloudkit.banner.failing.title", value: "iCloud uploads keep failing")
+    }
+
     static func message(for classification: SyncErrorClassifier.Classification) -> String? {
         message(
             for: SyncStatusPolicy.failureDisposition(for: classification),

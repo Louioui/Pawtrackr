@@ -1488,7 +1488,7 @@ final class CloudKitMonitor {
                 issues.append(SyncHealthIssue(
                     id: "upload.rejected",
                     severity: .danger,
-                    title: AppLocalization.localized("cloudkit.banner.rejected.title", value: "iCloud isn't accepting Pawtrackr's data"),
+                    title: SyncFailureCopy.severeTitle(for: disposition),
                     detail: detail
                 ))
             } else {

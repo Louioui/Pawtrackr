@@ -1371,7 +1371,7 @@
 "store_restore.result.title" = "Restauración";
 "recovery.body_safe" = "Tus datos siguen guardados en este dispositivo; Pawtrackr solo no pudo abrirlos. Por favor, no borres la app. Envía los detalles de abajo a soporte para ayudarte a entrar de nuevo.";
 "recovery.clients_on_device_fmt" = "Hay %d clientes guardados en este dispositivo.";
-"recovery.share_details" = "Enviar detalles a soporte";
+"recovery.share_details" = "Compartir informe de soporte";
 "recovery.advanced" = "Avanzado";
 "recovery.reset_warning" = "Restablece solo si el soporte de Pawtrackr te lo pide. Empieza con una base de datos vacía; tus datos actuales se mueven a una copia de seguridad en este dispositivo.";
 "recovery.reset_confirm.title" = "¿Restablecer los datos locales?";
@@ -1400,12 +1400,13 @@
 
 /* iCloud backup status from confirmed uploads (1.0.3) */
 "cloudkit.banner.action.export_clients" = "Exportar clientes";
-"cloudkit.banner.action.send_support" = "Enviar detalles a soporte";
+"cloudkit.banner.action.send_support" = "Compartir informe de soporte";
 "cloudkit.banner.local_only.title" = "La copia de seguridad en iCloud está desactivada en este dispositivo";
 "cloudkit.banner.local_only.message" = "Pawtrackr no pudo iniciar la sincronización con iCloud, así que tus clientes solo están guardados aquí.";
 "cloudkit.banner.quota.steps_ios" = "Para liberar espacio, abre Ajustes, toca tu nombre y luego iCloud > Administrar almacenamiento de la cuenta.";
 "cloudkit.banner.quota.steps_mac" = "Para liberar espacio, abre Ajustes del Sistema, haz clic en tu nombre y luego en iCloud > Administrar.";
 "cloudkit.banner.rejected.title" = "iCloud no está aceptando los datos de Pawtrackr";
+"cloudkit.banner.failing.title" = "Las subidas a iCloud siguen fallando";
 "cloudkit.banner.rejected.message" = "Tus clientes están en este dispositivo, pero NO tienen copia de seguridad. No borres la app.";
 "cloudkit.diagnostics.failures" = "Fallos recientes de iCloud";
 "cloudkit.diagnostics.last_backup" = "Última copia en iCloud";

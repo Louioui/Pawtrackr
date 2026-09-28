@@ -117,7 +117,7 @@ struct DataStoreRecoveryView: View {
                     VStack(spacing: 16) {
                         ShareLink(item: supportReport) {
                             Label(
-                                AppLocalization.localized("recovery.share_details", value: "Send Details to Support"),
+                                AppLocalization.localized("recovery.share_details", value: "Share Support Report"),
                                 systemImage: "square.and.arrow.up"
                             )
                             .frame(maxWidth: .infinity)
@@ -183,6 +183,11 @@ struct DataStoreRecoveryView: View {
         }
     }
 
+    /// Set by AppStoreBootstrap when the last launch couldn't start iCloud.
+    private static var wasLocalOnly: Bool {
+        UserDefaults.standard.bool(forKey: AppStoreBootstrap.cloudKitFallbackActiveKey)
+    }
+
     private var lastErrorDetail: String? {
         UserDefaults.standard.string(forKey: PawtrackrApp.lastInitErrorKey)
     }
@@ -192,7 +197,7 @@ struct DataStoreRecoveryView: View {
             Label(Self.lastUploadText(for: record), systemImage: "icloud")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            if SyncStatusPolicy.lacksRecentUpload(record, now: Date()) {
+            if SyncStatusPolicy.lacksRecentUpload(record, isLocalOnlyFallback: Self.wasLocalOnly, now: Date()) {
                 Text(Self.noRecentCopyWarning)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.orange)
@@ -250,7 +255,7 @@ struct DataStoreRecoveryView: View {
         // behind the dialog.
         if let uploadRecord {
             message += "\n\n" + Self.lastUploadText(for: uploadRecord)
-            if SyncStatusPolicy.lacksRecentUpload(uploadRecord, now: Date()) {
+            if SyncStatusPolicy.lacksRecentUpload(uploadRecord, isLocalOnlyFallback: Self.wasLocalOnly, now: Date()) {
                 message += "\n\n" + Self.noRecentCopyWarning
             }
         }
