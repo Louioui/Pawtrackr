@@ -15,6 +15,10 @@ enum CloudSyncReconciler {
         let duplicateVisitsRemoved: Int
         let orphanVisitItemCount: Int
         let orphanPaymentCount: Int
+        /// Client / pet UUIDs that exist more than once. Reported, never merged:
+        /// see `countDuplicateClientsAndPets`.
+        var duplicateClientGroups: Int = 0
+        var duplicatePetGroups: Int = 0
 
         var summary: String {
             var parts: [String] = []
@@ -30,6 +34,9 @@ enum CloudSyncReconciler {
             if orphanPaymentCount > 0 {
                 parts.append("found \(orphanPaymentCount) orphan payment(s)")
             }
+            if duplicateClientGroups > 0 || duplicatePetGroups > 0 {
+                parts.append("found \(duplicateClientGroups) duplicated client(s) and \(duplicatePetGroups) duplicated pet(s), left in place")
+            }
             return parts.isEmpty ? "Cloud import reconciliation found no issues" : "Cloud import reconciliation " + parts.joined(separator: ", ")
         }
     }
@@ -39,9 +46,10 @@ enum CloudSyncReconciler {
         var removedVisits = 0
         var orphanItems = 0
         var orphanPayments = 0
+        var duplicates = (clients: 0, pets: 0)
 
         do {
-            try reconcileConcurrentEdits(in: context)
+            duplicates = try countDuplicateClientsAndPets(in: context)
             removedTransactions = try dedupeCheckoutTransactions(in: context)
             removedVisits = try dedupeVisits(in: context)
             orphanItems = try countOrphanVisitItems(in: context)
@@ -58,35 +66,31 @@ enum CloudSyncReconciler {
             duplicateCheckoutTransactionsRemoved: removedTransactions,
             duplicateVisitsRemoved: removedVisits,
             orphanVisitItemCount: orphanItems,
-            orphanPaymentCount: orphanPayments
+            orphanPaymentCount: orphanPayments,
+            duplicateClientGroups: duplicates.clients,
+            duplicatePetGroups: duplicates.pets
         )
     }
 
-    private static func reconcileConcurrentEdits(in context: ModelContext) throws {
-        // Find Clients and Pets that were recently updated and check for version drifts
-        let clientRows = try context.fetch(FetchDescriptor<Client>())
-        let clientGroups = Dictionary(grouping: clientRows) { $0.uuid }
-        for (_, group) in clientGroups where group.count > 1 {
-            let sorted = group.sorted { $0.updatedAt > $1.updatedAt }
-            let winner = sorted.first!
-            let losers = sorted.dropFirst()
-            for loser in losers {
-                winner.resolveConflict(with: loser)
-                context.delete(loser)
-            }
+    /// Clients and pets that share a UUID are counted and logged, never merged.
+    ///
+    /// This used to keep the newest twin and `context.delete` the other, which
+    /// cascade-deleted that twin's pets, visits and payments on every device —
+    /// and it copied the older twin's fields over the newer one. Twins come
+    /// from one object being re-uploaded, so they share `createdAt` and differ
+    /// only in editable fields; two devices mid-sync can pick different
+    /// survivors, delete each other's, and cascade away everything. Nothing
+    /// that deterministic exists to choose by, so a duplicate row on screen is
+    /// the safe outcome.
+    private static func countDuplicateClientsAndPets(in context: ModelContext) throws -> (clients: Int, pets: Int) {
+        let clientGroups = Dictionary(grouping: try context.fetch(FetchDescriptor<Client>()), by: \.uuid)
+            .values.filter { $0.count > 1 }.count
+        let petGroups = Dictionary(grouping: try context.fetch(FetchDescriptor<Pet>()), by: \.uuid)
+            .values.filter { $0.count > 1 }.count
+        if clientGroups + petGroups > 0 {
+            Logger.cloudReconcile.notice("Duplicate UUIDs after import: \(clientGroups) client group(s), \(petGroups) pet group(s); left in place.")
         }
-
-        let petRows = try context.fetch(FetchDescriptor<Pet>())
-        let petGroups = Dictionary(grouping: petRows) { $0.uuid }
-        for (_, group) in petGroups where group.count > 1 {
-            let sorted = group.sorted { $0.updatedAt > $1.updatedAt }
-            let winner = sorted.first!
-            let losers = sorted.dropFirst()
-            for loser in losers {
-                winner.resolveConflict(with: loser)
-                context.delete(loser)
-            }
-        }
+        return (clientGroups, petGroups)
     }
 
     private static func dedupeVisits(in context: ModelContext) throws -> Int {
@@ -120,6 +124,9 @@ enum CloudSyncReconciler {
                 let diff = abs(dupe.startedAt.timeIntervalSince(canonical.startedAt))
                 if diff < 300 { // 5 minutes
                     mergeVisit(dupe, into: canonical)
+                    // Save the moves before deleting: the delete cascades to
+                    // whatever is still attached to the duplicate.
+                    try context.save()
                     context.delete(dupe)
                     removed += 1
 
@@ -168,6 +175,7 @@ enum CloudSyncReconciler {
             target.total = source.total
         }
         if target.payment == nil, let payment = source.payment {
+            source.payment = nil
             target.attachPayment(payment)
         }
 
@@ -180,10 +188,14 @@ enum CloudSyncReconciler {
         if target.afterThumbnailData == nil { target.afterThumbnailData = source.afterThumbnailData }
 
         if let sourceItems = source.items, !sourceItems.isEmpty {
+            // Move by swapping the to-many collections. Setting only
+            // `item.visit` doesn't reliably take the item out of the source's
+            // `items`, and the source's cascade delete then destroys it.
             let existingKeys = Set((target.items ?? []).map { lineItemKey($0) })
-            for item in sourceItems where !existingKeys.contains(lineItemKey(item)) {
-                item.visit = target
-            }
+            let moving = sourceItems.filter { !existingKeys.contains(lineItemKey($0)) }
+            let movingIDs = Set(moving.map(\.persistentModelID))
+            source.items = sourceItems.filter { !movingIDs.contains($0.persistentModelID) }
+            target.items = (target.items ?? []) + moving
         }
         target.lastModifiedAt = max(target.lastModifiedAt, source.lastModifiedAt)
         target.updatedAt = max(target.updatedAt, source.updatedAt)
