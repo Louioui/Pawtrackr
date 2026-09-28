@@ -263,10 +263,17 @@ final class SyncStatusPolicyTests: XCTestCase {
         XCTAssertEqual(state.lastSuccessfulExportEndedAt, minute(10))
         XCTAssertEqual(state.lastImportEndedAt, minute(20))
 
-        let reducer = SyncHealthReducer(state: state)
+        // Not green past the grace period unless an upload after the update
+        // confirms it: the old builds' pending counter can't be trusted.
+        var reducer = SyncHealthReducer(state: state)
+        XCTAssertEqual(
+            reducer.backupStatus(conditions: .init(account: .available, isOnline: true), now: minute(36)),
+            .notBackedUp(localChangesSince: minute(30))
+        )
+        reducer.apply(.succeeded(.export, startedAt: minute(32), endedAt: minute(33)))
         XCTAssertEqual(
             reducer.backupStatus(conditions: .init(account: .available, isOnline: true), now: minute(40)),
-            .backedUp(asOf: minute(10))
+            .backedUp(asOf: minute(32))
         )
     }
 
@@ -281,7 +288,7 @@ final class SyncStatusPolicyTests: XCTestCase {
             from: .init(lastExportDate: minute(10), pendingLocalChangeCount: 2, pendingLocalChangeDate: minute(15)),
             now: minute(30)
         )
-        XCTAssertEqual(state.pendingLocalChangeDate, minute(15))
+        XCTAssertEqual(state.firstPendingLocalChangeDate, minute(15))
         let reducer = SyncHealthReducer(state: state)
         XCTAssertEqual(
             reducer.backupStatus(conditions: .init(account: .available, isOnline: true), now: minute(30)),
@@ -399,7 +406,9 @@ final class SyncStatusPolicyTests: XCTestCase {
 
         let state = CloudKitMonitor.persistedOrMigratedSyncHealth(defaults: defaults, now: minute(40))
         XCTAssertEqual(state.lastSuccessfulExportEndedAt, minute(30))
-        XCTAssertFalse(Policy.lacksRecentUpload(state, now: minute(40)))
+        // An upgrader stuck on the recovery screen is warned off Reset: no
+        // upload since the update has confirmed the old one.
+        XCTAssertTrue(Policy.lacksRecentUpload(state, now: minute(40)))
     }
 
     // MARK: - Evidence kept through a reset

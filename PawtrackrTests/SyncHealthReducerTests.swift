@@ -132,15 +132,30 @@ final class SyncHealthReducerTests: XCTestCase {
         var reducer = Reducer()
         reducer.apply(succeeded(.export, from: 0, to: 1))
         reducer.apply(failed(.setup, at: 60, disposition: .setupFailedWhileSignedIn, code: "NSCocoaErrorDomain.134400"))
-        reducer.apply(succeeded(.setup, from: 120, to: 120.1))
+        reducer.recordLocalChange(at: minute(70))
 
         XCTAssertEqual(
-            reducer.backupStatus(conditions: online, now: minute(121)),
+            reducer.backupStatus(conditions: online, now: minute(71)),
             .failing(since: minute(60), disposition: .setupFailedWhileSignedIn)
         )
 
         reducer.apply(succeeded(.export, from: 122, to: 123))
         XCTAssertEqual(reducer.backupStatus(conditions: online, now: minute(124)), .backedUp(asOf: minute(122)))
+    }
+
+    /// The banner tells the groomer to reopen the app; a setup that then
+    /// works has disproved the failure, even before anything uploads.
+    func testASetupSuccessClearsASetupFailureButNotAnUploadFailure() {
+        var reducer = Reducer()
+        reducer.apply(succeeded(.export, from: 0, to: 1))
+        reducer.apply(failed(.setup, at: 60, disposition: .setupFailedWhileSignedIn, code: "NSCocoaErrorDomain.134400"))
+        reducer.apply(succeeded(.setup, from: 120, to: 120.1))
+        XCTAssertFalse(reducer.state.exportHealth.isFailing)
+        XCTAssertEqual(reducer.backupStatus(conditions: online, now: minute(121)), .backedUp(asOf: minute(0)))
+
+        reducer.apply(failed(.export, at: 130, disposition: .schemaRejected, code: "CKError.15"))
+        reducer.apply(succeeded(.setup, from: 140, to: 140.1))
+        XCTAssertTrue(reducer.state.exportHealth.isFailing, "Only an upload disproves a rejected upload.")
     }
 
     func testSignedOutSetupFailureDoesNotFollowTheGroomerIntoSignIn() {

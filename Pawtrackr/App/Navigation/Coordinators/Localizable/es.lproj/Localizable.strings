@@ -284,7 +284,7 @@
 "settings.help.preparing_report" = "Preparando reporte...";
 "settings.help.report_copied" = "Reporte de soporte copiado.";
 "settings.help.icloud_title" = "Sincronización iCloud";
-"settings.help.icloud_detail" = "Usa la sección iCloud para revisar la cuenta, cambios pendientes y diagnósticos. En dispositivos reales, confirma que la Cuenta Apple esté iniciada y que iCloud Drive esté activado.";
+"settings.help.icloud_detail" = "Usa la sección iCloud para revisar tu última copia, la cuenta y los diagnósticos. Si la sincronización se detiene, confirma que iniciaste sesión en iCloud, que Pawtrackr está activado en Apps que usan iCloud y que el almacenamiento de iCloud no está lleno.";
 "settings.help.hardware_title" = "Impresoras y hardware";
 "settings.help.hardware_detail" = "La impresión Bluetooth requiere un iPad o iPhone físico y hardware compatible del salón. El simulador no puede descubrir impresoras.";
 "settings.help.exports_title" = "Exportaciones y respaldos";

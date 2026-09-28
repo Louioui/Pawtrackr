@@ -142,9 +142,15 @@ struct SyncHealthReducer: Sendable, Equatable {
             case .import:
                 state.lastImportEndedAt = Self.later(state.lastImportEndedAt, endedAt)
             case .setup:
-                // A working setup proves nothing left the device, and it must not
-                // clear a failure only an upload can disprove.
-                break
+                // A working setup proves nothing left the device, so it can't
+                // clear an upload failure. It does disprove a setup failure:
+                // otherwise reopening the app, as the banner asks, would leave
+                // the red banner up until something else uploads.
+                let health = state.exportHealth
+                if health.lastFailureDisposition == .setupFailedWhileSignedIn,
+                   let failedAt = health.lastFailureAt, failedAt <= endedAt {
+                    state.exportHealth = ExportHealth()
+                }
             }
 
         case let .failed(kind, _, endedAt, disposition, code):

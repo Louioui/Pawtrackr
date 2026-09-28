@@ -368,11 +368,16 @@ enum SummaryUpdater {
         UserDefaults.standard.removeObject(forKey: "lastSummaryRebuildDate")
     }
 
+    // Duplicate rows for one key (each device inserted its own before
+    // importing the other's) are all brought up to date rather than thinned
+    // out. Nothing tells the copies apart the same way on every device, so
+    // each would keep its own and delete the other's, and the deletes would
+    // sync both away. Readers already collapse duplicates.
     private static func replaceDaySummaries(with stats: [Date: (revenue: Decimal, count: Int)], in context: ModelContext) throws {
         let rows = try context.fetch(FetchDescriptor<DaySummary>())
         var seen = Set<Date>()
         for row in rows {
-            guard let aggregate = stats[row.day], !seen.contains(row.day) else {
+            guard let aggregate = stats[row.day] else {
                 context.delete(row)
                 continue
             }
@@ -393,7 +398,7 @@ enum SummaryUpdater {
         var seen = Set<SummaryNameKey>()
         for row in rows {
             let key = SummaryNameKey(day: row.day, name: row.serviceName)
-            guard let count = stats[key], !seen.contains(key) else {
+            guard let count = stats[key] else {
                 context.delete(row)
                 continue
             }
@@ -411,7 +416,7 @@ enum SummaryUpdater {
         var seen = Set<SummaryNameKey>()
         for row in rows {
             let key = SummaryNameKey(day: row.day, name: row.categoryRaw)
-            guard let count = stats[key], !seen.contains(key) else {
+            guard let count = stats[key] else {
                 context.delete(row)
                 continue
             }
@@ -431,7 +436,7 @@ enum SummaryUpdater {
         let rows = try context.fetch(FetchDescriptor<ClientInsightSummary>())
         var seen = Set<UUID>()
         for row in rows {
-            guard let aggregate = stats[row.clientUUID], !seen.contains(row.clientUUID) else {
+            guard let aggregate = stats[row.clientUUID] else {
                 context.delete(row)
                 continue
             }

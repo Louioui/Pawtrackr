@@ -59,6 +59,25 @@ final class SummaryRebuildIdempotencyTests: XCTestCase {
         XCTAssertEqual(insight.visitCount, 4)
     }
 
+    /// Two devices each inserted a row for the same day before importing the
+    /// other's. Deleting either one lets the devices delete each other's.
+    func testDuplicateRowsAreUpdatedNotDeleted() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        try seedCompletedVisits(in: context)
+        SummaryUpdater.rebuildAllSummaries(in: context)
+        let day = try XCTUnwrap(try context.fetch(FetchDescriptor<DaySummary>()).first?.day)
+        context.insert(DaySummary(day: day, revenue: 1, visitCount: 9))
+        try context.save()
+
+        XCTAssertTrue(SummaryUpdater.rebuildAllSummaries(in: ModelContext(container)), "The stale copy is corrected.")
+        let copies = try ModelContext(container).fetch(FetchDescriptor<DaySummary>()).filter { $0.day == day }
+        XCTAssertEqual(copies.count, 2)
+        XCTAssertEqual(Set(copies.map(\.visitCount)).count, 1)
+        XCTAssertEqual(Set(copies.map { $0.revenue.roundedMoney() }).count, 1)
+        XCTAssertFalse(SummaryUpdater.rebuildAllSummaries(in: ModelContext(container)))
+    }
+
     // MARK: - Helpers
 
     private func makeContainer() throws -> ModelContainer {

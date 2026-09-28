@@ -284,7 +284,7 @@
 "settings.help.preparing_report" = "Preparing report...";
 "settings.help.report_copied" = "Support report copied.";
 "settings.help.icloud_title" = "iCloud Sync";
-"settings.help.icloud_detail" = "Use the iCloud section to check account status, pending changes, and diagnostics. On real devices, confirm the Apple Account is signed in and iCloud Drive is enabled.";
+"settings.help.icloud_detail" = "Use the iCloud section to check your last backup, account status and diagnostics. If sync stops, check that you're signed in to iCloud, that Pawtrackr is turned on under Apps Using iCloud, and that iCloud storage isn't full.";
 "settings.help.hardware_title" = "Printers & Hardware";
 "settings.help.hardware_detail" = "Bluetooth receipt printing requires a physical iPad or iPhone and supported salon hardware. The simulator cannot discover printers.";
 "settings.help.exports_title" = "Exports & Backups";

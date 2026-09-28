@@ -304,11 +304,13 @@ final actor ClientRepository: ClientRepositoryProtocol {
         }
         client.emergencyContacts = emergencyContacts
         
+        let changedAt = Date()
         try modelContext.save()
         let clientUUID = client.uuid
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Created client",
+                occurredAt: changedAt,
                 entityName: "Client",
                 recordUUID: clientUUID,
                 changedKeys: ["uuid", "firstName", "lastName", "phone", "email", "address", "photoData", "pets", "emergencyContacts", "createdAt", "updatedAt"]
@@ -323,11 +325,13 @@ final actor ClientRepository: ClientRepositoryProtocol {
         client.setLastName(lastName)
         client.setPhone(phone)
         client.setEmail(email)
+        let changedAt = Date()
         try modelContext.save()
         let clientUUID = client.uuid
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Saved client",
+                occurredAt: changedAt,
                 entityName: "Client",
                 recordUUID: clientUUID,
                 changedKeys: ["firstName", "lastName", "phone", "email", "primaryContactInfo", "updatedAt", "lastModifiedBy"]
@@ -346,11 +350,13 @@ final actor ClientRepository: ClientRepositoryProtocol {
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
 
         modelContext.delete(client)
+        let changedAt = Date()
         try modelContext.save()
         SpotlightIndexer.shared.removeClientAndPetsFromIndex(clientID: clientUUID, petIDs: petUUIDs)
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Deleted client",
+                occurredAt: changedAt,
                 entityName: "Client",
                 recordUUID: clientUUID,
                 changedKeys: ["deleted"]

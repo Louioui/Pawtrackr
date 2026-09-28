@@ -182,7 +182,10 @@ struct CloudKitAccountBanner: View {
 
         // Signed in, but iCloud refuses Pawtrackr: almost always the per-app
         // iCloud switch. Red like a rejection, but with the switch to check.
-        if monitor.isShowingUploadRejection, monitor.iCloudAppAccessMayBeDisabled {
+        // Decided from the persisted cause too, since the in-memory flag
+        // starts false at every launch.
+        if monitor.isShowingUploadRejection, case .failing(_, let disposition) = monitor.backupStatus,
+           disposition == .setupFailedWhileSignedIn || monitor.iCloudAppAccessMayBeDisabled {
             return BannerInfo(
                 fingerprint: "appAccessBlocked",
                 icon: "exclamationmark.icloud.fill",

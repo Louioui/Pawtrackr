@@ -676,7 +676,7 @@ private struct HelpSectionView: View {
                     title: settingsLocalized("settings.help.icloud_title", value: "iCloud Sync"),
                     detail: settingsLocalized(
                         "settings.help.icloud_detail",
-                        value: "Use the iCloud section to check account status, pending changes, and diagnostics. On real devices, confirm the Apple Account is signed in and iCloud Drive is enabled."
+                        value: "Use the iCloud section to check your last backup, account status and diagnostics. If sync stops, check that you're signed in to iCloud, that Pawtrackr is turned on under Apps Using iCloud, and that iCloud storage isn't full."
                     )
                 )
                 HelpTopicRow(

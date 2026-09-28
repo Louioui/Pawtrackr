@@ -217,6 +217,14 @@ enum SyncStatusPolicy {
         if legacy.pendingLocalChangeCount > 0, let pending = legacy.pendingLocalChangeDate {
             reducer.recordLocalChange(at: pending)
         }
+        if legacy.lastExportDate != nil {
+            // Older builds cleared their pending counter without uploading
+            // (the offline flush zeroed it), so the old export date can't
+            // vouch for everything saved since. The first upload after the
+            // update has to; the launch heartbeat writes something, so one
+            // follows within seconds when iCloud works.
+            reducer.recordLocalChange(at: now)
+        }
         if legacy.quotaExceeded {
             // The old flag only cleared on a successful export, so the quota
             // failure came after the last one. The exact time wasn't kept.

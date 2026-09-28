@@ -46,10 +46,12 @@ final class VisitRepository: VisitRepositoryProtocol {
             modelContext.insert(visit)
         }
         visit.ensureSessionToken()
+        let changedAt = Date()
         try modelContext.save()
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Saved visit",
+                occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visit.uuid,
                 changedKeys: ["note", "behaviorTagsRaw", "items", "updatedAt", "lastModifiedAt", "lastModifiedBy"]
@@ -62,10 +64,12 @@ final class VisitRepository: VisitRepositoryProtocol {
         let started = visit.startedAt
         let ended = visit.endedAt
         modelContext.delete(visit)
+        let changedAt = Date()
         try modelContext.save()
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Deleted visit",
+                occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visitUUID,
                 changedKeys: ["deleted"]
@@ -101,6 +105,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         modelContext.insert(visit)
         Logger.visits.info("VisitRepository: Visit object created and inserted into context")
         
+        let changedAt = Date()
         do {
             try modelContext.save()
             Logger.visits.info("VisitRepository: Context save successful for new visit. visitID=\(visit.uuid)")
@@ -113,6 +118,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Checked in pet",
+                occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visit.uuid,
                 changedKeys: ["uuid", "sessionToken", "pet", "startedAt", "createdAt", "updatedAt", "lastModifiedBy"]
@@ -136,6 +142,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         visit.markCheckedOut(total: total ?? visit.effectiveTotal, now: now)
         
         // Save the visit and its payment
+        let changedAt = Date()
         try modelContext.save()
         
         // Apply loyalty points
@@ -144,6 +151,7 @@ final class VisitRepository: VisitRepositoryProtocol {
         await MainActor.run {
             CloudKitMonitor.shared.recordLocalChange(
                 "Checked out visit",
+                occurredAt: changedAt,
                 entityName: "Visit",
                 recordUUID: visit.uuid,
                 changedKeys: ["endedAt", "total", "payment", "updatedAt", "lastModifiedAt", "lastModifiedBy", "loyaltyPointsChange"]

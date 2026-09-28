@@ -332,6 +332,7 @@ final class CloudKitMonitor {
     private var remoteStoreRefreshTask: Task<Void, Never>?
     private var offlineFlushTask: Task<Void, Never>?
     private var reconcileDebounceTask: Task<Void, Never>?
+    private var localChangeRebuildTask: Task<Void, Never>?
     private var manualCheckCooldownTask: Task<Void, Never>?
 
     private enum DefaultsKey {
@@ -881,6 +882,11 @@ final class CloudKitMonitor {
                 iCloudAppAccessMayBeDisabled = false
             }
             clearPendingLocalChanges(reason: "CloudKit export finished", coveredUpTo: startedAt)
+            // An upload went through, so the account works whatever an
+            // earlier failure made us assume.
+            if !accountState.isAvailable {
+                Task { await refreshAccountStatus() }
+            }
         case .import:
             lastImportDate = endedAt
             UserDefaults.standard.set(lastImportDate, forKey: DefaultsKey.lastImportDate)
@@ -955,7 +961,12 @@ final class CloudKitMonitor {
         startedAt: Date,
         endedAt: Date
     ) {
-        let disposition = SyncStatusPolicy.failureDisposition(for: classification)
+        var disposition = SyncStatusPolicy.failureDisposition(for: classification)
+        if reducerKind == .setup, disposition == .notAuthenticated, accountState.isAvailable {
+            // CKContainer says signed in, so iCloud is refusing Pawtrackr
+            // (usually its per-app switch), not reporting a signed-out device.
+            disposition = .setupFailedWhileSignedIn
+        }
         let code = classification.diagnosticCode
         if let reducerKind {
             reducer.apply(.failed(reducerKind, startedAt: startedAt, endedAt: endedAt, disposition: disposition, code: code))
@@ -963,7 +974,7 @@ final class CloudKitMonitor {
         }
 
         switch classification.disposition {
-        case .userActionable(.notAuthenticated) where reducerKind == .setup:
+        case .userActionable(.notAuthenticated) where reducerKind == .setup && !accountState.isAvailable:
             // Signed out: mirroring has nothing to set up, and the account
             // banner already says so.
             log.info("CloudKit integration setup skipped: no iCloud account is available.")
@@ -992,7 +1003,18 @@ final class CloudKitMonitor {
         }
 
         log.error("CloudKit \(kind.rawValue, privacy: .public) failed: \(disposition.rawValue, privacy: .public) \(code, privacy: .public)")
-        let message = SyncFailureCopy.message(for: classification)
+        // "Sign in to iCloud" is wrong for a groomer CKContainer says is
+        // signed in: then it's iCloud refusing Pawtrackr.
+        let signedInRefusal: String? = switch disposition {
+        case .setupFailedWhileSignedIn:
+            SyncFailureCopy.message(for: disposition, isNetwork: false)
+        case .notAuthenticated where accountState.isAvailable:
+            NSLocalizedString("cloudkit.banner.app_access.message", value: "iCloud is signed in, but app access may be disabled in Settings.", comment: "")
+        default:
+            nil
+        }
+        let message = signedInRefusal
+            ?? SyncFailureCopy.message(for: classification)
             ?? SyncFailureCopy.message(for: .unknown, isNetwork: false)
             ?? code
         // An upload failure outranks a download failure, and only an upload
@@ -1020,6 +1042,9 @@ final class CloudKitMonitor {
             accountState = .temporarilyUnavailable
             accountAvailableSince = nil
             iCloudAppAccessMayBeDisabled = false
+            // One per-record error can set this; ask CKContainer so it doesn't
+            // outlive the problem.
+            Task { await refreshAccountStatus() }
         case .userActionable(.notAuthenticated), .setupFailedWhileSignedIn:
             // CKContainer says signed in, but iCloud refuses Pawtrackr: the
             // per-app switch. Re-check in case the account really changed.
@@ -1139,19 +1164,25 @@ final class CloudKitMonitor {
         postChange()
     }
 
+    /// `occurredAt` is when the save began. Callers that save off the main
+    /// actor pass it: stamped after the hop, the change can postdate an
+    /// export that already carried it, and would then wait for an upload
+    /// that never comes.
     func recordLocalChange(
         _ operation: String,
+        occurredAt: Date? = nil,
         entityName: String? = nil,
         recordUUID: UUID? = nil,
         changedKeys: [String] = []
     ) {
         guard !AppRuntime.isRunningTests else { return }
-        let now = Date()
+        let now = occurredAt ?? Date()
         // Tracked even while local-only: a later launch that starts mirroring
         // uploads these, and only that upload may cover them.
         reducer.recordLocalChange(at: now)
         persistSyncHealth()
         pendingLocalChangeDescription = operation
+        scheduleSummaryRebuildAfterLocalChange()
 
         guard mode.isMirroring else {
             // Nothing will upload this launch, so nothing is "waiting for iCloud".
@@ -1268,7 +1299,11 @@ final class CloudKitMonitor {
     /// red: a rejection retrying can't fix, or a streak that isn't a hiccup.
     var isUploadFailureSevere: Bool {
         _ = statusRevision
-        guard case .failing = backupStatus else { return false }
+        guard case .failing(_, let disposition) = backupStatus else { return false }
+        // Account failures are explained by the (orange) account banner, which
+        // goes away when the account recovers; a red icon would outlive it
+        // with nothing on screen saying why. Full storage keeps its red banner.
+        if SyncStatusPolicy.hasDedicatedBanner(disposition), disposition != .quotaExceeded { return false }
         return SyncStatusPolicy.isSevereFailure(reducer.state.exportHealth, isOnline: networkState.isOnline, now: Date())
     }
 
@@ -1883,6 +1918,22 @@ final class CloudKitMonitor {
         release(.remotePush)
         for waiter in waiters {
             waiter.resume(returning: success)
+        }
+    }
+
+    /// A deleted or renamed client changes Insights. The remote-change notice
+    /// used to cover this by rebuilding after every save, including its own;
+    /// now local edits ask for it. The rebuild saves only real differences
+    /// and never records a local change, so it can't re-trigger itself.
+    private func scheduleSummaryRebuildAfterLocalChange() {
+        guard let modelContainer else { return }
+        localChangeRebuildTask?.cancel()
+        localChangeRebuildTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            await Task.detached(priority: .utility) {
+                SummaryUpdater.rebuildAllSummaries(in: ModelContext(modelContainer))
+            }.value
         }
     }
 

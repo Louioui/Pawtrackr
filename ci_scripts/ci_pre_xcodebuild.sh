@@ -48,7 +48,9 @@ for model in $(cat "$WORK_DIR/schema-models"); do
     exit 1
   fi
   for model_file in $model_files; do
-    if sed 's://.*$::' "$model_file" | grep -nE '@Attribute\([^)]*\.unique|#Unique[[:space:]]*<'; then
+    # Joined into one line first, so @Attribute(\n .unique) and
+    # @Attribute(.transformable(by: X.self), .unique) are caught too.
+    if sed 's://.*$::' "$model_file" | tr '\n' ' ' | grep -qE '@Attribute\([^;{}]*\.unique([^A-Za-z0-9_]|$)|#Unique[[:space:]]*<'; then
       echo "Build failed: ${model_file#"$REPO_ROOT"/} declares a unique constraint, and $model is in the CloudKit-mirrored schema."
       exit 1
     fi

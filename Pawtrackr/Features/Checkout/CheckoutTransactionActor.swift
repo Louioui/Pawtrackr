@@ -104,11 +104,13 @@ final actor CheckoutTransactionActor {
             
             // 8. Commit
             transaction.markSucceeded(completedAt: endedAt)
+            let changedAt = Date()
             try context.save()
             let transactionUUID = transaction.uuid
             await MainActor.run {
                 CloudKitMonitor.shared.recordLocalChange(
                     "Completed checkout",
+                    occurredAt: changedAt,
                     entityName: "CheckoutTransaction",
                     recordUUID: transactionUUID,
                     changedKeys: [
@@ -127,6 +129,7 @@ final actor CheckoutTransactionActor {
                 await MainActor.run {
                     CloudKitMonitor.shared.recordLocalChange(
                         "Applied checkout loyalty points",
+                        occurredAt: changedAt,
                         entityName: "Client",
                         recordUUID: loyaltyClientUUID,
                         changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
