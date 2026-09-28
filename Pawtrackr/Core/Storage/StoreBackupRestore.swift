@@ -313,7 +313,12 @@ enum StoreBackupRestore {
             guard let appSupportURL = overrideAppSupportURL ?? defaultAppSupportURL(fileManager: fileManager) else {
                 throw CocoaError(.fileNoSuchFile)
             }
-            let outcome = try restore(directoryName: directoryName, appSupportURL: appSupportURL, fileManager: fileManager)
+            let outcome = try restore(
+                directoryName: directoryName,
+                appSupportURL: appSupportURL,
+                fileManager: fileManager,
+                userDefaults: userDefaults
+            )
             if case .restored(_, let clientCount, _) = outcome {
                 dismissOffer(directoryName: directoryName, userDefaults: userDefaults)
                 userDefaults.set(clientCount, forKey: lastRestoredClientCountKey)
@@ -366,7 +371,12 @@ enum StoreBackupRestore {
         return .failed(reason)
     }
 
-    private static func restore(directoryName: String, appSupportURL: URL, fileManager: FileManager) throws -> Outcome {
+    private static func restore(
+        directoryName: String,
+        appSupportURL: URL,
+        fileManager: FileManager,
+        userDefaults: UserDefaults
+    ) throws -> Outcome {
         guard isSafeDirectoryName(directoryName), Kind(directoryName: directoryName) != nil else {
             throw RestoreError.invalidBackupName(directoryName)
         }
@@ -397,9 +407,13 @@ enum StoreBackupRestore {
                 try? fileManager.removeItem(at: archiveURL)
                 throw error
             }
+            // The launch keeps this store's upload record only until the restore
+            // resets it; this README is the copy a later reset can't overwrite.
             try? readme(
                 reason: "Pawtrackr moved this store aside while restoring \(directoryName).",
-                files: moved.map(\.to.lastPathComponent)
+                files: moved.map(\.to.lastPathComponent),
+                evidence: CloudKitMonitor.persistedUploadEvidenceLines(defaults: userDefaults)
+                    + CloudKitMonitor.recentSyncEventLines(defaults: userDefaults)
             ).write(to: archiveURL.appendingPathComponent("README.txt"), atomically: true, encoding: .utf8)
             archive = (archiveName, archiveURL, moved)
         }
@@ -514,13 +528,15 @@ enum StoreBackupRestore {
         ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
     }
 
-    private static func readme(reason: String, files: [String]) -> String {
-        [
+    private static func readme(reason: String, files: [String], evidence: [String]) -> String {
+        ([
             "Pawtrackr store backup",
             "Created: \(Date().formatted(date: .complete, time: .standard))",
             "Reason: \(reason)",
             "Files:",
-            files.isEmpty ? "- none" : files.map { "- \($0)" }.joined(separator: "\n")
-        ].joined(separator: "\n")
+            files.isEmpty ? "- none" : files.map { "- \($0)" }.joined(separator: "\n"),
+            "",
+            "iCloud evidence for this store when it was moved aside:"
+        ] + evidence).joined(separator: "\n")
     }
 }

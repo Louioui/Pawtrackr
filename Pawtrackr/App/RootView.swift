@@ -182,6 +182,10 @@ struct RootView: View {
         // pending — a new/reinstalling user sees the Welcome flow immediately and
         // the gate would only flash behind it.
         guard !onboardingIncomplete, !showOnboarding else { return }
+        // A local restore cleared first sync, but the clients on screen came
+        // from this device; "Restoring your data from iCloud…" would say
+        // otherwise. The first-sync wait itself still runs underneath.
+        guard !cloudKitMonitor.restoredLocalBackupThisLaunch else { return }
         guard accountState.isAvailable, !cloudKitMonitor.firstSyncCompleted else { return }
         showFirstSyncGate = true
     }

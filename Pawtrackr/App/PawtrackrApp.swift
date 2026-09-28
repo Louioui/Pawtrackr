@@ -18,14 +18,11 @@ import AppKit
 
 @main
 struct PawtrackrApp: App {
-    static let lastInitErrorKey = "pawtrackr.lastInitError"
-    /// Set by DataStoreRecoveryView when the user picks "Run Without iCloud".
-    /// Honored on the next launch: skips `cloudKitDatabase: .automatic` so a
-    /// broken CloudKit schema can't keep the container from initializing.
-    static let cloudKitDisabledByRecoveryKey = "pawtrackr.cloudKitDisabledByRecovery"
-    /// True when this launch fell back to local-only because CloudKit init
-    /// threw. The UI shows a banner so the user knows sync is off.
-    static let cloudKitFallbackActiveKey = "pawtrackr.cloudKitFallbackActive"
+    static let lastInitErrorKey = AppStoreBootstrap.lastInitErrorKey
+    /// True while launches keep falling back to local-only because CloudKit
+    /// mirroring wouldn't start. CloudKitMonitor shows the red local-only
+    /// banner from the launch's mode; this key feeds the support reports.
+    static let cloudKitFallbackActiveKey = AppStoreBootstrap.cloudKitFallbackActiveKey
 
     let container: ModelContainer?
     private var scheduledTasks: ScheduledTasks?
@@ -48,7 +45,7 @@ struct PawtrackrApp: App {
 
     init() {
         // 1. Initial local variables for all properties
-        var initialContainer: ModelContainer?
+        let initialContainer: ModelContainer?
         let initialTasks: ScheduledTasks?
         let initialAuthVM: AuthenticationViewModel
 
@@ -59,9 +56,6 @@ struct PawtrackrApp: App {
         // stores coexist in the process and the runtime can invalidate model
         // instances mid-test. Skip container creation entirely for unit tests
         // so the test owns the only container in the process.
-        let inMemory = AppRuntime.prefersInMemoryStore
-        let logger = Logger(subsystem: "com.pawtrackr", category: "PawtrackrApp")
-
         if isRunningUnitTests {
             initialContainer = nil
             initialTasks = nil
@@ -73,97 +67,16 @@ struct PawtrackrApp: App {
             return
         }
 
-        // Honor the recovery flag: if a previous launch hit a CloudKit-schema
-        // boot loop and the user picked "Run Without iCloud", skip CloudKit
-        // on this launch so they can actually open the app.
-        let cloudKitDisabledByRecovery = UserDefaults.standard.bool(forKey: PawtrackrApp.cloudKitDisabledByRecoveryKey)
-        let wantsCloudKit = !inMemory && !cloudKitDisabledByRecovery && AppRuntime.allowsICloudSync
+        // Store-file work, the DEBUG schema initializer and the one container
+        // this process opens. App Intents share the same outcome.
+        let bootstrap = AppStoreBootstrap.shared()
+        let inMemory = bootstrap.isInMemory
+        let syncMode = bootstrap.syncMode
+        // Before any view mounts, so the first frame already says whether
+        // iCloud backup is running.
+        CloudKitMonitor.shared.configure(mode: syncMode, restoredLocalBackup: bootstrap.restoredLocalBackup)
 
-        let schema = Schema(PawtrackrSchema.models)
-        let containerName = inMemory ? "PawtrackrTests" : "Pawtrackr"
-        var didRestoreThisLaunch = false
-        var restoreArchiveName: String?
-        if !inMemory {
-            // A restore the user confirmed last session. It has to swap files
-            // before anything opens the store, and before the per-build backup
-            // copies whatever is live.
-            switch StoreBackupRestore.performScheduledRestoreIfNeeded() {
-            case .restored(let directoryName, let clientCount, let archivedDirectoryName):
-                logger.notice("Restored \(clientCount) clients from \(directoryName, privacy: .public); previous store archived as \(archivedDirectoryName ?? "none", privacy: .public).")
-                CloudKitMonitor.resetPersistedSyncStateForLocalStoreReset()
-                didRestoreThisLaunch = true
-                restoreArchiveName = archivedDirectoryName
-            case .failed(let reason):
-                logger.error("Scheduled store restore didn't run: \(reason.rawValue, privacy: .public)")
-            case .none:
-                break
-            }
-
-            let backupOutcome = StoreFileMigration.backupStoresForCurrentBuildIfNeeded()
-            if backupOutcome.copiedFiles > 0 {
-                logger.info("Pre-migration SwiftData store backup completed: copied=\(backupOutcome.copiedFiles)")
-            }
-            let migrationOutcome = StoreFileMigration.migrateLegacyDefaultStoreIfNeeded()
-            switch migrationOutcome.action {
-            case .migratedToMissingNamedStore, .restoredLegacyOverEmptyNamedStore:
-                logger.info("Legacy SwiftData store migration completed: moved=\(migrationOutcome.movedFiles), backedUp=\(migrationOutcome.backedUpFiles)")
-            case .skippedNamedStoreHasData:
-                logger.info("Legacy SwiftData store migration skipped because current store has data.")
-            case .skippedUnableToVerifyStoreContents:
-                logger.warning("Legacy SwiftData store migration skipped because store contents could not be verified.")
-            case .failed(let message):
-                logger.error("Legacy SwiftData store migration failed: \(message, privacy: .public)")
-            case .none:
-                break
-            }
-        }
-
-        // Try CloudKit first (the normal path). If init throws, retry with
-        // .none so the user lands in a working local-only app instead of the
-        // recovery screen. A banner elsewhere informs them sync is off.
-        func openStore() -> (container: ModelContainer?, fellBackToLocalOnly: Bool, firstError: Error?) {
-            do {
-                let primaryConfig = ModelConfiguration(
-                    containerName,
-                    schema: schema,
-                    isStoredInMemoryOnly: inMemory,
-                    cloudKitDatabase: wantsCloudKit ? .automatic : .none
-                )
-                return (try ModelContainer(for: schema, configurations: [primaryConfig]), false, nil)
-            } catch {
-                logger.critical("ModelContainer init failed (cloudkit=\(wantsCloudKit)): \(error.localizedDescription, privacy: .public)")
-                guard wantsCloudKit else {
-                    UserDefaults.standard.set(error.localizedDescription, forKey: PawtrackrApp.lastInitErrorKey)
-                    return (nil, false, error)
-                }
-
-                logger.warning("Falling back to local-only ModelContainer so the user can still open the app.")
-                do {
-                    let fallbackConfig = ModelConfiguration(
-                        containerName,
-                        schema: schema,
-                        isStoredInMemoryOnly: false,
-                        cloudKitDatabase: .none
-                    )
-                    return (try ModelContainer(for: schema, configurations: [fallbackConfig]), true, error)
-                } catch let fallbackError {
-                    logger.critical("Local-only fallback also failed: \(fallbackError.localizedDescription, privacy: .public)")
-                    UserDefaults.standard.set("CloudKit init failed: \(error.localizedDescription). Local-only fallback also failed: \(fallbackError.localizedDescription)", forKey: PawtrackrApp.lastInitErrorKey)
-                    return (nil, false, error)
-                }
-            }
-        }
-
-        var (loaded, fellBackToLocalOnly, firstError) = openStore()
-        if loaded == nil, didRestoreThisLaunch {
-            // The backup we just swapped in can't be opened. Put back the store
-            // that worked before instead of stranding the user on the recovery screen.
-            logger.critical("Restored store failed to open; rolling the restore back.")
-            StoreBackupRestore.rollBackRestore(archivedDirectoryName: restoreArchiveName)
-            (loaded, fellBackToLocalOnly, firstError) = openStore()
-        }
-
-        if let localContainer = loaded {
+        if let localContainer = bootstrap.container {
             if isUITesting {
                 try? UITestDataSeeder.seedIfNeeded(in: localContainer.mainContext)
             }
@@ -171,20 +84,6 @@ struct PawtrackrApp: App {
             initialContainer = localContainer
             initialTasks = inMemory ? nil : ScheduledTasks(modelContainer: localContainer)
             initialAuthVM = AuthenticationViewModel(modelContext: localContainer.mainContext)
-
-            // Validate store health
-            if !StoreHealthCheck.isStoreHealthy(container: localContainer) {
-                logger.critical("ModelContainer health check failed.")
-                UserDefaults.standard.set("Database integrity check failed.", forKey: PawtrackrApp.lastInitErrorKey)
-                initialContainer = nil
-            } else if fellBackToLocalOnly {
-                // Record a non-fatal banner-state for the UI to surface.
-                UserDefaults.standard.set(true, forKey: PawtrackrApp.cloudKitFallbackActiveKey)
-                UserDefaults.standard.set("CloudKit unavailable: \(firstError?.localizedDescription ?? "unknown error"). Running in local-only mode.", forKey: PawtrackrApp.lastInitErrorKey)
-            } else if !cloudKitDisabledByRecovery {
-                // Successful CloudKit launch — clear stale fallback markers.
-                UserDefaults.standard.removeObject(forKey: PawtrackrApp.cloudKitFallbackActiveKey)
-            }
         } else {
             initialContainer = nil
             initialTasks = nil
@@ -202,7 +101,6 @@ struct PawtrackrApp: App {
         }
 
         // 3. Start side effects AFTER full initialization
-        let cloudKitActive = wantsCloudKit && !fellBackToLocalOnly
         if let localContainer = initialContainer {
             if inMemory {
                 Task { @MainActor in
@@ -211,7 +109,8 @@ struct PawtrackrApp: App {
             } else {
                 initialTasks?.start()
 
-                if cloudKitActive {
+                switch syncMode {
+                case .mirroring:
                     // Start the CloudKit monitor on launch so the UI gets the
                     // earliest possible signal about account/sync state.
                     let busForStart = eventBus
@@ -229,10 +128,12 @@ struct PawtrackrApp: App {
                         NSApplication.shared.registerForRemoteNotifications()
                     }
                     #endif
-                } else {
-                    // Local-only mode: tell CloudKitMonitor it's idle so any UI
-                    // observing it doesn't show a permanent "syncing…" state.
+                case .localOnlyFallback, .disabled:
+                    // No mirroring delegate to watch, but the account and
+                    // network rows must still be real, and there is no
+                    // first iCloud import to wait for.
                     Task { @MainActor in
+                        CloudKitMonitor.shared.startStatusObserversOnly()
                         CloudKitMonitor.shared.markFirstSyncCompleted()
                     }
                 }
@@ -243,7 +144,7 @@ struct PawtrackrApp: App {
                 }
 
                 #if targetEnvironment(simulator)
-                logger.debug("Skipping Bluetooth printer discovery on simulator (unsupported).")
+                Logger(subsystem: "com.pawtrackr", category: "PawtrackrApp").debug("Skipping Bluetooth printer discovery on simulator (unsupported).")
                 #else
                 Task.detached(priority: .utility) {
                     await BluetoothPeripheralManager.shared.startPrinterDiscovery(autoConnect: true)

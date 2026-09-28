@@ -26,9 +26,11 @@ public final class DataStoreService {
         do {
             let schema = Schema(PawtrackrSchema.models)
             let usesCloudKit = !inMemory && AppRuntime.allowsICloudSync
-            // Store-file work (backup, restore, legacy move) belongs to
-            // PawtrackrApp.init alone: it must run once, before any container
-            // in the process opens the store.
+            // For tests and QualityControl only. The app's store is opened by
+            // AppStoreBootstrap, which runs the store-file work (backup,
+            // restore, legacy move) once before any container in the process
+            // opens it; a second on-disk `.automatic` container here would be
+            // a second mirroring delegate on the same store.
             let config = ModelConfiguration(
                 inMemory ? "PawtrackrTests" : "Pawtrackr",
                 schema: schema,

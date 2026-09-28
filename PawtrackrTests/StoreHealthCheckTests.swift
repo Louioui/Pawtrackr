@@ -7,7 +7,7 @@ final class StoreHealthCheckTests: XCTestCase {
     
     override func setUpWithError() throws {
         let schema = Schema(PawtrackrSchema.models)
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         container = try ModelContainer(for: schema, configurations: [config])
     }
 

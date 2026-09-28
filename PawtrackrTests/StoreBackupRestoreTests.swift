@@ -182,6 +182,14 @@ final class StoreBackupRestoreTests: XCTestCase {
         // Nothing was deleted: the previous live store and the backup both remain.
         let archivedStore = appSupport.appendingPathComponent(archiveName).appendingPathComponent("Pawtrackr.store")
         XCTAssertEqual(StoreFileMigration.clientRowCount(in: archivedStore), 1)
+        // The launch resets the upload record right after this; the README keeps it.
+        let readme = try String(
+            contentsOf: appSupport.appendingPathComponent(archiveName).appendingPathComponent("README.txt"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(readme.contains("iCloud evidence for this store when it was moved aside:"))
+        XCTAssertTrue(readme.contains("Last confirmed iCloud upload from this device: never"))
+        XCTAssertTrue(readme.contains("Recent sync events (0):"))
         XCTAssertTrue(fileManager.fileExists(atPath: appSupport.appendingPathComponent(backupName).appendingPathComponent("Pawtrackr.store").path))
 
         XCTAssertNil(StoreBackupRestore.scheduledRestoreDirectory(userDefaults: defaults))

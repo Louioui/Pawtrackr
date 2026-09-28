@@ -4,13 +4,18 @@
 //
 //  Compact iCloud sync status indicator for the toolbar / sidebar.
 //
-//  Visual states:
-//  - 🟢 checkmark.icloud.fill        — synced
-//  - 🟡 exclamationmark.icloud.fill  — signed out / quota exceeded
-//  - 🔴 xmark.icloud.fill            — sync error
-//  - ⏳ arrow.triangle.2.circlepath.icloud (spinning) — syncing
+//  Icon and tint come from CloudKitMonitor.backupStatus, which is built
+//  from uploads alone:
+//  - checkmark.icloud.fill (green) — only when an upload CloudKit accepted
+//    covers this device's changes. Imports never earn it.
+//  - arrow.triangle.2.circlepath.icloud (spinning) — an upload is carrying
+//    changes that aren't covered yet
+//  - exclamationmark.icloud.fill (orange) — changes waiting past the grace
+//    period, or upload failures that may still clear
+//  - xmark.icloud.fill (red) — iCloud keeps rejecting uploads
+//  - icloud.slash — signed out, or local-only (red)
 //
-//  Tap reveals a small popover with last-sync time and a "Sync Now" button.
+//  Tap reveals a small popover with the backup status and a "Check iCloud" button.
 //
 
 import SwiftUI
@@ -43,9 +48,10 @@ struct CloudKitStatusView: View {
         }
     }
 
+    /// Only the upload icon spins; a spinning checkmark during imports would
+    /// suggest an upload that isn't happening.
     private var isSpinning: Bool {
-        if case .syncing = monitor.syncState { return true }
-        return false
+        monitor.backupStatus == .uploading
     }
 
     private var tintColor: Color {
@@ -57,19 +63,10 @@ struct CloudKitStatusView: View {
         }
     }
 
+    /// Says what the icon shows: VoiceOver used to announce "Synced with
+    /// iCloud" next to a warning icon.
     private var accessibilityLabel: String {
-        switch monitor.syncState {
-        case .syncing: return NSLocalizedString("cloudkit.status.syncing", value: "Syncing with iCloud", comment: "")
-        case .error(let message): return message
-        case .idle:
-            if let pending = monitor.pendingChangesSummary {
-                return pending
-            }
-            if monitor.accountState.isAvailable {
-                return NSLocalizedString("cloudkit.status.synced", value: "Synced with iCloud", comment: "")
-            }
-            return monitor.accountState.displayLabel
-        }
+        monitor.statusAccessibilityLabel
     }
 }
 

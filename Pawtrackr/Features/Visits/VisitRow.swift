@@ -97,20 +97,12 @@ struct VisitRow: View {
                 Label(NSLocalizedString("visit.photos", comment: ""), systemImage: "photo.on.rectangle")
             }
             Spacer()
-            
-            // Sync Status Indicator
-            if visit.updatedAt > (CloudKitMonitor.shared.lastSyncDate ?? .distantPast) {
-                Image(systemName: "icloud.and.arrow.up")
-                    .font(.caption2)
-                    .foregroundStyle(.blue)
-                    .accessibilityLabel(AppLocalization.localized("visit.syncing_icloud", value: "Syncing to iCloud"))
-            } else {
-                Image(systemName: "checkmark.icloud.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.green)
-                    .accessibilityLabel(AppLocalization.localized("visit.synced_icloud", value: "Synced to iCloud"))
-            }
-            
+
+            // No per-visit iCloud badge: SwiftData doesn't expose whether a
+            // record was exported, and the old badge turned green on any
+            // import, telling groomers visits were backed up when they weren't.
+            // Backup status lives in the toolbar icon and Settings.
+
             if let paymentMethod = visit.payment?.method {
                 Label(paymentMethod.displayName, systemImage: paymentMethod.systemImage)
             }

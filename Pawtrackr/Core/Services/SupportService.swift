@@ -37,15 +37,21 @@ final class SupportService {
         // 2. iCloud Status
         report += "ICLOUD STATUS:\n"
         let monitor = CloudKitMonitor.shared
+        report += "- Sync Mode: \(monitor.mode.diagnosticName)\n"
+        report += "- Backup Status: \(monitor.backupStatus.diagnosticDescription)\n"
         report += "- Account: \(monitor.accountState.displayLabel)\n"
         report += "- Network: \(monitor.networkState.displayLabel)\n"
         report += "- Health: \(monitor.healthHeadline)\n"
         report += "- Detail: \(SupportReportSanitizer.redacted(monitor.healthDetail))\n"
         report += "- First Sync Completed: \(monitor.firstSyncCompleted)\n"
         report += "- Pending Changes: \(SupportReportSanitizer.redacted(monitor.pendingChangesSummary ?? "none"))\n"
-        report += "- Last Sync: \(monitor.lastSyncDate?.formatted() ?? "never")\n"
-        report += "- Last Import: \(monitor.lastImportDate?.formatted() ?? "never")\n"
-        report += "- Last Export: \(monitor.lastExportDate?.formatted() ?? "never")\n"
+        // Upload evidence rather than a "last sync" date: that date moved on
+        // imports too, which let groomers believe iCloud had clients it never
+        // received.
+        for line in CloudKitMonitor.persistedUploadEvidenceLines() {
+            report += line.hasPrefix("- ") ? "  \(line)\n" : "- \(line)\n"
+        }
+        report += "- Remote Change Notices This Launch: \(monitor.remoteChangeCount)\n"
         report += "- Quota Exceeded: \(monitor.quotaExceeded)\n"
         report += "- App Access Warning: \(monitor.iCloudAppAccessMayBeDisabled)\n"
         report += "- Last Error: \(SupportReportSanitizer.redacted(monitor.lastErrorMessage ?? "none"))\n"

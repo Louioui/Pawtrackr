@@ -68,7 +68,7 @@ extension PersistentIdentifier {
     private static let demoClientStorage: PersistentIdentifier = {
         let schema = Schema([Client.self])
         do {
-            let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+            let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)])
             let client = Client(firstName: "Test", lastName: "Test")
             container.mainContext.insert(client)
             return client.persistentModelID

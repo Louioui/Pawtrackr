@@ -12,7 +12,7 @@ class XCTDataTestCase: XCTestCase {
     override func setUp() {
         super.setUp()
         let schema = Schema(PawtrackrSchema.models)
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         do {
             container = try ModelContainer(for: schema, configurations: [config])
             context = container.mainContext

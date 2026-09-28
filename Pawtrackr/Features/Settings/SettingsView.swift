@@ -552,7 +552,10 @@ private struct ICloudSectionView: View {
 
                 SettingsInfoRow(title: settingsLocalized("settings.icloud.account", value: "Account"), value: monitor.accountState.displayLabel)
                 SettingsInfoRow(title: settingsLocalized("settings.icloud.network", value: "Network"), value: monitor.networkState.displayLabel)
-                SettingsInfoRow(title: settingsLocalized("settings.icloud.last_sync", value: "Last Sync"), value: monitor.lastSyncSummary)
+                // Only an upload iCloud accepted counts as a backup; downloads
+                // get their own row so one can't pass for the other.
+                SettingsInfoRow(title: settingsLocalized("settings.icloud.last_backup", value: "Last iCloud backup"), value: monitor.lastBackupValue)
+                SettingsInfoRow(title: settingsLocalized("settings.icloud.last_download", value: "Last download"), value: monitor.lastDownloadValue)
 
                 if let pending = monitor.pendingChangesSummary {
                     SettingsInfoRow(title: settingsLocalized("settings.icloud.pending_changes", value: "Pending Changes"), value: pending)

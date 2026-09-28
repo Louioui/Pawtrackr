@@ -114,12 +114,14 @@ struct StoreRestoreView: View {
                 candidate.clientCount,
                 backupDate
             )
-        // With iCloud on, the restored store also downloads whatever this
-        // device already synced, so the result is both sets, not a swap.
-        if CloudKitMonitor.shared.accountState.isAvailable {
+        // The restored store also downloads whatever this device already
+        // synced, so the result is both sets, not a swap. Only a confirmed
+        // upload earns that promise: a signed-in account alone doesn't mean
+        // iCloud has anything, and without the evidence saying nothing is safer.
+        if CloudKitMonitor.shared.backupStatus.isBackedUp {
             message += "\n\n" + localized(
-                "store_restore.confirm.icloud_note",
-                value: "iCloud sync is on, so clients already saved in iCloud will also come back alongside the restored ones."
+                "store_restore.confirm.icloud_note_backed_up",
+                value: "iCloud has a confirmed backup from this device, so clients already saved in iCloud will also come back alongside the restored ones."
             )
         }
         return message

@@ -140,27 +140,18 @@ struct GetBusinessStatsIntent: AppIntent {
 
 // MARK: - Container Provider
 enum IntentContainerProvider {
-    /// Memoized container shared across all AppIntents invocations within a
-    /// process. Constructing one per call (the previous behavior) opened
-    /// multiple ModelContainers against the same CloudKit-backed store —
-    /// wasted memory + cross-container cache divergence.
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var cached: ModelContainer?
-
+    /// The container the app opened, or on a cold intent launch the one
+    /// AppStoreBootstrap opens now, after the same store-file work. A second
+    /// `.automatic` container here would run a second mirroring delegate on
+    /// the same store in this process.
+    @MainActor
     static func sharedContainer() throws -> ModelContainer {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached { return cached }
-
-        let schema = Schema(PawtrackrSchema.models)
-        let config = ModelConfiguration(
-            "Pawtrackr",
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: AppRuntime.allowsICloudSync ? .automatic : .none
-        )
-        let container = try ModelContainer(for: schema, configurations: [config])
-        cached = container
+        guard let container = AppStoreBootstrap.shared().container else {
+            throw AppError.database(AppLocalization.localized(
+                "intent.error.store_unavailable",
+                value: "Pawtrackr couldn't open its data. Open the app to see what happened."
+            ))
+        }
         return container
     }
 }

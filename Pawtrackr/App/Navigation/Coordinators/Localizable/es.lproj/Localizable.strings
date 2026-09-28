@@ -845,9 +845,9 @@
 "onboarding.welcome.title" = "Bienvenido a Pawtrackr";
 "onboarding.welcome.message" = "El espacio de trabajo moderno para groomers.\nConfiguremos tu negocio en minutos.";
 "onboarding.feature.icloud.title" = "Sincronización iCloud";
-"onboarding.feature.icloud.subtitle" = "Tus datos se mantienen seguros y sincronizados en todos tus dispositivos.";
+"onboarding.feature.icloud.subtitle_status" = "Con iCloud activado, Pawtrackr se sincroniza con tus otros dispositivos y te muestra cuándo tus datos tienen copia de seguridad.";
 "onboarding.feature.privacy.title" = "Privacidad primero";
-"onboarding.feature.privacy.subtitle" = "Seguridad integral con almacenamiento local y bloqueo biométrico.";
+"onboarding.feature.privacy.subtitle_device" = "Tus clientes se guardan en tu dispositivo y solo se sincronizan a través de tu propia cuenta de iCloud. Puedes bloquear la app con un PIN y Face ID o Touch ID.";
 "onboarding.feature.insights.title" = "Estadísticas del negocio";
 "onboarding.feature.insights.subtitle" = "Monitorea ingresos, tendencias de servicios y lealtad de clientes sin esfuerzo.";
 "onboarding.business.upload_logo" = "Subir logo del negocio";
@@ -936,7 +936,7 @@
 "cloudkit.banner.quota.title" = "El almacenamiento de iCloud está lleno";
 "cloudkit.banner.restricted.message" = "Restricciones o controles parentales están bloqueando la sincronización con iCloud.";
 "cloudkit.banner.restricted.title" = "iCloud está restringido";
-"cloudkit.banner.signed_out.message" = "Tus datos están solo en este dispositivo. Inicia sesión para respaldarlos y sincronizarlos.";
+"cloudkit.signed_out.message" = "iCloud está desactivado. Los clientes que ya se subieron vuelven cuando inicias sesión con la misma Cuenta de Apple. Los cambios que hagas ahora se quedan en este dispositivo.";
 "cloudkit.banner.signed_out.title" = "Sesión de iCloud cerrada";
 "cloudkit.banner.sync_error.title" = "La sincronización de iCloud necesita atención";
 "cloudkit.banner.temp_unavailable.message" = "Vuelve a iniciar sesión o espera; iCloud no está disponible temporalmente.";
@@ -986,7 +986,6 @@
 "cloudkit.health.quota.title" = "El almacenamiento de iCloud está lleno";
 "cloudkit.health.restricted.detail" = "Las restricciones del dispositivo están bloqueando la sincronización.";
 "cloudkit.health.restricted.title" = "iCloud está restringido";
-"cloudkit.health.signed_out.detail" = "Los cambios permanecen en este dispositivo hasta que iCloud esté disponible.";
 "cloudkit.health.signed_out.title" = "Sesión de iCloud cerrada";
 "cloudkit.health.syncing" = "Sincronizando con iCloud";
 "cloudkit.last_attempt.relative" = "Última revisión %@";
@@ -1379,6 +1378,9 @@
 "recovery.reset_confirm.message_fmt" = "Los %d clientes guardados en este dispositivo se moverán a una carpeta de copia de seguridad y Pawtrackr empezará vacía. Solo volverán por sí solos si la sincronización con iCloud ya los había subido.";
 "recovery.reset_confirm.message" = "Tus datos se moverán a una carpeta de copia de seguridad en este dispositivo y Pawtrackr empezará vacía.";
 "recovery.reset_done.body_backup" = "Cierra y vuelve a abrir Pawtrackr. Tus datos anteriores se guardan en una copia de seguridad en este dispositivo, y Pawtrackr te ofrecerá recuperarlos cuando una versión corregida pueda abrirlos.";
+"recovery.last_upload_fmt" = "Última subida confirmada a iCloud desde este dispositivo: %@";
+"recovery.last_upload_never" = "Última subida confirmada a iCloud desde este dispositivo: nunca";
+"recovery.no_recent_icloud_copy" = "iCloud no tiene una copia reciente de este dispositivo. Si restableces, Pawtrackr quedará vacía aquí.";
 
 /* Clients sort + card (added in 1.0.2) */
 "clients.no_pets" = "Sin mascotas";
@@ -1386,7 +1388,7 @@
 "clients.sort.first_name" = "Nombre";
 "clients.sort.pet_name" = "Nombre de la mascota";
 "data_safety.restore_pending.message" = "Cierra Pawtrackr por completo y vuelve a abrirla para terminar. Lo que cambies antes se guardará en una copia aparte.";
-"store_restore.confirm.icloud_note" = "La sincronización con iCloud está activada, así que los clientes ya guardados en iCloud también volverán junto con los restaurados.";
+"store_restore.confirm.icloud_note_backed_up" = "iCloud tiene una copia de seguridad confirmada de este dispositivo, así que los clientes ya guardados en iCloud también volverán junto con los restaurados.";
 "store_restore.result.expired" = "La restauración que iniciaste antes no se completó, así que no se cambió nada. Iníciala de nuevo desde Restaurar clientes y vuelve a abrir Pawtrackr enseguida.";
 "store_restore.result.unopenable" = "No se pudo abrir esa copia de seguridad, así que Pawtrackr volvió a poner tus datos anteriores. No se perdió nada.";
 "store_restore.result.failed" = "Pawtrackr no pudo restaurar la copia de seguridad y no se cambió nada.";
@@ -1395,3 +1397,46 @@
 "onboarding.restore.message_fmt" = "Una copia de seguridad aquí tiene %d clientes. Restáuralos en lugar de empezar de nuevo.";
 "onboarding.restore.action" = "Restaurar clientes";
 "store_restore.confirm.message_empty_fmt" = "Pawtrackr recuperará los %1$d clientes del %2$@ la próxima vez que se abra.";
+
+/* iCloud backup status from confirmed uploads (1.0.3) */
+"cloudkit.banner.action.export_clients" = "Exportar clientes";
+"cloudkit.banner.action.send_support" = "Enviar detalles a soporte";
+"cloudkit.banner.local_only.title" = "La copia de seguridad en iCloud está desactivada en este dispositivo";
+"cloudkit.banner.local_only.message" = "Pawtrackr no pudo iniciar la sincronización con iCloud, así que tus clientes solo están guardados aquí.";
+"cloudkit.banner.quota.steps_ios" = "Para liberar espacio, abre Ajustes, toca tu nombre y luego iCloud > Administrar almacenamiento de la cuenta.";
+"cloudkit.banner.quota.steps_mac" = "Para liberar espacio, abre Ajustes del Sistema, haz clic en tu nombre y luego en iCloud > Administrar.";
+"cloudkit.banner.rejected.title" = "iCloud no está aceptando los datos de Pawtrackr";
+"cloudkit.banner.rejected.message" = "Tus clientes están en este dispositivo, pero NO tienen copia de seguridad. No borres la app.";
+"cloudkit.diagnostics.failures" = "Fallos recientes de iCloud";
+"cloudkit.diagnostics.last_backup" = "Última copia en iCloud";
+"cloudkit.diagnostics.mode" = "Modo de sincronización";
+"cloudkit.diagnostics.mode.disabled" = "Desactivada en esta sesión";
+"cloudkit.diagnostics.mode.local_only_fmt" = "Solo local desde %@";
+"cloudkit.diagnostics.mode.mirroring" = "Sincronización con iCloud activada";
+"cloudkit.diagnostics.no_failures" = "No hay fallos de iCloud registrados.";
+"cloudkit.diagnostics.remote_changes" = "Avisos de cambios remotos";
+"cloudkit.diagnostics.upload_health" = "Estado de las subidas";
+"cloudkit.diagnostics.upload_health.failing_fmt" = "%1$d fallo(s) seguidos desde %2$@";
+"cloudkit.diagnostics.upload_health.ok" = "Sin fallos desde la última subida";
+"cloudkit.error.generic" = "Algunos cambios no han llegado a iCloud. Si esto sigue pasando, envía los detalles a soporte.";
+"cloudkit.error.limit_exceeded" = "Algunos registros son demasiado grandes para que iCloud los acepte. Reintentar no lo soluciona, así que envía los detalles a soporte.";
+"cloudkit.error.schema_rejected" = "iCloud está rechazando los cambios de esta versión de Pawtrackr. Reintentar no lo soluciona, así que envía los detalles a soporte.";
+"cloudkit.error.setup_failed" = "La sincronización con iCloud no pudo iniciarse aunque tienes la sesión iniciada. Revisa que Pawtrackr esté activado para iCloud en Ajustes y vuelve a abrir la app.";
+"cloudkit.error.user_deleted_zone" = "Los datos de Pawtrackr se borraron de iCloud. Los clientes de este dispositivo son ahora la única copia, así que no borres la app.";
+"cloudkit.health.backed_up" = "Con copia de seguridad en iCloud";
+"cloudkit.health.disabled.detail" = "Los cambios se quedan en este dispositivo.";
+"cloudkit.health.disabled.title" = "La sincronización con iCloud está desactivada en esta sesión";
+"cloudkit.health.download_error.title" = "No se pudo descargar de iCloud";
+"cloudkit.health.never_uploaded.detail" = "Tus clientes están guardados en este dispositivo, pero iCloud no ha confirmado ninguna subida desde él. Exporta tus clientes antes de restablecer o cambiar de dispositivo.";
+"cloudkit.health.never_uploaded.title" = "Nada de este dispositivo ha llegado a iCloud todavía";
+"cloudkit.health.not_backed_up" = "Aún sin copia de seguridad en iCloud";
+"cloudkit.health.pending.detail_unconfirmed" = "Los cambios de este dispositivo aún no han llegado a iCloud.";
+"cloudkit.health.upload_failing.title" = "Algunos cambios aún no se han subido";
+"cloudkit.health.uploading" = "Subiendo a iCloud";
+"cloudkit.last_backup.never" = "Aún no hay copia en iCloud desde este dispositivo";
+"cloudkit.last_backup.relative" = "Última copia en iCloud %@";
+"intent.error.store_unavailable" = "Pawtrackr no pudo abrir sus datos. Abre la app para ver qué pasó.";
+"settings.icloud.last_backup" = "Última copia en iCloud";
+"settings.icloud.last_backup_never" = "Nunca desde este dispositivo";
+"settings.icloud.last_download" = "Última descarga";
+"settings.icloud.last_download_never" = "Nunca";

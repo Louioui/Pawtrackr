@@ -67,9 +67,10 @@ struct CloudKitDiagnosticsView: View {
                 row(NSLocalizedString("cloudkit.diagnostics.health_detail", value: "Detail", comment: ""),
                     monitor.healthDetail)
                 if monitor.healthIssues.isEmpty {
-                    Label(NSLocalizedString("cloudkit.health.ok", value: "iCloud sync looks healthy", comment: ""),
-                          systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    // Green only for a confirmed upload, like the toolbar icon.
+                    Label(monitor.healthHeadline,
+                          systemImage: monitor.backupStatus.isBackedUp ? "checkmark.circle.fill" : "info.circle")
+                    .foregroundStyle(monitor.backupStatus.isBackedUp ? .green : .secondary)
                 } else {
                     ForEach(monitor.healthIssues) { issue in
                         VStack(alignment: .leading, spacing: 3) {
@@ -84,7 +85,14 @@ struct CloudKitDiagnosticsView: View {
             }
 
             Section(NSLocalizedString("cloudkit.diagnostics.sync", value: "Sync", comment: "")) {
+                row(AppLocalization.localized("cloudkit.diagnostics.mode", value: "Sync Mode"), modeText)
                 row(NSLocalizedString("cloudkit.diagnostics.state", value: "Current State", comment: ""), syncStateText)
+                row(AppLocalization.localized("cloudkit.diagnostics.last_backup", value: "Last iCloud Backup"),
+                    monitor.syncHealth.lastSuccessfulExportEndedAt.map { $0.formatted(date: .abbreviated, time: .standard) }
+                        ?? AppLocalization.localized("settings.icloud.last_backup_never", value: "Never from this device"))
+                row(AppLocalization.localized("cloudkit.diagnostics.upload_health", value: "Upload Health"), uploadHealthText)
+                row(AppLocalization.localized("cloudkit.diagnostics.remote_changes", value: "Remote Change Notices"),
+                    "\(monitor.remoteChangeCount)")
                 row(NSLocalizedString("cloudkit.diagnostics.last_sync", value: "Last Sync", comment: ""),
                     monitor.lastSyncDate.map { $0.formatted(date: .abbreviated, time: .standard) } ?? "—")
                 row(NSLocalizedString("cloudkit.diagnostics.last_attempt", value: "Last Check", comment: ""),
@@ -110,6 +118,38 @@ struct CloudKitDiagnosticsView: View {
                             .foregroundStyle(.secondary)
                         Text(err)
                             .font(.caption.monospaced())
+                    }
+                }
+            }
+
+            // Kept apart from the event ring, which routine imports rotate
+            // through in minutes.
+            Section(AppLocalization.localized("cloudkit.diagnostics.failures", value: "Recent iCloud Failures")) {
+                if monitor.failureLog.isEmpty {
+                    Text(AppLocalization.localized("cloudkit.diagnostics.no_failures", value: "No iCloud failures recorded."))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(monitor.failureLog) { failure in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                Text(failure.disposition)
+                                    .font(.subheadline.weight(.medium))
+                                Spacer()
+                                Text(failure.code)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.red)
+                            }
+                            if let message = failure.serverMessage {
+                                Text(message)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                            Text("\(failure.kind.displayLabel) · \(failure.occurredAt.formatted(date: .abbreviated, time: .standard))")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 2)
                     }
                 }
             }
@@ -211,6 +251,36 @@ struct CloudKitDiagnosticsView: View {
         }
     }
 
+    private var modeText: String {
+        switch monitor.mode {
+        case .mirroring:
+            return AppLocalization.localized("cloudkit.diagnostics.mode.mirroring", value: "iCloud sync on")
+        case .localOnlyFallback(_, let since):
+            return String(
+                format: AppLocalization.localized("cloudkit.diagnostics.mode.local_only_fmt", value: "Local only since %@"),
+                since.formatted(date: .abbreviated, time: .shortened)
+            )
+        case .disabled:
+            return AppLocalization.localized("cloudkit.diagnostics.mode.disabled", value: "Off for this session")
+        }
+    }
+
+    private var uploadHealthText: String {
+        let health = monitor.syncHealth.exportHealth
+        guard health.isFailing else {
+            return AppLocalization.localized("cloudkit.diagnostics.upload_health.ok", value: "No failures since the last upload")
+        }
+        let since = (health.firstFailureAt ?? health.lastFailureAt).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "—"
+        return String(
+            format: AppLocalization.localized(
+                "cloudkit.diagnostics.upload_health.failing_fmt",
+                value: "%1$d failure(s) in a row since %2$@"
+            ),
+            health.consecutiveFailures,
+            since
+        ) + " (\(health.lastFailureDisposition?.rawValue ?? "unknown"))"
+    }
+
     private var syncStateText: String {
         switch monitor.syncState {
         case .idle: return "Idle"
@@ -230,6 +300,8 @@ struct CloudKitDiagnosticsView: View {
         let lines: [String] = [
             "Pawtrackr iCloud Diagnostics",
             "Container: \(monitor.containerIdentifier)",
+            "Sync mode: \(monitor.mode.diagnosticName)",
+            "Backup status: \(monitor.backupStatus.diagnosticDescription)",
             "Account: \(monitor.accountState.displayLabel)",
             "Network: \(monitor.networkState.displayLabel)",
             "State: \(syncStateText)",
@@ -245,6 +317,10 @@ struct CloudKitDiagnosticsView: View {
             "Quota exceeded: \(monitor.quotaExceeded)",
             "App access warning: \(monitor.iCloudAppAccessMayBeDisabled)",
             "Last error: \(monitor.lastErrorMessage ?? "none")",
+            "Remote change notices this launch: \(monitor.remoteChangeCount)",
+            "",
+            "Upload evidence:",
+            CloudKitMonitor.persistedUploadEvidenceLines().joined(separator: "\n"),
             "",
             "Health issues:",
             monitor.healthIssues.isEmpty ? "- none" : monitor.healthIssues.map { "- \($0.title): \($0.detail)" }.joined(separator: "\n"),

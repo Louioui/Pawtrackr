@@ -844,9 +844,9 @@
 "onboarding.welcome.title" = "Welcome to Pawtrackr";
 "onboarding.welcome.message" = "The modern workspace for pet groomers.\nLet's get your business set up in minutes.";
 "onboarding.feature.icloud.title" = "iCloud Sync";
-"onboarding.feature.icloud.subtitle" = "Your data stays safe and synced across all your devices.";
+"onboarding.feature.icloud.subtitle_status" = "When iCloud is on, Pawtrackr syncs to your other devices and shows you when your data is backed up.";
 "onboarding.feature.privacy.title" = "Privacy First";
-"onboarding.feature.privacy.subtitle" = "End-to-end security with local-first storage and biometric locking.";
+"onboarding.feature.privacy.subtitle_device" = "Your clients are saved on your device and sync only through your own iCloud account. You can lock the app with a PIN and Face ID or Touch ID.";
 "onboarding.feature.insights.title" = "Business Insights";
 "onboarding.feature.insights.subtitle" = "Track revenue, service trends, and client loyalty effortlessly.";
 "onboarding.business.upload_logo" = "Upload Business Logo";
@@ -935,7 +935,7 @@
 "cloudkit.banner.quota.title" = "iCloud storage is full";
 "cloudkit.banner.restricted.message" = "Restrictions or parental controls are blocking iCloud sync.";
 "cloudkit.banner.restricted.title" = "iCloud is restricted";
-"cloudkit.banner.signed_out.message" = "Your data is only on this device. Sign in to back it up and sync.";
+"cloudkit.signed_out.message" = "iCloud is off. Clients already uploaded come back when you sign in with the same Apple Account. Changes made now stay on this device.";
 "cloudkit.banner.signed_out.title" = "Signed out of iCloud";
 "cloudkit.banner.sync_error.title" = "iCloud sync needs attention";
 "cloudkit.banner.temp_unavailable.message" = "Sign in again or wait — iCloud is temporarily unavailable.";
@@ -985,7 +985,6 @@
 "cloudkit.health.quota.title" = "iCloud storage is full";
 "cloudkit.health.restricted.detail" = "Device restrictions are blocking sync.";
 "cloudkit.health.restricted.title" = "iCloud is restricted";
-"cloudkit.health.signed_out.detail" = "Changes stay on this device until iCloud is available.";
 "cloudkit.health.signed_out.title" = "Signed out of iCloud";
 "cloudkit.health.syncing" = "Syncing with iCloud";
 "cloudkit.last_attempt.relative" = "Last checked %@";
@@ -1240,6 +1239,9 @@
 "recovery.reset_confirm.message_fmt" = "The %d clients saved on this device will be moved into a backup folder and Pawtrackr will start empty. They only come back on their own if iCloud sync had already uploaded them.";
 "recovery.reset_confirm.message" = "Your data will be moved into a backup folder on this device and Pawtrackr will start empty.";
 "recovery.reset_done.body_backup" = "Close and reopen Pawtrackr. Your previous data is kept in a backup on this device, and Pawtrackr will offer to bring it back once a fixed version can open it.";
+"recovery.last_upload_fmt" = "Last confirmed iCloud upload from this device: %@";
+"recovery.last_upload_never" = "Last confirmed iCloud upload from this device: Never";
+"recovery.no_recent_icloud_copy" = "iCloud does not have a recent copy from this device. Resetting will leave Pawtrackr empty here.";
 
 /* Clients sort + card (added in 1.0.2) */
 "clients.no_pets" = "No pets";
@@ -1247,7 +1249,7 @@
 "clients.sort.first_name" = "First Name";
 "clients.sort.pet_name" = "Pet's Name";
 "data_safety.restore_pending.message" = "Close Pawtrackr completely and open it again to finish. Anything you change before then will be kept in a separate backup.";
-"store_restore.confirm.icloud_note" = "iCloud sync is on, so clients already saved in iCloud will also come back alongside the restored ones.";
+"store_restore.confirm.icloud_note_backed_up" = "iCloud has a confirmed backup from this device, so clients already saved in iCloud will also come back alongside the restored ones.";
 "store_restore.result.expired" = "The restore you started earlier wasn't finished, so nothing was changed. Start it again from Restore Clients and reopen Pawtrackr right away.";
 "store_restore.result.unopenable" = "That backup couldn't be opened, so Pawtrackr put your previous data back. Nothing was lost.";
 "store_restore.result.failed" = "Pawtrackr couldn't restore the backup, and nothing was changed.";
@@ -1256,3 +1258,46 @@
 "onboarding.restore.message_fmt" = "A backup here has %d clients. Restore them instead of starting over.";
 "onboarding.restore.action" = "Restore Clients";
 "store_restore.confirm.message_empty_fmt" = "Pawtrackr brings back the %1$d clients from %2$@ the next time it opens.";
+
+/* iCloud backup status from confirmed uploads (1.0.3) */
+"cloudkit.banner.action.export_clients" = "Export clients";
+"cloudkit.banner.action.send_support" = "Send details to support";
+"cloudkit.banner.local_only.title" = "iCloud backup is off on this device";
+"cloudkit.banner.local_only.message" = "Pawtrackr couldn't start iCloud sync, so your clients are saved only here.";
+"cloudkit.banner.quota.steps_ios" = "To free up space, open Settings, tap your name, then iCloud > Manage Account Storage.";
+"cloudkit.banner.quota.steps_mac" = "To free up space, open System Settings, click your name, then iCloud > Manage.";
+"cloudkit.banner.rejected.title" = "iCloud isn't accepting Pawtrackr's data";
+"cloudkit.banner.rejected.message" = "Your clients are on this device but are NOT backed up. Don't delete the app.";
+"cloudkit.diagnostics.failures" = "Recent iCloud Failures";
+"cloudkit.diagnostics.last_backup" = "Last iCloud Backup";
+"cloudkit.diagnostics.mode" = "Sync Mode";
+"cloudkit.diagnostics.mode.disabled" = "Off for this session";
+"cloudkit.diagnostics.mode.local_only_fmt" = "Local only since %@";
+"cloudkit.diagnostics.mode.mirroring" = "iCloud sync on";
+"cloudkit.diagnostics.no_failures" = "No iCloud failures recorded.";
+"cloudkit.diagnostics.remote_changes" = "Remote Change Notices";
+"cloudkit.diagnostics.upload_health" = "Upload Health";
+"cloudkit.diagnostics.upload_health.failing_fmt" = "%1$d failure(s) in a row since %2$@";
+"cloudkit.diagnostics.upload_health.ok" = "No failures since the last upload";
+"cloudkit.error.generic" = "Some changes haven't reached iCloud. If this keeps happening, send the details to support.";
+"cloudkit.error.limit_exceeded" = "Some records are too large for iCloud to accept. Retrying won't fix it, so send the details to support.";
+"cloudkit.error.schema_rejected" = "iCloud is rejecting changes from this version of Pawtrackr. Retrying won't fix it, so send the details to support.";
+"cloudkit.error.setup_failed" = "iCloud sync couldn't start even though you're signed in. Check that Pawtrackr is turned on for iCloud in Settings, then reopen the app.";
+"cloudkit.error.user_deleted_zone" = "Pawtrackr's data was deleted from iCloud. The clients on this device are now the only copy, so don't delete the app.";
+"cloudkit.health.backed_up" = "Backed up to iCloud";
+"cloudkit.health.disabled.detail" = "Changes stay on this device.";
+"cloudkit.health.disabled.title" = "iCloud sync is off for this session";
+"cloudkit.health.download_error.title" = "Couldn't download from iCloud";
+"cloudkit.health.never_uploaded.detail" = "Your clients are saved on this device, but iCloud hasn't confirmed an upload from it. Export your clients before you reset or switch devices.";
+"cloudkit.health.never_uploaded.title" = "Nothing from this device has reached iCloud yet";
+"cloudkit.health.not_backed_up" = "Not backed up to iCloud yet";
+"cloudkit.health.pending.detail_unconfirmed" = "Changes from this device haven't reached iCloud yet.";
+"cloudkit.health.upload_failing.title" = "Some changes haven't uploaded yet";
+"cloudkit.health.uploading" = "Uploading to iCloud";
+"cloudkit.last_backup.never" = "No iCloud backup from this device yet";
+"cloudkit.last_backup.relative" = "Last iCloud backup %@";
+"intent.error.store_unavailable" = "Pawtrackr couldn't open its data. Open the app to see what happened.";
+"settings.icloud.last_backup" = "Last iCloud backup";
+"settings.icloud.last_backup_never" = "Never from this device";
+"settings.icloud.last_download" = "Last download";
+"settings.icloud.last_download_never" = "Never";

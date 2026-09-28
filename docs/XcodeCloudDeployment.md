@@ -25,6 +25,7 @@ Configure these Xcode Cloud environment variables:
 
 - `PAWTRACKR_ENTERPRISE_ENVIRONMENT`: non-secret build environment label, for example `production`
 - `VAULT_SECRET_TOKEN`: secret token available to scripts or signing/upload tools
+- `CKTOOL_MANAGEMENT_TOKEN`: secret CloudKit management token for the Production-schema gate on archives. Setup is in `docs/icloud-validation.md`. Without it, archives print a warning and skip the gate.
 
 Do not write `VAULT_SECRET_TOKEN` into `Info.plist`. Values stored in `Info.plist` are bundled into the app and are visible to anyone with the app binary. The preflight script only injects non-secret environment metadata and confirms when the secret exists.
 
@@ -34,7 +35,10 @@ The scripts currently enforce:
 
 - no `FIXME_TRANSLATION` markers in localized resources
 - valid iOS Info.plist syntax
-- migration plan presence
+- no SwiftData migration plan in the app target (ADR-0004)
+- no unique constraint on a model in `PawtrackrSchema.models`
+- `docs/cloudkit/required-record-types.txt` matches `PawtrackrSchema.models`
+- on archives with `CKTOOL_MANAGEMENT_TOKEN`: the CloudKit Production schema has every required record type and every field Development has for them
 - `PawtrackrTests` and `PawtrackrUITests` inclusion in `TestPlan.xctestplan`
 - QualityControl chaos test source presence
 

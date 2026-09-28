@@ -48,27 +48,34 @@ struct EcosystemStatusBar: View {
     }
 
     private var isUpdating: Bool {
-        if case .syncing = monitor.syncState { return true }
-        return monitor.offlineBufferedMutationCount > 0
+        monitor.isActivelySyncing || monitor.offlineBufferedMutationCount > 0
     }
 
+    /// LIVE only when an upload iCloud accepted covers this device's changes;
+    /// a successful download alone used to earn it.
     private var statusCode: String {
+        if monitor.mode.isLocalOnlyFallback {
+            return "SHOP_SYNC_LOCAL_ONLY"
+        }
         if !monitor.networkState.isOnline {
             return "SHOP_SYNC_OFFLINE"
         }
         if !monitor.accountState.isAvailable {
             return "SHOP_SYNC_WAITING"
         }
-        if case .error = monitor.syncState {
+        switch monitor.backupStatus {
+        case .failing:
             return "SHOP_SYNC_ATTENTION"
-        }
-        if monitor.pendingChangesSummary != nil {
-            return "SHOP_SYNC_PENDING"
-        }
-        if isUpdating {
+        case .notBackedUp:
+            // PENDING only past the upload grace period, like the banner.
+            return monitor.hasUploadsPendingPastGrace ? "SHOP_SYNC_PENDING" : "SHOP_SYNC_WAITING"
+        case .uploading:
             return "SHOP_SYNC_UPDATING"
+        case .backedUp:
+            return isUpdating ? "SHOP_SYNC_UPDATING" : "SHOP_SYNC_LIVE"
+        case .signedOut, .localOnly, .unknown:
+            return "SHOP_SYNC_WAITING"
         }
-        return "SHOP_SYNC_LIVE"
     }
 
     private var tint: Color {

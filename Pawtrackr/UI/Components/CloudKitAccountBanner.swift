@@ -2,14 +2,18 @@
 //  CloudKitAccountBanner.swift
 //  Pawtrackr
 //
-//  Top-of-screen banner shown when the user is signed out of iCloud,
-//  iCloud storage is full, or sync has hit a hard error.
+//  Top-of-screen banner for iCloud backup problems, most serious first:
+//  local-only mode or uploads iCloud keeps rejecting (red, can't be
+//  dismissed), then full iCloud storage, then account problems, then changes
+//  that have waited past the upload grace period.
 //
-//  Hidden when everything is healthy. Tapping the banner opens system
-//  Settings (iOS) / System Settings.app (macOS) so the user can fix it.
+//  The red banners carry Export clients and Send details to support, because
+//  at that point the device holds the only copy. Account banners open
+//  Settings (iOS) / System Settings (macOS) so the groomer can fix them.
 //
 
 import SwiftUI
+import SwiftData
 #if canImport(UIKit) && !targetEnvironment(macCatalyst)
 import UIKit
 #elseif canImport(AppKit)
@@ -17,41 +21,56 @@ import AppKit
 #endif
 
 struct CloudKitAccountBanner: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var monitor = CloudKitMonitor.shared
     @State private var dismissedFingerprint: String?
+    @State private var clientExport: ExportDocument?
+    @State private var supportReport: String?
+    @State private var isPreparingExport = false
+    @State private var actionError: String?
 
     var body: some View {
         Group {
             if let info = bannerInfo, info.fingerprint != dismissedFingerprint {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: info.icon)
-                        .font(.title3)
-                        .foregroundStyle(info.tint)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(info.title).font(.subheadline.weight(.semibold))
-                        Text(info.message).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 8)
-                    if let actionTitle = info.actionTitle {
-                        Button {
-                            open(info.action)
-                        } label: {
-                            Text(actionTitle)
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                    if info.isDismissible {
-                        Button {
-                            dismissedFingerprint = info.fingerprint
-                        } label: {
-                            Image(systemName: "xmark")
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: info.icon)
+                            .font(.title3)
+                            .foregroundStyle(info.tint)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(info.title).font(.subheadline.weight(.semibold))
+                            Text(info.message)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(NSLocalizedString("common.dismiss", value: "Dismiss", comment: ""))
+                        Spacer(minLength: 8)
+                        if let actionTitle = info.actionTitle {
+                            Button {
+                                openSettings()
+                            } label: {
+                                Text(actionTitle)
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                        if info.isDismissible {
+                            Button {
+                                dismissedFingerprint = info.fingerprint
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(NSLocalizedString("common.dismiss", value: "Dismiss", comment: ""))
+                        }
+                    }
+
+                    if info.offersDataActions {
+                        dataActions
+                            .padding(.leading, 34)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -62,6 +81,11 @@ struct CloudKitAccountBanner: View {
                     alignment: .bottom
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
+                // Prepared up front so "Send details to support" is one tap.
+                .task(id: info.fingerprint) {
+                    guard info.offersDataActions else { return }
+                    supportReport = await SupportService.shared.generateReport(context: modelContext).content
+                }
             }
         }
         // Re-arm dismissal when the banner's identity changes (or it goes away).
@@ -70,11 +94,121 @@ struct CloudKitAccountBanner: View {
         .onChange(of: bannerInfo?.fingerprint) { oldValue, newValue in
             if oldValue != newValue {
                 dismissedFingerprint = nil
+                clientExport = nil
+                supportReport = nil
+                actionError = nil
+            }
+        }
+    }
+
+    /// Stacked, not side by side: two labelled buttons don't fit next to each
+    /// other at iPhone width.
+    private var dataActions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let clientExport {
+                ShareLink(
+                    item: clientExport,
+                    preview: SharePreview(clientExport.filename, icon: Image(systemName: "doc.text.fill"))
+                ) {
+                    Label(
+                        String(
+                            format: AppLocalization.localized("settings.export.share_fmt", value: "Share %@"),
+                            clientExport.filename
+                        ),
+                        systemImage: "square.and.arrow.up"
+                    )
+                    .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            } else {
+                Button {
+                    prepareClientExport()
+                } label: {
+                    Label(
+                        AppLocalization.localized("cloudkit.banner.action.export_clients", value: "Export clients"),
+                        systemImage: "person.3.sequence.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isPreparingExport)
+            }
+
+            if let supportReport {
+                ShareLink(item: supportReport) {
+                    Label(
+                        AppLocalization.localized("cloudkit.banner.action.send_support", value: "Send details to support"),
+                        systemImage: "lifepreserver"
+                    )
+                    .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            if let actionError {
+                Text(actionError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
     private var bannerInfo: BannerInfo? {
+        // Tests and in-memory runs have iCloud off on purpose.
+        if monitor.mode == .disabled { return nil }
+
+        if monitor.mode.isLocalOnlyFallback {
+            return BannerInfo(
+                fingerprint: "localOnly",
+                icon: "icloud.slash",
+                tint: .red,
+                title: AppLocalization.localized("cloudkit.banner.local_only.title", value: "iCloud backup is off on this device"),
+                message: AppLocalization.localized(
+                    "cloudkit.banner.local_only.message",
+                    value: "Pawtrackr couldn't start iCloud sync, so your clients are saved only here."
+                ),
+                actionTitle: nil,
+                isDismissible: false,
+                offersDataActions: true
+            )
+        }
+
+        if monitor.isShowingUploadRejection {
+            return BannerInfo(
+                fingerprint: "uploadRejected",
+                icon: "xmark.icloud.fill",
+                tint: .red,
+                title: AppLocalization.localized("cloudkit.banner.rejected.title", value: "iCloud isn't accepting Pawtrackr's data"),
+                message: AppLocalization.localized(
+                    "cloudkit.banner.rejected.message",
+                    value: "Your clients are on this device but are NOT backed up. Don't delete the app."
+                ),
+                actionTitle: nil,
+                isDismissible: false,
+                offersDataActions: true
+            )
+        }
+
+        if monitor.accountState == .available, monitor.quotaExceeded {
+            return BannerInfo(
+                fingerprint: "quotaExceeded",
+                icon: "exclamationmark.icloud.fill",
+                tint: .red,
+                title: NSLocalizedString("cloudkit.banner.quota.title", value: "iCloud storage is full", comment: ""),
+                message: NSLocalizedString("cloudkit.banner.quota.message", value: "Changes are saving locally until iCloud storage is cleared.", comment: "")
+                    + " " + storageSteps,
+                actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
+                isDismissible: false
+            )
+        }
+
         switch monitor.accountState {
         case .noAccount:
             return BannerInfo(
@@ -82,9 +216,8 @@ struct CloudKitAccountBanner: View {
                 icon: "icloud.slash",
                 tint: .orange,
                 title: NSLocalizedString("cloudkit.banner.signed_out.title", value: "Signed out of iCloud", comment: ""),
-                message: NSLocalizedString("cloudkit.banner.signed_out.message", value: "Your data is only on this device. Sign in to back it up and sync.", comment: ""),
+                message: SyncFailureCopy.signedOutMessage,
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings,
                 isDismissible: true
             )
         case .restricted:
@@ -95,7 +228,6 @@ struct CloudKitAccountBanner: View {
                 title: NSLocalizedString("cloudkit.banner.restricted.title", value: "iCloud is restricted", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.restricted.message", value: "Restrictions or parental controls are blocking iCloud sync.", comment: ""),
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings,
                 isDismissible: true
             )
         case .temporarilyUnavailable:
@@ -106,19 +238,7 @@ struct CloudKitAccountBanner: View {
                 title: NSLocalizedString("cloudkit.banner.temp_unavailable.title", value: "iCloud unavailable", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.temp_unavailable.message", value: "Sign in again or wait — iCloud is temporarily unavailable.", comment: ""),
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings,
                 isDismissible: true
-            )
-        case .available where monitor.quotaExceeded:
-            return BannerInfo(
-                fingerprint: "quotaExceeded",
-                icon: "exclamationmark.icloud.fill",
-                tint: .red,
-                title: NSLocalizedString("cloudkit.banner.quota.title", value: "iCloud storage is full", comment: ""),
-                message: NSLocalizedString("cloudkit.banner.quota.message", value: "Changes are saving locally until iCloud storage is cleared.", comment: ""),
-                actionTitle: NSLocalizedString("cloudkit.banner.quota.action", value: "Manage Storage", comment: ""),
-                action: .iCloudStorage,
-                isDismissible: false
             )
         case .available where monitor.iCloudAppAccessMayBeDisabled:
             return BannerInfo(
@@ -128,61 +248,68 @@ struct CloudKitAccountBanner: View {
                 title: NSLocalizedString("cloudkit.banner.app_access.title", value: "Check iCloud access", comment: ""),
                 message: NSLocalizedString("cloudkit.banner.app_access.message", value: "iCloud is signed in, but app access may be disabled in Settings.", comment: ""),
                 actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                action: .settings,
                 isDismissible: true
             )
-        case .available:
-            if let pending = monitor.pendingChangesSummary {
-                return BannerInfo(
-                    fingerprint: "pending-\(pending)",
-                    icon: "icloud.and.arrow.up",
-                    tint: .orange,
-                    title: NSLocalizedString("cloudkit.banner.pending.title", value: "iCloud upload pending", comment: ""),
-                    message: NSLocalizedString("cloudkit.banner.pending.message", value: "Changes are saving locally and will upload when iCloud is ready.", comment: ""),
-                    actionTitle: nil,
-                    action: .settings,
-                    isDismissible: false
-                )
-            }
-            if let message = monitor.lastErrorMessage, case .error = monitor.syncState {
-                return BannerInfo(
-                    fingerprint: "syncError-\(message)",
-                    icon: "xmark.icloud.fill",
-                    tint: .red,
-                    title: NSLocalizedString("cloudkit.banner.sync_error.title", value: "iCloud sync needs attention", comment: ""),
-                    message: message,
-                    actionTitle: NSLocalizedString("common.settings", value: "Settings", comment: ""),
-                    action: .settings,
-                    isDismissible: true
-                )
-            }
-            return nil
+        case .available where monitor.hasUploadsPendingPastGrace:
+            // Only past the grace period: uploads normally trail a save by
+            // seconds to minutes, and flashing this after every save taught
+            // groomers to ignore it.
+            return BannerInfo(
+                fingerprint: "pending",
+                icon: "icloud.and.arrow.up",
+                tint: .orange,
+                title: NSLocalizedString("cloudkit.banner.pending.title", value: "iCloud upload pending", comment: ""),
+                message: NSLocalizedString("cloudkit.banner.pending.message", value: "Changes are saving locally and will upload when iCloud is ready.", comment: ""),
+                actionTitle: nil,
+                isDismissible: false
+            )
         default:
             return nil
         }
     }
 
-    private func open(_ action: BannerAction) {
+    /// There is no public URL for iCloud storage, so the banner opens
+    /// Settings and says where to go from there.
+    private var storageSteps: String {
+        #if os(macOS)
+        AppLocalization.localized(
+            "cloudkit.banner.quota.steps_mac",
+            value: "To free up space, open System Settings, click your name, then iCloud > Manage."
+        )
+        #else
+        AppLocalization.localized(
+            "cloudkit.banner.quota.steps_ios",
+            value: "To free up space, open Settings, tap your name, then iCloud > Manage Account Storage."
+        )
+        #endif
+    }
+
+    private func openSettings() {
         #if canImport(UIKit) && !targetEnvironment(macCatalyst)
-        let urlString: String
-        switch action {
-        case .settings:
-            urlString = UIApplication.openSettingsURLString
-        case .iCloudStorage:
-            urlString = "App-prefs:CASTLE&path=STORAGE_MANAGEMENT"
-        }
-        if let url = URL(string: urlString) {
-            UIApplication.shared.open(url) { success in
-                if !success, action != .settings, let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(settingsURL)
-                }
-            }
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
         #elseif canImport(AppKit)
         if let url = URL(string: "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane") {
             NSWorkspace.shared.open(url)
         }
         #endif
+    }
+
+    /// Same export as Settings > Data Export, so the file matches what the
+    /// groomer would get there.
+    private func prepareClientExport() {
+        actionError = nil
+        isPreparingExport = true
+        defer { isPreparingExport = false }
+        do {
+            clientExport = try ExportService.shared.exportClientsToCSV(modelContext: modelContext)
+        } catch {
+            actionError = String(
+                format: AppLocalization.localized("settings.export.failed_fmt", value: "Export failed: %@"),
+                error.localizedDescription
+            )
+        }
     }
 
     private struct BannerInfo {
@@ -192,12 +319,7 @@ struct CloudKitAccountBanner: View {
         let title: String
         let message: String
         let actionTitle: String?
-        let action: BannerAction
         let isDismissible: Bool
-    }
-
-    private enum BannerAction: Equatable {
-        case settings
-        case iCloudStorage
+        var offersDataActions = false
     }
 }
