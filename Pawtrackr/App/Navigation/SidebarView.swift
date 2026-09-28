@@ -113,19 +113,30 @@ private struct SidebarRow: View {
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                #if os(macOS)
-                .scaleEffect(isHovering ? 1.02 : 1.0)
-                .shadow(color: isHovering ? .black.opacity(0.08) : .clear, radius: 4, y: 2)
-                .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isHovering)
-                #endif
         }
         .buttonStyle(.plain)
         .walkthroughAnchor(item.walkthroughAnchorID)
-        .listRowBackground(selection == item ? Color.accentColor.opacity(0.14) : Color.clear)
+        .listRowBackground(rowBackground)
         .accessibilityIdentifier("sidebar.row.\(item.rawValue)")
         .accessibilityAddTraits(selection == item ? .isSelected : [])
         #if os(macOS)
-        .onHover { hovering in isHovering = hovering }
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) {
+                isHovering = hovering
+            }
+        }
+        #endif
+    }
+
+    private var rowBackground: Color {
+        if selection == item {
+            return Color.accentColor.opacity(0.14)
+        }
+
+        #if os(macOS)
+        return isHovering ? Color.primary.opacity(0.06) : Color.clear
+        #else
+        return Color.clear
         #endif
     }
 }
