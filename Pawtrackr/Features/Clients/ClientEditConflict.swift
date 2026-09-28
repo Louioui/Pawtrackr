@@ -16,8 +16,9 @@
 //  - The check re-reads the client through a fresh ModelContext, so a change
 //    the view's context hasn't merged yet still counts.
 //
-//  Save writes only the fields the groomer changed, through a fresh context,
-//  so a different field changed elsewhere survives "Save My Changes".
+//  Save writes only the fields the groomer changed, onto a copy re-read from
+//  the store, so a different field changed elsewhere survives "Save My
+//  Changes".
 //
 
 import Foundation
@@ -180,13 +181,14 @@ enum ClientEditSaver {
     /// Saves the fields the groomer changed. With `overwrite` false, a change
     /// saved on another device since `baseline` stops the save instead.
     ///
-    /// The write goes through a fresh context. The view's context doesn't
-    /// merge another context's save (or a CloudKit import) into an object it
-    /// already holds, and saving that stale object puts every one of its old
-    /// values back, not just the edited ones: another device's new phone,
-    /// points or notes would be lost. A fresh fetch starts from what the
-    /// store has now, so only the changed fields move. `liveContext` is then
-    /// re-fetched so the screen shows the result.
+    /// The view's context doesn't merge another context's save (or a CloudKit
+    /// import) into an object it already holds, and saving that stale object
+    /// puts every one of its old values back, not just the edited ones:
+    /// another device's new phone, points or notes would be lost. So the
+    /// view's object is re-read first and written only when the re-read
+    /// matches the store; that keeps every screen showing this client in
+    /// step. If it doesn't match, the write goes through a fresh context
+    /// instead, so the store is right even if a screen lags.
     static func save(
         _ form: ClientEditForm,
         baseline: ClientEditBaseline,
@@ -201,34 +203,46 @@ enum ClientEditSaver {
         let changed = proposed.changedFields(comparedTo: baseline.fields)
         guard !changed.isEmpty else { return .unchanged }
 
-        let writeContext = ModelContext(container)
-        guard let stored = fetchClient(baseline.clientUUID, in: writeContext) else {
+        let freshContext = ModelContext(container)
+        guard let stored = fetchClient(baseline.clientUUID, in: freshContext) else {
             return .missing
         }
+        let storedNow = ClientEditBaseline(stored)
 
         if !overwrite,
-           baseline.hasChangeFromAnotherDevice(current: ClientEditBaseline(stored), currentDeviceID: currentDeviceID) {
+           baseline.hasChangeFromAnotherDevice(current: storedNow, currentDeviceID: currentDeviceID) {
             return .changedElsewhere
         }
 
-        if changed.contains(.firstName) { stored.setFirstName(proposed.firstName) }
-        if changed.contains(.lastName) { stored.setLastName(proposed.lastName) }
-        if changed.contains(.phone) { stored.setPhone(proposed.phone) }
-        if changed.contains(.email) { stored.setEmail(proposed.email) }
-        if changed.contains(.address) { stored.setAddress(proposed.address) }
-
-        guard writeContext.hasChanges else {
-            refresh(baseline.clientUUID, in: liveContext)
-            return .unchanged
+        let target: Client
+        let targetContext: ModelContext
+        if let liveContext,
+           let live = fetchClient(baseline.clientUUID, in: liveContext),
+           ClientEditBaseline(live) == storedNow {
+            target = live
+            targetContext = liveContext
+        } else {
+            target = stored
+            targetContext = freshContext
         }
+
+        if changed.contains(.firstName) { target.setFirstName(proposed.firstName) }
+        if changed.contains(.lastName) { target.setLastName(proposed.lastName) }
+        if changed.contains(.phone) { target.setPhone(proposed.phone) }
+        if changed.contains(.email) { target.setEmail(proposed.email) }
+        if changed.contains(.address) { target.setAddress(proposed.address) }
+
+        guard targetContext.hasChanges else { return .unchanged }
         do {
-            try writeContext.save()
+            try targetContext.save()
         } catch {
             Logger.clientEdit.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
             CloudKitMonitor.shared.reportLocalSaveError(error, operation: "saving client changes")
             return .failed(message: error.localizedDescription)
         }
-        refresh(baseline.clientUUID, in: liveContext)
+        if targetContext !== liveContext {
+            refresh(baseline.clientUUID, in: liveContext)
+        }
         CloudKitMonitor.shared.recordLocalChange("Saved client changes")
         return .saved
     }

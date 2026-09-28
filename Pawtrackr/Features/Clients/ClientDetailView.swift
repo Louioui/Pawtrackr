@@ -830,6 +830,9 @@ struct ClientDetailView: View {
     }
 
     private func beginEditContact(_ c: EmergencyContact) {
+        // Re-read first so the editor starts from what the store has, not
+        // from values this context kept after another device's change.
+        viewModel?.refreshEmergencyContacts()
         editingContact = c
         newContactName = TextInputLimits.limited(c.name, to: TextInputLimits.name)
         newContactRelation = TextInputLimits.limited(c.relation ?? "", to: TextInputLimits.shortText)

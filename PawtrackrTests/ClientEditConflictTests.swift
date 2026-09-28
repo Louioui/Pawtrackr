@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import Observation
 @testable import Pawtrackr
 
 /// The Edit Client sheet and the inline header edit must not silently
@@ -215,6 +216,49 @@ final class ClientEditConflictTests: XCTestCase {
         XCTAssertEqual(saved.loyaltyPoints, 40, "The other device's points survive the save.")
         XCTAssertEqual(client.loyaltyPoints, 40)
         XCTAssertEqual(client.lastName, "Stone-Reyes")
+    }
+
+    func testSavedEditReachesScreensWatchingTheClient() throws {
+        let client = try makeClient()
+        let baseline = ClientEditBaseline(client)
+        var edited = form(for: client)
+        edited.firstName = "Avery"
+
+        try simulateEditFromOtherDevice(client.uuid, at: Date(timeIntervalSince1970: 2_000)) { remote in
+            remote.loyaltyPoints = 12
+        }
+
+        var observedChange = false
+        withObservationTracking({ _ = client.firstName }, onChange: { observedChange = true })
+        XCTAssertEqual(
+            ClientEditSaver.save(edited, baseline: baseline, container: container, refreshing: context, overwrite: false, currentDeviceID: thisDevice),
+            .saved
+        )
+
+        XCTAssertTrue(observedChange, "List cards and headers observing the client must see the new name.")
+        XCTAssertEqual(client.firstName, "Avery")
+        XCTAssertEqual(try stored(client.uuid).loyaltyPoints, 12, "Writing through the re-read object keeps the other device's points.")
+    }
+
+    func testStaleViewObjectFallsBackToAFreshWrite() throws {
+        let client = try makeClient()
+        let baseline = ClientEditBaseline(client)
+        var edited = form(for: client)
+        edited.email = "ava.stone@example.com"
+
+        try simulateEditFromOtherDevice(client.uuid, at: Date(timeIntervalSince1970: 2_000)) { remote in
+            remote.phone = "+13125550199"
+        }
+        // Unsaved local edits keep a re-read from refreshing the view's object.
+        client.loyaltyPoints = 7
+
+        XCTAssertEqual(
+            ClientEditSaver.save(edited, baseline: baseline, container: container, refreshing: context, overwrite: true, currentDeviceID: thisDevice),
+            .saved
+        )
+        let saved = try stored(client.uuid)
+        XCTAssertEqual(saved.email, "ava.stone@example.com")
+        XCTAssertEqual(saved.phone, "+13125550199", "A stale view object is never the one written.")
     }
 
     func testMissingClientIsReportedInsteadOfRecreated() throws {
