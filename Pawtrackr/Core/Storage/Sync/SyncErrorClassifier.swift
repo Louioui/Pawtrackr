@@ -225,6 +225,11 @@ nonisolated enum SyncErrorClassifier {
             return verdict(forCloudKitCode: nsError.code, nsError: nsError)
         case NSCocoaErrorDomain where nsError.code == 134400:
             return .decisive(accountAvailable ? .setupFailedWhileSignedIn : .userActionable(.notAuthenticated))
+        case NSCocoaErrorDomain where nsError.code == 134417 && children(of: nsError).isEmpty:
+            // A bare 134417 is "cancelled because there is already a pending
+            // request": the queued export still runs, and bursts of saves
+            // produce these. One that wraps an error is decided by that error.
+            return .decisive(.benign)
         case NSURLErrorDomain where networkURLErrorCodes.contains(nsError.code):
             return .decisive(.transient)
         default:

@@ -256,8 +256,14 @@ enum SummaryUpdater {
     /// are still importing. A full deterministic rebuild avoids the silent failure
     /// mode where an early "no changes" watermark makes restored visits invisible in
     /// Dashboard/Insights.
-    static func rebuildAllSummaries(in context: ModelContext) {
+    ///
+    /// A rebuild that finds nothing to change must not save: the summary rows
+    /// are mirrored, so every saved row is uploaded and imported on every
+    /// other device, whose own rebuild then runs again. Returns whether it saved.
+    @discardableResult
+    static func rebuildAllSummaries(in context: ModelContext) -> Bool {
         let now = Date()
+        var saved = false
 
         do {
             let descriptor = FetchDescriptor<Visit>(
@@ -316,12 +322,14 @@ enum SummaryUpdater {
 
             if context.hasChanges {
                 try context.save()
+                saved = true
             }
             UserDefaults.standard.set(now, forKey: "lastSummaryRebuildDate")
-            Logger.summaries.info("Full summary rebuild successful: \(completedVisits.count) visits, \(dayStats.count) day rows")
+            Logger.summaries.info("Full summary rebuild successful: \(completedVisits.count) visits, \(dayStats.count) day rows, saved: \(saved)")
         } catch {
             Logger.summaries.error("Full summary rebuild failed: \(String(describing: error))")
         }
+        return saved
     }
 
     static func upsertClientInsightSummary(for client: Client, in context: ModelContext) throws {
@@ -334,13 +342,7 @@ enum SummaryUpdater {
         let canonical = canonicalClientInsightSummary(from: existingRows, in: context)
 
         if let row = canonical {
-            row.update(
-                clientName: aggregate.clientName,
-                totalSpent: aggregate.totalSpent,
-                visitCount: aggregate.visitCount,
-                isChurnRisk: aggregate.isChurnRisk,
-                lastVisitAt: aggregate.lastVisitAt
-            )
+            apply(aggregate, to: row)
         } else {
             context.insert(ClientInsightSummary(
                 clientUUID: aggregate.clientUUID,
@@ -375,8 +377,10 @@ enum SummaryUpdater {
                 continue
             }
             seen.insert(row.day)
-            row.revenue = aggregate.revenue
-            row.visitCount = aggregate.count
+            if row.revenue.roundedMoney() != aggregate.revenue.roundedMoney() {
+                row.revenue = aggregate.revenue
+            }
+            assign(aggregate.count, to: \.visitCount, on: row)
         }
 
         for (day, aggregate) in stats where !seen.contains(day) {
@@ -394,7 +398,7 @@ enum SummaryUpdater {
                 continue
             }
             seen.insert(key)
-            row.count = count
+            assign(count, to: \.count, on: row)
         }
 
         for (key, count) in stats where !seen.contains(key) {
@@ -412,7 +416,7 @@ enum SummaryUpdater {
                 continue
             }
             seen.insert(key)
-            row.count = count
+            assign(count, to: \.count, on: row)
         }
 
         for (key, count) in stats where !seen.contains(key) {
@@ -432,13 +436,7 @@ enum SummaryUpdater {
                 continue
             }
             seen.insert(row.clientUUID)
-            row.update(
-                clientName: aggregate.clientName,
-                totalSpent: aggregate.totalSpent,
-                visitCount: aggregate.visitCount,
-                isChurnRisk: aggregate.isChurnRisk,
-                lastVisitAt: aggregate.lastVisitAt
-            )
+            apply(aggregate, to: row)
         }
 
         for aggregate in stats.values where !seen.contains(aggregate.clientUUID) {
@@ -451,6 +449,37 @@ enum SummaryUpdater {
                 lastVisitAt: aggregate.lastVisitAt
             ))
         }
+    }
+
+    /// SwiftData marks a row changed on any assignment, even of the value it
+    /// already holds, and a changed mirrored row is uploaded. So summary
+    /// writers compare first.
+    private static func assign<Row: AnyObject, Value: Equatable>(
+        _ value: Value,
+        to keyPath: ReferenceWritableKeyPath<Row, Value>,
+        on row: Row
+    ) {
+        if row[keyPath: keyPath] != value {
+            row[keyPath: keyPath] = value
+        }
+    }
+
+    /// `update` also stamps `updatedAt`, so it only runs when a field differs.
+    private static func apply(_ aggregate: ClientInsightAggregate, to row: ClientInsightSummary) {
+        let unchanged = row.clientName == aggregate.clientName
+            && row.totalSpent.roundedMoney() == aggregate.totalSpent.roundedMoney()
+            && row.visitCount == aggregate.visitCount
+            && row.isRecurring == (aggregate.visitCount > 1)
+            && row.isChurnRisk == aggregate.isChurnRisk
+            && row.lastVisitAt == aggregate.lastVisitAt
+        guard !unchanged else { return }
+        row.update(
+            clientName: aggregate.clientName,
+            totalSpent: aggregate.totalSpent,
+            visitCount: aggregate.visitCount,
+            isChurnRisk: aggregate.isChurnRisk,
+            lastVisitAt: aggregate.lastVisitAt
+        )
     }
 
     private static func clientInsightAggregate(for client: Client) -> ClientInsightAggregate {

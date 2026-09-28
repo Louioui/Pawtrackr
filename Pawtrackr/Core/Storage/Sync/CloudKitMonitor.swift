@@ -784,6 +784,11 @@ final class CloudKitMonitor {
 
     /// A remote-change notice says the store changed, not that anything
     /// synced, so it only marks activity and never touches health.
+    ///
+    /// It must never write to the store. The notice fires for this app's own
+    /// saves too, so rebuilding summaries here re-triggered itself every
+    /// ~2.4 s: an export stayed queued forever (134417 on every retry) and the
+    /// banner sat on "upload pending". Successful `.import` events rebuild.
     private func handlePersistentStoreRemoteChange() {
         remoteChangeCount += 1
         lastRemoteChangeDate = Date()
@@ -797,7 +802,6 @@ final class CloudKitMonitor {
             try? await Task.sleep(for: .milliseconds(250))
             guard let self, !Task.isCancelled else { return }
             self.modelContainer?.mainContext.processPendingChanges()
-            self.rebuildAndReconcileAfterImport()
             self.release(.remoteChange)
             self.postChange()
         }

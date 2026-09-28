@@ -237,6 +237,19 @@ final class SyncErrorClassifierTests: XCTestCase {
         XCTAssertEqual(signedOut.userMessageKey, "cloudkit.error.signed_out")
     }
 
+    /// Logged on every save burst while an export is already queued. Counting
+    /// it as a failure would turn the banner red while uploads are fine.
+    func testAlreadyPendingExport134417IsBenign() {
+        let cancelled = NSError(
+            domain: NSCocoaErrorDomain,
+            code: 134417,
+            userInfo: [NSLocalizedFailureReasonErrorKey: "Request was cancelled because there is already a pending request of type 'NSCloudKitMirroringExportRequest'."]
+        )
+
+        XCTAssertEqual(SyncErrorClassifier.classify(cancelled, accountAvailable: true).disposition, .benign)
+        XCTAssertFalse(SyncErrorClassifier.classify(cancelled, accountAvailable: true).isPermanent)
+    }
+
     func testNested134400IsDecidedByCode() {
         let setupError = NSError(domain: NSCocoaErrorDomain, code: 134400)
         let wrapped = NSError(domain: NSCocoaErrorDomain, code: 134060, userInfo: [NSUnderlyingErrorKey: setupError])
