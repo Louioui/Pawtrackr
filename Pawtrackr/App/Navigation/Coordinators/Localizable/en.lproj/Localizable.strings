@@ -1323,3 +1323,24 @@
 "settings.icloud.last_backup_never" = "Never from this device";
 "settings.icloud.last_download" = "Last download";
 "settings.icloud.last_download_never" = "Never";
+
+/* Settings > Security card (App Lock status comes from isLockEnabled AND a PIN on this device), and the encrypted-snapshot controls kept off in the UI. */
+"settings.security.protection_title" = "Access Protection";
+"settings.security.pin_status" = "PIN Status";
+"settings.security.enabled_detail" = "Client records need your PIN when Pawtrackr opens and whenever the auto-lock rules below apply.";
+"settings.security.needs_pin_detail" = "App Lock is on, but this device has no PIN, so Pawtrackr opens without one. Set a PIN to protect client records.";
+"settings.security.disabled_detail" = "App lock is off. Turn it on before sharing this device with staff.";
+"settings.security.pin_biometric" = "PIN set with biometric unlock enabled";
+"settings.security.pin_only" = "PIN set";
+"settings.security.pin_missing" = "No PIN on this device";
+"settings.security.pin_disabled" = "Not required";
+"settings.security.auto_lock_title" = "Auto-Lock Rules";
+"settings.security.auto_lock_detail" = "Use these controls for shared front-desk devices or grooming-room stations.";
+"settings.security.lock_timing" = "Lock Timing";
+"settings.security.auto_lock_disabled" = "Enable app lock to use automatic locking.";
+"settings.security.auto_lock_needs_pin" = "Set a PIN to use automatic locking.";
+"settings.security.lock_on_close_only" = "Locks when the app closes or moves to the background.";
+"settings.security.lock_on_launch_only" = "Locks only when Pawtrackr starts.";
+"settings.export.encrypted_backup" = "Create Encrypted Local Backup";
+"settings.export.share_encrypted_backup" = "Share Encrypted Backup";
+"settings.export.encrypted_backup_note" = "This package can only be opened on this device, and Pawtrackr can't restore from it yet.";

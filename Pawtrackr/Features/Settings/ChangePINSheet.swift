@@ -8,11 +8,13 @@ struct ChangePINSheet: View {
     @State private var confirmPIN: String = ""
     @State private var errorMessage: String? = nil
 
-    /// No PIN has ever been chosen (e.g. the user finished onboarding passcode-free),
-    /// so there is no current PIN to verify — this becomes a "set your first PIN"
-    /// flow instead of a change. Prevents a dead-end where the user would have to
-    /// guess the default code to set a real one.
-    private var isInitialSetup: Bool { appSettings.lastPINChangeDate == nil }
+    /// No PIN is stored on this device (the user finished onboarding
+    /// passcode-free, or a device restore brought back `lastPINChangeDate` but
+    /// not the ThisDeviceOnly Keychain PIN), so there is no current PIN to
+    /// verify — this becomes a "set your PIN" flow instead of a change. Keyed on
+    /// `isPINSet`, not `lastPINChangeDate`: after a restore the date survives and
+    /// "Current PIN" could never validate, a dead end.
+    private var isInitialSetup: Bool { !appSettings.isPINSet }
 
     var body: some View {
         NavigationStack {

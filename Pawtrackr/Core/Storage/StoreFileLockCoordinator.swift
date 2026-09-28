@@ -16,6 +16,19 @@ import Darwin
 import Glibc
 #endif
 
+/// Serializes launch-time store-family file work (pre-update backup, legacy
+/// move) across threads and processes.
+///
+/// The lock is a `flock` on `Pawtrackr.store.lock` beside the store, opened
+/// with `open(O_CREAT)` so every caller and every process locks the same inode.
+/// Every wait is bounded (`timeout`): launch can't hang on a second Mac
+/// instance or a debug build that shares the container. On timeout the call
+/// throws and the caller skips its file work for this launch; both callers log
+/// that and retry on the next launch.
+///
+/// What it does NOT do: SQLite/Core Data never take this lock, so it gives no
+/// protection against an open `ModelContainer` writing the store. Callers must
+/// run before any container opens (see CLAUDE.md, "Store-file work").
 enum StoreFileLockCoordinator {
     enum LockError: LocalizedError {
         case couldNotCreateLockFile(URL)
@@ -32,53 +45,83 @@ enum StoreFileLockCoordinator {
     }
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "StoreFileLock")
-    private static let lockFileName = "Pawtrackr.store.lock"
+    static let lockFileName = "Pawtrackr.store.lock"
+    /// How long a caller waits for the lock (another thread, or another
+    /// process such as a second Mac instance or a debug build sharing the
+    /// container) before giving up.
+    static let defaultTimeout: TimeInterval = 3
     private static let processLock = NSRecursiveLock()
+    /// Lock files this thread already holds, with a nesting count. Only read
+    /// or written while `processLock` is held, and `processLock` is recursive,
+    /// so a non-zero count always belongs to the current thread.
+    nonisolated(unsafe) private static var heldLockDepth: [String: Int] = [:]
 
     static func withStoreLock<T>(
         in appSupportURL: URL,
         reason: String,
         fileManager: FileManager = .default,
+        timeout: TimeInterval = defaultTimeout,
         operation: () throws -> T
     ) throws -> T {
-        processLock.lock()
+        let lockURL = appSupportURL.appendingPathComponent(lockFileName)
+        let deadline = Date().addingTimeInterval(max(0, timeout))
+
+        // In-process: other threads doing store-file work. Bounded, like the
+        // cross-process wait below.
+        guard processLock.lock(before: deadline) else {
+            log.error("Store file lock busy in this process for \(reason, privacy: .public); skipping store-file work this launch.")
+            throw LockError.couldNotAcquireLock(lockURL, EWOULDBLOCK)
+        }
         defer { processLock.unlock() }
 
+        let key = lockURL.standardizedFileURL.path
+
+        // A nested call on this thread already holds the flock. Taking it
+        // again through a second descriptor would conflict with ourselves:
+        // flock locks belong to the open file description, not the process.
+        if let depth = heldLockDepth[key], depth > 0 {
+            heldLockDepth[key] = depth + 1
+            defer { heldLockDepth[key] = depth }
+            return try operation()
+        }
+
         try fileManager.createDirectory(at: appSupportURL, withIntermediateDirectories: true)
-        let lockURL = appSupportURL.appendingPathComponent(lockFileName)
-        guard fileManager.createFile(atPath: lockURL.path, contents: nil) || fileManager.fileExists(atPath: lockURL.path) else {
+
+        // open(O_CREAT) keeps the existing inode. FileManager.createFile writes
+        // atomically, which swapped in a new inode on every call, so two
+        // processes each locked their own file and never excluded each other.
+        let descriptor = open(lockURL.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else {
+            let code = errno
+            log.error("Couldn't open store lock file (errno \(code, privacy: .public)) for \(reason, privacy: .public).")
             throw LockError.couldNotCreateLockFile(lockURL)
         }
+        defer { close(descriptor) }
 
-        let handle = try FileHandle(forUpdating: lockURL)
-        defer { try? handle.close() }
+        try acquireExclusiveLock(descriptor, lockURL: lockURL, reason: reason, deadline: deadline)
+        defer { flock(descriptor, LOCK_UN) }
 
-        #if canImport(Darwin) || canImport(Glibc)
-        guard flock(handle.fileDescriptor, LOCK_EX) == 0 else {
-            throw LockError.couldNotAcquireLock(lockURL, errno)
-        }
-        defer { flock(handle.fileDescriptor, LOCK_UN) }
-        #endif
+        heldLockDepth[key] = 1
+        defer { heldLockDepth[key] = nil }
 
-        var coordinationError: NSError?
-        var result: Result<T, Error>!
-        NSFileCoordinator(filePresenter: nil).coordinate(
-            writingItemAt: appSupportURL,
-            options: [],
-            error: &coordinationError
-        ) { _ in
-            do {
-                log.info("Acquired store file lock for \(reason, privacy: .public)")
-                result = .success(try operation())
-            } catch {
-                result = .failure(error)
+        // No NSFileCoordinator: its wait has no timeout, and with a real flock
+        // it added nothing (nothing else coordinates on Application Support).
+        log.info("Acquired store file lock for \(reason, privacy: .public)")
+        return try operation()
+    }
+
+    /// Non-blocking flock with a bounded retry, so a lock held by another
+    /// process can never hang launch.
+    private static func acquireExclusiveLock(_ descriptor: Int32, lockURL: URL, reason: String, deadline: Date) throws {
+        while true {
+            if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { return }
+            let code = errno
+            guard code == EWOULDBLOCK || code == EINTR, Date() < deadline else {
+                log.error("Store file lock unavailable (errno \(code, privacy: .public)) for \(reason, privacy: .public); skipping store-file work this launch.")
+                throw LockError.couldNotAcquireLock(lockURL, code)
             }
+            usleep(50_000)
         }
-
-        if let coordinationError {
-            throw coordinationError
-        }
-        return try result.get()
     }
 }
 

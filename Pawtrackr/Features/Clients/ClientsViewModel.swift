@@ -89,7 +89,10 @@ final class ClientsViewModel {
     private var cancellables: Set<AnyCancellable> = []
     private var pageSize: Int = 100
     private var fetchOffset: Int = 0
-    
+    /// Clients the list loads per query. Filters and sorts run over this whole
+    /// set in memory, so it is not a page size (see `fetchClients`).
+    static let clientListFetchLimit = 1000
+
     // MARK: - Lifecycle
     init(modelContext: ModelContext, eventBus: GlobalEventBus? = nil, repository: ClientRepositoryProtocol? = nil) {
         self.modelContext = modelContext
@@ -132,6 +135,9 @@ final class ClientsViewModel {
     func fetchClients() {
         searchTask?.cancel()
         refreshTask?.cancel()
+        // A Load More still in flight belongs to the previous query or sort.
+        // Letting it finish would append rows that don't match the new list.
+        loadMoreTask?.cancel()
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isLoadingMore = false
@@ -146,8 +152,14 @@ final class ClientsViewModel {
                 
                 var inProgress = inProgressIDs.compactMap { self.modelContext.model(for: $0) as? Client }
 
-                // 2. Fetch Others based on filter
-                let (pageIDs, hasMore) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: pageSize, offset: 0)
+                // 2. Fetch Others based on filter.
+                // One bounded fetch, not pages: the smart filters and every sort
+                // other than last name run in memory below, so they must see
+                // the whole book. Paging a 100-row last-name window made
+                // filters show false "none" states, sorts skip clients, and
+                // Load More repeat rows (the repository pages raw rows that
+                // still include in-progress clients).
+                let (pageIDs, _) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: Self.clientListFetchLimit, offset: 0)
                 guard !Task.isCancelled else { return }
                 
                 var others = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
@@ -180,8 +192,8 @@ final class ClientsViewModel {
                 self.inProgressClients = sortedInProgress
                 self.otherClients = sortedOthers
                 
-                self.fetchOffset = pageIDs.count
-                self.canLoadMore = selectedFilter == .active ? false : hasMore
+                self.fetchOffset = self.otherClients.count
+                self.canLoadMore = false
                 self.isLoadingMore = false
             } catch {
                 guard !Task.isCancelled else { return }
@@ -258,6 +270,14 @@ final class ClientsViewModel {
         }
     }
 
+    /// Waits for the fetch started by the most recent `fetchClients()` (or a
+    /// filter/sort change) and any Load More. Lets tests read the lists
+    /// without sleeping.
+    func waitForPendingFetch() async {
+        await refreshTask?.value
+        await loadMoreTask?.value
+    }
+
     func loadMore() {
         let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         loadMoreTask?.cancel()
@@ -278,28 +298,19 @@ final class ClientsViewModel {
 
         do {
             let (pageIDs, hasMore) = try await repository.fetchInactiveClients(query: query, limit: pageSize, offset: fetchOffset)
-            var newPage = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
-
-            switch selectedFilter {
-            case .all:
-                break
-            case .active:
-                newPage = []
-            case .overdue:
-                newPage = newPage.filter { client in
-                    (client.pets ?? []).contains { $0.needsAttention }
-                }
-            case .missingInfo:
-                newPage = newPage.filter { $0.phone == nil || $0.email == nil }
+            guard !Task.isCancelled else {
+                isLoadingMore = false
+                return
             }
-            
+            let newPage = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+
             if resetOffset {
-                otherClients = sortClients(newPage)
+                otherClients = newPage
             } else {
-                otherClients = sortClients(otherClients + newPage)
+                otherClients += newPage
             }
 
-            fetchOffset += pageIDs.count
+            fetchOffset += newPage.count
             canLoadMore = hasMore
             isLoadingMore = false
         } catch {

@@ -205,10 +205,8 @@ final class DashboardViewModel {
                 let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
                 let hasPrices = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasConfiguredPrices)
                 let uploadRecord = CloudKitMonitor.persistedOrMigratedSyncHealth()
-                let hasCloudBackup = uploadRecord.lastSuccessfulExportEndedAt != nil
-                let hasLocalBackup = SecureStoreSnapshotExporter.hasSuccessfulSnapshotOnThisDevice
 
-                return (branding, hasPrices, clientCount > 0, visitCount > 0, hasCloudBackup || hasLocalBackup)
+                return (branding, hasPrices, clientCount > 0, visitCount > 0, DashboardViewModel.hasBackupProtection(uploadRecord: uploadRecord))
             }.value
 
             checklist = [
@@ -221,6 +219,14 @@ final class DashboardViewModel {
         } catch {
             dashboardLog.error("Checklist fetch failed: \(error)")
         }
+    }
+
+    /// "Confirm Backup Protection" is complete only when iCloud has confirmed
+    /// an upload. A local package this device made (for example the disabled
+    /// `SecureStoreSnapshotExporter`) doesn't count: it can't be restored and
+    /// is lost with the device, so it must never tick this item.
+    nonisolated static func hasBackupProtection(uploadRecord: SyncHealthReducer.State) -> Bool {
+        uploadRecord.lastSuccessfulExportEndedAt != nil
     }
 
     func checkInPet(_ pet: Pet) async {

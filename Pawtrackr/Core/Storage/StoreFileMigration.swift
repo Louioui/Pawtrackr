@@ -53,7 +53,8 @@ enum StoreFileMigration {
     static func backupStoresForCurrentBuildIfNeeded(
         appSupportURL overrideAppSupportURL: URL? = nil,
         fileManager: FileManager = .default,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        lockTimeout: TimeInterval = StoreFileLockCoordinator.defaultTimeout
     ) -> BackupOutcome {
         let buildIdentifier = appBuildIdentifier
         guard userDefaults.string(forKey: preMigrationBackupBuildKey) != buildIdentifier else {
@@ -68,7 +69,7 @@ enum StoreFileMigration {
                 create: true
             )
 
-            return try StoreFileLockCoordinator.withStoreLock(in: appSupportURL, reason: "pre-update backup", fileManager: fileManager) {
+            return try StoreFileLockCoordinator.withStoreLock(in: appSupportURL, reason: "pre-update backup", fileManager: fileManager, timeout: lockTimeout) {
                 let storeFiles = try existingStoreFamily(for: currentStoreName, in: appSupportURL, fileManager: fileManager)
                     + existingStoreFamily(for: legacyStoreName, in: appSupportURL, fileManager: fileManager)
             guard !storeFiles.isEmpty else {
@@ -126,7 +127,9 @@ enum StoreFileMigration {
             }
             }
         } catch {
-            log.error("Pre-update store backup failed: \(error.localizedDescription, privacy: .public)")
+            // The build key stays unset, so the next launch tries again. A
+            // lock timeout lands here too: never skip this backup silently.
+            log.error("Pre-update store backup not made this launch; the next launch retries: \(error.localizedDescription, privacy: .public)")
             return BackupOutcome(copiedFiles: 0, backupDirectory: nil)
         }
     }
@@ -168,7 +171,8 @@ enum StoreFileMigration {
     @discardableResult
     static func migrateLegacyDefaultStoreIfNeeded(
         appSupportURL overrideAppSupportURL: URL? = nil,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        lockTimeout: TimeInterval = StoreFileLockCoordinator.defaultTimeout
     ) -> Outcome {
         do {
             let appSupportURL = try overrideAppSupportURL ?? fileManager.url(
@@ -178,7 +182,7 @@ enum StoreFileMigration {
                 create: true
             )
 
-            return try StoreFileLockCoordinator.withStoreLock(in: appSupportURL, reason: "legacy default.store migration", fileManager: fileManager) {
+            return try StoreFileLockCoordinator.withStoreLock(in: appSupportURL, reason: "legacy default.store migration", fileManager: fileManager, timeout: lockTimeout) {
                 StoreMigrationJournal.recoverIfPossible(in: appSupportURL, fileManager: fileManager)
 
             let legacyFamily = try existingStoreFamily(for: legacyStoreName, in: appSupportURL, fileManager: fileManager)

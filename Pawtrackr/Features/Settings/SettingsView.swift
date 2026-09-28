@@ -500,13 +500,18 @@ private struct DataExportSectionView: View {
             }
             .accessibilityIdentifier("settings.restoreBackup")
 
-            Button {
-                Task { await createEncryptedBackup() }
-            } label: {
-                Label(settingsLocalized("settings.export.encrypted_backup", value: "Create Encrypted Local Backup"), systemImage: "lock.doc.fill")
+            // The raw-store snapshot can't be restored and its key never leaves
+            // this device, so it isn't offered as a backup (see
+            // SecureStoreSnapshotExporter.isUserFacingExportEnabled).
+            if SecureStoreSnapshotExporter.isUserFacingExportEnabled {
+                Button {
+                    Task { await createEncryptedBackup() }
+                } label: {
+                    Label(settingsLocalized("settings.export.encrypted_backup", value: "Create Encrypted Local Backup"), systemImage: "lock.doc.fill")
+                }
+                .accessibilityIdentifier("settings.createEncryptedBackup")
+                .disabled(isExportingClients || isExportingVisits || isCreatingEncryptedBackup)
             }
-            .accessibilityIdentifier("settings.createEncryptedBackup")
-            .disabled(isExportingClients || isExportingVisits || isCreatingEncryptedBackup)
 
             if isExportingClients || isExportingVisits || isCreatingEncryptedBackup {
                 ProgressView(settingsLocalized("settings.export.preparing", value: "Preparing export..."))
@@ -525,7 +530,7 @@ private struct DataExportSectionView: View {
                 .buttonStyle(.borderedProminent)
             }
 
-            if let encryptedBackupURL {
+            if SecureStoreSnapshotExporter.isUserFacingExportEnabled, let encryptedBackupURL {
                 ShareLink(item: encryptedBackupURL) {
                     Label(
                         settingsLocalized("settings.export.share_encrypted_backup", value: "Share Encrypted Backup"),
@@ -536,7 +541,7 @@ private struct DataExportSectionView: View {
 
                 Text(settingsLocalized(
                     "settings.export.encrypted_backup_note",
-                    value: "Encrypted backups use a Keychain key on this device. They are meant for same-device recovery."
+                    value: "This package can only be opened on this device, and Pawtrackr can't restore from it yet."
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -583,6 +588,7 @@ private struct DataExportSectionView: View {
 
     @MainActor
     private func createEncryptedBackup() async {
+        guard SecureStoreSnapshotExporter.isUserFacingExportEnabled else { return }
         isCreatingEncryptedBackup = true
         exportError = nil
         encryptedBackupURL = nil
@@ -1146,7 +1152,7 @@ private struct SecuritySectionView: View {
                     // the lock only if a PIN was actually chosen.
                     guard !isPresented, pendingEnableLock else { return }
                     pendingEnableLock = false
-                    if appSettings.lastPINChangeDate != nil {
+                    if appSettings.isPINSet {
                         appSettings.isLockEnabled = true
                     }
                 }
@@ -1160,14 +1166,23 @@ private struct SecuritySectionView: View {
                 SettingsSmartStatusRow(
                     title: settingsLocalized("settings.security.pin_status", value: "PIN Status"),
                     value: pinStatus,
-                    systemImage: appSettings.isLockEnabled ? "checkmark.shield.fill" : "shield.slash.fill",
-                    tint: appSettings.isLockEnabled ? DS.ColorToken.success : DS.ColorToken.warning
+                    systemImage: pinStatusIcon,
+                    tint: protectionStatus.isProtected ? DS.ColorToken.success : DS.ColorToken.warning
                 )
 
-                if appSettings.isLockEnabled {
+                switch protectionStatus {
+                case .protected:
                     Button(settingsLocalized("settings.pin.change", value: "Change PIN")) { showChangePIN = true }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("settings.changePIN")
+                case .needsPIN:
+                    // Lock is on in settings (e.g. restored from a device backup)
+                    // but the PIN didn't come with it: the app opens unlocked.
+                    Button(settingsLocalized("settings.pin.set", value: "Set PIN")) { showChangePIN = true }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("settings.setPIN")
+                case .off:
+                    EmptyView()
                 }
             }
 
@@ -1204,7 +1219,7 @@ private struct SecuritySectionView: View {
                     title: settingsLocalized("settings.security.lock_timing", value: "Lock Timing"),
                     value: autoLockSummary,
                     systemImage: "timer.circle.fill",
-                    tint: appSettings.autoLockAfterInactivity ? DS.ColorToken.success : DS.ColorToken.info
+                    tint: protectionStatus.isProtected && appSettings.autoLockAfterInactivity ? DS.ColorToken.success : DS.ColorToken.info
                 )
             }
         }
@@ -1224,25 +1239,52 @@ private struct SecuritySectionView: View {
         }
     }
 
+    private var protectionStatus: AppLockProtectionStatus {
+        appSettings.lockProtectionStatus
+    }
+
     private var securitySummary: String {
-        appSettings.isLockEnabled
-            ? settingsLocalized("settings.security.enabled_detail", value: "Client records are protected when Pawtrackr opens or returns to the foreground.")
-            : settingsLocalized("settings.security.disabled_detail", value: "App lock is off. Turn it on before sharing this device with staff.")
+        switch protectionStatus {
+        case .protected:
+            return settingsLocalized("settings.security.enabled_detail", value: "Client records need your PIN when Pawtrackr opens and whenever the auto-lock rules below apply.")
+        case .needsPIN:
+            return settingsLocalized("settings.security.needs_pin_detail", value: "App Lock is on, but this device has no PIN, so Pawtrackr opens without one. Set a PIN to protect client records.")
+        case .off:
+            return settingsLocalized("settings.security.disabled_detail", value: "App lock is off. Turn it on before sharing this device with staff.")
+        }
     }
 
     private var pinStatus: String {
-        if appSettings.isLockEnabled {
-            return appSettings.isBiometricLockEnabled
+        switch protectionStatus {
+        case .protected(let biometric):
+            return biometric
                 ? settingsLocalized("settings.security.pin_biometric", value: "PIN set with biometric unlock enabled")
                 : settingsLocalized("settings.security.pin_only", value: "PIN set")
+        case .needsPIN:
+            return settingsLocalized("settings.security.pin_missing", value: "No PIN on this device")
+        case .off:
+            return settingsLocalized("settings.security.pin_disabled", value: "Not required")
         }
+    }
 
-        return settingsLocalized("settings.security.pin_disabled", value: "Not required")
+    private var pinStatusIcon: String {
+        switch protectionStatus {
+        case .protected: return "checkmark.shield.fill"
+        case .needsPIN: return "exclamationmark.shield.fill"
+        case .off: return "shield.slash.fill"
+        }
     }
 
     private var autoLockSummary: String {
-        guard appSettings.isLockEnabled else {
+        switch protectionStatus {
+        case .off:
             return settingsLocalized("settings.security.auto_lock_disabled", value: "Enable app lock to use automatic locking.")
+        case .needsPIN:
+            // Nothing locks without a PIN (PinLockGate), so don't describe
+            // timing that never happens.
+            return settingsLocalized("settings.security.auto_lock_needs_pin", value: "Set a PIN to use automatic locking.")
+        case .protected:
+            break
         }
 
         if appSettings.autoLockAfterInactivity {
@@ -1256,7 +1298,9 @@ private struct SecuritySectionView: View {
             return settingsLocalized("settings.security.lock_on_close_only", value: "Locks when the app closes or moves to the background.")
         }
 
-        return settingsLocalized("settings.security.manual_lock_only", value: "Manual lock only.")
+        // Both rules off: PinLockGate still locks on every launch, and there
+        // is no manual lock control, so say when it actually locks.
+        return settingsLocalized("settings.security.lock_on_launch_only", value: "Locks only when Pawtrackr starts.")
     }
 
     private var lockEnabledBinding: Binding<Bool> {
@@ -1264,9 +1308,10 @@ private struct SecuritySectionView: View {
             appSettings.isLockEnabled
         } set: { isEnabled in
             if isEnabled {
-                if appSettings.lastPINChangeDate == nil {
-                    // Passcode-free setup: never had a PIN. Make the user set one
-                    // first so the lock can't fall back to the default code.
+                if !appSettings.isPINSet {
+                    // No PIN on this device (passcode-free setup, or a device
+                    // restore that brought the setting back but not the
+                    // Keychain PIN). Make the user set one first.
                     pendingEnableLock = true
                     showChangePIN = true
                 } else {

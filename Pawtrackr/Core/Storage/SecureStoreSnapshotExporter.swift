@@ -9,7 +9,32 @@ import Foundation
 import CryptoKit
 import OSLog
 
+/// Writes an AES-GCM package of the raw store family.
+///
+/// DISABLED FOR USERS (`isUserFacingExportEnabled == false`). Nothing can read
+/// a package back, so it must not be offered as a backup or counted as one:
+/// - There is no restore path. `validateSnapshot` only proves decryption, no
+///   code unpacks the archive, and `StoreBackupRestore` never lists
+///   `EncryptedBackups`.
+/// - The key is random and stored `ThisDeviceOnly`, so a package can't be
+///   opened on another device or after a device restore, and a missing key
+///   silently produces a new one that orphans every older package.
+/// - The store is copied file by file while SwiftData and CloudKit keep
+///   writing to it. The lock here is not one SQLite honours, so a checkpoint
+///   between the main-file and WAL reads can tear the copy.
+/// - Every file and photo is held in memory several times over, and old
+///   packages are never pruned.
+/// - The package carries CloudKit mirroring metadata, so the only restore it
+///   admits is a store-file swap, which ADR-0004 rules out.
+///
+/// A real backup needs a logical export (records by UUID) with a
+/// passphrase-derived key and an insert-only merge; see the client-tools plan,
+/// item 5. Do not flip the flag until that exists.
 actor SecureStoreSnapshotExporter {
+    /// Gate for every user-facing entry point (Settings > Data). Keep `false`:
+    /// see the type comment for why this package is not a backup.
+    nonisolated static let isUserFacingExportEnabled = false
+
     enum SnapshotError: LocalizedError {
         case storeNotFound
         case keyUnavailable
@@ -48,11 +73,9 @@ actor SecureStoreSnapshotExporter {
     }
 
     static let shared = SecureStoreSnapshotExporter()
+    /// Diagnostic only. A package that can't be restored is not backup
+    /// protection, so nothing may read this as "the user is protected".
     nonisolated static let lastSuccessfulSnapshotDateKey = "secureStoreSnapshot.lastSuccessfulSnapshotDate"
-
-    nonisolated static var hasSuccessfulSnapshotOnThisDevice: Bool {
-        UserDefaults.standard.object(forKey: lastSuccessfulSnapshotDateKey) as? Date != nil
-    }
 
     private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "SecureSnapshot")
     private let storeName = "Pawtrackr.store"
@@ -208,7 +231,7 @@ actor SecureStoreSnapshotExporter {
         func read<T: FixedWidthInteger>(_ type: T.Type) throws -> T {
             let size = MemoryLayout<T>.size
             guard cursor + size <= data.count else { throw SnapshotError.invalidPackage }
-            let value = data[cursor..<cursor + size].withUnsafeBytes { $0.load(as: T.self) }
+            let value = data[cursor..<cursor + size].withUnsafeBytes { $0.loadUnaligned(as: T.self) }
             cursor += size
             return T(bigEndian: value)
         }

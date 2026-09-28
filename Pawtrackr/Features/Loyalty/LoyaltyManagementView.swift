@@ -44,6 +44,16 @@ struct LoyaltyManagementView: View {
             }
         }
         .task {
+            // Seed only after this device's first iCloud import has settled,
+            // like startup maintenance: on a device that just joined, the
+            // owner's reward catalog may still be downloading, and seeding
+            // "because it's empty" would upload a second catalog beside it.
+            // Local-only / signed-out devices don't wait.
+            let monitor = CloudKitMonitor.shared
+            if monitor.accountState.isAvailable, !monitor.firstSyncCompleted {
+                await monitor.awaitFirstSyncSettled(timeout: .seconds(30))
+            }
+            guard !Task.isCancelled else { return }
             DataMigrations.ensureLoyaltyDefaults(in: modelContext)
         }
         .confirmationDialog(

@@ -1462,3 +1462,24 @@
 "settings.icloud.last_backup_never" = "Nunca desde este dispositivo";
 "settings.icloud.last_download" = "Última descarga";
 "settings.icloud.last_download_never" = "Nunca";
+
+/* Settings > Security card (App Lock status comes from isLockEnabled AND a PIN on this device), and the encrypted-snapshot controls kept off in the UI. */
+"settings.security.protection_title" = "Protección de acceso";
+"settings.security.pin_status" = "Estado del PIN";
+"settings.security.enabled_detail" = "Los registros de clientes piden tu PIN al abrir Pawtrackr y cada vez que se aplican las reglas de bloqueo automático de abajo.";
+"settings.security.needs_pin_detail" = "El bloqueo de la app está activado, pero este dispositivo no tiene PIN, así que Pawtrackr se abre sin pedirlo. Establece un PIN para proteger los registros de clientes.";
+"settings.security.disabled_detail" = "El bloqueo de la app está desactivado. Actívalo antes de compartir este dispositivo con tu equipo.";
+"settings.security.pin_biometric" = "PIN establecido con desbloqueo biométrico activado";
+"settings.security.pin_only" = "PIN establecido";
+"settings.security.pin_missing" = "Sin PIN en este dispositivo";
+"settings.security.pin_disabled" = "No requerido";
+"settings.security.auto_lock_title" = "Reglas de bloqueo automático";
+"settings.security.auto_lock_detail" = "Usa estos controles en dispositivos compartidos de recepción o en estaciones de grooming.";
+"settings.security.lock_timing" = "Momento del bloqueo";
+"settings.security.auto_lock_disabled" = "Activa el bloqueo de la app para usar el bloqueo automático.";
+"settings.security.auto_lock_needs_pin" = "Establece un PIN para usar el bloqueo automático.";
+"settings.security.lock_on_close_only" = "Se bloquea al cerrar la app o al pasar a segundo plano.";
+"settings.security.lock_on_launch_only" = "Solo se bloquea al iniciar Pawtrackr.";
+"settings.export.encrypted_backup" = "Crear copia local cifrada";
+"settings.export.share_encrypted_backup" = "Compartir copia cifrada";
+"settings.export.encrypted_backup_note" = "Este paquete solo se puede abrir en este dispositivo, y Pawtrackr aún no puede restaurar desde él.";

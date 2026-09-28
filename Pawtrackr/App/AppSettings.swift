@@ -516,3 +516,36 @@ final class AppSettings {
         pin.count == 4 && pin.allSatisfy { $0.isNumber }
     }
 }
+
+/// What App Lock actually does on this device.
+///
+/// `isLockEnabled` lives in UserDefaults, which a device-backup restore or a
+/// phone migration brings back, while the PIN is a ThisDeviceOnly Keychain item
+/// that doesn't come back. `PinLockGate` leaves the app unlocked without a PIN,
+/// so anything that tells the owner "records are protected" must use this, not
+/// `isLockEnabled` alone.
+enum AppLockProtectionStatus: Equatable, Sendable {
+    /// App Lock is off.
+    case off
+    /// App Lock is on and a PIN is stored on this device.
+    case protected(biometric: Bool)
+    /// App Lock is on in settings, but this device has no PIN, so the app
+    /// opens without one.
+    case needsPIN
+
+    static func resolve(isLockEnabled: Bool, isPINSet: Bool, isBiometricLockEnabled: Bool) -> Self {
+        guard isLockEnabled else { return .off }
+        return isPINSet ? .protected(biometric: isBiometricLockEnabled) : .needsPIN
+    }
+
+    var isProtected: Bool {
+        if case .protected = self { return true }
+        return false
+    }
+}
+
+extension AppSettings {
+    var lockProtectionStatus: AppLockProtectionStatus {
+        .resolve(isLockEnabled: isLockEnabled, isPINSet: isPINSet, isBiometricLockEnabled: isBiometricLockEnabled)
+    }
+}

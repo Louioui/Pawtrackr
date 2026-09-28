@@ -60,6 +60,45 @@ final class DashboardViewModelTests: XCTestCase {
                       "Empty store: every checklist step should be incomplete.")
     }
 
+    /// Regression: a same-device encrypted snapshot (which nothing can
+    /// restore, and whose key never leaves the device) used to tick
+    /// "Confirm Backup Protection". Only a confirmed iCloud upload may.
+    func testRefresh_LocalSnapshotDoesNotCountAsBackupProtection() async {
+        let key = SecureStoreSnapshotExporter.lastSuccessfulSnapshotDateKey
+        let previous = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(previous, forKey: key) }
+
+        func backupItemCompleted() async -> Bool? {
+            let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
+            await vm.refresh()
+            return vm.checklist.first { item in
+                if case .iCloudBackup = item.action { return true }
+                return false
+            }?.isCompleted
+        }
+
+        // Differential: the host's persisted iCloud upload record decides the
+        // baseline; a local snapshot must not change it.
+        UserDefaults.standard.removeObject(forKey: key)
+        let withoutSnapshot = await backupItemCompleted()
+        XCTAssertNotNil(withoutSnapshot)
+
+        UserDefaults.standard.set(Date(), forKey: key)
+        let withSnapshot = await backupItemCompleted()
+        XCTAssertEqual(withSnapshot, withoutSnapshot, "A local snapshot must not count as backup protection.")
+    }
+
+    func testBackupProtection_RequiresConfirmedUpload() {
+        var state = SyncHealthReducer.State()
+        XCTAssertFalse(DashboardViewModel.hasBackupProtection(uploadRecord: state))
+        state.pendingLocalChangeDate = Date()
+        XCTAssertFalse(DashboardViewModel.hasBackupProtection(uploadRecord: state))
+        state.lastSuccessfulExportEndedAt = Date()
+        XCTAssertTrue(DashboardViewModel.hasBackupProtection(uploadRecord: state))
+        XCTAssertFalse(SecureStoreSnapshotExporter.isUserFacingExportEnabled,
+                       "The raw-store snapshot has no restore path; it must stay hidden.")
+    }
+
     func testRefresh_ChecklistFlipsBrandingWhenSetupComplete() async throws {
         let config = BusinessConfig()
         config.name = "My Shop"
