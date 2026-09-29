@@ -77,6 +77,24 @@ final class SyncStatusPolicyTests: XCTestCase {
         XCTAssertFalse(Policy.isSevereFailure(failing, isOnline: false, now: minute(120)))
     }
 
+    /// The mirroring delegate can hand over a partial failure with its
+    /// per-record errors stripped; the most likely cause is full storage.
+    func testAStrippedPartialFailureHintsAtFullStorageWithoutClaimingIt() {
+        let stripped = SyncErrorClassifier.classify(CKError(.partialFailure), accountAvailable: true)
+        XCTAssertEqual(stripped.disposition, .unknown)
+        XCTAssertEqual(stripped.diagnosticCode, "CKError.2")
+
+        var health = health(failures: 3, since: 0, disposition: .unknown)
+        health.lastFailureCode = stripped.diagnosticCode
+        XCTAssertNotNil(SyncFailureCopy.storageHint(for: health))
+
+        health.lastFailureCode = "CKError.15"
+        XCTAssertNil(SyncFailureCopy.storageHint(for: health), "Only the stripped partial failure")
+        var quota = self.health(failures: 3, since: 0, disposition: .quotaExceeded)
+        quota.lastFailureCode = "CKError.2"
+        XCTAssertNil(SyncFailureCopy.storageHint(for: quota), "Known quota failures have their own banner")
+    }
+
     /// Restored at launch from last night: nothing has been retried yet.
     func testALoneFailureNeverAgesIntoRed() {
         let lone = health(failures: 1, since: 0, disposition: .transient)

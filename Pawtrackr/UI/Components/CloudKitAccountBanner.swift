@@ -202,16 +202,18 @@ struct CloudKitAccountBanner: View {
         }
 
         if monitor.isShowingUploadRejection, case .failing(_, let disposition) = monitor.backupStatus {
+            let rejected = AppLocalization.localized(
+                "cloudkit.banner.rejected.message",
+                value: "Your clients are on this device but are NOT backed up. Don't delete the app."
+            )
+            let storageHint = SyncFailureCopy.storageHint(for: monitor.exportHealth)
             return BannerInfo(
-                fingerprint: "uploadRejected",
+                fingerprint: storageHint == nil ? "uploadRejected" : "uploadRejectedMaybeStorage",
                 icon: "xmark.icloud.fill",
                 tint: .red,
                 title: SyncFailureCopy.severeTitle(for: disposition),
-                message: AppLocalization.localized(
-                    "cloudkit.banner.rejected.message",
-                    value: "Your clients are on this device but are NOT backed up. Don't delete the app."
-                ),
-                actionTitle: nil,
+                message: storageHint.map { [rejected, $0, storageSteps].joined(separator: " ") } ?? rejected,
+                actionTitle: storageHint == nil ? nil : NSLocalizedString("common.settings", value: "Settings", comment: ""),
                 isDismissible: false,
                 offersDataActions: true
             )

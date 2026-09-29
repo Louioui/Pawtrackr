@@ -1440,6 +1440,7 @@
 "cloudkit.banner.rejected.title" = "iCloud no está aceptando los datos de Pawtrackr";
 "cloudkit.banner.failing.title" = "Las subidas a iCloud siguen fallando";
 "cloudkit.banner.rejected.message" = "Tus clientes están en este dispositivo, pero NO tienen copia de seguridad. No borres la app.";
+"cloudkit.banner.rejected.storage_hint" = "La causa más común es que el almacenamiento de iCloud está lleno.";
 "cloudkit.diagnostics.failures" = "Fallos recientes de iCloud";
 "cloudkit.diagnostics.last_backup" = "Última copia en iCloud";
 "cloudkit.diagnostics.mode" = "Modo de sincronización";

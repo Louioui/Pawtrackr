@@ -1287,6 +1287,7 @@
 "cloudkit.banner.rejected.title" = "iCloud isn't accepting Pawtrackr's data";
 "cloudkit.banner.failing.title" = "iCloud uploads keep failing";
 "cloudkit.banner.rejected.message" = "Your clients are on this device but are NOT backed up. Don't delete the app.";
+"cloudkit.banner.rejected.storage_hint" = "The most common cause is full iCloud storage.";
 "cloudkit.diagnostics.failures" = "Recent iCloud Failures";
 "cloudkit.diagnostics.last_backup" = "Last iCloud Backup";
 "cloudkit.diagnostics.mode" = "Sync Mode";

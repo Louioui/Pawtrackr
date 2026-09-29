@@ -1415,6 +1415,12 @@ final class CloudKitMonitor {
         return SyncStatusPolicy.isSevereFailure(reducer.state.exportHealth, isOnline: networkState.isOnline, now: Date())
     }
 
+    /// The upload failure streak on record, for copy that depends on its cause.
+    var exportHealth: SyncHealthReducer.ExportHealth {
+        _ = statusRevision
+        return reducer.state.exportHealth
+    }
+
     /// The red, non-dismissible "iCloud isn't accepting Pawtrackr's data" state.
     var isShowingUploadRejection: Bool {
         _ = statusRevision
@@ -1650,7 +1656,8 @@ final class CloudKitMonitor {
                     id: "upload.rejected",
                     severity: .danger,
                     title: SyncFailureCopy.severeTitle(for: disposition),
-                    detail: detail
+                    detail: [detail, SyncFailureCopy.storageHint(for: reducer.state.exportHealth)]
+                        .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
                 ))
             } else {
                 issues.append(SyncHealthIssue(

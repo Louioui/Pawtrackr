@@ -297,6 +297,20 @@ struct SyncFailureRecord: Codable, Equatable, Identifiable, Sendable {
 /// `SyncErrorClassifier.Classification.userMessageKey`; they're spelled out
 /// here so the localization check can see them.
 enum SyncFailureCopy {
+    /// A partial failure (CKError 2) that reached the app with no per-record
+    /// errors inside can't be classified; the mirroring delegate often passes
+    /// it on stripped. Full iCloud storage is its most common cause, so the
+    /// red state says so, without claiming it. Returns nil for anything else.
+    static func storageHint(for health: SyncHealthReducer.ExportHealth) -> String? {
+        guard health.isFailing,
+              health.lastFailureDisposition == .unknown,
+              health.lastFailureCode == "CKError.\(CKError.Code.partialFailure.rawValue)" else { return nil }
+        return AppLocalization.localized(
+            "cloudkit.banner.rejected.storage_hint",
+            value: "The most common cause is full iCloud storage."
+        )
+    }
+
     /// Title for the red state. "Isn't accepting" is only true for a
     /// rejection; a streak of timeouts or throttling that went red says so.
     static func severeTitle(for disposition: SyncHealthReducer.FailureDisposition) -> String {
