@@ -918,7 +918,7 @@ struct OnboardingView: View {
             VStack(spacing: DS.Spacing.md) {
                 startChoiceButton(
                     title: NSLocalizedString("onboarding.finish.sample.title", value: "Explore with sample clients", comment: ""),
-                    subtitle: NSLocalizedString("onboarding.finish.sample.subtitle", value: "Adds 2 practice clients with pets and visits so the tour can show check-in and checkout. Remove them anytime in Settings.", comment: ""),
+                    subtitle: NSLocalizedString("onboarding.finish.sample.subtitle", value: "Adds 2 practice clients with pets and visits, and example prices for services that have none, so the tour can show check-in and checkout. Remove them anytime in Settings.", comment: ""),
                     systemImage: "wand.and.stars",
                     isProminent: viewModel.sampleDataAvailability == .seed,
                     identifier: "onboarding.explore"

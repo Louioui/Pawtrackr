@@ -18,8 +18,12 @@ enum DemoDataSeeder {
     /// Callers decide whether seeding is allowed at all
     /// (`SampleDataSeedPolicy`); this is the last guard, run on the context
     /// that writes.
+    ///
+    /// The example prices it puts on unpriced catalog services are recorded
+    /// in `userDefaults` (see `SamplePriceRecord`), so removing the sample
+    /// clients on this device can take back the ones nobody changed since.
     @discardableResult
-    static func seedIfNeeded(in context: ModelContext) throws -> Bool {
+    static func seedIfNeeded(in context: ModelContext, userDefaults: UserDefaults = .standard) throws -> Bool {
         DataMigrations.ensureServiceCatalog(in: context)
         DataMigrations.ensureMessageTemplates(in: context)
 
@@ -33,7 +37,7 @@ enum DemoDataSeeder {
         }
 
         let services = try context.fetch(FetchDescriptor<Service>(sortBy: [SortDescriptor(\.name)]))
-        applySamplePrices(to: services)
+        let pricedServices = applySamplePrices(to: services)
 
         // Fixed UUIDs go on right after init, before any setter: setters
         // schedule Spotlight items under the current UUID, and a visit's
@@ -128,6 +132,9 @@ enum DemoDataSeeder {
         rebuiltDates.append(now.addingTimeInterval(-24 * 86_400))
 
         try context.save()
+        // Recorded only once the prices are saved, with the stamp they were
+        // saved under: any later edit to the service moves that stamp.
+        SamplePriceRecord.remember(pricedServices, userDefaults: userDefaults)
 
         for date in rebuiltDates {
             SummaryUpdater.rebuildDay(for: date, in: context)
@@ -189,13 +196,17 @@ enum DemoDataSeeder {
         "Hair Dye": 35
     ]
 
-    private static func applySamplePrices(to services: [Service]) {
+    /// Returns the services it priced.
+    private static func applySamplePrices(to services: [Service]) -> [Service] {
+        var priced: [Service] = []
         for service in services where service.basePrice == nil {
             guard let englishName = DefaultServiceCatalog.englishName(forKnownName: service.name),
                   let price = samplePrices[englishName]
             else { continue }
             service.setBasePrice(price)
+            priced.append(service)
         }
+        return priced
     }
 
     /// Maps built-in English service identities to the active seed language.
@@ -209,5 +220,78 @@ enum DemoDataSeeder {
             visits.append(visit)
             pet.visits = visits
         }
+    }
+}
+
+/// The example prices `DemoDataSeeder` put on this device's catalog: service
+/// UUID, the price, and the `updatedAt` stamp the price was saved with.
+///
+/// Before this work `ensureServiceCatalog` cleared every catalog price on the
+/// next launch, so example prices never outlived the first session. Now that
+/// prices set in Settings are kept, the example ones would stay in the real
+/// catalog after the sample clients are gone. "Remove Sample Clients" clears
+/// a price only when the service still holds exactly the recorded price under
+/// exactly the recorded stamp: any edit to the service since, even to the same
+/// price, moves the stamp and the price stays.
+///
+/// The record lives in this device's UserDefaults, so removing the samples on
+/// another device leaves the prices alone. That is the safe direction: a
+/// price is never cleared without proof it is still the example one.
+enum SamplePriceRecord {
+    static let userDefaultsKey = "pawtrackr.sampleData.appliedPrices"
+
+    struct Entry: Equatable {
+        let serviceUUID: UUID
+        let price: Decimal
+        let stampedAt: Date
+
+        /// CloudKit keeps dates to the millisecond, so a stamp that made a
+        /// round trip may differ by less than that. A person's edit can't.
+        func matches(_ service: Service) -> Bool {
+            service.uuid == serviceUUID
+                && service.basePrice == price
+                && abs(service.updatedAt.timeIntervalSince(stampedAt)) < 0.001
+        }
+    }
+
+    static func remember(_ services: [Service], userDefaults: UserDefaults) {
+        guard !services.isEmpty else { return }
+        var stored = userDefaults.dictionary(forKey: userDefaultsKey) ?? [:]
+        for service in services {
+            guard let price = service.basePrice else { continue }
+            stored[service.uuid.uuidString] = [
+                "price": NSDecimalNumber(decimal: price).stringValue,
+                "stampedAt": service.updatedAt.timeIntervalSinceReferenceDate
+            ]
+        }
+        userDefaults.set(stored, forKey: userDefaultsKey)
+    }
+
+    static func entries(userDefaults: UserDefaults) -> [Entry] {
+        let stored = userDefaults.dictionary(forKey: userDefaultsKey) ?? [:]
+        return stored.compactMap { key, value in
+            guard let id = UUID(uuidString: key),
+                  let fields = value as? [String: Any],
+                  let priceText = fields["price"] as? String,
+                  let price = Decimal(string: priceText, locale: Locale(identifier: "en_US_POSIX")),
+                  let stamp = fields["stampedAt"] as? Double
+            else { return nil }
+            return Entry(serviceUUID: id, price: price, stampedAt: Date(timeIntervalSinceReferenceDate: stamp))
+        }
+    }
+
+    /// Services that still hold the example price they were given, untouched.
+    static func untouchedServices(in context: ModelContext, userDefaults: UserDefaults) throws -> [Service] {
+        var services: [Service] = []
+        for entry in entries(userDefaults: userDefaults) {
+            let id = entry.serviceUUID
+            let matches = try context.fetch(FetchDescriptor<Service>(predicate: #Predicate { $0.uuid == id }))
+            services += matches.filter(entry.matches)
+        }
+        return services
+    }
+
+    static func forget(userDefaults: UserDefaults) {
+        userDefaults.removeObject(forKey: userDefaultsKey)
     }
 }

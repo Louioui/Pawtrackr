@@ -33,7 +33,7 @@ final class SampleDataTests: XCTestCase {
     // MARK: - Seeding
 
     func testSeedingUsesTheFixedSampleUUIDs() throws {
-        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
 
         XCTAssertEqual(Set(try context.fetch(FetchDescriptor<Client>()).map(\.uuid)), SampleData.clientIDs)
         XCTAssertEqual(Set(try context.fetch(FetchDescriptor<Pet>()).map(\.uuid)), SampleData.petIDs)
@@ -60,7 +60,7 @@ final class SampleDataTests: XCTestCase {
         try context.save()
         let before = try serviceSnapshot()
 
-        XCTAssertFalse(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertFalse(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
 
         XCTAssertEqual(try serviceSnapshot(), before, "Prices, the enabled switch and change stamps stay as they were.")
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<Client>()), 1)
@@ -71,7 +71,7 @@ final class SampleDataTests: XCTestCase {
         context.insert(Pet(name: "Orphan", species: .cat))
         try context.save()
 
-        XCTAssertFalse(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertFalse(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<Client>()), 0)
     }
 
@@ -82,7 +82,7 @@ final class SampleDataTests: XCTestCase {
         context.insert(Service(name: "Teeth Brushing", category: .addOn))
         try context.save()
 
-        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
 
         XCTAssertEqual(try service(named: "Bath").basePrice, 80, "A price the salon set is kept.")
         XCTAssertFalse(try service(named: "Haircut").isEnabled, "A service the salon turned off stays off.")
@@ -93,7 +93,7 @@ final class SampleDataTests: XCTestCase {
     // MARK: - Removal
 
     func testRemovingSampleDataLeavesRealRowsUntouched() throws {
-        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
         let sharedDay = try XCTUnwrap(try visit(SampleData.miloRecentVisitID).endedAt)
 
         // A real client who shares the sample's name, with a visit on the
@@ -140,7 +140,7 @@ final class SampleDataTests: XCTestCase {
         SummaryUpdater.rebuildDay(for: sharedDay, in: context)
         try context.save()
 
-        let result = try DataReset.removeSampleData(in: context)
+        let result = try DataReset.removeSampleData(in: context, userDefaults: defaults)
 
         XCTAssertEqual(result.clients, 3, "Both copies of Ava and Jordan go.")
         XCTAssertEqual(try SampleData.sampleClientCount(in: context), 0)
@@ -170,7 +170,7 @@ final class SampleDataTests: XCTestCase {
     }
 
     func testConfirmationListsPetsAddedUnderSampleClientsBeforeRemovingThem() throws {
-        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
         let ava = try XCTUnwrap(try SampleData.sampleClients(in: context).first { $0.uuid == SampleData.avaClientID })
         let biscuit = Pet(name: "Biscuit", species: .cat)
         biscuit.owner = ava
@@ -178,22 +178,80 @@ final class SampleDataTests: XCTestCase {
         ava.pets = (ava.pets ?? []) + [biscuit]
         try context.save()
 
-        let inventory = try DataReset.sampleDataInventory(in: context)
+        let inventory = try DataReset.sampleDataInventory(in: context, userDefaults: defaults)
         XCTAssertEqual(Set(inventory.clientNames), ["Ava Martinez", "Jordan Lee"])
         XCTAssertEqual(inventory.addedPetNames, ["Biscuit"])
         XCTAssertTrue(SampleDataCopy.removeMessage(for: inventory).contains("Biscuit"),
                       "The confirmation names the added pet before it is deleted.")
 
-        try DataReset.removeSampleData(in: context)
+        try DataReset.removeSampleData(in: context, userDefaults: defaults)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<Pet>()), 0)
-        XCTAssertTrue(try DataReset.sampleDataInventory(in: context).isEmpty)
+        XCTAssertTrue(try DataReset.sampleDataInventory(in: context, userDefaults: defaults).isEmpty)
+    }
+
+    // MARK: - Example prices
+
+    func testRemovalClearsOnlyTheExamplePricesNobodyChanged() throws {
+        DataMigrations.ensureServiceCatalog(in: context)
+        try service(named: "Bath").setBasePrice(80)
+        try context.save()
+
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
+        XCTAssertEqual(try service(named: "Full Package").basePrice, 95)
+        XCTAssertEqual(try service(named: "Haircut").basePrice, 60)
+        XCTAssertEqual(try service(named: "De-shedding").basePrice, 24)
+
+        // Later edits: a new price, and the same price saved again. Either
+        // way the service now holds a price someone chose.
+        Thread.sleep(forTimeInterval: 0.01)
+        try service(named: "Haircut").setBasePrice(65)
+        try service(named: "De-shedding").setBasePrice(24)
+        try context.save()
+
+        let inventory = try DataReset.sampleDataInventory(in: context, userDefaults: defaults)
+        XCTAssertGreaterThan(inventory.examplePriceCount, 0)
+        let priceSentence = AppLocalization.localized("sample_data.remove.example_prices", value: "")
+        XCTAssertFalse(priceSentence.isEmpty)
+        XCTAssertTrue(SampleDataCopy.removeMessage(for: inventory).contains(priceSentence),
+                      "The confirmation says example prices go too.")
+        XCTAssertFalse(SampleDataCopy.removeMessage(for: SampleDataInventory(clientNames: ["Ava Martinez"], addedPetNames: []))
+            .contains(priceSentence), "No price sentence when there is nothing to take back.")
+
+        let result = try DataReset.removeSampleData(in: context, userDefaults: defaults)
+
+        XCTAssertEqual(result.examplePricesCleared, inventory.examplePriceCount)
+        XCTAssertNil(try service(named: "Full Package").basePrice, "An untouched example price is taken back.")
+        XCTAssertEqual(try service(named: "Bath").basePrice, 80, "A price set before the samples stays.")
+        XCTAssertEqual(try service(named: "Haircut").basePrice, 65, "A price changed since stays.")
+        XCTAssertEqual(try service(named: "De-shedding").basePrice, 24, "A price saved again since stays.")
+        XCTAssertNil(defaults.dictionary(forKey: SamplePriceRecord.userDefaultsKey), "The record is spent.")
+
+        // Nothing left to take back: a second pass changes nothing.
+        XCTAssertEqual(try DataReset.removeSampleData(in: context, userDefaults: defaults).examplePricesCleared, 0)
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    func testRemovalOnADeviceThatDidNotLoadTheSamplesKeepsEveryPrice() throws {
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
+        let before = try serviceSnapshot()
+
+        let otherSuite = "SampleDataTests.other.\(UUID().uuidString)"
+        let otherDevice = try XCTUnwrap(UserDefaults(suiteName: otherSuite))
+        defer { otherDevice.removePersistentDomain(forName: otherSuite) }
+
+        XCTAssertEqual(try DataReset.sampleDataInventory(in: context, userDefaults: otherDevice).examplePriceCount, 0)
+        let result = try DataReset.removeSampleData(in: context, userDefaults: otherDevice)
+
+        XCTAssertEqual(result.examplePricesCleared, 0)
+        XCTAssertEqual(try service(named: "Full Package").basePrice, 95)
+        XCTAssertEqual(try serviceSnapshot(), before, "Without proof a price is still the example one, it stays.")
     }
 
     func testSampleClientsNeverCountTowardTheDataLossBaseline() throws {
         let appSupport = try makeAppSupportDirectory()
         defer { try? FileManager.default.removeItem(at: appSupport) }
 
-        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
         DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: appSupport, userDefaults: defaults)
         XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 0,
                        "Only real clients count.")
@@ -214,7 +272,7 @@ final class SampleDataTests: XCTestCase {
         let appSupport = try makeAppSupportDirectory()
         defer { try? FileManager.default.removeItem(at: appSupport) }
 
-        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context, userDefaults: defaults))
         let real = (1...3).map { Client(firstName: "Real \($0)", lastName: "Client") }
         real.forEach(context.insert)
         try context.save()

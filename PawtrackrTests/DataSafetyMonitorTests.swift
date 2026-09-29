@@ -118,20 +118,39 @@ final class DataSafetyMonitorTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: StoreBackupRestore.offerDirectoryKey))
     }
 
+    func testABackupHoldingOnlySampleClientsIsNeverNamedAsRecovery() throws {
+        // Sample clients (fixed UUIDs) are practice rows. A per-build backup
+        // taken while only they were loaded has none of the user's clients.
+        defaults.set(4, forKey: DataSafetyMonitor.lastKnownClientCountKey)
+        let directory = tempDirectory.appendingPathComponent("PreMigrationBackup-1.0.3-4-2026-10-01T10-00-00Z", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = directory.appendingPathComponent("Pawtrackr.store")
+        try makeSQLiteStore(at: store, clientRows: 0)
+        try insertClientUUID(SampleData.avaClientID, into: store, primaryKey: 100)
+        try insertClientUUID(SampleData.jordanClientID, into: store, primaryKey: 101)
+
+        DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: tempDirectory, userDefaults: defaults)
+
+        XCTAssertTrue(defaults.bool(forKey: DataSafetyMonitor.suspectedDataLossKey))
+        XCTAssertNil(defaults.string(forKey: DataSafetyMonitor.suspectedDataLossRecoveryDetailKey),
+                     "Only a backup with the user's own clients is offered as the way back.")
+        XCTAssertNil(defaults.string(forKey: StoreBackupRestore.offerDirectoryKey))
+    }
+
     private func makeBackup(named name: String, clientRows: Int) throws {
         let directory = tempDirectory.appendingPathComponent(name, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try makeSQLiteStore(at: directory.appendingPathComponent("Pawtrackr.store"), clientRows: clientRows)
     }
 
-    private func insertClientUUID(_ uuid: UUID, into url: URL) throws {
+    private func insertClientUUID(_ uuid: UUID, into url: URL, primaryKey: Int = 100) throws {
         #if canImport(SQLite3)
         var database: OpaquePointer?
         XCTAssertEqual(sqlite3_open(url.path, &database), SQLITE_OK)
         guard let database else { return XCTFail("Failed to open \(url.lastPathComponent)") }
         defer { sqlite3_close(database) }
         let hex = withUnsafeBytes(of: uuid.uuid) { $0.map { String(format: "%02X", $0) }.joined() }
-        XCTAssertEqual(sqlite3_exec(database, "INSERT INTO ZCLIENT (Z_PK, ZUUID) VALUES (100, X'\(hex)')", nil, nil, nil), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(database, "INSERT INTO ZCLIENT (Z_PK, ZUUID) VALUES (\(primaryKey), X'\(hex)')", nil, nil, nil), SQLITE_OK)
         #else
         throw XCTSkip("SQLite3 is unavailable on this platform")
         #endif

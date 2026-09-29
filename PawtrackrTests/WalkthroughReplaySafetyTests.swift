@@ -25,6 +25,8 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: draftDirectory)
+        // Seeding records the example prices it set; don't leave them behind.
+        UserDefaults.standard.removeObject(forKey: SamplePriceRecord.userDefaultsKey)
         container = nil
         context = nil
         try super.tearDownWithError()

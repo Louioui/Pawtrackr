@@ -1901,17 +1901,18 @@
 /* Sample clients: onboarding choice, Settings and checklist */
 "onboarding.finish.real.subtitle" = "Empieza con la lista de clientes vacía. Puedes cargar clientes de ejemplo más tarde en Ajustes.";
 "onboarding.finish.real.title" = "Empezar con mi negocio real";
-"onboarding.finish.sample.subtitle" = "Agrega 2 clientes de práctica con mascotas y visitas para que el recorrido muestre cómo registrar la entrada y cobrar. Quítalos cuando quieras en Ajustes.";
+"onboarding.finish.sample.subtitle" = "Agrega 2 clientes de práctica con mascotas y visitas, y precios de ejemplo a los servicios sin precio, para que el recorrido muestre cómo registrar la entrada y cobrar. Quítalos cuando quieras en Ajustes.";
 "onboarding.finish.sample.title" = "Explorar con clientes de ejemplo";
 "onboarding.finish.sample.unavailable_backup" = "Este dispositivo tiene una copia de seguridad de tus clientes. Restáurala en lugar de agregar clientes de ejemplo.";
 "onboarding.finish.sample.unavailable_icloud" = "Revisando iCloud en busca de los registros de tu salón. Los clientes de ejemplo estarán disponibles cuando termine la revisión.";
 "onboarding.finish.sample.unavailable_salon" = "Tu salón ya tiene datos, así que no se agregarán clientes de ejemplo.";
 "sample_data.remove.added_pets_fmt" = "También se eliminan las mascotas agregadas a estos clientes: %@.";
+"sample_data.remove.example_prices" = "También se borran los precios de ejemplo que se agregaron con ellos. Los precios que pusiste o cambiaste tú se quedan.";
 "sample_data.remove.confirm" = "Quitar clientes de ejemplo";
 "sample_data.remove.message_fmt" = "Esto elimina los clientes de ejemplo %@ con sus mascotas, visitas y pagos, en este dispositivo y en tus otros dispositivos a través de iCloud. Tus propios clientes no se tocan.";
 "sample_data.remove.title" = "¿Quitar los clientes de ejemplo?";
 "settings.sample.load" = "Cargar clientes de ejemplo";
-"settings.sample.load_caption" = "Agrega 2 clientes de práctica con mascotas y visitas para que pruebes el registro de entrada y el cobro. Disponible mientras tu lista de clientes esté vacía.";
+"settings.sample.load_caption" = "Agrega 2 clientes de práctica con mascotas y visitas, y precios de ejemplo a los servicios sin precio, para que pruebes el registro de entrada y el cobro. Disponible mientras tu lista de clientes esté vacía.";
 "settings.sample.load_icloud" = "Primero se revisa iCloud en busca de los registros de tu salón. Vuelve a intentarlo cuando termine la revisión.";
 "settings.sample.load_skipped" = "No se agregaron clientes de ejemplo porque tu salón ya tiene clientes.";
 "settings.sample.loaded_caption_fmt" = "%@ son clientes de práctica. Quitarlos no afecta a tus propios clientes.";

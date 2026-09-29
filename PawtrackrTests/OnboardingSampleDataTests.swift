@@ -181,5 +181,6 @@ final class OnboardingSampleDataTests: XCTestCase {
             AppSettingsKeys.onboardingRole
         ].forEach { defaults.removeObject(forKey: $0) }
         defaults.removeObject(forKey: draftKey)
+        defaults.removeObject(forKey: SamplePriceRecord.userDefaultsKey)
     }
 }

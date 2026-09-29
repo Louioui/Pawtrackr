@@ -1893,17 +1893,18 @@
 /* Sample clients: onboarding choice, Settings and checklist */
 "onboarding.finish.real.subtitle" = "Begin with an empty client list. You can load sample clients later in Settings.";
 "onboarding.finish.real.title" = "Start with my real business";
-"onboarding.finish.sample.subtitle" = "Adds 2 practice clients with pets and visits so the tour can show check-in and checkout. Remove them anytime in Settings.";
+"onboarding.finish.sample.subtitle" = "Adds 2 practice clients with pets and visits, and example prices for services that have none, so the tour can show check-in and checkout. Remove them anytime in Settings.";
 "onboarding.finish.sample.title" = "Explore with sample clients";
 "onboarding.finish.sample.unavailable_backup" = "This device has a backup of your clients. Restore it instead of adding sample clients.";
 "onboarding.finish.sample.unavailable_icloud" = "Checking iCloud for your salon's records. Sample clients become available when the check finishes.";
 "onboarding.finish.sample.unavailable_salon" = "Your salon already has data, so sample clients won't be added.";
 "sample_data.remove.added_pets_fmt" = "Pets added to these clients are deleted too: %@.";
+"sample_data.remove.example_prices" = "The example service prices added with them are cleared too. Prices you set or changed stay.";
 "sample_data.remove.confirm" = "Remove Sample Clients";
 "sample_data.remove.message_fmt" = "This deletes the sample clients %@ with their pets, visits and payments, on this device and on your other devices through iCloud. Your own clients aren't touched.";
 "sample_data.remove.title" = "Remove Sample Clients?";
 "settings.sample.load" = "Load Sample Clients";
-"settings.sample.load_caption" = "Adds 2 practice clients with pets and visits so you can try check-in and checkout. Available while your client list is empty.";
+"settings.sample.load_caption" = "Adds 2 practice clients with pets and visits, and example prices for services that have none, so you can try check-in and checkout. Available while your client list is empty.";
 "settings.sample.load_icloud" = "Checking iCloud for your salon's records first. Try again when the check finishes.";
 "settings.sample.load_skipped" = "Sample clients weren't added because your salon already has clients.";
 "settings.sample.loaded_caption_fmt" = "%@ are practice clients. Removing them leaves your own clients alone.";

@@ -107,7 +107,7 @@ enum DataSafetyMonitor {
                     "data_safety.backup_found_fmt",
                     value: "A backup on this device has %d clients — tap Review to bring them back."
                 ),
-                candidate.clientCount
+                candidate.missingClientCount(liveClientUUIDs: [])
             )
             userDefaults.set(candidate.directoryName, forKey: suspectedDataLossRecoveryDetailKey)
         } else {
@@ -123,9 +123,13 @@ enum DataSafetyMonitor {
         appSupportURL overrideAppSupportURL: URL?,
         fileManager: FileManager
     ) -> StoreBackupRestore.Candidate? {
+        // Counted without sample clients, like the baseline: a backup that
+        // holds only the practice clients has nothing of the user's to offer.
         StoreBackupRestore.candidates(appSupportURL: overrideAppSupportURL, fileManager: fileManager)
-            .filter { $0.clientCount > 0 }
-            .max { $0.clientCount < $1.clientCount }
+            .map { (candidate: $0, realClients: $0.missingClientCount(liveClientUUIDs: [])) }
+            .filter { $0.realClients > 0 }
+            .max { $0.realClients < $1.realClients }?
+            .candidate
     }
 
     private static var appBuildIdentifier: String {

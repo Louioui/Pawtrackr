@@ -70,6 +70,9 @@ struct SampleDataInventory: Equatable, Sendable {
     var clientNames: [String]
     /// Pets under sample clients that aren't sample pets: someone added them.
     var addedPetNames: [String]
+    /// Catalog services still holding the example price loading the samples
+    /// gave them on this device (`SamplePriceRecord`). Removal clears those.
+    var examplePriceCount = 0
 
     var isEmpty: Bool { clientNames.isEmpty }
 }
@@ -82,9 +85,10 @@ extension DataReset {
         var visits = 0
         var ledgerEntries = 0
         var checkoutTransactions = 0
+        var examplePricesCleared = 0
     }
 
-    static func sampleDataInventory(in context: ModelContext) throws -> SampleDataInventory {
+    static func sampleDataInventory(in context: ModelContext, userDefaults: UserDefaults = .standard) throws -> SampleDataInventory {
         let clients = try SampleData.sampleClients(in: context)
         var names: [String] = []
         var addedPets: [String] = []
@@ -95,7 +99,11 @@ extension DataReset {
                 addedPets.append(pet.name)
             }
         }
-        return SampleDataInventory(clientNames: names, addedPetNames: addedPets)
+        return SampleDataInventory(
+            clientNames: names,
+            addedPetNames: addedPets,
+            examplePriceCount: try SamplePriceRecord.untouchedServices(in: context, userDefaults: userDefaults).count
+        )
     }
 
     /// Deletes the sample salon and nothing else. Rows are found only by the
@@ -108,10 +116,12 @@ extension DataReset {
     ///   which the confirmation lists first),
     /// - loyalty ledger entries, checkout transactions and client insight
     ///   rows, which point at sample clients, pets or visits by UUID.
+    /// - the example prices loading the samples put on this device's catalog,
+    ///   only where the service is untouched since (`SamplePriceRecord`).
     /// Day summaries for the affected days are rebuilt from what remains.
     /// The deletions sync to iCloud like any other delete.
     @discardableResult
-    static func removeSampleData(in context: ModelContext) throws -> SampleRemovalResult {
+    static func removeSampleData(in context: ModelContext, userDefaults: UserDefaults = .standard) throws -> SampleRemovalResult {
         var result = SampleRemovalResult()
 
         let clients = unique(try SampleData.sampleClients(in: context))
@@ -204,9 +214,19 @@ extension DataReset {
             for row in rows { context.delete(row) }
         }
 
+        // Example prices go back to "no price" only where nobody has touched
+        // the service since; `untouchedServices` already compared, so each
+        // assignment here is a real change.
+        for service in try SamplePriceRecord.untouchedServices(in: context, userDefaults: userDefaults) {
+            service.setBasePrice(nil)
+            result.examplePricesCleared += 1
+        }
+
         if context.hasChanges {
             try context.save()
         }
+        // Spent: whatever wasn't cleared was changed by someone and stays.
+        SamplePriceRecord.forget(userDefaults: userDefaults)
 
         for day in affectedDays {
             SummaryUpdater.rebuildDay(for: day, in: context)
@@ -226,7 +246,7 @@ extension DataReset {
         // sample clients, so their removal (here, or synced from another
         // device) can't look like data loss.
 
-        log.info("Removed sample data: clients=\(result.clients), pets=\(result.pets), visits=\(result.visits), ledger=\(result.ledgerEntries), transactions=\(result.checkoutTransactions)")
+        log.info("Removed sample data: clients=\(result.clients), pets=\(result.pets), visits=\(result.visits), ledger=\(result.ledgerEntries), transactions=\(result.checkoutTransactions), examplePrices=\(result.examplePricesCleared)")
         return result
     }
 

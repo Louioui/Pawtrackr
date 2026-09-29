@@ -532,13 +532,18 @@ private struct SettingsDetailView: View {
             existingClientCount: sampleStatus.clientCount,
             existingPetCount: 0,
             iCloud: SampleDataSeedPolicy.currentICloudState(),
-            restorableClientCount: 0
+            // The launch check's restore offer (the banner RootView shows): an
+            // empty list may be clients this device can still bring back.
+            restorableClientCount: UserDefaults.standard.integer(forKey: StoreBackupRestore.offerClientCountKey)
         ))
         switch decision {
         case .seed:
             break
         case .skip(.iCloudStillChecking):
             sampleLoadMessage = SampleDataCopy.loadWaitingForICloud
+            return
+        case .skip(.backupFound):
+            sampleLoadMessage = SampleDataCopy.loadBackupFound
             return
         case .skip:
             sampleLoadMessage = SampleDataCopy.loadSkipped

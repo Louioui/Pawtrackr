@@ -37,6 +37,12 @@ enum SampleDataCopy {
                 ListFormatter.localizedString(byJoining: inventory.addedPetNames)
             )
         }
+        if inventory.examplePriceCount > 0 {
+            message += " " + AppLocalization.localized(
+                "sample_data.remove.example_prices",
+                value: "The example service prices added with them are cleared too. Prices you set or changed stay."
+            )
+        }
         return message
     }
 
@@ -49,11 +55,16 @@ enum SampleDataCopy {
     }
 
     static var loadCaption: String {
-        AppLocalization.localized("settings.sample.load_caption", value: "Adds 2 practice clients with pets and visits so you can try check-in and checkout. Available while your client list is empty.")
+        AppLocalization.localized("settings.sample.load_caption", value: "Adds 2 practice clients with pets and visits, and example prices for services that have none, so you can try check-in and checkout. Available while your client list is empty.")
     }
 
     static var loadWaitingForICloud: String {
         AppLocalization.localized("settings.sample.load_icloud", value: "Checking iCloud for your salon's records first. Try again when the check finishes.")
+    }
+
+    /// A backup on this device holds the user's own clients.
+    static var loadBackupFound: String {
+        AppLocalization.localized("onboarding.finish.sample.unavailable_backup", value: "This device has a backup of your clients. Restore it instead of adding sample clients.")
     }
 
     static var loadSkipped: String {
