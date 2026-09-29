@@ -722,7 +722,11 @@ private struct WalkthroughOverlayView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityIdentifier("walkthrough.card")
             .accessibilityLabel(Text(step.title))
-            .accessibilityValue(Text("\(controller.stepNumber) of \(controller.stepCount)"))
+            .accessibilityValue(Text(String(
+                format: AppLocalization.localized("tour.step_position_fmt", value: "%1$d of %2$d"),
+                controller.stepNumber,
+                controller.stepCount
+            )))
     }
 
     private var activeAnchorProbe: some View {
@@ -956,7 +960,11 @@ private struct WalkthroughOverlayView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("walkthrough.bubble")
         .accessibilityLabel(Text(step.title))
-        .accessibilityValue(Text("\(controller.stepNumber) of \(controller.stepCount)"))
+        .accessibilityValue(Text(String(
+            format: AppLocalization.localized("tour.step_position_fmt", value: "%1$d of %2$d"),
+            controller.stepNumber,
+            controller.stepCount
+        )))
     }
 
     @ViewBuilder

@@ -1893,3 +1893,6 @@
 "insights.revenue.empty" = "No hay ingresos registrados en este período";
 "photo_well.click_to_add" = "Haz clic para agregar";
 "photo_well.tap_to_add" = "Toca para agregar";
+
+/* Guided tour step position (VoiceOver) */
+"tour.step_position_fmt" = "%1$d de %2$d";
