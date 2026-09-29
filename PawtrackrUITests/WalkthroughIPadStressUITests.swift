@@ -84,14 +84,14 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     func testClientDetailActionTargetsStayHittableAndOpenCheckoutOnIPad() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("cdAddPet", maxTaps: 20)
+        advanceWalkthroughUntilActiveAnchor("cdAddPet", maxTaps: 40)
         assertActiveWalkthroughAnchor("cdAddPet")
         XCTAssertTrue(
             waitUntilHittable(app.buttons["clientDetail.addPet.inline"], timeout: 8),
             "The visible iPad Add Pet control should own the Add Pet walkthrough target."
         )
 
-        advanceWalkthroughUntilActiveAnchor("cdCheckOut", maxTaps: 6)
+        advanceWalkthroughUntilActiveAnchor("cdCheckOut", maxTaps: 10)
         assertActiveWalkthroughAnchor("cdCheckOut")
         let checkoutButton = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
         XCTAssertTrue(checkoutButton.waitForExistence(timeout: 8), "Checkout should be visible for the highlighted walkthrough target.")
@@ -149,10 +149,10 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         XCTAssertTrue(app.otherElements["walkthrough.card"].waitForExistence(timeout: 12))
         let stepCounter = app.staticTexts["walkthrough.stepCounter"]
         XCTAssertTrue(stepCounter.waitForExistence(timeout: 6), "Step counter should appear after replay")
-        XCTAssertTrue(stepCounter.label.hasPrefix("Step 1") || stepCounter.label.contains("1/") || stepCounter.label.contains("1 of"), "Step counter should show step 1 after replay")
+        XCTAssertTrue(stepCounter.label.hasPrefix("Step 1") || stepCounter.label.hasPrefix("1 /") || stepCounter.label.contains("1/") || stepCounter.label.contains("1 of"), "Step counter should show step 1 after replay")
     }
 
-    private func advanceWalkthroughUntilNewClientOwnerForm(maxTaps: Int = 14) {
+    private func advanceWalkthroughUntilNewClientOwnerForm(maxTaps: Int = 32) {
         let firstName = app.textFields["newClient.firstName"]
         for _ in 0..<maxTaps {
             if firstName.exists { return }

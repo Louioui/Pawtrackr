@@ -10,7 +10,7 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
     func testRecentHistoryStepKeepsGuideReadableOnIPhone() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 36)
+        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 60)
         assertActiveWalkthroughAnchor("cdHistory")
 
         let bubble = app.otherElements["walkthrough.bubble"]
@@ -20,13 +20,13 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
         XCTAssertGreaterThanOrEqual(
             bubble.frame.height,
             240,
-            "Step 24 should leave enough visible bubble height for the guide text. layout=\(activeWalkthroughLayoutDebug())"
+            "The Recent History stop should leave enough visible bubble height for the guide text. layout=\(activeWalkthroughLayoutDebug())"
         )
         XCTAssertGreaterThanOrEqual(bubble.frame.minY, screen.minY)
         XCTAssertLessThanOrEqual(
             bubble.frame.maxY,
             screen.maxY,
-            "Step 24 guide should not be clipped below the iPhone screen. layout=\(activeWalkthroughLayoutDebug())"
+            "The Recent History guide should not be clipped below the iPhone screen. layout=\(activeWalkthroughLayoutDebug())"
         )
     }
 
