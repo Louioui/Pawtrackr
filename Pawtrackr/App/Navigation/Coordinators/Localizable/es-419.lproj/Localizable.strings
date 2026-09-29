@@ -1284,7 +1284,7 @@
 "tour.cd.owner.tip" = "Usa esta pantalla antes de cada cita cuando necesites contacto, notas de mascotas o historial en un solo lugar.";
 "tour.cd.emergency.title" = "Contactos de emergencia";
 "tour.cd.emergency.directive" = "Mantén cerca contactos de respaldo.";
-"tour.cd.emergency.purpose" = "Cada persona de respaldo muestra relación y teléfono. Llamar la marca, y el menú de la fila ofrece Enviar mensaje, Copiar teléfono, Editar y Eliminar. Una nota amarilla indica lo que falta.";
+"tour.cd.emergency.purpose" = "Cada contacto muestra relación y teléfono. El botón Llamar marca su número y el menú ofrece Enviar mensaje, Copiar teléfono, Editar y Eliminar. La nota “Falta:” indica qué agregar.";
 "tour.cd.pets.title" = "Acciones de mascotas";
 "tour.cd.pets.directive" = "Esta fila es donde empieza el trabajo de la visita.";
 "tour.cd.pets.purpose" = "Cada mascota tiene su propio estado y acciones. Las siguientes paradas explican entrada, cobro e historial para que el flujo quede claro antes de usarlo con clientes reales.";

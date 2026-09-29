@@ -1538,7 +1538,7 @@
 "tour.cd.owner.tip" = "Use this screen before every appointment when you need contact info, pet notes, or history in one place.";
 "tour.cd.emergency.title" = "Emergency Contacts";
 "tour.cd.emergency.directive" = "Keep backup contacts close.";
-"tour.cd.emergency.purpose" = "Each backup person shows relation and phone. Call dials them, and the row’s menu offers Message, Copy Phone, Edit, and Delete. A yellow note lists what’s missing.";
+"tour.cd.emergency.purpose" = "Each backup person shows relation and phone. Call dials them, and the row’s menu offers Message, Copy Phone, Edit, and Delete. A “Missing:” note lists what’s left to add.";
 "tour.cd.pets.title" = "Pet Actions";
 "tour.cd.pets.directive" = "This row is where the visit work starts.";
 "tour.cd.pets.purpose" = "Each pet has its own status and actions. The next stops break down check-in, checkout, and history so the workflow is clear before you use it with real clients.";

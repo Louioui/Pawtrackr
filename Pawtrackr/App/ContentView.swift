@@ -357,6 +357,16 @@ struct ContentView: View {
     private func synchronizeWalkthroughStepLocation() {
         guard walkthrough.isActive, let step = walkthrough.currentStep else { return }
 
+        // The tour's context was read when it started. By the iCloud stop
+        // the backup status may have changed, so its line is read again:
+        // "Backed up as of…" only while iCloud has confirmed an upload.
+        if step.id == WalkthroughStepID.iCloud {
+            walkthrough.updateCoachTip(
+                WalkthroughController.iCloudTip(for: CloudKitMonitor.shared.backupStatus),
+                forStepID: step.id
+            )
+        }
+
         switch step.route {
         case .demoClientDetail:
             if walkthroughNeedsClientDetailNavigation(for: step) {

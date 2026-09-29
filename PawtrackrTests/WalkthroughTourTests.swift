@@ -248,6 +248,26 @@ final class WalkthroughTourTests: XCTestCase {
         }
     }
 
+    func testTheICloudLineIsReadAgainWhenItsStopComesUp() throws {
+        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        // The tour started while backed up. By the iCloud stop uploads fail.
+        var started = WalkthroughTourContext.practice
+        started.backupStatus = .backedUp(asOf: Self.fixedDate)
+        let controller = makeController()
+        controller.start(WalkthroughController.tour(for: .frontDeskGroomer, context: started), at: "set.icloud")
+        XCTAssertTrue(controller.currentStep?.coachTip?.contains("Backed up as of") ?? false)
+
+        let failing = BackupStatus.failing(since: Self.fixedDate, disposition: .transient)
+        controller.updateCoachTip(WalkthroughController.iCloudTip(for: failing), forStepID: "set.icloud")
+
+        let tip = try XCTUnwrap(controller.currentStep?.coachTip)
+        XCTAssertFalse(tip.contains("Backed up as of"), tip)
+        XCTAssertEqual(tip, WalkthroughController.iCloudTip(for: failing))
+        XCTAssertEqual(controller.currentStep?.id, "set.icloud", "Only the line changes.")
+        controller.updateCoachTip("ignored", forStepID: "retired.step")
+        XCTAssertEqual(controller.currentStep?.coachTip, tip)
+    }
+
     func testWithoutAPetTheTourSkipsPetStops() {
         let context = WalkthroughTourContext(hasSampleClient: true, hasRealClients: false, sampleClientHasPet: false, hasActiveSampleVisit: false)
         for role in OnboardingRole.allCases {
@@ -687,7 +707,7 @@ final class WalkthroughTourTests: XCTestCase {
 
         // The emergency card's actions.
         let emergency = try XCTUnwrap(steps["cd.emergency"]).purpose
-        for action in ["Call", "Message", "Copy Phone", "Edit", "Delete"] {
+        for action in ["Call", "Message", "Copy Phone", "Edit", "Delete", "Missing:"] {
             XCTAssertTrue(emergency.contains(action), "\(action): \(emergency)")
         }
 

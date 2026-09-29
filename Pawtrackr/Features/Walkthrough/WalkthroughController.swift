@@ -630,6 +630,15 @@ final class WalkthroughController {
         return true
     }
 
+    /// Replaces one stop's coach tip in the running tour, e.g. the iCloud
+    /// stop's backup line, which is read again when the stop comes up so it
+    /// never reports a status that has since changed. Writes only when the
+    /// text differs.
+    func updateCoachTip(_ tip: String?, forStepID stepID: String) {
+        guard let index = steps.firstIndex(where: { $0.id == stepID }), steps[index].coachTip != tip else { return }
+        steps[index].coachTip = tip
+    }
+
     /// Shows Next on the current hands-on step because the action can't
     /// happen (or already happened) here.
     func releaseActionRequirement(reason: String) {
@@ -707,10 +716,10 @@ final class WalkthroughController {
     private func scheduleWatchdog() {
         watchdogTask?.cancel()
         watchdogTask = nil
-        guard var delay = targetWatchdogDelay, let step = currentStep else { return }
-        // Sections that may simply not exist are given less time, since
-        // nothing is drawn while the tour waits for them.
-        if step.skipsWhenTargetMissing { delay = min(delay, .seconds(1)) }
+        // Sections that may not exist (Needs Attention, Recent Clients) get
+        // the same time as everything else: a dashboard that is still
+        // loading after a tab switch must not lose a stop it would show.
+        guard let delay = targetWatchdogDelay, let step = currentStep else { return }
         let stepID = step.id
         watchdogTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: delay)
@@ -962,7 +971,7 @@ extension WalkthroughController {
                 id: "cd.emergency", anchor: .cdEmergency, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.emergency.title", value: "Emergency Contacts"),
                 directive: AppLocalization.localized("tour.cd.emergency.directive", value: "Keep backup contacts close."),
-                purpose: AppLocalization.localized("tour.cd.emergency.purpose", value: "Each backup person shows relation and phone. Call dials them, and the row’s menu offers Message, Copy Phone, Edit, and Delete. A yellow note lists what’s missing."),
+                purpose: AppLocalization.localized("tour.cd.emergency.purpose", value: "Each backup person shows relation and phone. Call dials them, and the row’s menu offers Message, Copy Phone, Edit, and Delete. A “Missing:” note lists what’s left to add."),
                 lesson: .clientRecords,
                 icon: "phone.badge.plus"
             ),
