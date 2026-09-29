@@ -30,6 +30,9 @@ struct LoyaltyManagementView: View {
                 lockedCard
             }
 
+            LoyaltySimulatorCard()
+                .walkthroughTarget(.loyaltySimulator)
+
             earningRulesCard
                 .disabled(!canEdit)
 

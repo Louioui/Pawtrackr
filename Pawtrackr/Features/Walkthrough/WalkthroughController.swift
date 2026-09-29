@@ -42,6 +42,7 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     // Client-detail sections
     case cdOwner
     case cdEmergency
+    case cdLoyalty
     case cdPets
     case petGenderDots
     case emergencyContactBadges
@@ -58,9 +59,11 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case coConfirm
     // Settings sections
     case setBusiness
+    case setLoyalty
     case setSecurity
     case setData
     case setICloud
+    case setDevices
     case setAbout
     case setStartFresh
     case clientFilters
@@ -350,20 +353,31 @@ extension WalkthroughController {
     }
 
     static func tour(for role: OnboardingRole) -> [WalkthroughStep] {
-        let allSteps = fullTour()
         switch role {
         case .ownerManager:
-            return allSteps
+            return smartTour(including: [
+                .dashboard, .setupChecklist, .dashKpis, .dashQuickActions, .dashRevenue,
+                .clients, .clientFilters, .ncOwner, .ncPets, .ncSave,
+                .cdOwner, .cdEmergency, .emergencyContactBadges, .cdLoyalty, .cdPets, .petGenderDots,
+                .cdAddPet, .cdCheckIn, .cdCheckOut, .coServices, .coPayment, .coReview, .coConfirm,
+                .cdPetHistory, .cdHistory,
+                .insights, .insKpis, .insRevenue, .insServices,
+                .settings, .setBusiness, .setLoyalty, .loyaltySimulator, .setSecurity, .setICloud, .setDevices, .setData, .setAbout, .setStartFresh
+            ])
         case .frontDeskGroomer:
-            let frontDeskAnchors: Set<WalkthroughAnchorID> = [
+            return smartTour(including: [
                 .dashboard, .dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients,
                 .clients, .clientFilters, .ncOwner, .ncPets, .ncSave,
-                .cdOwner, .cdEmergency, .emergencyContactBadges, .cdPets, .petGenderDots, .cdAddPet,
+                .cdOwner, .cdEmergency, .emergencyContactBadges, .cdLoyalty, .cdPets, .petGenderDots, .cdAddPet,
                 .cdCheckIn, .cdCheckOut, .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
-                .cdPetHistory, .cdHistory, .setICloud
-            ]
-            return allSteps.filter { frontDeskAnchors.contains($0.anchor) }
+                .cdPetHistory, .cdHistory, .settings, .setLoyalty, .loyaltySimulator, .setICloud, .setDevices
+            ])
         }
+    }
+
+    private static func smartTour(including anchors: [WalkthroughAnchorID]) -> [WalkthroughStep] {
+        let included = Set(anchors)
+        return fullTour().filter { included.contains($0.anchor) }
     }
 
     /// The full guided deep-dive a new user sees: it walks the four primary
@@ -384,6 +398,15 @@ extension WalkthroughController {
                 lesson: .appMap,
                 coachTip: AppLocalization.localized("tour.nav.dashboard.tip", value: "The app loop is simple: find the client, check in the pet, finish checkout, then review the numbers."),
                 icon: "square.grid.2x2.fill", fallback: .tabBarItem(index: 0, count: 4)
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setupChecklist, surface: .dashboard,
+                title: AppLocalization.localized("tour.dash.setup.title", value: "Smart Setup Checklist"),
+                directive: AppLocalization.localized("tour.dash.setup.directive", value: "Finish the five setup steps that make Pawtrackr useful on day one."),
+                purpose: AppLocalization.localized("tour.dash.setup.purpose", value: "The checklist deep-links to branding, services, first client, first visit, and backup protection so setup stays practical instead of scattered through Settings."),
+                lesson: .settingsAndSafety,
+                coachTip: AppLocalization.localized("tour.dash.setup.tip", value: "Dismiss it when the shop is ready. You can replay the walkthrough from Settings later."),
+                icon: "checklist.checked"
             ),
             WalkthroughStep(
                 id: next(), anchor: .dashKpis, surface: .dashboard,
@@ -517,6 +540,15 @@ extension WalkthroughController {
                 icon: "person.crop.circle.badge.exclamationmark.fill"
             ),
             WalkthroughStep(
+                id: next(), anchor: .cdLoyalty, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.loyalty.title", value: "Loyalty Balance"),
+                directive: AppLocalization.localized("tour.cd.loyalty.directive", value: "Open this card to see points, rewards, and loyalty history."),
+                purpose: AppLocalization.localized("tour.cd.loyalty.purpose", value: "After checkout, earned points post here automatically so staff can redeem rewards without doing math or searching old tickets."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.cd.loyalty.tip", value: "The badge shows the live balance. The detail screen shows reward progress and the points ledger."),
+                icon: "giftcard.fill"
+            ),
+            WalkthroughStep(
                 id: next(), anchor: .cdPets, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.pets.title", value: "Pet Actions"),
                 directive: AppLocalization.localized("tour.cd.pets.directive", value: "This row is where the visit work starts."),
@@ -612,7 +644,7 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.co.confirm.directive", value: "This is the real checkout finish line."),
                 purpose: AppLocalization.localized("tour.co.confirm.purpose", value: "Confirm & Pay saves the payment, updates history, refreshes insights, and prepares receipt details. This demo tour does not charge or save."),
                 lesson: .checkoutAndMoney,
-                coachTip: AppLocalization.localized("tour.co.confirm.tip", value: "During real use, only press this once the client has paid and the visit details are right."),
+                coachTip: AppLocalization.localized("tour.co.confirm.tip", value: "After payment, loyalty points post to the client profile automatically."),
                 icon: "checkmark.seal.fill",
                 presents: .checkout
             ),
@@ -710,6 +742,24 @@ extension WalkthroughController {
                 icon: "building.2.fill"
             ),
             WalkthroughStep(
+                id: next(), anchor: .setLoyalty, surface: .settings,
+                title: AppLocalization.localized("tour.set.loyalty.title", value: "Loyalty ladder"),
+                directive: AppLocalization.localized("tour.set.loyalty.directive", value: "Pick rewards before staff start checking out."),
+                purpose: AppLocalization.localized("tour.set.loyalty.purpose", value: "Discount Ladder gives simple point rewards, and Reset to Discount Ladder restores the default catalog without touching custom rewards unless you choose it."),
+                lesson: .settingsAndSafety,
+                coachTip: AppLocalization.localized("tour.set.loyalty.tip", value: "Keep rewards easy to explain at pickup: points should feel automatic, not like extra paperwork."),
+                icon: "giftcard.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .loyaltySimulator, surface: .settings,
+                title: AppLocalization.localized("tour.set.loyalty_sim.title", value: "Loyalty Simulator"),
+                directive: AppLocalization.localized("tour.set.loyalty_sim.directive", value: "Move the ticket total to show staff how points appear after checkout."),
+                purpose: AppLocalization.localized("tour.set.loyalty_sim.purpose", value: "The simulator turns a grooming total into points and shows which Discount Ladder rewards unlock, so loyalty feels concrete before staff explain it to clients."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.set.loyalty_sim.tip", value: "Use this during training: one dollar equals one point by default, and rewards unlock automatically as the balance grows."),
+                icon: "slider.horizontal.3"
+            ),
+            WalkthroughStep(
                 id: next(), anchor: .setSecurity, surface: .settings,
                 title: AppLocalization.localized("tour.set.security.title", value: "Security"),
                 directive: AppLocalization.localized("tour.set.security.directive", value: "Protect client data."),
@@ -734,6 +784,15 @@ extension WalkthroughController {
                 lesson: .dataOwnership,
                 coachTip: AppLocalization.localized("tour.set.icloud.tip", value: "The top account banner tells you if iCloud needs sign-in or network attention."),
                 icon: "icloud.fill"
+            ),
+            WalkthroughStep(
+                id: next(), anchor: .setDevices, surface: .settings,
+                title: AppLocalization.localized("tour.set.devices.title", value: "Synced devices"),
+                directive: AppLocalization.localized("tour.set.devices.directive", value: "Check which phones, iPads, and Macs are active."),
+                purpose: AppLocalization.localized("tour.set.devices.purpose", value: "Device health shows recently seen workstations, iCloud context, and stale devices so managers can spot sync gaps before staff rely on old records."),
+                lesson: .dataOwnership,
+                coachTip: AppLocalization.localized("tour.set.devices.tip", value: "If a device needs a check, use iCloud diagnostics before resetting anything."),
+                icon: "iphone.gen3.radiowaves.left.and.right"
             ),
             WalkthroughStep(
                 id: next(), anchor: .setAbout, surface: .settings,

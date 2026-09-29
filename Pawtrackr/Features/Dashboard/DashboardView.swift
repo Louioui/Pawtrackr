@@ -119,7 +119,7 @@ struct DashboardView: View {
 
     /// Dashboard sections the deep-dive tour can scroll to and spotlight.
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> =
-        [.dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients, .dashRevenue]
+        [.setupChecklist, .dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients, .dashRevenue]
 
     @ViewBuilder
     private func content(_ vm: DashboardViewModel) -> some View {
@@ -128,7 +128,7 @@ struct DashboardView: View {
                 LazyVStack(spacing: 24) {
                     smartSummary(vm)
 
-                    if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
+                    if shouldShowChecklistSection(vm) {
                         checklistSection(vm)
                             .walkthroughTarget(.setupChecklist)
                     }
@@ -145,8 +145,8 @@ struct DashboardView: View {
 
                             VStack(spacing: 24) {
                                 quickActionsSection.walkthroughTarget(.dashQuickActions)
-                                if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
-                                if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
+                                if shouldShowNeedsAttentionSection(vm) { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
+                                if shouldShowRecentClientsSection(vm) { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
                             }
                             .frame(width: dashboardSideColumnWidth)
                         }
@@ -156,8 +156,8 @@ struct DashboardView: View {
                             quickActionsSection.walkthroughTarget(.dashQuickActions)
                             if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
                             reengagementSection(vm)
-                            if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
-                            if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
+                            if shouldShowNeedsAttentionSection(vm) { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
+                            if shouldShowRecentClientsSection(vm) { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
                             revenueSection(vm).walkthroughTarget(.dashRevenue)
                         }
                     }
@@ -174,12 +174,19 @@ struct DashboardView: View {
                 _ = await (local, cloud)
             }
             // Scroll the current deep-dive target into view as the tour advances.
-            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
-                guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                    proxy.scrollTo(anchor, anchor: .center)
-                }
+            .onAppear {
+                scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: proxy)
             }
+            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+                scrollToWalkthroughAnchorIfNeeded(anchor, proxy: proxy)
+            }
+        }
+    }
+
+    private func scrollToWalkthroughAnchorIfNeeded(_ anchor: WalkthroughAnchorID?, proxy: ScrollViewProxy) {
+        guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            proxy.scrollTo(anchor, anchor: .center)
         }
     }
 
@@ -224,6 +231,23 @@ struct DashboardView: View {
             }
             .padding(16)
         }
+    }
+
+    private func isWalkthroughSpotlighting(_ anchor: WalkthroughAnchorID) -> Bool {
+        walkthrough?.isActive == true && walkthrough?.currentStep?.anchor == anchor
+    }
+
+    private func shouldShowChecklistSection(_ vm: DashboardViewModel) -> Bool {
+        isWalkthroughSpotlighting(.setupChecklist)
+        || (!appSettings.isChecklistDismissed && !vm.checklist.allSatisfy(\.isCompleted))
+    }
+
+    private func shouldShowNeedsAttentionSection(_ vm: DashboardViewModel) -> Bool {
+        !vm.overduePets.isEmpty || isWalkthroughSpotlighting(.dashNeedsAttention)
+    }
+
+    private func shouldShowRecentClientsSection(_ vm: DashboardViewModel) -> Bool {
+        !vm.recentClients.isEmpty || isWalkthroughSpotlighting(.dashRecentClients)
     }
 
     private var dashboardVerticalPadding: CGFloat {
@@ -671,9 +695,16 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(NSLocalizedString("dashboard.needs_attention", comment: "")).font(.headline)
             LazyVStack(spacing: 12) {
-                ForEach(vm.overduePets, id: \.uuid) { pet in
-                    if let owner = pet.owner {
-                        attentionPetCard(pet, owner: owner)
+                if vm.overduePets.isEmpty {
+                    walkthroughEmptyDashboardCard(
+                        title: AppLocalization.localized("tour.dash.attention.empty.title", value: "All caught up"),
+                        message: AppLocalization.localized("tour.dash.attention.empty.message", value: "Needs Attention will show overdue pets, missing contacts, behavior flags, and health notes when the front desk has a follow-up.")
+                    )
+                } else {
+                    ForEach(vm.overduePets, id: \.uuid) { pet in
+                        if let owner = pet.owner {
+                            attentionPetCard(pet, owner: owner)
+                        }
                     }
                 }
             }
@@ -701,7 +732,6 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 PetGenderNameBadge(pet: pet, maxNameWidth: 150)
-                                    .walkthroughTarget(.petGenderDots)
                                 Spacer(minLength: 8)
                                 if let status = pet.nextVisitStatus {
                                     Chip(status, style: .tinted, size: .xs, tint: attentionTint(for: pet))
@@ -804,15 +834,44 @@ struct DashboardView: View {
                 .font(.footnote)
             }
             LazyVStack(spacing: 10) {
-                ForEach(vm.recentClients.prefix(5)) { client in
-                    Button {
-                        openClient(client)
-                    } label: {
-                        ClientRow(client: client)
+                if vm.recentClients.isEmpty {
+                    walkthroughEmptyDashboardCard(
+                        title: AppLocalization.localized("tour.dash.recent.empty.title", value: "No recent clients yet"),
+                        message: AppLocalization.localized("tour.dash.recent.empty.message", value: "After check-ins and profile edits, this area becomes a quick jump back into the clients your team touched most recently.")
+                    )
+                } else {
+                    ForEach(vm.recentClients.prefix(5)) { client in
+                        Button {
+                            openClient(client)
+                        } label: {
+                            ClientRow(client: client)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    private func walkthroughEmptyDashboardCard(title: String, message: String) -> some View {
+        Card(elevation: .regular) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .frame(width: 30, height: 30)
+                    .background(DS.ColorToken.primary.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

@@ -43,6 +43,7 @@ struct ContentView: View {
     @State private var walkthrough = WalkthroughController()
     @State private var walkthroughStartTask: Task<Void, Never>?
     @State private var isExplicitWalkthroughReplayPending = false
+    @State private var lastSynchronizedWalkthroughRoute: WalkthroughRoute?
     /// Last-handled (kind, uuid, timestamp) used to dedupe near-simultaneous
     /// navigation requests coming from both `.onReceive` and `consumePendingNavigation`
     /// at app launch / cold-start time.
@@ -80,56 +81,55 @@ struct ContentView: View {
     }
 
     var body: some View {
-        rootContent
-            .walkthroughOverlay(walkthrough, scope: rootOverlayScope)
-            // Confetti moment when the user finishes the whole tour. Sits above the
-            // walkthrough overlay so it plays as the tour dismisses, then clears
-            // itself after the burst.
-            .overlay {
-                if walkthrough.isCelebrating {
-                    WalkthroughCelebrationView()
-                        .transition(.opacity)
+        lifecycleContent
+    }
+
+    private var lifecycleContent: some View {
+        sheetContent
+            .onAppear {
+                if !hasAppliedDefaultLaunchTab && !AppRuntime.isUITesting,
+                   let tab = NavigationItem(rawValue: appSettings.defaultLaunchTab) {
+                    sidebarSelection = tab
+                    tabSelection = tab
+                }
+                hasAppliedDefaultLaunchTab = true
+                router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
+                applyUITestLaunchOverrides()
+                consumePendingNewClientRequest()
+                consumePendingNavigation()
+                startWalkthroughIfReady()
+            }
+            .onChange(of: appSettings.hasSeenAppTour) { _, seen in
+                // Pick up the OnboardingViewModel (or "Replay Getting Started")
+                // arming the tour without requiring a fresh ContentView appear.
+                if !seen, !isExplicitWalkthroughReplayPending {
+                    startWalkthroughIfReady()
                 }
             }
-            .onChange(of: walkthrough.isCelebrating) { _, celebrating in
-                guard celebrating else { return }
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(2.4))
-                    walkthrough.endCelebration()
+    }
+
+    private var sheetContent: some View {
+        notificationContent
+            .adaptiveCover(item: $presentedSheet) { destination in
+                switch destination {
+                case .newClient:
+                    // SwiftUI does not reliably forward the `.environment(walkthrough)`
+                    // injected on the root into a fullScreenCover/sheet, so the in-sheet
+                    // guided-tour overlay never saw the controller (it read nil and
+                    // silently skipped the spotlight). Re-inject it explicitly here so
+                    // the New Client tour steps render inside the cover on iOS and macOS.
+                    NewClientSheet(modelContext: modelContext)
+                        .environment(walkthrough)
+                case .recentHistory(let scope):
+                    NavigationStack {
+                        RecentHistoryView(initialScope: scope)
+                    }
                 }
             }
-            .environment(walkthrough)
-            // The deep-dive tour drives navigation: when a step lives on another
-            // screen, switch to it before the step shows so its anchor exists.
-            .onChange(of: walkthrough.currentStep?.surface) { _, surface in
-                if let surface {
-                    selectSurface(surface)
-                    revealSplitSidebarForWalkthroughIfNeeded()
-                }
-            }
-            .onChange(of: walkthrough.currentStep?.presents) { _, presentation in
-                synchronizeWalkthroughPresentation(presentation)
-            }
-            .onChange(of: walkthrough.currentStep?.route) { _, route in
-                synchronizeWalkthroughRoute(route)
-            }
-            .onChange(of: walkthrough.isActive) { _, isActive in
-                if !isActive {
-                    closeWalkthroughPresentationIfNeeded()
-                }
-            }
-            .environment(router)
-            .onChange(of: appSettings.currencySymbol) { _, newValue in
-                Formatters.updateCurrencySymbol(newValue)
-            }
-            .onChange(of: sidebarSelection) { _, newValue in
-                if let newValue {
-                    router.activeNavigationItem = newValue
-                }
-            }
-            .onChange(of: tabSelection) { _, newValue in
-                router.activeNavigationItem = newValue
-            }
+    }
+
+    private var notificationContent: some View {
+        navigationStateContent
             .onReceive(NotificationCenter.default.publisher(for: .showNewClientSheet)) { _ in
                 consumePendingNewClientRequest()
                 presentedSheet = .newClient
@@ -166,40 +166,56 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .replayGettingStartedRequested)) { _ in
                 replayGettingStartedFromRoot()
             }
-            .adaptiveCover(item: $presentedSheet) { destination in
-                switch destination {
-                case .newClient:
-                    // SwiftUI does not reliably forward the `.environment(walkthrough)`
-                    // injected on the root into a fullScreenCover/sheet, so the in-sheet
-                    // guided-tour overlay never saw the controller (it read nil and
-                    // silently skipped the spotlight). Re-inject it explicitly here so
-                    // the New Client tour steps render inside the cover on iOS and macOS.
-                    NewClientSheet(modelContext: modelContext)
-                        .environment(walkthrough)
-                case .recentHistory(let scope):
-                    NavigationStack {
-                        RecentHistoryView(initialScope: scope)
-                    }
+    }
+
+    private var navigationStateContent: some View {
+        walkthroughContent
+            .environment(router)
+            .onChange(of: appSettings.currencySymbol) { _, newValue in
+                Formatters.updateCurrencySymbol(newValue)
+            }
+            .onChange(of: sidebarSelection) { _, newValue in
+                if let newValue {
+                    router.activeNavigationItem = newValue
                 }
             }
-            .onAppear {
-                if !hasAppliedDefaultLaunchTab && !AppRuntime.isUITesting,
-                   let tab = NavigationItem(rawValue: appSettings.defaultLaunchTab) {
-                    sidebarSelection = tab
-                    tabSelection = tab
-                }
-                hasAppliedDefaultLaunchTab = true
-                router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
-                applyUITestLaunchOverrides()
-                consumePendingNewClientRequest()
-                consumePendingNavigation()
-                startWalkthroughIfReady()
+            .onChange(of: tabSelection) { _, newValue in
+                router.activeNavigationItem = newValue
             }
-            .onChange(of: appSettings.hasSeenAppTour) { _, seen in
-                // Pick up the OnboardingViewModel (or "Replay Getting Started")
-                // arming the tour without requiring a fresh ContentView appear.
-                if !seen, !isExplicitWalkthroughReplayPending {
-                    startWalkthroughIfReady()
+    }
+
+    private var walkthroughContent: some View {
+        rootContent
+            .walkthroughOverlay(walkthrough, scope: rootOverlayScope)
+            // Confetti moment when the user finishes the whole tour. Sits above the
+            // walkthrough overlay so it plays as the tour dismisses, then clears
+            // itself after the burst.
+            .overlay {
+                if walkthrough.isCelebrating {
+                    WalkthroughCelebrationView()
+                        .transition(.opacity)
+                }
+            }
+            .onChange(of: walkthrough.isCelebrating) { _, celebrating in
+                guard celebrating else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2.4))
+                    walkthrough.endCelebration()
+                }
+            }
+            .environment(walkthrough)
+            // The deep-dive tour drives navigation for every step, not only when
+            // the high-level surface value changes. Consecutive steps often live
+            // on the same screen (Clients -> Client Filters), and replaying from
+            // another tab must still move the user to the step's real target.
+            .onChange(of: walkthrough.currentStep?.id) { _, _ in
+                synchronizeWalkthroughStep(walkthrough.currentStep)
+            }
+            .onChange(of: walkthrough.isActive) { _, isActive in
+                if isActive {
+                    synchronizeWalkthroughStep(walkthrough.currentStep)
+                } else {
+                    closeWalkthroughPresentationIfNeeded()
                 }
             }
     }
@@ -258,6 +274,42 @@ struct ContentView: View {
         !appSettings.hasSeenAppTour || AppRuntime.shouldStartWalkthroughForUITesting
     }
 
+    private func synchronizeWalkthroughStep(_ step: WalkthroughStep?) {
+        guard walkthrough.isActive, let step else {
+            closeWalkthroughPresentationIfNeeded()
+            lastSynchronizedWalkthroughRoute = nil
+            return
+        }
+
+        if let surface = step.surface {
+            selectSurface(surface)
+            resetRootPathForWalkthroughStepIfNeeded(step)
+            revealSplitSidebarForWalkthroughIfNeeded()
+        }
+
+        synchronizeWalkthroughPresentation(step.presents)
+        let isNewRouteChapter = step.route != lastSynchronizedWalkthroughRoute
+        synchronizeWalkthroughRoute(step.route, repairingIfNeeded: true, forceNavigation: isNewRouteChapter)
+        lastSynchronizedWalkthroughRoute = step.route
+    }
+
+    private func resetRootPathForWalkthroughStepIfNeeded(_ step: WalkthroughStep) {
+        guard step.route == nil else { return }
+
+        switch step.anchor {
+        case .dashboard, .setupChecklist, .dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients, .dashRevenue:
+            router.popToRoot()
+        case .clients, .clientFilters, .ncOwner, .ncPets, .ncSave:
+            router.popToRoot()
+        case .insights, .insKpis, .insRevenue, .insMonthly, .insServices, .insPaymentMix, .insCategory:
+            router.popToRoot()
+        case .settings, .setBusiness, .setLoyalty, .loyaltySimulator, .setSecurity, .setData, .setICloud, .setDevices, .setAbout, .setStartFresh:
+            router.popToRoot()
+        default:
+            break
+        }
+    }
+
     private func synchronizeWalkthroughPresentation(_ presentation: WalkthroughPresentation?) {
         guard walkthrough.isActive else {
             closeWalkthroughPresentationIfNeeded()
@@ -281,12 +333,20 @@ struct ContentView: View {
         isWalkthroughDrivingSheet = false
     }
 
-    private func synchronizeWalkthroughRoute(_ route: WalkthroughRoute?) {
+    private func synchronizeWalkthroughRoute(
+        _ route: WalkthroughRoute?,
+        repairingIfNeeded: Bool = false,
+        forceNavigation: Bool = false
+    ) {
         guard walkthrough.isActive, let route else { return }
 
         switch route {
         case .demoClientDetail:
-            openWalkthroughDemoClientDetail()
+            if repairingIfNeeded, !forceNavigation, !router.clientsPath.isEmpty {
+                selectClientsSurface()
+            } else {
+                openWalkthroughDemoClientDetail()
+            }
         }
     }
 
@@ -450,6 +510,7 @@ struct ContentView: View {
         #if os(iOS)
         guard horizontalSizeClass != .compact else { return }
         #endif
+        guard columnVisibility != .all else { return }
         columnVisibility = .all
     }
 

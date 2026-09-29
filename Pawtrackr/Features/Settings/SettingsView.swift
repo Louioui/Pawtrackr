@@ -81,15 +81,19 @@ enum SettingSection: String, CaseIterable, Identifiable {
         switch self {
         case .business:
             return .setBusiness
+        case .loyalty:
+            return .setLoyalty
         case .security:
             return .setSecurity
         case .dataExport:
             return .setData
         case .icloud:
             return .setICloud
+        case .devices:
+            return .setDevices
         case .about:
             return .setAbout
-        case .preferences, .loyalty, .help, .devices:
+        case .preferences, .help:
             return nil
         }
     }
@@ -97,6 +101,7 @@ enum SettingSection: String, CaseIterable, Identifiable {
     static func walkthroughSection(for anchor: WalkthroughAnchorID?) -> SettingSection? {
         guard let anchor else { return nil }
         if anchor == .setStartFresh { return .about }
+        if anchor == .loyaltySimulator { return .loyalty }
         return allCases.first { $0.walkthroughAnchorID == anchor }
     }
 }
@@ -156,6 +161,9 @@ struct SettingsView: View {
                 regularMacSettings
             }
         }
+        .onAppear {
+            synchronizeWalkthroughSection(walkthrough?.currentStep?.anchor)
+        }
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughSection(anchor)
         }
@@ -189,6 +197,9 @@ struct SettingsView: View {
             } else {
                 detail
             }
+        }
+        .onAppear {
+            synchronizeWalkthroughSection(walkthrough?.currentStep?.anchor)
         }
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughSection(anchor)
@@ -301,11 +312,14 @@ private struct SettingsDetailView: View {
 
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
         .setBusiness,
+        .setLoyalty,
         .setSecurity,
         .setData,
         .setICloud,
+        .setDevices,
         .setAbout,
-        .setStartFresh
+        .setStartFresh,
+        .loyaltySimulator
     ]
     
     var body: some View {

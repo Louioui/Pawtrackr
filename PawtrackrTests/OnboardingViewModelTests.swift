@@ -341,12 +341,39 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(finalStep.purpose.localizedCaseInsensitiveContains("real business"))
     }
 
+    func testRoleBasedWalkthroughsUseSmarterCurricula() {
+        let ownerAnchors = WalkthroughController.tour(for: .ownerManager).map(\.anchor)
+        let staffAnchors = WalkthroughController.tour(for: .frontDeskGroomer).map(\.anchor)
+
+        XCTAssertTrue(ownerAnchors.contains(.setupChecklist))
+        XCTAssertTrue(ownerAnchors.contains(.cdLoyalty))
+        XCTAssertTrue(ownerAnchors.contains(.cdAddPet))
+        XCTAssertTrue(ownerAnchors.contains(.setLoyalty))
+        XCTAssertTrue(ownerAnchors.contains(.loyaltySimulator))
+        XCTAssertTrue(ownerAnchors.contains(.setDevices))
+        XCTAssertTrue(ownerAnchors.contains(.insRevenue))
+        XCTAssertTrue(ownerAnchors.contains(.setStartFresh))
+
+        XCTAssertTrue(staffAnchors.contains(.clientFilters))
+        XCTAssertTrue(staffAnchors.contains(.emergencyContactBadges))
+        XCTAssertTrue(staffAnchors.contains(.cdLoyalty))
+        XCTAssertTrue(staffAnchors.contains(.petGenderDots))
+        XCTAssertTrue(staffAnchors.contains(.setLoyalty))
+        XCTAssertTrue(staffAnchors.contains(.loyaltySimulator))
+        XCTAssertTrue(staffAnchors.contains(.setICloud))
+        XCTAssertFalse(staffAnchors.contains(.insRevenue))
+        XCTAssertFalse(staffAnchors.contains(.setStartFresh))
+        XCTAssertLessThan(staffAnchors.count, ownerAnchors.count)
+    }
+
     func testFullWalkthroughTeachesCheckoutAndHistoryAsDedicatedProcess() throws {
         let steps = WalkthroughController.fullTour()
         let anchors = steps.map(\.anchor)
 
         XCTAssertTrue(anchors.contains(.cdCheckIn), "Check In should have its own stop, not only a grouped pet-actions explanation.")
         XCTAssertTrue(anchors.contains(.cdCheckOut), "Check Out should have its own stop so the user understands when checkout becomes available.")
+        XCTAssertTrue(anchors.contains(.cdLoyalty), "Client details should show where checkout-earned loyalty points appear.")
+        XCTAssertTrue(anchors.contains(.loyaltySimulator), "Settings should include a replayable loyalty simulator stop for staff training.")
         XCTAssertTrue(anchors.contains(.coServices), "The tour should open checkout and explain the Services step in the real checkout UI.")
         XCTAssertTrue(anchors.contains(.coDetails), "The tour should open checkout and explain the Notes & Photos step in the real checkout UI.")
         XCTAssertTrue(anchors.contains(.coPayment), "The tour should open checkout and explain the Payment step in the real checkout UI.")
@@ -375,6 +402,7 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(checkoutSteps[2].purpose.localizedCaseInsensitiveContains("reference"))
         XCTAssertTrue(checkoutSteps[3].purpose.localizedCaseInsensitiveContains("history"))
         XCTAssertTrue(checkoutSteps[4].purpose.localizedCaseInsensitiveContains("insights"))
+        XCTAssertTrue(checkoutSteps[4].coachTip?.localizedCaseInsensitiveContains("loyalty points") == true)
 
         let petHistoryStep = try XCTUnwrap(steps.first { $0.anchor == .cdPetHistory })
         XCTAssertTrue(petHistoryStep.purpose.localizedCaseInsensitiveContains("search"))

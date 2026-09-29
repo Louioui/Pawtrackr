@@ -42,7 +42,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         assertActiveWalkthroughAnchor("dashboard", timeout: 15)
         XCTAssertTrue(tapWalkthroughPrimary(timeout: 8), "Walkthrough Next should be tappable.")
 
-        assertActiveWalkthroughAnchor("clients", timeout: 8)
+        assertActiveWalkthroughAnchor("setupChecklist", timeout: 8)
         let back = app.buttons["walkthrough.back"]
         XCTAssertTrue(waitUntilHittable(back, timeout: 8), "Walkthrough Back should be tappable.")
         back.tap()
@@ -84,7 +84,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     func testClientDetailActionTargetsStayHittableAndOpenCheckoutOnIPad() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("cdAddPet", maxTaps: 20)
+        advanceWalkthroughUntilActiveAnchor("cdAddPet", maxTaps: 34)
         assertActiveWalkthroughAnchor("cdAddPet")
         XCTAssertTrue(
             waitUntilHittable(app.buttons["clientDetail.addPet.inline"], timeout: 8),
@@ -93,6 +93,18 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
 
         advanceWalkthroughUntilActiveAnchor("cdCheckOut", maxTaps: 6)
         assertActiveWalkthroughAnchor("cdCheckOut")
+
+        let back = app.buttons["walkthrough.back"]
+        XCTAssertTrue(waitUntilHittable(back, timeout: 8), "Back should stay available after check-in completes.")
+        back.tap()
+        assertActiveWalkthroughAnchor("cdCheckIn")
+        XCTAssertTrue(
+            waitUntilHittable(app.buttons["walkthrough.primary"], timeout: 8),
+            "Completed required-action steps should expose Next when the original highlighted action is no longer available."
+        )
+        app.buttons["walkthrough.primary"].tap()
+        assertActiveWalkthroughAnchor("cdCheckOut")
+
         let checkoutButton = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
         XCTAssertTrue(checkoutButton.waitForExistence(timeout: 8), "Checkout should be visible for the highlighted walkthrough target.")
         assertBubbleDoesNotCover(checkoutButton, named: "Check Out")
@@ -119,7 +131,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     func testSettingsWalkthroughDetailTargetsRenderOnIPad() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("setBusiness", maxTaps: 48)
+        advanceWalkthroughUntilActiveAnchor("setBusiness", maxTaps: 64)
         assertActiveWalkthroughAnchor("setBusiness")
         XCTAssertTrue(app.otherElements["walkthrough.bubble"].exists)
     }
@@ -149,7 +161,11 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         XCTAssertTrue(app.otherElements["walkthrough.card"].waitForExistence(timeout: 12))
         let stepCounter = app.staticTexts["walkthrough.stepCounter"]
         XCTAssertTrue(stepCounter.waitForExistence(timeout: 6), "Step counter should appear after replay")
-        XCTAssertTrue(stepCounter.label.hasPrefix("Step 1") || stepCounter.label.contains("1/") || stepCounter.label.contains("1 of"), "Step counter should show step 1 after replay")
+        XCTAssertTrue(
+            stepCounter.label.hasPrefix("1 ") || stepCounter.label.contains("1 /") || stepCounter.label.contains("1/") || stepCounter.label.contains("1 of"),
+            "Step counter should show step 1 after replay. label=\(stepCounter.label)"
+        )
+        assertActiveWalkthroughAnchor("dashboard", timeout: 8)
     }
 
     private func advanceWalkthroughUntilNewClientOwnerForm(maxTaps: Int = 14) {
@@ -197,7 +213,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
 
             if target.waitForExistence(timeout: 3) { return }
         }
-        XCTFail("Walkthrough did not reach active anchor \(anchor).")
+        XCTFail("Walkthrough did not reach active anchor \(anchor). current=\(currentActiveWalkthroughAnchor() ?? "none") all=\(allActiveWalkthroughAnchorIdentifiers()) layout=\(activeWalkthroughLayoutDebug())")
     }
 
     private func tapWalkthroughPrimary(timeout: TimeInterval = 4) -> Bool {
@@ -218,7 +234,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     private func assertActiveWalkthroughAnchor(_ anchor: String, timeout: TimeInterval = 8) {
         XCTAssertTrue(
             app.otherElements["walkthrough.activeAnchor.\(anchor)"].waitForExistence(timeout: timeout),
-            "Walkthrough should expose active anchor \(anchor)."
+            "Walkthrough should expose active anchor \(anchor). current=\(currentActiveWalkthroughAnchor() ?? "none") all=\(allActiveWalkthroughAnchorIdentifiers()) layout=\(activeWalkthroughLayoutDebug())"
         )
         XCTAssertTrue(
             app.otherElements["walkthrough.bubble"].waitForExistence(timeout: timeout),
@@ -228,6 +244,22 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
 
     private func activeWalkthroughLayoutDebug() -> String {
         app.otherElements.matching(NSPredicate(format: "identifier BEGINSWITH %@", "walkthrough.activeAnchor.")).firstMatch.value as? String ?? "no layout debug"
+    }
+
+    private func currentActiveWalkthroughAnchor() -> String? {
+        let element = app.otherElements
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "walkthrough.activeAnchor."))
+            .firstMatch
+        guard element.exists else { return nil }
+        return element.identifier.replacingOccurrences(of: "walkthrough.activeAnchor.", with: "")
+    }
+
+    private func allActiveWalkthroughAnchorIdentifiers() -> [String] {
+        app.otherElements
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "walkthrough.activeAnchor."))
+            .allElementsBoundByIndex
+            .filter(\.exists)
+            .map(\.identifier)
     }
 
     private func assertBubbleDoesNotCover(

@@ -480,9 +480,10 @@ enum WalkthroughOverlayScope {
     /// double-dimming the real target (which left e.g. the Add Pet button un-lit
     /// with a faint stray circle elsewhere).
     private static let detailAnchors: Set<WalkthroughAnchorID> = [
-        .cdOwner, .cdEmergency, .cdPets, .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory,
+        .cdOwner, .cdEmergency, .emergencyContactBadges, .cdLoyalty, .cdPets, .petGenderDots,
+        .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory,
         .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
-        .setBusiness, .setSecurity, .setData, .setICloud, .setAbout, .setStartFresh
+        .setBusiness, .setLoyalty, .loyaltySimulator, .setSecurity, .setData, .setICloud, .setDevices, .setAbout, .setStartFresh
     ]
 
     func handles(_ step: WalkthroughStep) -> Bool {
@@ -494,6 +495,15 @@ enum WalkthroughOverlayScope {
             return !Self.navigationAnchors.contains(step.anchor) && !Self.detailAnchors.contains(step.anchor)
         case .detailContent:
             return Self.detailAnchors.contains(step.anchor)
+        }
+    }
+
+    var ignoresOverlaySafeArea: Bool {
+        switch self {
+        case .all, .navigation, .content:
+            return true
+        case .rootContent, .detailContent:
+            return false
         }
     }
 }
@@ -539,13 +549,24 @@ private struct WalkthroughOverlayHost<Content: View>: View {
                 GeometryReader { proxy in
                     if controller.isActive, let step = controller.currentStep,
                        step.presents == presenting, scope.handles(step) {
-                        // Prefer the live viewport frame, then the live anchor,
-                        // then a computed fallback for targets SwiftUI won't expose.
-                        let rawFrameTarget = frames[step.anchor]
+                        // Prefer the explicitly emitted global frame first.
+                        // Pushed views inside `NavigationSplitView` can resolve
+                        // local anchors without the sidebar/top-chrome offsets,
+                        // which makes the bubble land over the wrong control.
+                        // The anchor path remains a fallback for targets whose
+                        // frame preference is unavailable.
+                        let overlayFrameInGlobal = proxy.frame(in: .global)
+                        let rawFrameTarget = frames[step.anchor].map { frame in
+                            frame.offsetBy(dx: -overlayFrameInGlobal.minX, dy: -overlayFrameInGlobal.minY)
+                        }
                         let rawAnchorTarget = anchors[step.anchor].map { proxy[$0] }
-                        let rawLiveTarget = rawAnchorTarget ?? rawFrameTarget
-                        let liveTarget = WalkthroughTargetFrame.validated(
-                            rawLiveTarget,
+                        let frameTarget = WalkthroughTargetFrame.validated(
+                            rawFrameTarget,
+                            in: proxy.size,
+                            safeAreaInsets: proxy.safeAreaInsets
+                        )
+                        let anchorTarget = WalkthroughTargetFrame.validated(
+                            rawAnchorTarget,
                             in: proxy.size,
                             safeAreaInsets: proxy.safeAreaInsets
                         )
@@ -554,7 +575,8 @@ private struct WalkthroughOverlayHost<Content: View>: View {
                             in: proxy.size,
                             safeAreaInsets: proxy.safeAreaInsets
                         )
-                        let target = liveTarget ?? fallbackTarget
+                        let target = frameTarget ?? anchorTarget ?? fallbackTarget
+                        let rawLiveTarget = frameTarget != nil ? rawFrameTarget : rawAnchorTarget
                         WalkthroughOverlayView(
                             step: step,
                             rawTargetRect: rawLiveTarget,
@@ -565,8 +587,21 @@ private struct WalkthroughOverlayHost<Content: View>: View {
                         )
                     }
                 }
-                .ignoresSafeArea()
+                .modifier(WalkthroughOverlaySafeAreaModifier(ignoresSafeArea: scope.ignoresOverlaySafeArea))
             }
+    }
+}
+
+private struct WalkthroughOverlaySafeAreaModifier: ViewModifier {
+    let ignoresSafeArea: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if ignoresSafeArea {
+            content.ignoresSafeArea()
+        } else {
+            content
+        }
     }
 }
 
@@ -931,6 +966,8 @@ private struct WalkthroughOverlayView: View {
                     .accessibilityIdentifier("walkthrough.stepCounter")
             }
 
+            tourProgressBar
+
             ViewThatFits(in: .vertical) {
                 bubbleBody
 
@@ -957,6 +994,26 @@ private struct WalkthroughOverlayView: View {
         .accessibilityIdentifier("walkthrough.bubble")
         .accessibilityLabel(Text(step.title))
         .accessibilityValue(Text("\(controller.stepNumber) of \(controller.stepCount)"))
+    }
+
+    private var tourProgressBar: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.18))
+                Capsule()
+                    .fill(DS.ColorToken.primary)
+                    .frame(width: max(10, proxy.size.width * walkthroughProgress))
+            }
+        }
+        .frame(height: 3)
+        .accessibilityHidden(true)
+    }
+
+    private var walkthroughProgress: CGFloat {
+        guard controller.stepCount > 0 else { return 0 }
+        let rawValue = CGFloat(controller.stepNumber) / CGFloat(controller.stepCount)
+        return min(max(rawValue, 0), 1)
     }
 
     @ViewBuilder
@@ -1013,7 +1070,7 @@ private struct WalkthroughOverlayView: View {
 
     @ViewBuilder
     private var footerPrimaryControl: some View {
-        if step.requiresTargetAction {
+        if step.requiresTargetAction, targetRect != nil {
             Label(AppLocalization.localized("tour.tap_highlighted", value: "Tap highlighted button"), systemImage: "hand.tap.fill")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)

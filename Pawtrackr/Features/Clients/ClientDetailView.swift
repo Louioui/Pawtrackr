@@ -110,7 +110,10 @@ struct ClientDetailView: View {
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
         .cdOwner,
         .cdEmergency,
+        .emergencyContactBadges,
+        .cdLoyalty,
         .cdPets,
+        .petGenderDots,
         .cdAddPet,
         .cdCheckIn,
         .cdCheckOut,
@@ -171,13 +174,9 @@ struct ClientDetailView: View {
             .modifier(CheckoutPresentationModifier(checkoutRoute: $checkoutRoute, vm: vm, walkthrough: walkthrough))
             .onAppear {
                 synchronizeWalkthroughCheckoutPresentation(walkthrough?.currentStep?.presents, vm: vm)
-                advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
             }
             .onChange(of: walkthrough?.currentStep?.presents) { _, presentation in
                 synchronizeWalkthroughCheckoutPresentation(presentation, vm: vm)
-            }
-            .onChange(of: walkthrough?.currentStep?.anchor) { _, _ in
-                advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
             }
             .onReceive(NotificationCenter.default.publisher(for: .visitDidStart)) { notification in
                 continueWalkthroughAfterVisitStart(notification, vm: vm)
@@ -386,6 +385,7 @@ struct ClientDetailView: View {
                         .walkthroughTarget(.emergencyContactBadges)
                     notesCard(client: vm.client)
                     loyaltySection(client: vm.client)
+                        .walkthroughTarget(.cdLoyalty)
                     petsSection(vm: vm)
                         .walkthroughTarget(.cdPets)
                     recentHistorySection(vm: vm)
@@ -842,7 +842,7 @@ struct ClientDetailView: View {
                                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         PetGenderNameBadge(pet: pet, maxNameWidth: 220)
-                                            .walkthroughTarget(.petGenderDots)
+                                            .clientDetailWalkthroughTarget(.petGenderDots, when: shouldRegisterPetWalkthroughAnchor(.petGenderDots, for: pet, vm: vm))
                                         Text(pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
                                     }
                                     Spacer()
@@ -876,8 +876,9 @@ struct ClientDetailView: View {
                                     }
                                     .opacity(activeVisit == nil && !isCheckingIn ? 1.0 : 0.55)
                                     .disabled(activeVisit != nil || isCheckingIn)
+                                    .id("clientDetail.pet.\(pet.uuid.uuidString).checkIn.\(activeVisit == nil && !isCheckingIn)")
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
-                                    .walkthroughTarget(.cdCheckIn)
+                                    .clientDetailWalkthroughTarget(.cdCheckIn, when: shouldRegisterPetWalkthroughAnchor(.cdCheckIn, for: pet, vm: vm))
 
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
                                         if let visit = vm.activeVisit(for: pet) {
@@ -891,14 +892,16 @@ struct ClientDetailView: View {
                                     }
                                     .opacity(activeVisit == nil ? 0.3 : 1.0)
                                     .disabled(activeVisit == nil)
+                                    .id("clientDetail.pet.\(pet.uuid.uuidString).checkOut.\(activeVisit != nil)")
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
-                                    .walkthroughTarget(.cdCheckOut)
+                                    .clientDetailWalkthroughTarget(.cdCheckOut, when: shouldRegisterPetWalkthroughAnchor(.cdCheckOut, for: pet, vm: vm))
 
                                     actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {
                                         sheetDestination = .history(pet)
                                     }
+                                    .id("clientDetail.pet.\(pet.uuid.uuidString).history")
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).history")
-                                    .walkthroughTarget(.cdPetHistory)
+                                    .clientDetailWalkthroughTarget(.cdPetHistory, when: shouldRegisterPetWalkthroughAnchor(.cdPetHistory, for: pet, vm: vm))
                                 }
                             }
                         }
@@ -976,6 +979,42 @@ struct ClientDetailView: View {
             }
         }
         .padding(.bottom, 80) // space for FAB
+    }
+
+    private func shouldRegisterPetWalkthroughAnchor(
+        _ anchor: WalkthroughAnchorID,
+        for pet: Pet,
+        vm: ClientDetailViewModel
+    ) -> Bool {
+        guard walkthrough?.currentStep?.anchor == anchor else { return false }
+
+        switch anchor {
+        case .cdCheckIn:
+            return vm.activeVisit(for: pet) == nil
+                && !vm.isCheckingIn(pet)
+                && pet.persistentModelID == checkInWalkthroughPetID(vm: vm)
+        case .cdCheckOut:
+            return vm.activeVisit(for: pet) != nil
+                && pet.persistentModelID == checkoutWalkthroughPetID(vm: vm)
+        case .petGenderDots, .cdPetHistory:
+            return pet.persistentModelID == primaryWalkthroughPetID(vm: vm)
+        default:
+            return true
+        }
+    }
+
+    private func primaryWalkthroughPetID(vm: ClientDetailViewModel) -> PersistentIdentifier? {
+        firstActiveCheckoutRoute(vm: vm)?.pet.persistentModelID ?? vm.pets.first?.persistentModelID
+    }
+
+    private func checkInWalkthroughPetID(vm: ClientDetailViewModel) -> PersistentIdentifier? {
+        vm.pets.first { pet in
+            vm.activeVisit(for: pet) == nil && !vm.isCheckingIn(pet)
+        }?.persistentModelID ?? primaryWalkthroughPetID(vm: vm)
+    }
+
+    private func checkoutWalkthroughPetID(vm: ClientDetailViewModel) -> PersistentIdentifier? {
+        firstActiveCheckoutRoute(vm: vm)?.pet.persistentModelID ?? primaryWalkthroughPetID(vm: vm)
     }
 
     // MARK: - Toolbar
@@ -1109,20 +1148,6 @@ struct ClientDetailView: View {
         vm.refreshPets()
         vm.refreshRecentVisits()
         walkthrough?.advance()
-    }
-
-    private func advanceWalkthroughIfCheckInAlreadySatisfied(vm: ClientDetailViewModel) {
-        guard walkthrough?.isActive == true,
-              walkthrough?.currentStep?.anchor == .cdCheckIn
-        else { return }
-
-        vm.refreshPets()
-        guard firstActiveCheckoutRoute(vm: vm) != nil else { return }
-
-        Task { @MainActor in
-            guard walkthrough?.currentStep?.anchor == .cdCheckIn else { return }
-            walkthrough?.advance()
-        }
     }
 
     private func advanceWalkthroughIntoCheckoutIfNeeded() {
@@ -1349,6 +1374,17 @@ private struct InitialsCircle: View {
 
 private extension Logger {
     static let clientDetailView = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "ClientDetailView")
+}
+
+private extension View {
+    @ViewBuilder
+    func clientDetailWalkthroughTarget(_ id: WalkthroughAnchorID, when condition: Bool) -> some View {
+        if condition {
+            walkthroughTarget(id)
+        } else {
+            self
+        }
+    }
 }
 
 // Nonisolated small helper for duration string to use inside TimelineView
