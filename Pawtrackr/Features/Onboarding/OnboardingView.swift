@@ -517,6 +517,9 @@ struct OnboardingView: View {
                 // that records them was never reachable from here.
                 StoreBackupRestore.offer(from: StoreBackupRestore.candidates(), liveClientUUIDs: [], dismissed: [])
             }.value
+            // Sample clients are never added while this device holds a backup
+            // of the user's own clients.
+            viewModel.restorableClientCount = restoreOffer?.missingClientCount ?? 0
         }
         .onAppear {
             welcomeAppeared = true
@@ -872,6 +875,7 @@ struct OnboardingView: View {
     }
     
     private var warmStartStep: some View {
+        ScrollView {
         VStack(spacing: DS.Spacing.xxl) {
             VStack(spacing: DS.Spacing.md) {
                 Image(systemName: "checkmark.seal.fill")
@@ -882,7 +886,7 @@ struct OnboardingView: View {
                 Text(NSLocalizedString("onboarding.finish.title", value: "You're all set!", comment: ""))
                     .font(.title2.bold())
 
-                Text(NSLocalizedString("onboarding.finish.message", value: "We've loaded a sample salon so you can explore hands-on. Tap below and we'll show you around — clear it anytime with “Start Fresh” in Settings.", comment: ""))
+                Text(NSLocalizedString("onboarding.finish.message", value: "Choose how you'd like to start.", comment: ""))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, DS.Spacing.xl)
@@ -908,26 +912,42 @@ struct OnboardingView: View {
             .hairlineBorder(DS.ColorToken.border, cornerRadius: 14)
             .padding(.horizontal, DS.Spacing.xxl)
 
-            // Single, unmistakable call to action — every new user starts in the
-            // demo and is guided from there. (No "fresh vs demo" fork anymore.)
-            Button {
-                completeWithCelebration(seed: true)
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "wand.and.stars")
-                    Text(NSLocalizedString("onboarding.finish.explore", value: "Explore Pawtrackr", comment: ""))
-                        .fontWeight(.semibold)
+            // Sample clients go into the real, iCloud-synced store, so they're
+            // a choice the user makes, never a default. The rules for when
+            // they may be added live in SampleDataSeedPolicy.
+            VStack(spacing: DS.Spacing.md) {
+                startChoiceButton(
+                    title: NSLocalizedString("onboarding.finish.sample.title", value: "Explore with sample clients", comment: ""),
+                    subtitle: NSLocalizedString("onboarding.finish.sample.subtitle", value: "Adds 2 practice clients with pets and visits so the tour can show check-in and checkout. Remove them anytime in Settings.", comment: ""),
+                    systemImage: "wand.and.stars",
+                    isProminent: viewModel.sampleDataAvailability == .seed,
+                    identifier: "onboarding.explore"
+                ) {
+                    completeWithCelebration(seed: true)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, DS.Spacing.md)
-                .background(DS.ColorToken.primary)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
-                .shadow(color: DS.ColorToken.primary.opacity(0.3), radius: 8, x: 0, y: 4)
+                .disabled(viewModel.isSaving || viewModel.sampleDataAvailability != .seed)
+                .opacity(viewModel.sampleDataAvailability == .seed ? 1 : 0.55)
+
+                if let note = sampleDataUnavailableNote {
+                    Label(note, systemImage: "info.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("onboarding.sampleUnavailable")
+                }
+
+                startChoiceButton(
+                    title: NSLocalizedString("onboarding.finish.real.title", value: "Start with my real business", comment: ""),
+                    subtitle: NSLocalizedString("onboarding.finish.real.subtitle", value: "Begin with an empty client list. You can load sample clients later in Settings.", comment: ""),
+                    systemImage: "building.2",
+                    isProminent: viewModel.sampleDataAvailability != .seed,
+                    identifier: "onboarding.startReal"
+                ) {
+                    completeWithCelebration(seed: false)
+                }
+                .disabled(viewModel.isSaving)
             }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isSaving)
-            .accessibilityIdentifier("onboarding.explore")
             .padding(.horizontal, DS.Spacing.xxl)
 
             if viewModel.isSaving {
@@ -937,9 +957,62 @@ struct OnboardingView: View {
                     #endif
             }
         }
+        .padding(.vertical, DS.Spacing.lg)
+        }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     
+    /// Why the sample option is off, in words the groomer can act on.
+    private var sampleDataUnavailableNote: String? {
+        switch viewModel.sampleDataAvailability {
+        case .seed, .skip(.notChosen):
+            return nil
+        case .skip(.salonHasData):
+            return NSLocalizedString("onboarding.finish.sample.unavailable_salon", value: "Your salon already has data, so sample clients won't be added.", comment: "")
+        case .skip(.backupFound):
+            return NSLocalizedString("onboarding.finish.sample.unavailable_backup", value: "This device has a backup of your clients. Restore it instead of adding sample clients.", comment: "")
+        case .skip(.iCloudStillChecking):
+            return NSLocalizedString("onboarding.finish.sample.unavailable_icloud", value: "Checking iCloud for your salon's records. Sample clients become available when the check finishes.", comment: "")
+        }
+    }
+
+    private func startChoiceButton(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        isProminent: Bool,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: DS.Spacing.md) {
+                Image(systemName: systemImage)
+                    .font(.title3)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .fontWeight(.semibold)
+                    Text(subtitle)
+                        .font(.footnote)
+                        .opacity(0.85)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .multilineTextAlignment(.leading)
+            .padding(DS.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isProminent ? DS.ColorToken.primary : DS.ColorToken.surface)
+            .foregroundStyle(isProminent ? Color.white : Color.primary)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+            .hairlineBorder(isProminent ? Color.clear : DS.ColorToken.border, cornerRadius: DS.Radius.md)
+            .contentShape(RoundedRectangle(cornerRadius: DS.Radius.md))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
     private func completeWithCelebration(seed: Bool) {
         Task {
             withAnimation(.spring()) {

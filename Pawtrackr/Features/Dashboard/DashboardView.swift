@@ -24,6 +24,9 @@ struct DashboardView: View {
     @State private var showActivityFeed = false
     @State private var showQuickCheckOut = false
     @State private var selectedRevenueDate: Date?
+    /// Set while the "Remove Sample Clients?" confirmation is up; it lists
+    /// what will be deleted.
+    @State private var sampleRemovalInventory: SampleDataInventory?
     var namespace: Namespace.ID
 
     var body: some View {
@@ -40,6 +43,21 @@ struct DashboardView: View {
                     showQuickCheckOut = false
                     router.navigateToCheckout(visit)
                 }
+            }
+            .alert(
+                SampleDataCopy.removeTitle,
+                isPresented: Binding(
+                    get: { sampleRemovalInventory != nil },
+                    set: { if !$0 { sampleRemovalInventory = nil } }
+                ),
+                presenting: sampleRemovalInventory
+            ) { _ in
+                Button(NSLocalizedString("common.cancel", comment: ""), role: .cancel) {}
+                Button(SampleDataCopy.removeConfirm, role: .destructive) {
+                    Task { await vm?.removeSampleData() }
+                }
+            } message: { inventory in
+                Text(SampleDataCopy.removeMessage(for: inventory))
             }
             .alert(item: appErrorBinding) { error in
                 Alert(
@@ -366,37 +384,54 @@ struct DashboardView: View {
                     }
                 }
 
-                Divider().opacity(0.4)
+                // Sample → real business. Shown only while sample clients
+                // (fixed UUIDs) exist, and it removes only them. The full
+                // Start Fresh wipe stays in Settings behind its own warning.
+                if vm.hasSampleData {
+                    Divider().opacity(0.4)
 
-                // Sandbox → live transition. The demo data is explorable, then the
-                // user clears it from Settings ("Start Fresh") to begin for real.
-                Button {
-                    selectSurface(.settings, resetPath: true)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "wand.and.stars")
-                            .foregroundStyle(DS.ColorToken.primary)
-                            .font(.title3)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(AppLocalization.localized("checklist.start_fresh.title", value: "Done exploring the demo?"))
-                                .font(.subheadline.weight(.semibold))
-                            Text(AppLocalization.localized("checklist.start_fresh.subtitle", value: "Clear the sample data and start fresh with your real business."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        confirmSampleDataRemoval()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "wand.and.stars")
+                                .foregroundStyle(DS.ColorToken.primary)
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(AppLocalization.localized("checklist.start_fresh.title", value: "Done exploring the demo?"))
+                                    .font(.subheadline.weight(.semibold))
+                                Text(AppLocalization.localized("checklist.start_fresh.subtitle", value: "Remove the sample clients. Your own clients stay."))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityHint(AppLocalization.localized("checklist.start_fresh.hint", value: "Asks before removing the sample clients"))
+                    .accessibilityIdentifier("dashboard.removeSampleData")
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint(AppLocalization.localized("checklist.start_fresh.hint", value: "Opens Settings where you can wipe demo data"))
             }
             .padding(DS.Spacing.md)
+        }
+    }
+
+    private func confirmSampleDataRemoval() {
+        do {
+            let inventory = try DataReset.sampleDataInventory(in: modelContext)
+            guard !inventory.isEmpty else {
+                Task { await vm?.refresh() }
+                return
+            }
+            sampleRemovalInventory = inventory
+        } catch {
+            vm?.appError = .database(error.localizedDescription)
         }
     }
 

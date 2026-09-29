@@ -225,7 +225,7 @@ struct ContentView: View {
             selectSurface(.dashboard, resetPath: true)
             revealSplitSidebarForWalkthroughIfNeeded()
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.start(WalkthroughController.tour(for: appSettings.onboardingRole))
+            walkthrough.start(currentWalkthroughSteps())
         }
     }
 
@@ -246,8 +246,18 @@ struct ContentView: View {
             guard !Task.isCancelled else { return }
             guard presentedSheet == nil else { return }
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.restart(WalkthroughController.tour(for: appSettings.onboardingRole))
+            walkthrough.restart(currentWalkthroughSteps())
         }
+    }
+
+    /// The tour for this device's role, shaped by what the store holds right
+    /// now: explain-only when real clients exist, and client-detail/checkout
+    /// steps only when a sample client is there to open.
+    private func currentWalkthroughSteps() -> [WalkthroughStep] {
+        WalkthroughController.tour(
+            for: appSettings.onboardingRole,
+            context: WalkthroughTourContext.resolve(in: modelContext)
+        )
     }
 
     private var canStartWalkthroughInCurrentRuntime: Bool {
@@ -307,42 +317,16 @@ struct ContentView: View {
     }
 
     private func performDemoClientDetailNavigation() {
-        selectClientsSurface()
-        router.popClientsToRoot()
-
-        if let client = preferredWalkthroughClient() {
-            router.navigateToClient(client)
+        // Only a sample client (fixed UUID) is ever opened. A client created
+        // during the tour, or any other real client, is never the target: the
+        // hands-on steps that follow would check its pet in for real.
+        guard let client = SampleData.tourClient(in: modelContext) else {
+            Logger.contentNav.info("Walkthrough client-detail route skipped: no sample client in the store.")
             return
         }
-
-        var descriptor = FetchDescriptor<Client>(sortBy: [
-            SortDescriptor(\.lastVisitDate, order: .reverse),
-            SortDescriptor(\.createdAt, order: .forward)
-        ])
-        descriptor.fetchLimit = 20
-
-        do {
-            let clients = try modelContext.fetch(descriptor)
-            guard let client = clients.first(where: { !($0.pets ?? []).isEmpty }) ?? clients.first else { return }
-            router.navigateToClient(client)
-        } catch {
-            Logger.contentNav.error("Walkthrough demo client fetch failed: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    private func preferredWalkthroughClient() -> Client? {
-        guard let id = walkthrough.preferredClientDetailID else { return nil }
-        if let client = modelContext.model(for: id) as? Client {
-            return client
-        }
-
-        do {
-            let clients = try modelContext.fetch(FetchDescriptor<Client>())
-            return clients.first { $0.persistentModelID == id }
-        } catch {
-            Logger.contentNav.error("Walkthrough preferred client fetch failed: \(String(describing: error), privacy: .public)")
-            return nil
-        }
+        selectClientsSurface()
+        router.popClientsToRoot()
+        router.navigateToClient(client)
     }
 
     private func continueWalkthroughAfterClientCreate(_ notification: Notification) {

@@ -1223,8 +1223,11 @@ struct ClientDetailView: View {
     }
 
     private func continueWalkthroughAfterVisitStart(_ notification: Notification, vm: ClientDetailViewModel) {
+        // Explain-only steps (a salon with real clients) move on with Next,
+        // never because a visit started.
         guard walkthrough?.isActive == true,
-              walkthrough?.currentStep?.anchor == .cdCheckIn
+              walkthrough?.currentStep?.anchor == .cdCheckIn,
+              walkthrough?.currentStep?.requiresTargetAction == true
         else { return }
 
         guard let visit = notification.object as? Visit,
@@ -1238,8 +1241,11 @@ struct ClientDetailView: View {
     }
 
     private func advanceWalkthroughIfCheckInAlreadySatisfied(vm: ClientDetailViewModel) {
+        // Only a hands-on step waits for a check-in. An explain-only one stays
+        // up until the user taps Next, so the explanation isn't skipped.
         guard walkthrough?.isActive == true,
-              walkthrough?.currentStep?.anchor == .cdCheckIn
+              walkthrough?.currentStep?.anchor == .cdCheckIn,
+              walkthrough?.currentStep?.requiresTargetAction == true
         else { return }
 
         vm.refreshPets()

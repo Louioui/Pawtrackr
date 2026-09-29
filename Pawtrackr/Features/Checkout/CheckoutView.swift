@@ -120,6 +120,13 @@ struct CheckoutView: View {
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughCheckoutStep(anchor)
         }
+        .onChange(of: walkthrough?.isActive) { _, isActive in
+            // A checkout the tour drove normally closes with the tour. If it
+            // stays open, it becomes a normal checkout again, from Services.
+            if isActive != true {
+                viewModel.endWalkthroughPreview()
+            }
+        }
         .overlay {
             if shouldShowOverlay {
                 overlayContent
@@ -674,7 +681,10 @@ struct CheckoutView: View {
                 .walkthroughTarget(.coConfirm)
                 .animation(Animations.responsiveSpring, value: viewModel.isAdvanceEnabled)
                 #if os(macOS)
-                .keyboardShortcut(.return)
+                // Off during the guided tour: the overlay intercepts clicks on
+                // this button, but not keyboard shortcuts, and ⌘Return on the
+                // Review step would confirm a real payment.
+                .keyboardShortcut(walkthrough?.isActive == true ? nil : KeyboardShortcut(.return))
                 #endif
             }
             .padding()
@@ -762,10 +772,13 @@ struct CheckoutView: View {
             targetStep = nil
         }
 
+        // The tour only shows these steps. Preview mode stops the checkout
+        // from saving a draft or a payment for the visit it opened.
+        viewModel.beginWalkthroughPreview()
         guard let targetStep, viewModel.currentStep != targetStep else { return }
         focusedField = nil
         isGoingBack = false
-        viewModel.currentStep = targetStep
+        viewModel.showStepForWalkthrough(targetStep)
     }
 
     private func stepHero(eyebrow: String, title: String, message: String) -> some View {

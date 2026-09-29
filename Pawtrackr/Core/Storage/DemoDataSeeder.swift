@@ -2,34 +2,49 @@
 //  DemoDataSeeder.swift
 //  Pawtrackr
 //
-//  Friendly starter data used by onboarding when the user chooses demo mode.
+//  The sample salon: two practice clients with pets and visits, loaded only
+//  when the user asks for them and the store is empty.
 //
 
 import Foundation
 import SwiftData
 
 enum DemoDataSeeder {
-    static func seedIfNeeded(in context: ModelContext) throws {
+    /// Inserts the sample clients (fixed UUIDs, see `SampleData`) into an
+    /// empty store. Returns false, changing nothing but the catalog check,
+    /// when any client or pet already exists: sample rows must never land in
+    /// a salon that has data.
+    ///
+    /// Callers decide whether seeding is allowed at all
+    /// (`SampleDataSeedPolicy`); this is the last guard, run on the context
+    /// that writes.
+    @discardableResult
+    static func seedIfNeeded(in context: ModelContext) throws -> Bool {
         DataMigrations.ensureServiceCatalog(in: context)
         DataMigrations.ensureMessageTemplates(in: context)
 
-        let services = try context.fetch(FetchDescriptor<Service>(sortBy: [SortDescriptor(\.name)]))
-        applyPrices(to: services)
-
         let clientCount = try context.fetchCount(FetchDescriptor<Client>())
-        if clientCount > 0 {
+        let petCount = try context.fetchCount(FetchDescriptor<Pet>())
+        guard clientCount == 0, petCount == 0 else {
             if context.hasChanges {
                 try context.save()
             }
-            return
+            return false
         }
 
+        let services = try context.fetch(FetchDescriptor<Service>(sortBy: [SortDescriptor(\.name)]))
+        applySamplePrices(to: services)
+
+        // Fixed UUIDs go on right after init, before any setter: setters
+        // schedule Spotlight items under the current UUID, and a visit's
+        // session token is derived from its pet's UUID.
         let ava = Client(
             firstName: "Ava",
             lastName: "Martinez",
             phone: "3125550110",
             email: "ava@example.com"
         )
+        ava.uuid = SampleData.avaClientID
         ava.setAddress("42 Cedar Street")
 
         let jordan = Client(
@@ -38,9 +53,11 @@ enum DemoDataSeeder {
             phone: "4155550142",
             email: "jordan@example.com"
         )
+        jordan.uuid = SampleData.jordanClientID
         jordan.setAddress("18 Harbor Avenue")
 
         let milo = Pet(name: "Milo", species: .dog, gender: .male)
+        milo.uuid = SampleData.miloPetID
         milo.setBreed("Mini Goldendoodle")
         milo.setColor("Apricot")
         milo.setPreferredGroomingFrequency(.monthly)
@@ -48,6 +65,7 @@ enum DemoDataSeeder {
         ava.pets = [milo]
 
         let luna = Pet(name: "Luna", species: .dog, gender: .female)
+        luna.uuid = SampleData.lunaPetID
         luna.setBreed("Shih Tzu")
         luna.setColor("White & Tan")
         luna.setPreferredGroomingFrequency(.monthly)
@@ -61,15 +79,20 @@ enum DemoDataSeeder {
 
         let now = Date()
         let activeVisit = Visit(pet: milo, startedAt: now.addingTimeInterval(-48 * 60))
+        activeVisit.uuid = SampleData.miloActiveVisitID
         activeVisit.note = "Comfort breaks during drying help keep Milo relaxed."
         activeVisit.behaviorTags = ["Friendly", "Needs breaks"]
         context.insert(activeVisit)
         append(activeVisit, to: milo)
 
-        let byName = Dictionary(uniqueKeysWithValues: services.map { ($0.name, $0) })
+        var byName: [String: Service] = [:]
+        for service in services where byName[service.name] == nil {
+            byName[service.name] = service
+        }
 
         var rebuiltDates: [Date] = []
         try addCompletedVisit(
+            id: SampleData.miloRecentVisitID,
             pet: milo,
             endedAt: now.addingTimeInterval(-2 * 86_400),
             serviceNames: localizedServiceNames(["Full Package", "Paw Trim"]),
@@ -81,6 +104,7 @@ enum DemoDataSeeder {
         rebuiltDates.append(now.addingTimeInterval(-2 * 86_400))
 
         try addCompletedVisit(
+            id: SampleData.lunaRecentVisitID,
             pet: luna,
             endedAt: now.addingTimeInterval(-9 * 86_400),
             serviceNames: localizedServiceNames(["Bath", "Face Grooming"]),
@@ -92,6 +116,7 @@ enum DemoDataSeeder {
         rebuiltDates.append(now.addingTimeInterval(-9 * 86_400))
 
         try addCompletedVisit(
+            id: SampleData.miloOlderVisitID,
             pet: milo,
             endedAt: now.addingTimeInterval(-24 * 86_400),
             serviceNames: localizedServiceNames(["Haircut", "De-shedding"]),
@@ -107,9 +132,14 @@ enum DemoDataSeeder {
         for date in rebuiltDates {
             SummaryUpdater.rebuildDay(for: date, in: context)
         }
+        if context.hasChanges {
+            try context.save()
+        }
+        return true
     }
 
     private static func addCompletedVisit(
+        id: UUID,
         pet: Pet,
         endedAt: Date,
         serviceNames: [String],
@@ -120,6 +150,7 @@ enum DemoDataSeeder {
     ) throws {
         let startedAt = endedAt.addingTimeInterval(-75 * 60)
         let visit = Visit(pet: pet, startedAt: startedAt)
+        visit.uuid = id
         visit.note = note
         context.insert(visit)
         append(visit, to: pet)
@@ -139,27 +170,31 @@ enum DemoDataSeeder {
         visit.markCheckedOut(total: total, now: endedAt)
     }
 
-    private static func applyPrices(to services: [Service]) {
-        let prices: [String: Decimal] = [
-            "Full Package": 95,
-            "Basic Package": 72,
-            "Spa Package": 118,
-            "Bath": 45,
-            "Haircut": 60,
-            "De-shedding": 24,
-            "Anal Glands Expression": 18,
-            "Face Grooming": 22,
-            "Paw Trim": 16,
-            "Hygiene Area Trim": 20,
-            "Knots and Matting Fee": 30,
-            "Flea & Ticks Treatment": 28,
-            "Hair Dye": 35
-        ]
+    /// Example prices for the built-in catalog, so the sample checkout shows
+    /// a subtotal. A price the salon already set is never touched, custom
+    /// services are left alone, and nothing is enabled or disabled.
+    static let samplePrices: [String: Decimal] = [
+        "Full Package": 95,
+        "Basic Package": 72,
+        "Spa Package": 118,
+        "Bath": 45,
+        "Haircut": 60,
+        "De-shedding": 24,
+        "Anal Glands Expression": 18,
+        "Face Grooming": 22,
+        "Paw Trim": 16,
+        "Hygiene Area Trim": 20,
+        "Knots and Matting Fee": 30,
+        "Flea & Ticks Treatment": 28,
+        "Hair Dye": 35
+    ]
 
-        for service in services {
-            let englishName = DefaultServiceCatalog.englishName(forKnownName: service.name) ?? service.name
-            service.setBasePrice(prices[englishName] ?? 25)
-            service.setEnabled(true)
+    private static func applySamplePrices(to services: [Service]) {
+        for service in services where service.basePrice == nil {
+            guard let englishName = DefaultServiceCatalog.englishName(forKnownName: service.name),
+                  let price = samplePrices[englishName]
+            else { continue }
+            service.setBasePrice(price)
         }
     }
 

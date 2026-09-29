@@ -195,6 +195,11 @@ final class CheckoutViewModel {
     private var lastSavedDraftFingerprint: String?
     private var lastAcceptedConfirmAt: Date?
     private let confirmDebounceWindow: TimeInterval = 1.0
+    /// True while the guided tour drives this checkout. The tour only shows
+    /// the steps: nothing is saved, neither the crash-recovery draft (a tour
+    /// jump to Review would otherwise reopen a real visit at Review later) nor
+    /// the payment.
+    private(set) var isWalkthroughPreview = false
 
     // MARK: Computed State
     var requiresExternalReference: Bool {
@@ -555,6 +560,36 @@ final class CheckoutViewModel {
         scheduleCriticalDraftSave(reason: "step_advanced")
     }
 
+    // MARK: - Guided tour preview
+
+    /// Enters tour preview: from now on this checkout saves nothing. Any
+    /// pending draft write is cancelled.
+    func beginWalkthroughPreview() {
+        guard !isWalkthroughPreview else { return }
+        isWalkthroughPreview = true
+        autosaveTask?.cancel()
+        autosaveTask = nil
+        trace("walkthrough_preview_started")
+    }
+
+    /// Shows a step for the tour without validating or saving it. Only works
+    /// in tour preview, so real checkouts still go through `advance()`.
+    func showStepForWalkthrough(_ step: CheckoutFlowStep) {
+        guard isWalkthroughPreview, currentStep != step else { return }
+        currentStep = step
+    }
+
+    /// Leaves tour preview if the checkout outlives the tour. The tour jumped
+    /// steps without validation, so the checkout starts over at Services, and
+    /// the fingerprint is re-based so the tour's state isn't saved as a draft.
+    func endWalkthroughPreview() {
+        guard isWalkthroughPreview else { return }
+        currentStep = .services
+        lastSavedDraftFingerprint = currentFingerprint()
+        isWalkthroughPreview = false
+        trace("walkthrough_preview_ended")
+    }
+
     func dismissDraftRecoveryNotice() {
         guard draftRecoveryNotice != nil else { return }
         draftRecoveryNotice = nil
@@ -582,6 +617,12 @@ final class CheckoutViewModel {
     @MainActor
     func processPayment() async {
         guard !isSaving, state != .confirmed else { return }
+        // The guided tour intercepts Confirm, but a keyboard shortcut or a
+        // stray tap must still never save a checkout the tour opened.
+        guard !isWalkthroughPreview else {
+            trace("confirm_blocked_walkthrough_preview")
+            return
+        }
         guard currentStep == .review else {
             self.appError = .validation(.custom(message: AppLocalization.localized("checkout.error.review_first", value: "Review checkout before confirming payment.")))
             return
@@ -709,6 +750,7 @@ final class CheckoutViewModel {
     }
 
     func flushDraft() {
+        guard !isWalkthroughPreview else { return }
         if state == .confirmed {
             Task { [draftStore, visitID = visit.uuid] in
                 do {
@@ -814,7 +856,7 @@ final class CheckoutViewModel {
     }
 
     private func scheduleDraftSave(reason: String, immediate: Bool = false) {
-        guard !suppressDraftAutosave, !isBootstrappingCheckout, state != .confirmed, !visit.isCompleted else { return }
+        guard !isWalkthroughPreview, !suppressDraftAutosave, !isBootstrappingCheckout, state != .confirmed, !visit.isCompleted else { return }
 
         let fingerprint = currentFingerprint()
         if fingerprint == lastSavedDraftFingerprint { return }

@@ -76,6 +76,9 @@ final class DashboardViewModel {
     var overduePets: [Pet] = []
     var revenueSeries: [RevenuePoint] = []
     var checklist: [ChecklistItem] = []
+    /// Sample clients (fixed UUIDs, `SampleData`) are in the store. The
+    /// checklist offers to remove them only while this is true.
+    var hasSampleData = false
     var smartSuggestions: [SmartSuggestion] = []
     var appError: AppError? = nil
 
@@ -195,7 +198,7 @@ final class DashboardViewModel {
         // that aren't yet in the repository.
         let container = dataStore.container
         do {
-            let (isBrandingComplete, hasPrices, hasClient, hasVisit, hasBackupSignal) = try await Task.detached {
+            let (isBrandingComplete, hasPrices, hasClient, hasVisit, hasBackupSignal, hasSamples) = try await Task.detached {
                 let context = ModelContext(container)
 
                 let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
@@ -203,11 +206,15 @@ final class DashboardViewModel {
 
                 let clientCount = try context.fetchCount(FetchDescriptor<Client>())
                 let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
+                let sampleCount = try SampleData.sampleClientCount(in: context)
                 let hasPrices = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasConfiguredPrices)
                 let uploadRecord = CloudKitMonitor.persistedOrMigratedSyncHealth()
 
-                return (branding, hasPrices, clientCount > 0, visitCount > 0, DashboardViewModel.hasBackupProtection(uploadRecord: uploadRecord))
+                return (branding, hasPrices, clientCount > 0, visitCount > 0, DashboardViewModel.hasBackupProtection(uploadRecord: uploadRecord), sampleCount > 0)
             }.value
+            if hasSampleData != hasSamples {
+                hasSampleData = hasSamples
+            }
 
             checklist = [
                 ChecklistItem(title: AppLocalization.localized("checklist.branding", value: "Add Business Branding"), isCompleted: isBrandingComplete, action: .branding),
@@ -227,6 +234,17 @@ final class DashboardViewModel {
     /// is lost with the device, so it must never tick this item.
     nonisolated static func hasBackupProtection(uploadRecord: SyncHealthReducer.State) -> Bool {
         uploadRecord.lastSuccessfulExportEndedAt != nil
+    }
+
+    /// Removes only the sample clients and what belongs to them
+    /// (`DataReset.removeSampleData`), then reloads the dashboard.
+    func removeSampleData() async {
+        do {
+            try DataReset.removeSampleData(in: dataStore.container.mainContext)
+        } catch {
+            setDashboardError(error, source: #function)
+        }
+        await refresh()
     }
 
     func checkInPet(_ pet: Pet) async {

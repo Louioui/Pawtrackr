@@ -904,8 +904,8 @@
 "checklist.backup" = "Confirm Backup Protection";
 "checklist.hint.complete" = "Opens the screen to finish this step";
 "checklist.hint.review" = "Opens this section to review";
-"checklist.start_fresh.hint" = "Opens Settings where you can wipe demo data";
-"checklist.start_fresh.subtitle" = "Clear the sample data and start fresh with your real business.";
+"checklist.start_fresh.hint" = "Asks before removing the sample clients";
+"checklist.start_fresh.subtitle" = "Remove the sample clients. Your own clients stay.";
 "checklist.start_fresh.title" = "Done exploring the demo?";
 "checklist.visit" = "Start Your First Visit";
 
@@ -1049,7 +1049,7 @@
 "new_client.validation.last_required" = "Last name is required.";
 "new_client.validation.phone_invalid" = "Please enter a valid phone number.";
 "onboarding.finish.explore" = "Explore Pawtrackr";
-"onboarding.finish.message" = "We've loaded a sample salon so you can explore hands-on. Tap below and we'll show you around — clear it anytime with “Start Fresh” in Settings.";
+"onboarding.finish.message" = "Choose how you'd like to start.";
 "onboarding.finish.title" = "You're all set!";
 "onboarding.permissions.biometric_unavailable" = "Turn on Face ID or Touch ID in your device Settings to speed up checkout unlocks. Your PIN keeps working in the meantime.";
 "onboarding.security.skip" = "Skip for now — use without a PIN";
@@ -1083,7 +1083,7 @@
 "settings.pin.new" = "New PIN";
 "settings.pin.set" = "Set PIN";
 "settings.reset_guide.confirm" = "Replay";
-"settings.reset_guide.message" = "This re-shows the new-user tour and dashboard checklist. Your business settings, clients, and visits are not affected.";
+"settings.reset_guide.message" = "This re-shows the new-user tour and the dashboard checklist. When your salon has real clients, the tour only explains each screen. It doesn't check pets in, create clients, or save checkouts.";
 "settings.reset_guide.title" = "Replay Getting Started?";
 "settings.security.disable_lock_confirm" = "Disable";
 "settings.security.disable_lock_message" = "Pawtrackr will stop requiring your PIN when the app opens or returns to the foreground.";
@@ -1093,7 +1093,7 @@
 "settings.wipe.button" = "Wipe & Start Fresh";
 "settings.wipe.confirm" = "Erase Everything";
 "settings.wipe.message" = "This permanently erases every client, pet, visit, payment, inventory item, and report — including the demo data — and cannot be undone. The wipe also syncs to iCloud and your other devices. Your business profile and service menu are kept.";
-"settings.wipe.section_caption" = "Erase all clients, pets, visits, and history (including the demo) and begin with an empty workspace. Your business profile and service menu are kept.";
+"settings.wipe.section_caption" = "Erase every client, pet, visit, and payment, real or sample, on all your devices through iCloud, and begin with an empty workspace. Your business profile and service menu are kept.";
 "settings.wipe.section_title" = "Start Fresh";
 "settings.wipe.title" = "Wipe Everything & Start Fresh?";
 "tour.done" = "Done";
@@ -1613,11 +1613,11 @@
 "tour.set.icloud.tip" = "The top account banner tells you if iCloud needs sign-in or network attention.";
 "tour.set.about.title" = "Replay & Start Fresh";
 "tour.set.about.directive" = "Replay this walkthrough whenever someone needs training.";
-"tour.set.about.purpose" = "The replay button brings this guided tour back without changing clients, pets, visits, settings, or reports.";
+"tour.set.about.purpose" = "Replay brings this tour back. When your salon has real clients, it only explains each screen. It never checks pets in, creates clients, or saves a checkout.";
 "tour.set.start_fresh.title" = "Wipe & Start Fresh";
-"tour.set.start_fresh.directive" = "Use this when you are done practicing.";
-"tour.set.start_fresh.purpose" = "After you know your way around, Wipe & Start Fresh clears the demo clients, pets, visits, payments, and history so you can begin with an empty workspace for real business.";
-"tour.set.start_fresh.tip" = "Your business profile and service menu stay. Only practice records are removed.";
+"tour.set.start_fresh.directive" = "Only for erasing the whole salon, real clients included.";
+"tour.set.start_fresh.purpose" = "Wipe & Start Fresh erases every client, pet, visit, payment and report, real or sample, on all your devices through iCloud. Use it to begin with an empty workspace for real business.";
+"tour.set.start_fresh.tip" = "To drop only the sample clients, use Remove Sample Clients. Your own clients stay.";
 "tour.tap_highlighted" = "Tap highlighted button";
 
 /* iCloud activity events, local change and save-failure descriptions, import check summary */
@@ -1888,3 +1888,22 @@
 
 /* Guided tour step position (VoiceOver) */
 "tour.step_position_fmt" = "%1$d of %2$d";
+
+/* Sample clients: onboarding choice, Settings and checklist */
+"onboarding.finish.real.subtitle" = "Begin with an empty client list. You can load sample clients later in Settings.";
+"onboarding.finish.real.title" = "Start with my real business";
+"onboarding.finish.sample.subtitle" = "Adds 2 practice clients with pets and visits so the tour can show check-in and checkout. Remove them anytime in Settings.";
+"onboarding.finish.sample.title" = "Explore with sample clients";
+"onboarding.finish.sample.unavailable_backup" = "This device has a backup of your clients. Restore it instead of adding sample clients.";
+"onboarding.finish.sample.unavailable_icloud" = "Checking iCloud for your salon's records. Sample clients become available when the check finishes.";
+"onboarding.finish.sample.unavailable_salon" = "Your salon already has data, so sample clients won't be added.";
+"sample_data.remove.added_pets_fmt" = "Pets added to these clients are deleted too: %@.";
+"sample_data.remove.confirm" = "Remove Sample Clients";
+"sample_data.remove.message_fmt" = "This deletes the sample clients %@ with their pets, visits and payments, on this device and on your other devices through iCloud. Your own clients aren't touched.";
+"sample_data.remove.title" = "Remove Sample Clients?";
+"settings.sample.load" = "Load Sample Clients";
+"settings.sample.load_caption" = "Adds 2 practice clients with pets and visits so you can try check-in and checkout. Available while your client list is empty.";
+"settings.sample.load_icloud" = "Checking iCloud for your salon's records first. Try again when the check finishes.";
+"settings.sample.load_skipped" = "Sample clients weren't added because your salon already has clients.";
+"settings.sample.loaded_caption_fmt" = "%@ are practice clients. Removing them leaves your own clients alone.";
+"settings.sample.title" = "Sample Clients";

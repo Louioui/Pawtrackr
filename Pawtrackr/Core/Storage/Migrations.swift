@@ -166,8 +166,18 @@ enum DataMigrations {
         }
     }
 
-    /// Ensure the service catalog exists with the current set of packages/add-ons,
-    /// and strip any default prices so checkout amounts are always user-entered.
+    /// Ensure the service catalog exists with the current set of packages/add-ons.
+    ///
+    /// Runs on every launch on every device, so it only writes what differs:
+    /// SwiftData uploads every row a property is assigned on, even to the same
+    /// value. Prices and the enabled switch belong to the salon. This used to
+    /// clear every catalog price and re-enable every catalog service on each
+    /// launch, which undid prices set in Settings → Services and brought back
+    /// services the salon had turned off. It no longer touches either. There is
+    /// no one-time "strip default prices" pass either: every build since the
+    /// catalog shipped stripped prices on each launch, so no store still holds
+    /// an old default, and a one-time pass would only erase prices the salon
+    /// entered since its last launch.
     static func ensureServiceCatalog(in context: ModelContext) {
         let desired = DefaultServiceCatalog.definitions
 
@@ -183,15 +193,7 @@ enum DataMigrations {
                 let svc = candidateNames.compactMap { byName[$0] }.first
 
                 if let svc {
-                    // Normalize attributes and remove any default price.
-                    if svc.name != targetName {
-                        svc.rename(targetName)
-                    }
-                    svc.setCategory(def.category)
-                    svc.setSystemIcon(def.icon)
-                    svc.setBasePrice(nil)
-                    svc.setEnabled(true)
-                    svc.isPackage = def.isPackage
+                    normalizeCatalogAttributes(of: svc, to: def, name: targetName)
                 } else {
                     let svc = Service(
                         name: targetName,
@@ -205,9 +207,15 @@ enum DataMigrations {
                 }
             }
 
+            // "Basic Groom" was retired from checkout. Still switched off each
+            // launch, but only when it isn't already off and unpriced.
             for svc in existing where svc.isObsoleteCheckoutService {
-                svc.setEnabled(false)
-                svc.setBasePrice(nil)
+                if svc.isEnabled {
+                    svc.setEnabled(false)
+                }
+                if svc.basePrice != nil {
+                    svc.setBasePrice(nil)
+                }
             }
 
             // Persist any updates/inserts.
@@ -216,6 +224,27 @@ enum DataMigrations {
             }
         } catch {
             Logger.migrations.error("ensureServiceCatalog failed: \(String(describing: error))")
+        }
+    }
+
+    /// Name, category, icon and the package flag follow the built-in
+    /// definition. Each is assigned only when it differs, compared the way the
+    /// setter would store it, so an unchanged catalog saves nothing.
+    private static func normalizeCatalogAttributes(of svc: Service, to def: DefaultServiceCatalog.Definition, name targetName: String) {
+        if svc.name != TextInputLimits.clamped(targetName, to: TextInputLimits.name) {
+            svc.rename(targetName)
+        }
+        if svc.categoryRaw != def.category?.rawValue {
+            svc.setCategory(def.category)
+        }
+        let targetIcon = def.icon.map { TextInputLimits.clamped($0, to: TextInputLimits.shortText) }
+        if svc.systemIcon != targetIcon {
+            svc.setSystemIcon(def.icon)
+        }
+        if svc.isPackage != def.isPackage {
+            svc.isPackage = def.isPackage
+            svc.updatedAt = .now
+            svc.lastModifiedBy = DeviceIdentity.currentID
         }
     }
 

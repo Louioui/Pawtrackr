@@ -72,6 +72,16 @@ enum DataSafetyMonitor {
         userDefaults.removeObject(forKey: suspectedDataLossRecoveryDetailKey)
     }
 
+    /// Removing the sample clients lowers the client count on purpose. Record
+    /// the new count so the next launch doesn't read it as data loss. A loss
+    /// already flagged stays flagged: that signal is about real clients, and
+    /// removing samples says nothing about them.
+    static func recordIntentionalSampleRemoval(remainingClientCount: Int, userDefaults: UserDefaults = .standard) {
+        guard !userDefaults.bool(forKey: suspectedDataLossKey) else { return }
+        userDefaults.set(max(0, remainingClientCount), forKey: lastKnownClientCountKey)
+        userDefaults.set(appBuildIdentifier, forKey: lastKnownClientCountBuildKey)
+    }
+
     static func clearAfterIntentionalWipe() {
         let defaults = UserDefaults.standard
         // Every backup now holds the data the user chose to erase.

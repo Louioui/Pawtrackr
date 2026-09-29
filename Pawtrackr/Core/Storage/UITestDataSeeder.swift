@@ -35,9 +35,13 @@ enum UITestDataSeeder {
             phone: "3125550100",
             email: "uitest.owner@example.com"
         )
+        // The walkthrough UI tests practise on this client, so it carries the
+        // sample UUIDs: the tour only opens and acts on sample clients.
+        owner.uuid = SampleData.avaClientID
         owner.setAddress("100 Grooming Lane")
 
         let pet = Pet(name: "UITest Pet", species: .dog, gender: .female)
+        pet.uuid = SampleData.miloPetID
         pet.setBreed("Poodle")
         pet.setColor("Apricot")
         pet.setPreferredGroomingFrequency(.monthly)
@@ -49,6 +53,7 @@ enum UITestDataSeeder {
 
         let now = Date()
         let activeVisit = Visit(pet: pet, startedAt: now.addingTimeInterval(-42 * 60))
+        activeVisit.uuid = SampleData.miloActiveVisitID
         context.insert(activeVisit)
         append(activeVisit, to: pet)
 

@@ -184,6 +184,46 @@ struct WalkthroughStep: Identifiable, Equatable {
     var requiresTargetAction = false
 }
 
+extension WalkthroughStep {
+    /// The same stop with the highlighted control made look-only: the bubble
+    /// shows Next, and a tap on the control advances the tour instead of
+    /// checking a pet in, opening checkout or saving a form.
+    func explainingOnly() -> WalkthroughStep {
+        var step = self
+        step.requiresTargetAction = false
+        step.allowsTargetInteraction = false
+        return step
+    }
+}
+
+/// What the store holds when a tour starts, which decides how hands-on the
+/// tour may be. Built by `resolve(in:)` from counts and fixed sample UUIDs,
+/// never from names.
+struct WalkthroughTourContext: Equatable, Sendable {
+    /// A sample client (fixed UUID) exists, so the client-detail and
+    /// checkout steps have something safe to open.
+    var hasSampleClient: Bool
+    /// Clients that aren't sample rows exist.
+    var hasRealClients: Bool
+
+    /// With real clients around, the tour only explains. It never checks a
+    /// pet in, saves a client, or saves a checkout.
+    var isExplainOnly: Bool { hasRealClients }
+
+    @MainActor
+    static func resolve(in context: ModelContext) -> WalkthroughTourContext {
+        do {
+            return WalkthroughTourContext(
+                hasSampleClient: try SampleData.sampleClientCount(in: context) > 0,
+                hasRealClients: try SampleData.realClientCount(in: context) > 0
+            )
+        } catch {
+            // Unknown store contents: explain only, and open no client.
+            return WalkthroughTourContext(hasSampleClient: false, hasRealClients: true)
+        }
+    }
+}
+
 /// Owns tour state. Intentionally UI-framework-light so it can be created once and
 /// handed to the overlay. Driven exclusively by SwiftUI on the main thread; the
 /// host gates *whether* to start (e.g. only when the app tour hasn't been seen)
@@ -349,12 +389,17 @@ extension WalkthroughController {
         #endif
     }
 
-    static func tour(for role: OnboardingRole) -> [WalkthroughStep] {
-        let allSteps = fullTour()
-        switch role {
-        case .ownerManager:
-            return allSteps
-        case .frontDeskGroomer:
+    /// The steps for a role, made safe for what the store holds (`context`).
+    /// The tour runs on the real, iCloud-synced store, so:
+    /// - Client-detail and checkout steps only exist when a sample client is
+    ///   there to open (`SampleData.tourClient`). The tour never opens a real
+    ///   client.
+    /// - With real clients in the store, every hands-on step only explains:
+    ///   no step waits for a real tap, taps on the highlighted control move
+    ///   the tour on instead of acting, and the New Client form can't save.
+    static func tour(for role: OnboardingRole, context: WalkthroughTourContext) -> [WalkthroughStep] {
+        var steps = fullTour()
+        if role == .frontDeskGroomer {
             let frontDeskAnchors: Set<WalkthroughAnchorID> = [
                 .dashboard, .dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients,
                 .clients, .clientFilters, .ncOwner, .ncPets, .ncSave,
@@ -362,8 +407,15 @@ extension WalkthroughController {
                 .cdCheckIn, .cdCheckOut, .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
                 .cdPetHistory, .cdHistory, .setICloud
             ]
-            return allSteps.filter { frontDeskAnchors.contains($0.anchor) }
+            steps = steps.filter { frontDeskAnchors.contains($0.anchor) }
         }
+        if !context.hasSampleClient {
+            steps.removeAll { $0.route == .demoClientDetail || $0.presents == .checkout }
+        }
+        if context.isExplainOnly {
+            steps = steps.map { $0.explainingOnly() }
+        }
+        return steps
     }
 
     /// The full guided deep-dive a new user sees: it walks the four primary
@@ -739,17 +791,17 @@ extension WalkthroughController {
                 id: next(), anchor: .setAbout, surface: .settings,
                 title: AppLocalization.localized("tour.set.about.title", value: "Replay & Start Fresh"),
                 directive: AppLocalization.localized("tour.set.about.directive", value: "Replay this walkthrough whenever someone needs training."),
-                purpose: AppLocalization.localized("tour.set.about.purpose", value: "The replay button brings this guided tour back without changing clients, pets, visits, settings, or reports."),
+                purpose: AppLocalization.localized("tour.set.about.purpose", value: "Replay brings this tour back. When your salon has real clients, it only explains each screen. It never checks pets in, creates clients, or saves a checkout."),
                 lesson: .dataOwnership,
                 icon: "sparkles"
             ),
             WalkthroughStep(
                 id: next(), anchor: .setStartFresh, surface: .settings,
                 title: AppLocalization.localized("tour.set.start_fresh.title", value: "Wipe & Start Fresh"),
-                directive: AppLocalization.localized("tour.set.start_fresh.directive", value: "Use this when you are done practicing."),
-                purpose: AppLocalization.localized("tour.set.start_fresh.purpose", value: "After you know your way around, Wipe & Start Fresh clears the demo clients, pets, visits, payments, and history so you can begin with an empty workspace for real business."),
+                directive: AppLocalization.localized("tour.set.start_fresh.directive", value: "Only for erasing the whole salon, real clients included."),
+                purpose: AppLocalization.localized("tour.set.start_fresh.purpose", value: "Wipe & Start Fresh erases every client, pet, visit, payment and report, real or sample, on all your devices through iCloud. Use it to begin with an empty workspace for real business."),
                 lesson: .dataOwnership,
-                coachTip: AppLocalization.localized("tour.set.start_fresh.tip", value: "Your business profile and service menu stay. Only practice records are removed."),
+                coachTip: AppLocalization.localized("tour.set.start_fresh.tip", value: "To drop only the sample clients, use Remove Sample Clients. Your own clients stay."),
                 icon: "trash.fill"
             )
         ]

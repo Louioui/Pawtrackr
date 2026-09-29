@@ -906,8 +906,8 @@
 "checklist.backup" = "Confirma la protección de respaldo";
 "checklist.hint.complete" = "Abre la pantalla para completar este paso";
 "checklist.hint.review" = "Abre esta sección para revisar";
-"checklist.start_fresh.hint" = "Abre Ajustes, donde puedes borrar los datos de demo";
-"checklist.start_fresh.subtitle" = "Borra los datos de ejemplo y empieza desde cero con tu negocio real.";
+"checklist.start_fresh.hint" = "Pregunta antes de quitar los clientes de ejemplo";
+"checklist.start_fresh.subtitle" = "Quita los clientes de ejemplo. Tus propios clientes se quedan.";
 "checklist.start_fresh.title" = "¿Ya terminaste de explorar el demo?";
 "checklist.visit" = "Inicia tu primera visita";
 
@@ -1055,7 +1055,7 @@
 "new_client.validation.last_required" = "El apellido es obligatorio.";
 "new_client.validation.phone_invalid" = "Ingresa un número de teléfono válido.";
 "onboarding.finish.explore" = "Explorar Pawtrackr";
-"onboarding.finish.message" = "Cargamos un salón de ejemplo para que explores con datos reales de demo. Toca abajo y te mostraremos la app; puedes borrarlo cuando quieras con “Empezar desde cero” en Ajustes.";
+"onboarding.finish.message" = "Elige cómo quieres empezar.";
 "onboarding.finish.title" = "¡Todo listo!";
 "onboarding.permissions.biometric_unavailable" = "Activa Face ID o Touch ID en los Ajustes del dispositivo para desbloquear más rápido durante el cobro. Tu PIN seguirá funcionando mientras tanto.";
 "onboarding.security.skip" = "Omitir por ahora; usar sin PIN";
@@ -1090,7 +1090,7 @@
 "settings.pin.new" = "Nuevo PIN";
 "settings.pin.set" = "Establecer PIN";
 "settings.reset_guide.confirm" = "Repetir";
-"settings.reset_guide.message" = "Esto vuelve a mostrar el tour para nuevos usuarios y la lista de primeros pasos del panel. No afecta los ajustes de tu negocio, clientes ni visitas.";
+"settings.reset_guide.message" = "Esto vuelve a mostrar el recorrido para nuevos usuarios y la lista de primeros pasos del panel. Si tu salón tiene clientes reales, el recorrido solo explica cada pantalla. No registra entradas, no crea clientes ni guarda cobros.";
 "settings.reset_guide.title" = "¿Repetir primeros pasos?";
 "settings.security.disable_lock_confirm" = "Desactivar";
 "settings.security.disable_lock_message" = "Pawtrackr dejará de pedir tu PIN al abrir la app o volver al primer plano.";
@@ -1100,7 +1100,7 @@
 "settings.wipe.button" = "Borrar y empezar desde cero";
 "settings.wipe.confirm" = "Borrar todo";
 "settings.wipe.message" = "Esto borra permanentemente todos los clientes, mascotas, visitas, pagos, artículos de inventario y reportes, incluidos los datos de demo, y no se puede deshacer. El borrado también se sincroniza con iCloud y tus otros dispositivos. Se conserva el perfil de tu negocio y el menú de servicios.";
-"settings.wipe.section_caption" = "Borra todos los clientes, mascotas, visitas e historial (incluido el demo) y empieza con un espacio vacío. Se conserva el perfil de tu negocio y el menú de servicios.";
+"settings.wipe.section_caption" = "Borra todos los clientes, mascotas, visitas y pagos, reales o de ejemplo, en todos tus dispositivos por iCloud, y empieza con un espacio vacío. Se conserva el perfil de tu negocio y el menú de servicios.";
 "settings.wipe.section_title" = "Empezar desde cero";
 "settings.wipe.title" = "¿Borrar todo y empezar desde cero?";
 "tour.done" = "Listo";
@@ -1345,11 +1345,11 @@
 "tour.set.icloud.tip" = "El banner superior de cuenta te dice si iCloud necesita inicio de sesión o atención de red.";
 "tour.set.about.title" = "Repetir y empezar desde cero";
 "tour.set.about.directive" = "Repite este recorrido cuando alguien necesite capacitación.";
-"tour.set.about.purpose" = "El botón de repetir trae de vuelta este tour guiado sin cambiar clientes, mascotas, visitas, ajustes ni reportes.";
+"tour.set.about.purpose" = "Repetir trae de vuelta este recorrido. Si tu salón tiene clientes reales, solo explica cada pantalla. No registra entradas, no crea clientes ni guarda cobros.";
 "tour.set.start_fresh.title" = "Borrar y empezar desde cero";
-"tour.set.start_fresh.directive" = "Úsalo cuando termines de practicar.";
-"tour.set.start_fresh.purpose" = "Cuando ya conozcas la app, Borrar y empezar desde cero limpia clientes, mascotas, visitas, pagos e historial de demo para que empieces con un espacio vacío para el negocio real.";
-"tour.set.start_fresh.tip" = "Tu perfil y menú de servicios se conservan. Solo se borran registros de práctica.";
+"tour.set.start_fresh.directive" = "Úsalo solo para borrar todo el salón, incluidos los clientes reales.";
+"tour.set.start_fresh.purpose" = "Borrar y empezar desde cero elimina clientes, mascotas, visitas, pagos y reportes, reales o de ejemplo, en todos tus dispositivos por iCloud. Deja un espacio vacío para el negocio real.";
+"tour.set.start_fresh.tip" = "Para quitar solo los clientes de ejemplo, usa Quitar clientes de ejemplo. Tus propios clientes se quedan.";
 
 /* Insights Pro lock */
 "insights.locked.title" = "Estadísticas es parte de Pawtrackr Pro";
@@ -1896,3 +1896,22 @@
 
 /* Guided tour step position (VoiceOver) */
 "tour.step_position_fmt" = "%1$d de %2$d";
+
+/* Sample clients: onboarding choice, Settings and checklist */
+"onboarding.finish.real.subtitle" = "Empieza con la lista de clientes vacía. Puedes cargar clientes de ejemplo más tarde en Ajustes.";
+"onboarding.finish.real.title" = "Empezar con mi negocio real";
+"onboarding.finish.sample.subtitle" = "Agrega 2 clientes de práctica con mascotas y visitas para que el recorrido muestre cómo registrar la entrada y cobrar. Quítalos cuando quieras en Ajustes.";
+"onboarding.finish.sample.title" = "Explorar con clientes de ejemplo";
+"onboarding.finish.sample.unavailable_backup" = "Este dispositivo tiene una copia de seguridad de tus clientes. Restáurala en lugar de agregar clientes de ejemplo.";
+"onboarding.finish.sample.unavailable_icloud" = "Revisando iCloud en busca de los registros de tu salón. Los clientes de ejemplo estarán disponibles cuando termine la revisión.";
+"onboarding.finish.sample.unavailable_salon" = "Tu salón ya tiene datos, así que no se agregarán clientes de ejemplo.";
+"sample_data.remove.added_pets_fmt" = "También se eliminan las mascotas agregadas a estos clientes: %@.";
+"sample_data.remove.confirm" = "Quitar clientes de ejemplo";
+"sample_data.remove.message_fmt" = "Esto elimina los clientes de ejemplo %@ con sus mascotas, visitas y pagos, en este dispositivo y en tus otros dispositivos a través de iCloud. Tus propios clientes no se tocan.";
+"sample_data.remove.title" = "¿Quitar los clientes de ejemplo?";
+"settings.sample.load" = "Cargar clientes de ejemplo";
+"settings.sample.load_caption" = "Agrega 2 clientes de práctica con mascotas y visitas para que pruebes el registro de entrada y el cobro. Disponible mientras tu lista de clientes esté vacía.";
+"settings.sample.load_icloud" = "Primero se revisa iCloud en busca de los registros de tu salón. Vuelve a intentarlo cuando termine la revisión.";
+"settings.sample.load_skipped" = "No se agregaron clientes de ejemplo porque tu salón ya tiene clientes.";
+"settings.sample.loaded_caption_fmt" = "%@ son clientes de práctica. Quitarlos no afecta a tus propios clientes.";
+"settings.sample.title" = "Clientes de ejemplo";

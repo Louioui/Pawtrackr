@@ -73,15 +73,17 @@ final class OnboardingViewModel {
         }
     }
     var logoData: Data? = nil { didSet { saveDraft() } }
+    /// The PIN and its confirmation live only in memory. They are never put
+    /// in the draft: that is a plain UserDefaults dictionary, and the real
+    /// PIN belongs in the Keychain (`AppSettings.changePIN`).
     var pin: String = "" {
         didSet {
             // Typing a PIN cancels a prior "skip" choice so finish() doesn't
             // silently leave the app passcode-free after the user changed their mind.
             if !pin.isEmpty { pinSkipped = false }
-            saveDraft()
         }
     }
-    var confirmPin: String = "" { didSet { saveDraft() } }
+    var confirmPin: String = ""
     var selectedRole: OnboardingRole = .ownerManager { didSet { saveDraft() } }
     /// User chose to set up the app without a PIN (passcode-free). Defaults false so
     /// existing validation/tests still require a matching 4-digit PIN by default.
@@ -92,6 +94,22 @@ final class OnboardingViewModel {
     var currentCurrency: String = "$" { didSet { saveDraft() } }
     var isSaving: Bool = false
     var saveError: String?
+
+    /// Clients a backup on this device holds that the store is missing (the
+    /// Welcome screen's restore offer). Sample clients are never added then:
+    /// the user should restore their own clients instead.
+    var restorableClientCount: Int = 0
+    /// A business profile was already in the store when onboarding bound,
+    /// for example one iCloud delivered for an existing salon.
+    private(set) var foundExistingBusinessConfig = false
+    private(set) var existingClientCountAtBind = 0
+    /// The sample-data decision the last finish() made. Read by tests.
+    private(set) var lastSampleDataDecision: SampleDataSeedPolicy.Decision?
+    /// Live iCloud state for the sample-data rules. Tests replace it so the
+    /// host's iCloud account can't decide their outcome.
+    @ObservationIgnored var iCloudStateProvider: @MainActor () -> SampleDataSeedPolicy.ICloudState = {
+        SampleDataSeedPolicy.currentICloudState()
+    }
 
     var currencySymbol: String {
         get { currentCurrency }
@@ -118,7 +136,7 @@ final class OnboardingViewModel {
         guard !isInitializing else { return }
         let draft: [String: Any] = [
             "name": name, "email": email, "phone": phone, "address": address,
-            "pin": pin, "confirmPin": confirmPin, "pinSkipped": pinSkipped,
+            "pinSkipped": pinSkipped,
             "biometricsEnabled": biometricsEnabled,
             "lockOnBackgroundEnabled": lockOnBackgroundEnabled,
             "autoLockAfterInactivityEnabled": autoLockAfterInactivityEnabled,
@@ -140,8 +158,6 @@ final class OnboardingViewModel {
         email = draft["email"] as? String ?? ""
         phone = draft["phone"] as? String ?? ""
         address = draft["address"] as? String ?? ""
-        pin = draft["pin"] as? String ?? ""
-        confirmPin = draft["confirmPin"] as? String ?? ""
         if let rawRole = draft["selectedRole"] as? String, let role = OnboardingRole(rawValue: rawRole) {
             selectedRole = role
             restoredDraftFields.insert("selectedRole")
@@ -161,6 +177,30 @@ final class OnboardingViewModel {
 
     private func clearDraft() {
         UserDefaults.standard.removeObject(forKey: draftKey)
+    }
+
+    /// Drafts saved by earlier builds held the PIN in plain text. Called from
+    /// bindIfNeeded (a .task), never from init, which must not write defaults.
+    private func removePINFromStoredDraft() {
+        guard var draft = UserDefaults.standard.dictionary(forKey: draftKey),
+              draft["pin"] != nil || draft["confirmPin"] != nil
+        else { return }
+        draft.removeValue(forKey: "pin")
+        draft.removeValue(forKey: "confirmPin")
+        UserDefaults.standard.set(draft, forKey: draftKey)
+    }
+
+    /// What the finish step can offer about sample clients right now. finish()
+    /// decides again with fresh counts after waiting for iCloud.
+    var sampleDataAvailability: SampleDataSeedPolicy.Decision {
+        SampleDataSeedPolicy.decide(.init(
+            userChoseSampleData: true,
+            businessConfigExisted: foundExistingBusinessConfig,
+            existingClientCount: existingClientCountAtBind,
+            existingPetCount: 0,
+            iCloud: iCloudStateProvider(),
+            restorableClientCount: restorableClientCount
+        ))
     }
 
     // MARK: - Init
@@ -204,10 +244,14 @@ final class OnboardingViewModel {
             selectedRole = appSettings.onboardingRole
         }
 
+        removePINFromStoredDraft()
+
         do {
+            existingClientCountAtBind = try modelContext.fetchCount(FetchDescriptor<Client>())
             var descriptor = FetchDescriptor<BusinessConfig>()
             descriptor.fetchLimit = 1
             if let config = try modelContext.fetch(descriptor).first {
+                foundExistingBusinessConfig = true
                 if !config.name.trimmed.isEmpty {
                     name = config.name
                 }
@@ -437,14 +481,33 @@ final class OnboardingViewModel {
         do {
             var descriptor = FetchDescriptor<BusinessConfig>()
             descriptor.fetchLimit = 1
-            let config = try context.fetch(descriptor).first ?? BusinessConfig()
+            let existingConfig = try context.fetch(descriptor).first
 
-            config.name = businessName
-            config.email = businessEmail
-            config.phone = businessPhone
-            config.address = businessAddress
-            config.logoData = logoData
-            config.isSetupComplete = true
+            // Decide about sample clients BEFORE writing the config, so a
+            // profile iCloud delivered for an existing salon still counts as
+            // "this salon has data". Sample rows upload to every device, so
+            // any doubt means no samples; Settings can add them later.
+            let decision = SampleDataSeedPolicy.decide(.init(
+                userChoseSampleData: seedSampleData,
+                businessConfigExisted: existingConfig != nil || foundExistingBusinessConfig,
+                existingClientCount: try context.fetchCount(FetchDescriptor<Client>()),
+                existingPetCount: try context.fetchCount(FetchDescriptor<Pet>()),
+                iCloud: iCloudStateProvider(),
+                restorableClientCount: restorableClientCount
+            ))
+            lastSampleDataDecision = decision
+            let shouldSeed = decision == .seed
+            if seedSampleData, case .skip(let reason) = decision {
+                logger.notice("Sample clients not added: \(String(describing: reason), privacy: .public)")
+            }
+
+            let config = existingConfig ?? BusinessConfig()
+            if config.name != businessName { config.name = businessName }
+            if config.email != businessEmail { config.email = businessEmail }
+            if config.phone != businessPhone { config.phone = businessPhone }
+            if config.address != businessAddress { config.address = businessAddress }
+            if config.logoData != logoData { config.logoData = logoData }
+            if !config.isSetupComplete { config.isSetupComplete = true }
 
             if config.modelContext == nil {
                 context.insert(config)
@@ -452,7 +515,9 @@ final class OnboardingViewModel {
 
             // Persist BusinessConfig so @Query in RootView re-evaluates and
             // can dismiss onboarding. This save is small and fast.
-            try context.save()
+            if context.hasChanges {
+                try context.save()
+            }
 
             // Apply settings (and PIN, unless the user opted out) before kicking
             // off background work. When the PIN is skipped the app runs lock-free.
@@ -463,10 +528,9 @@ final class OnboardingViewModel {
             settings.currencySymbol = currentCurrency
             settings.businessName = businessName
             settings.isChecklistDismissed = false
-            settings.hasConfiguredPrices = seedSampleData
-            settings.hasAddedFirstClient = seedSampleData
-            settings.hasCompletedFirstVisit = seedSampleData
-            settings.hasSeenAppTour = false
+            settings.hasConfiguredPrices = shouldSeed
+            settings.hasAddedFirstClient = shouldSeed
+            settings.hasCompletedFirstVisit = shouldSeed
             settings.onboardingRole = selectedRole
 
             if !pinSkipped {
@@ -477,24 +541,21 @@ final class OnboardingViewModel {
             // Note: when pinSkipped, lock is disabled above so the stored PIN is
             // never consulted. Enabling App Lock later in Settings prompts for a PIN.
 
-            // Catalog seed, demo data, and summary rebuilds are optional and
-            // can be slow (multiple DB saves + potential SQLite write contention
-            // with CloudKit sync). Fire-and-forget so the spinner clears
-            // immediately and the user enters the app while seeding finishes
-            // in the background.
+            // Catalog check and sample clients run in the background so the
+            // spinner clears quickly. `ensureServiceCatalog` adds the starter
+            // services (no prices) on both paths, so a salon starting for real
+            // is never left without a service menu.
+            //
+            // The tour is armed (hasSeenAppTour = false) only once this has
+            // saved: ContentView is already mounted under the onboarding cover
+            // and starts the tour as soon as the flag flips, and it decides
+            // which steps to show from what the store holds at that moment.
             let container = context.container
             let backgroundTask = Task.detached(priority: .userInitiated) {
                 let bg = ModelContext(container)
                 DataMigrations.ensureServiceCatalog(in: bg)
                 DataMigrations.ensureMessageTemplates(in: bg)
-                // `ensureServiceCatalog` above already seeds the full starter
-                // catalog (Bath, Haircut, packages, add-ons) with no default
-                // price in BOTH paths, so Start-Fresh users are never left
-                // without services. We intentionally do NOT insert an extra
-                // "Basic Groom" service here: it duplicated the catalog and
-                // re-introduced a hard-coded $50 default price, contradicting
-                // the catalog's user-entered-price design.
-                if seedSampleData {
+                if shouldSeed {
                     do {
                         try DemoDataSeeder.seedIfNeeded(in: bg)
                     } catch {
@@ -502,16 +563,22 @@ final class OnboardingViewModel {
                     }
                 }
                 if bg.hasChanges {
-                    try? bg.save()
+                    do {
+                        try bg.save()
+                    } catch {
+                        Logger.database.error("Onboarding catalog save failed: \(error.localizedDescription, privacy: .public)")
+                    }
                 }
-                
+
                 await MainActor.run {
+                    settings.hasSeenAppTour = false
                     onComplete()
                 }
             }
 
             TelemetryService.shared.track(event: "onboarding_finished", parameters: [
                 "seedSampleData": String(seedSampleData),
+                "sampleDataAdded": String(shouldSeed),
                 "role": selectedRole.rawValue
             ])
 

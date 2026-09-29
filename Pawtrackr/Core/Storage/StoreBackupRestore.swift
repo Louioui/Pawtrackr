@@ -76,13 +76,16 @@ enum StoreBackupRestore {
             return build.isEmpty ? nil : String(build)
         }
 
-        /// Clients in this backup that the live store doesn't have.
+        /// Clients in this backup that the live store doesn't have. Sample
+        /// clients (`SampleData`) never count: a backup taken while they were
+        /// loaded would otherwise offer to bring back practice clients the
+        /// user removed on purpose.
         func missingClientCount(liveClientUUIDs: Set<UUID>) -> Int {
             guard !clientUUIDs.isEmpty else {
                 // UUIDs unreadable: only an empty live store proves they're missing.
                 return liveClientUUIDs.isEmpty ? clientCount : 0
             }
-            return clientUUIDs.subtracting(liveClientUUIDs).count
+            return clientUUIDs.subtracting(liveClientUUIDs).subtracting(SampleData.clientIDs).count
         }
     }
 

@@ -298,6 +298,11 @@ private struct SettingsDetailView: View {
     @State private var showWipeBlockedAlert = false
     @State private var storeRestoreClientCount: Int?
     @AppStorage(DataSafetyMonitor.suspectedDataLossKey) private var dataLossSuspected = false
+    /// About section: what the sample-clients card shows.
+    @State private var sampleStatus = SampleDataStatus()
+    @State private var sampleRemovalInventory: SampleDataInventory?
+    @State private var sampleLoadMessage: String?
+    @State private var isLoadingSamples = false
 
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
         .setBusiness,
@@ -377,7 +382,7 @@ private struct SettingsDetailView: View {
         } message: {
             Text(settingsLocalized(
                 "settings.reset_guide.message",
-                value: "This re-shows the new-user tour and dashboard checklist. Your business settings, clients, and visits are not affected."
+                value: "This re-shows the new-user tour and the dashboard checklist. When your salon has real clients, the tour only explains each screen. It doesn't check pets in, create clients, or save checkouts."
             ))
         }
         .alert(
@@ -393,6 +398,35 @@ private struct SettingsDetailView: View {
                 "settings.wipe.message",
                 value: "This permanently erases every client, pet, visit, payment, inventory item, and report — including the demo data — and cannot be undone. The wipe also syncs to iCloud and your other devices. Your business profile and service menu are kept."
             ))
+        }
+        .alert(
+            SampleDataCopy.removeTitle,
+            isPresented: Binding(
+                get: { sampleRemovalInventory != nil },
+                set: { if !$0 { sampleRemovalInventory = nil } }
+            ),
+            presenting: sampleRemovalInventory
+        ) { _ in
+            Button(settingsLocalized("common.cancel", value: "Cancel"), role: .cancel) {}
+            Button(SampleDataCopy.removeConfirm, role: .destructive) {
+                removeSampleClients()
+            }
+        } message: { inventory in
+            Text(SampleDataCopy.removeMessage(for: inventory))
+        }
+        .alert(
+            SampleDataCopy.settingsTitle,
+            isPresented: Binding(
+                get: { sampleLoadMessage != nil },
+                set: { if !$0 { sampleLoadMessage = nil } }
+            )
+        ) {
+            Button(settingsLocalized("common.ok", value: "OK"), role: .cancel) {}
+        } message: {
+            Text(sampleLoadMessage ?? "")
+        }
+        .task {
+            refreshSampleStatus()
         }
         .alert(
             settingsLocalized("data_safety.wipe_blocked.title", value: "Start Fresh is locked"),
@@ -443,6 +477,92 @@ private struct SettingsDetailView: View {
         } catch {
             Logger.database.error("Start Fresh wipe failed: \(error.localizedDescription, privacy: .public)")
         }
+        refreshSampleStatus()
+    }
+
+    // MARK: Sample clients
+
+    private func refreshSampleStatus() {
+        guard section == .about else { return }
+        do {
+            let status = SampleDataStatus(
+                inventory: try DataReset.sampleDataInventory(in: modelContext),
+                clientCount: try modelContext.fetchCount(FetchDescriptor<Client>())
+            )
+            if status != sampleStatus {
+                sampleStatus = status
+            }
+        } catch {
+            Logger.database.error("Sample client status check failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func confirmSampleRemoval() {
+        do {
+            let inventory = try DataReset.sampleDataInventory(in: modelContext)
+            if inventory.isEmpty {
+                refreshSampleStatus()
+            } else {
+                sampleRemovalInventory = inventory
+            }
+        } catch {
+            Logger.database.error("Sample client lookup failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func removeSampleClients() {
+        do {
+            try DataReset.removeSampleData(in: modelContext)
+            #if os(iOS)
+            HapticManager.notify(.success)
+            #endif
+        } catch {
+            Logger.database.error("Removing sample clients failed: \(error.localizedDescription, privacy: .public)")
+        }
+        refreshSampleStatus()
+    }
+
+    /// Adds the sample clients to an empty client list, under the same rules
+    /// onboarding uses (`SampleDataSeedPolicy`). The seeder re-checks that
+    /// the store is empty on the context that writes.
+    private func loadSampleClients() {
+        let decision = SampleDataSeedPolicy.decide(.init(
+            userChoseSampleData: true,
+            businessConfigExisted: false,
+            existingClientCount: sampleStatus.clientCount,
+            existingPetCount: 0,
+            iCloud: SampleDataSeedPolicy.currentICloudState(),
+            restorableClientCount: 0
+        ))
+        switch decision {
+        case .seed:
+            break
+        case .skip(.iCloudStillChecking):
+            sampleLoadMessage = SampleDataCopy.loadWaitingForICloud
+            return
+        case .skip:
+            sampleLoadMessage = SampleDataCopy.loadSkipped
+            return
+        }
+
+        isLoadingSamples = true
+        let container = modelContext.container
+        Task { @MainActor in
+            let seeded = await Task.detached(priority: .userInitiated) { () -> Bool in
+                let context = ModelContext(container)
+                do {
+                    return try DemoDataSeeder.seedIfNeeded(in: context)
+                } catch {
+                    Logger.database.error("Loading sample clients failed: \(error.localizedDescription, privacy: .public)")
+                    return false
+                }
+            }.value
+            isLoadingSamples = false
+            if !seeded {
+                sampleLoadMessage = SampleDataCopy.loadSkipped
+            }
+            refreshSampleStatus()
+        }
     }
 
     @ViewBuilder
@@ -461,7 +581,11 @@ private struct SettingsDetailView: View {
         case .about: AboutSectionView(
             showResetFirstRunConfirm: $showResetFirstRunConfirm,
             showWipeConfirm: $showWipeConfirm,
-            dataLossSuspected: dataLossSuspected
+            dataLossSuspected: dataLossSuspected,
+            sampleStatus: sampleStatus,
+            isLoadingSamples: isLoadingSamples,
+            onLoadSamples: loadSampleClients,
+            onRemoveSamples: confirmSampleRemoval
         )
         }
     }
@@ -1389,10 +1513,20 @@ private struct SettingsLabeledField<Content: View>: View {
     }
 }
 
+/// What the About section's sample-clients card needs to know.
+struct SampleDataStatus: Equatable {
+    var inventory = SampleDataInventory(clientNames: [], addedPetNames: [])
+    var clientCount = 0
+}
+
 private struct AboutSectionView: View {
     @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
     let dataLossSuspected: Bool
+    let sampleStatus: SampleDataStatus
+    let isLoadingSamples: Bool
+    let onLoadSamples: () -> Void
+    let onRemoveSamples: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -1417,14 +1551,17 @@ private struct AboutSectionView: View {
             }
             .walkthroughTarget(.setAbout)
 
-            // Destructive "Start Fresh": clears the demo (and anything entered
-            // while exploring) so the operator can begin real business clean.
+            sampleClientsCard
+
+            // Destructive "Start Fresh": erases EVERY client, pet, visit and
+            // payment, real ones included, and the deletions sync to iCloud.
+            // To drop only the sample clients, use the card above.
             CardView {
                 Label(settingsLocalized("settings.wipe.section_title", value: "Start Fresh"), systemImage: "trash")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.red)
 
-                Text(settingsLocalized("settings.wipe.section_caption", value: "Erase all clients, pets, visits, and history (including the demo) and begin with an empty workspace. Your business profile and service menu are kept."))
+                Text(settingsLocalized("settings.wipe.section_caption", value: "Erase every client, pet, visit, and payment, real or sample, on all your devices through iCloud, and begin with an empty workspace. Your business profile and service menu are kept."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1451,6 +1588,56 @@ private struct AboutSectionView: View {
                 .tint(.red)
                 .disabled(dataLossSuspected)
                 .walkthroughTarget(.setStartFresh)
+            }
+        }
+    }
+
+    /// Remove the sample clients while they exist; offer to load them while
+    /// the client list is empty; otherwise nothing to show.
+    @ViewBuilder
+    private var sampleClientsCard: some View {
+        if !sampleStatus.inventory.isEmpty {
+            CardView {
+                Label(SampleDataCopy.settingsTitle, systemImage: "wand.and.stars")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(SampleDataCopy.loadedCaption(for: sampleStatus.inventory))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: onRemoveSamples) {
+                    Label(SampleDataCopy.removeConfirm, systemImage: "person.2.slash")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("settings.removeSampleData")
+            }
+        } else if sampleStatus.clientCount == 0 {
+            let iCloudChecking = SampleDataSeedPolicy.currentICloudState() == .stillChecking
+            CardView {
+                Label(SampleDataCopy.settingsTitle, systemImage: "wand.and.stars")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(iCloudChecking ? SampleDataCopy.loadWaitingForICloud : SampleDataCopy.loadCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: onLoadSamples) {
+                    HStack {
+                        Label(SampleDataCopy.loadButton, systemImage: "person.2.badge.plus")
+                        if isLoadingSamples {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isLoadingSamples || iCloudChecking)
+                .accessibilityIdentifier("settings.loadSampleData")
             }
         }
     }
