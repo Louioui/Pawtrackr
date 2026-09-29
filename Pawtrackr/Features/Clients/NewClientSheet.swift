@@ -365,7 +365,9 @@ struct NewClientSheet: View {
                 .accessibilityIdentifier("newClient.cancel")
 
             createButton(viewModel)
-                .keyboardShortcut(.defaultAction)
+                // A look-only tour stop (salon with real clients) intercepts
+                // clicks, but not keyboard shortcuts: Return must not save.
+                .keyboardShortcut(isCreateLockedByTour ? nil : KeyboardShortcut.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .tint(.orange)
                 .walkthroughAnchor(.ncSave)
@@ -412,6 +414,14 @@ struct NewClientSheet: View {
                     .accessibilityIdentifier("\(accessibilityIdentifier ?? "field").error")
             }
         }
+    }
+
+    /// The guided tour is showing this form on a stop that only explains.
+    private var isCreateLockedByTour: Bool {
+        guard let walkthrough, walkthrough.isActive,
+              let step = walkthrough.currentStep, step.presents == .newClient
+        else { return false }
+        return !step.allowsTargetInteraction
     }
 
     private func focusInitialFieldIfNeeded() {

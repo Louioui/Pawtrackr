@@ -1277,6 +1277,7 @@
 "tour.nc.save.title" = "Guarda el cliente";
 "tour.nc.save.directive" = "Créalo una vez y reutilízalo en cada visita.";
 "tour.nc.save.purpose" = "Toca Crear cuando agregues un cliente real, o usa Siguiente para seguir practicando. Al guardarlo, el cliente queda listo para entrada, servicios, cobro, recibos e historial futuro.";
+"tour.nc.save.purpose_explain" = "Crear guarda el cliente, listo para entrada, servicios, cobro, recibos e historial. En esta repetición el formulario es solo de muestra, así que usa Siguiente.";
 "tour.cd.owner.title" = "Detalles del cliente";
 "tour.cd.owner.directive" = "Este es el perfil que abres desde la lista de Clientes.";
 "tour.cd.owner.purpose" = "La tarjeta superior mantiene juntos teléfono, correo, dirección, mensajes y acciones rápidas de edición del dueño para confirmar datos al agendar o entregar.";

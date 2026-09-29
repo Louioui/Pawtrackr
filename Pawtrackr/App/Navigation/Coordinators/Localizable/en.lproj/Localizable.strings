@@ -1531,6 +1531,7 @@
 "tour.nc.save.title" = "Save the client";
 "tour.nc.save.directive" = "Create once, reuse every visit.";
 "tour.nc.save.purpose" = "Tap Create when you are adding a real client, or use Next to keep practicing. Once saved, the client is ready for check in, services, checkout, receipts, and future history.";
+"tour.nc.save.purpose_explain" = "Create saves the client for check in, services, checkout, receipts, and history. In this replay the form is look-only, so use Next to continue.";
 "tour.cd.owner.title" = "Client Details";
 "tour.cd.owner.directive" = "This is the profile you open from the Clients list.";
 "tour.cd.owner.purpose" = "The top card keeps the owner’s phone, email, address, messaging, and quick edit actions together so you can confirm details during booking or pickup.";

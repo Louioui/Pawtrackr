@@ -68,6 +68,37 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
         XCTAssertEqual(WalkthroughController.tour(for: .ownerManager, context: context).last?.anchor, .setStartFresh)
     }
 
+    func testLookOnlyCopyDoesNotInviteATapOnCreateAndStaysShort() {
+        defer { UserDefaults.standard.removeObject(forKey: AppSettingsKeys.appLanguageOverride) }
+        let explainOnly = WalkthroughTourContext(hasSampleClient: true, hasRealClients: true)
+        for (language, invitation) in [(AppLanguageOverride.en, "Tap Create"), (AppLanguageOverride.es, "Toca Crear")] {
+            UserDefaults.standard.set(language.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+            let steps = WalkthroughController.tour(for: .ownerManager, context: explainOnly)
+            let save = steps.first { $0.anchor == .ncSave }
+            XCTAssertNotNil(save)
+            XCTAssertFalse(save?.purpose.contains(invitation) ?? true, "\(language): \(save?.purpose ?? "")")
+            for step in steps {
+                XCTAssertLessThanOrEqual(step.directive.count, 86, "\(language) \(step.anchor)")
+                XCTAssertLessThanOrEqual(step.purpose.count, 190, "\(language) \(step.anchor)")
+                XCTAssertLessThanOrEqual(step.coachTip?.count ?? 0, 150, "\(language) \(step.anchor)")
+                for text in [step.directive, step.purpose] + [step.coachTip].compactMap(\.self) {
+                    XCTAssertFalse(text.contains(";") || text.contains(" — "), "\(language) \(step.anchor): \(text)")
+                }
+            }
+        }
+    }
+
+    func testStartFreshCopySaysItErasesEverythingAndSyncs() {
+        defer { UserDefaults.standard.removeObject(forKey: AppSettingsKeys.appLanguageOverride) }
+        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        let startFresh = WalkthroughController.fullTour().first { $0.anchor == .setStartFresh }
+        let purpose = startFresh?.purpose ?? ""
+        XCTAssertTrue(purpose.contains("every client"), purpose)
+        XCTAssertTrue(purpose.contains("real or sample"), purpose)
+        XCTAssertTrue(purpose.contains("iCloud"), purpose)
+        XCTAssertFalse((startFresh?.coachTip ?? "").contains("Only practice records"), "The old tip promised a partial wipe.")
+    }
+
     func testAPracticeStoreKeepsTheHandsOnTour() {
         let practice = WalkthroughTourContext(hasSampleClient: true, hasRealClients: false)
         let steps = WalkthroughController.tour(for: .ownerManager, context: practice)

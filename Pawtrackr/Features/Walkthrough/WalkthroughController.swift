@@ -162,7 +162,7 @@ struct WalkthroughStep: Identifiable, Equatable {
     /// The action / orientation line, e.g. "Tap Clients to see everyone you groom."
     let directive: String
     /// The benefit, e.g. "Aggressive pets show a red warning so your team stays safe."
-    let purpose: String
+    var purpose: String
     /// Learning category for this step.
     var lesson: WalkthroughLesson = .appMap
     /// Small practical hint shown below the main explanation.
@@ -192,6 +192,13 @@ extension WalkthroughStep {
         var step = self
         step.requiresTargetAction = false
         step.allowsTargetInteraction = false
+        if anchor == .ncSave {
+            // The hands-on copy invites a tap on Create, which is locked here.
+            step.purpose = AppLocalization.localized(
+                "tour.nc.save.purpose_explain",
+                value: "Create saves the client for check in, services, checkout, receipts, and history. In this replay the form is look-only, so use Next to continue."
+            )
+        }
         return step
     }
 }
