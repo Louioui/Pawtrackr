@@ -22,7 +22,12 @@ final class OnboardingQualityControlUITests: QualityControlUITestCase {
         _ = tapIfHittable(app.buttons["onboarding.continue"], timeout: 4)
         XCTAssertTrue(waitForRegionalStep(), "Regional/contact step should appear.")
 
-        _ = tapIfHittable(app.buttons["onboarding.back"], timeout: 4)
+        // The keyboard from the name field slides away as the step changes,
+        // and the footer moves with it. A tap aimed at Back mid-slide lands
+        // where the button was, so wait for the layout to settle.
+        _ = waitForAny([{ !self.app.keyboards.firstMatch.exists }], timeout: 4)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        XCTAssertTrue(tapIfHittable(app.buttons["onboarding.back"], timeout: 4), "Back should be tappable on the contact step.")
         XCTAssertTrue(app.textFields["onboarding.businessName"].waitForExistence(timeout: 5))
     }
 
