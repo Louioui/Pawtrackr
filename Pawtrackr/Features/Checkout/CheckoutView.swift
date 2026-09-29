@@ -758,19 +758,7 @@ struct CheckoutView: View {
               let anchor
         else { return }
 
-        let targetStep: CheckoutViewModel.CheckoutFlowStep?
-        switch anchor {
-        case .coServices:
-            targetStep = .services
-        case .coDetails:
-            targetStep = .details
-        case .coPayment:
-            targetStep = .payment
-        case .coReview, .coConfirm:
-            targetStep = .review
-        default:
-            targetStep = nil
-        }
+        let targetStep = CheckoutViewModel.CheckoutFlowStep.walkthroughStep(for: anchor)
 
         // The tour only shows these steps. Preview mode stops the checkout
         // from saving a draft or a payment for the visit it opened.
@@ -1273,6 +1261,20 @@ struct CheckoutView: View {
         PaymentOption(method: .zelle,      icon: "dollarsign.circle",  tint: .yellow),
         PaymentOption(method: .other,      icon: "ellipsis.circle",    tint: .gray),
     ]
+}
+
+extension CheckoutViewModel.CheckoutFlowStep {
+    /// The checkout step each guided-tour stop shows, or nil for stops that
+    /// aren't inside checkout.
+    static func walkthroughStep(for anchor: WalkthroughAnchorID) -> Self? {
+        switch anchor {
+        case .coServices: return .services
+        case .coDetails: return .details
+        case .coPayment: return .payment
+        case .coReview, .coConfirm: return .review
+        default: return nil
+        }
+    }
 }
 
 private struct CheckoutWalkthroughOverlayModifier: ViewModifier {

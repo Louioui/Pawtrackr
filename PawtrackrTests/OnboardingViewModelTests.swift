@@ -223,6 +223,8 @@ final class OnboardingViewModelTests: XCTestCase {
         viewModel.currencySymbol = "$"
         viewModel.pin = "4826"
         viewModel.confirmPin = "4826"
+        // The host's iCloud account must not decide whether samples are added.
+        viewModel.iCloudStateProvider = { .off }
 
         let task = await viewModel.finish(seedSampleData: true) { }
         _ = await task?.result
