@@ -223,6 +223,10 @@ struct WalkthroughStep: Identifiable, Equatable {
     var requiresTargetAction = false
     /// Left out of the front desk tour.
     var isOwnerOnly = false
+    /// Roles whose tour leaves this stop out. The owner's tour is the
+    /// shorter curriculum: it skips the counter-side dashboard lists, the
+    /// checkout notes stop, and the secondary Insights charts.
+    var excludedRoles: Set<OnboardingRole> = []
     /// Skipped, instead of shown as a centered bubble, when its target isn't
     /// on screen. For sections that only exist with data, like Needs Attention.
     var skipsWhenTargetMissing = false
@@ -825,6 +829,7 @@ extension WalkthroughController {
         if role == .frontDeskGroomer {
             steps.removeAll(where: \.isOwnerOnly)
         }
+        steps.removeAll { $0.excludedRoles.contains(role) }
         if !context.hasSampleClient {
             steps.removeAll { $0.route == .demoClientDetail || $0.presents == .checkout }
         } else if !context.sampleClientHasPet {
@@ -908,6 +913,7 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.dash.attention.purpose", value: "Pets due for their next groom surface here, so you can call, message, and rebook them before they drift away."),
                 lesson: .dailyWorkflow,
                 icon: "exclamationmark.circle.fill",
+                excludedRoles: [.ownerManager],
                 skipsWhenTargetMissing: true
             ),
             WalkthroughStep(
@@ -931,6 +937,7 @@ extension WalkthroughController {
                 lesson: .clientRecords,
                 coachTip: AppLocalization.localized("tour.dash.recent.tip", value: "Aggressive behavior tags appear in red anywhere the team needs to notice them."),
                 icon: "person.2.fill",
+                excludedRoles: [.ownerManager],
                 skipsWhenTargetMissing: true
             ),
             WalkthroughStep(
@@ -1109,7 +1116,8 @@ extension WalkthroughController {
                 lesson: .checkoutAndMoney,
                 coachTip: AppLocalization.localized("tour.co.details.tip", value: "Use behavior tags for safety patterns the team should remember next time."),
                 icon: "note.text.badge.plus",
-                presents: .checkout
+                presents: .checkout,
+                excludedRoles: [.ownerManager]
             ),
             WalkthroughStep(
                 id: "co.payment", anchor: .coPayment, surface: .clients, route: .demoClientDetail,
@@ -1194,7 +1202,11 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.ins.monthly.purpose", value: "Find busy seasons, slow windows, and promotion timing without building your own spreadsheet."),
                 lesson: .businessInsights,
                 icon: "calendar",
-                isOwnerOnly: true
+                // Owner-only and left out of the owner's tour, so no tour
+                // shows it. Same for Payment Mix and Visits by Category.
+                // `fullTour()` still has all three.
+                isOwnerOnly: true,
+                excludedRoles: [.ownerManager]
             ),
             WalkthroughStep(
                 id: "ins.services", anchor: .insServices, surface: .insights,
@@ -1213,7 +1225,8 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.ins.payment.purpose", value: "Cash, card, debit, Zelle, or transfer: knowing your mix helps you plan deposits and spot processing-fee patterns."),
                 lesson: .businessInsights,
                 icon: "creditcard.fill",
-                isOwnerOnly: true
+                isOwnerOnly: true,
+                excludedRoles: [.ownerManager]
             ),
             WalkthroughStep(
                 id: "ins.category", anchor: .insCategory, surface: .insights,
@@ -1222,7 +1235,8 @@ extension WalkthroughController {
                 purpose: AppLocalization.localized("tour.ins.category.purpose", value: "A breakdown of grooms, add-ons, packages, and special care shows what your shop actually does most."),
                 lesson: .businessInsights,
                 icon: "square.grid.2x2",
-                isOwnerOnly: true
+                isOwnerOnly: true,
+                excludedRoles: [.ownerManager]
             ),
 
             // MARK: Settings & Safety

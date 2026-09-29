@@ -427,6 +427,20 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertFalse(staffAnchors.contains(.insRevenue))
         XCTAssertFalse(staffAnchors.contains(.setStartFresh))
         XCTAssertLessThan(staffAnchors.count, ownerAnchors.count)
+
+        // The owner's shorter curriculum leaves out the counter-side lists,
+        // the checkout notes stop, and the secondary Insights charts. The
+        // front desk keeps its three, and the catalog keeps all six.
+        let ownerTrimmed: [WalkthroughAnchorID] = [.dashNeedsAttention, .dashRecentClients, .coDetails, .insMonthly, .insPaymentMix, .insCategory]
+        for anchor in ownerTrimmed {
+            XCTAssertFalse(ownerAnchors.contains(anchor), "\(anchor)")
+            XCTAssertTrue(WalkthroughController.fullTour().contains { $0.anchor == anchor }, "\(anchor)")
+        }
+        for anchor in [WalkthroughAnchorID.dashNeedsAttention, .dashRecentClients, .coDetails] {
+            XCTAssertTrue(staffAnchors.contains(anchor), "\(anchor)")
+        }
+        let ownerInsights = WalkthroughController.steps(for: .businessInsights, role: .ownerManager, context: .practice).map(\.anchor)
+        XCTAssertEqual(ownerInsights, [.insights, .insKpis, .insRevenue, .insServices])
     }
 
     func testFullWalkthroughTeachesCheckoutAndHistoryAsDedicatedProcess() throws {
