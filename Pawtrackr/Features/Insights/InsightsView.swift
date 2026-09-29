@@ -237,12 +237,19 @@ struct InsightsView: View {
             }
             .accessibilityIdentifier("insights.mainScroll")
             // Scroll the current deep-dive target into view as the tour advances.
-            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
-                guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                    proxy.scrollTo(anchor, anchor: .center)
-                }
+            .onAppear {
+                scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: proxy)
             }
+            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+                scrollToWalkthroughAnchorIfNeeded(anchor, proxy: proxy)
+            }
+        }
+    }
+
+    private func scrollToWalkthroughAnchorIfNeeded(_ anchor: WalkthroughAnchorID?, proxy: ScrollViewProxy) {
+        guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            proxy.scrollTo(anchor, anchor: .center)
         }
     }
 

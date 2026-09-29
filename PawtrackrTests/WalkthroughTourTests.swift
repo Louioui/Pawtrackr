@@ -121,9 +121,9 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertEqual(OnboardingRole.frontDeskGroomer.tourLessonOrder, lessonSequence(frontDesk))
 
         // Front desk: the counter work first, no Insights, and Settings only
-        // for the iCloud stop.
+        // for the iCloud and synced-device stops.
         XCTAssertFalse(frontDesk.contains { $0.surface == .insights })
-        XCTAssertEqual(frontDesk.filter { $0.surface == .settings }.map(\.id), ["set.icloud"])
+        XCTAssertEqual(frontDesk.filter { $0.surface == .settings }.map(\.id), ["set.icloud", "set.devices"])
 
         // Owner: numbers, setup and data safety before the daily work.
         let ownerIDs = owner.map(\.id)
@@ -573,6 +573,7 @@ final class WalkthroughTourTests: XCTestCase {
         .ncSave: (.sheet(.newClient), "Pawtrackr/Features/Clients/NewClientSheet.swift"),
         .cdOwner: (.detail, "Pawtrackr/Features/Clients/ClientDetailView.swift"),
         .cdEmergency: (.detail, "Pawtrackr/Features/Clients/ClientDetailView.swift"),
+        .cdLoyalty: (.detail, "Pawtrackr/Features/Clients/ClientDetailView.swift"),
         .emergencyContactBadges: (.detail, "Pawtrackr/UI/Components/EmergencyContactSummaryCard.swift"),
         .petGenderDots: (.detail, "Pawtrackr/Features/Clients/ClientDetailView.swift"),
         .cdPets: (.detail, "Pawtrackr/Features/Clients/ClientDetailView.swift"),
@@ -587,9 +588,11 @@ final class WalkthroughTourTests: XCTestCase {
         .coReview: (.sheet(.checkout), "Pawtrackr/Features/Checkout/CheckoutView.swift"),
         .coConfirm: (.sheet(.checkout), "Pawtrackr/Features/Checkout/CheckoutView.swift"),
         .setBusiness: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
+        .setLoyalty: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setSecurity: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setData: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setICloud: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
+        .setDevices: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setAbout: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setStartFresh: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .loyaltySimulator: (.detail, "Pawtrackr/Features/Loyalty/LoyaltyManagementView.swift")

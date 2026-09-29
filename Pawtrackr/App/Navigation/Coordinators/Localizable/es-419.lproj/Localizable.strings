@@ -1112,6 +1112,8 @@
 "tour.dash.attention.title" = "Necesita atención";
 "tour.dash.attention.directive" = "Quién va atrasado para una visita.";
 "tour.dash.attention.purpose" = "Las mascotas que ya tocan su próximo aseo aparecen aquí, para que puedas contactarlas y reagendar antes de que se pierdan.";
+"tour.dash.attention.empty.title" = "Todo al día";
+"tour.dash.attention.empty.message" = "Las mascotas que ya tocan su próximo aseo aparecen aquí para que la recepción llame y reagende.";
 "tour.dash.recent.title" = "Clientes recientes";
 "tour.dash.recent.directive" = "Retoma donde te quedaste.";
 "tour.dash.recent.purpose" = "Tus clientes recientes están listos para reagendar. Toca uno para abrir perfil, mascotas, notas e historial.";
@@ -1264,6 +1266,8 @@
 "tour.workflow.checkout.purpose" = "Registrar entrada inicia el cronómetro, la visita reúne servicios, notas y fotos, y el cobro registra pago, propina, referencia y detalles del recibo para historial y reportes.";
 "tour.workflow.checkout.tip" = "El dinero usa cálculos Decimal exactos, para que los totales de servicios, propinas y pagos sean confiables.";
 "tour.dash.recent.tip" = "Las etiquetas de comportamiento agresivo aparecen en rojo donde el equipo necesita verlas.";
+"tour.dash.recent.empty.title" = "Aún no hay clientes recientes";
+"tour.dash.recent.empty.message" = "Cuando agregues clientes, los de visitas más recientes aparecen aquí para volver rápido a su perfil.";
 "tour.nav.clients.tip" = "Un cliente puede tener varias mascotas, así las familias con varias mascotas se mantienen juntas.";
 "tour.nc.owner.title" = "Agrega al dueño";
 "tour.nc.owner.directive" = "Empieza con la persona que agenda y paga.";
@@ -1288,6 +1292,10 @@
 "tour.cd.pets.directive" = "Esta fila es donde empieza el trabajo de la visita.";
 "tour.cd.pets.purpose" = "Cada mascota tiene su propio estado y acciones. Las siguientes paradas explican entrada, cobro e historial para que el flujo quede claro antes de usarlo con clientes reales.";
 "tour.cd.pets.tip" = "Cada dueño puede tener varias mascotas, y cada mascota conserva su propio estado e historial de visitas.";
+"tour.cd.loyalty.title" = "Saldo de lealtad";
+"tour.cd.loyalty.directive" = "Abre esta tarjeta para ver puntos, recompensas e historial.";
+"tour.cd.loyalty.purpose" = "Después del cobro, los puntos ganados aparecen aquí para canjear premios sin hacer cuentas ni buscar tickets.";
+"tour.cd.loyalty.tip" = "La insignia muestra el saldo actual. El detalle muestra el progreso de recompensas y el historial de puntos.";
 "tour.cd.addpet.title" = "Agregar una mascota nueva";
 "tour.cd.addpet.directive" = "Agrega otra mascota a este dueño con este botón.";
 "tour.cd.addpet.purpose" = "Cuando un dueño tenga otro perro o gato, agrégalo aquí. La mascota guarda su foto, raza, notas, etiquetas e historial.";
@@ -1319,7 +1327,7 @@
 "tour.co.confirm.title" = "Confirmar y guardar";
 "tour.co.confirm.directive" = "Esta es la meta real del cobro.";
 "tour.co.confirm.purpose" = "Confirmar y pagar guarda el pago, actualiza historial, refresca estadísticas y prepara el recibo. El demo no cobra ni guarda.";
-"tour.co.confirm.tip" = "En uso real, presiona esto solo cuando el cliente ya pagó y los detalles de la visita estén correctos.";
+"tour.co.confirm.tip" = "Después del pago, los puntos se agregan al perfil del cliente.";
 "tour.cd.pet_history.title" = "Historial de mascota";
 "tour.cd.pet_history.directive" = "Abre la línea de tiempo completa de la mascota.";
 "tour.cd.pet_history.purpose" = "Historial muestra visitas pasadas con servicios, notas, pagos, fotos, búsqueda, filtros por fecha y exportación.";
@@ -1342,6 +1350,10 @@
 "tour.set.icloud.title" = "Sincronización de iCloud";
 "tour.set.icloud.directive" = "“Con copia” significa que iCloud confirmó la subida.";
 "tour.set.icloud.purpose" = "Con iCloud activo, clientes, mascotas, visitas, fotos y cobros se sincronizan en tu iPhone, iPad y Mac, igual que nombre, moneda y color de marca. Lo demás queda en cada equipo.";
+"tour.set.devices.title" = "Dispositivos sincronizados";
+"tour.set.devices.directive" = "Mira qué teléfonos, iPads y Macs comparten tus datos y cuándo se vio cada uno.";
+"tour.set.devices.purpose" = "La salud de dispositivos muestra estaciones recientes, contexto de iCloud y equipos antiguos para detectar brechas antes de usar datos desactualizados.";
+"tour.set.devices.tip" = "Si un dispositivo requiere revisión, usa diagnósticos de iCloud antes de restablecer.";
 "tour.set.icloud.tip" = "El banner superior de cuenta te dice si iCloud necesita inicio de sesión o atención de red.";
 "tour.set.about.title" = "Repetir y empezar desde cero";
 "tour.set.about.directive" = "Continúa el recorrido o repite una lección para alguien nuevo.";
@@ -1981,6 +1993,10 @@
 "tour.dash.checklist.directive" = "Termina de configurar tu salón desde esta lista.";
 "tour.dash.checklist.purpose" = "Cada fila abre la pantalla donde se completa. Las filas se marcan solas según tus datos, y los clientes de ejemplo no cuentan como tuyos.";
 "tour.dash.checklist.tip" = "La fila de respaldo se marca solo cuando iCloud confirma una subida. La lista desaparece cuando todas las filas están hechas.";
+"tour.set.loyalty_ladder.title" = "Escalera de lealtad";
+"tour.set.loyalty_ladder.directive" = "Elige recompensas antes de que el personal cobre visitas.";
+"tour.set.loyalty_ladder.purpose" = "La escalera de descuentos da premios simples por puntos. Restablecerla reemplaza todas las recompensas, también las personalizadas. Los puntos de los clientes no cambian.";
+"tour.set.loyalty_ladder.tip" = "Haz que las recompensas sean fáciles de explicar: puntos automáticos, sin papeleo extra.";
 "tour.set.loyalty.title" = "Puntos de lealtad";
 "tour.set.loyalty.directive" = "Prueba tus reglas de lealtad antes de que un cliente gane puntos.";
 "tour.set.loyalty.purpose" = "Mueve el total del cobro, elige un nivel y mira los puntos que gana una visita. El cobro da los puntos con esta misma cuenta, y las reglas están justo arriba.";

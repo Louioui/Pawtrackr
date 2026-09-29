@@ -125,6 +125,7 @@ struct ClientDetailView: View {
         .cdOwner,
         .cdEmergency,
         .emergencyContactBadges,
+        .cdLoyalty,
         .cdPets,
         .petGenderDots,
         .cdAddPet,
@@ -190,14 +191,14 @@ struct ClientDetailView: View {
             .modifier(CheckoutPresentationModifier(checkoutRoute: $checkoutRoute, vm: vm, walkthrough: walkthrough))
             .onAppear {
                 synchronizeWalkthroughCheckoutPresentation(walkthrough?.currentStep?.presents, vm: vm)
-                advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
+                releaseWalkthroughCheckInIfAlreadyInSession(vm: vm)
                 releaseWalkthroughCheckOutIfNothingIsCheckedIn(vm: vm)
             }
             .onChange(of: walkthrough?.currentStep?.presents) { _, presentation in
                 synchronizeWalkthroughCheckoutPresentation(presentation, vm: vm)
             }
             .onChange(of: walkthrough?.currentStep?.anchor) { _, _ in
-                advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
+                releaseWalkthroughCheckInIfAlreadyInSession(vm: vm)
                 releaseWalkthroughCheckOutIfNothingIsCheckedIn(vm: vm)
             }
             .onChange(of: showContactEditor) { _, isShowing in
@@ -467,6 +468,7 @@ struct ClientDetailView: View {
                         .walkthroughTarget(.cdEmergency)
                     notesCard(client: vm.client)
                     loyaltySection(client: vm.client)
+                        .walkthroughTarget(.cdLoyalty)
                     petsSection(vm: vm)
                         .walkthroughTarget(.cdPets)
                     recentHistorySection(vm: vm)
@@ -988,6 +990,7 @@ struct ClientDetailView: View {
                                     }
                                     .opacity(activeVisit == nil && !isCheckingIn ? 1.0 : 0.55)
                                     .disabled(activeVisit != nil || isCheckingIn)
+                                    .id("clientDetail.pet.\(pet.uuid.uuidString).checkIn.\(activeVisit == nil && !isCheckingIn)")
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
                                     .walkthroughTarget(.cdCheckIn, isActive: pet.persistentModelID == tourPets.checkIn)
 
@@ -1003,12 +1006,14 @@ struct ClientDetailView: View {
                                     }
                                     .opacity(activeVisit == nil ? 0.3 : 1.0)
                                     .disabled(activeVisit == nil)
+                                    .id("clientDetail.pet.\(pet.uuid.uuidString).checkOut.\(activeVisit != nil)")
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
                                     .walkthroughTarget(.cdCheckOut, isActive: pet.persistentModelID == tourPets.featured)
 
                                     actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {
                                         sheetDestination = .history(pet)
                                     }
+                                    .id("clientDetail.pet.\(pet.uuid.uuidString).history")
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).history")
                                     .walkthroughTarget(.cdPetHistory, isActive: pet.persistentModelID == tourPets.featured)
                                 }
@@ -1256,9 +1261,13 @@ struct ClientDetailView: View {
         walkthrough?.advance()
     }
 
-    private func advanceWalkthroughIfCheckInAlreadySatisfied(vm: ClientDetailViewModel) {
-        // Only a hands-on step waits for a check-in. An explain-only one stays
-        // up until the user taps Next, so the explanation isn't skipped.
+    /// A pet already in session: the hands-on Check In stop shows Next
+    /// instead of waiting for a tap, in either direction. The stop isn't
+    /// skipped, so its explanation stays readable, and Check In still works
+    /// on a pet that isn't in session yet.
+    private func releaseWalkthroughCheckInIfAlreadyInSession(vm: ClientDetailViewModel) {
+        // Only a hands-on step waits for a check-in. An explain-only one
+        // already shows Next.
         guard walkthrough?.isActive == true,
               walkthrough?.currentStep?.anchor == .cdCheckIn,
               walkthrough?.currentStep?.requiresTargetAction == true
@@ -1266,18 +1275,7 @@ struct ClientDetailView: View {
 
         vm.refreshPets()
         guard firstActiveCheckoutRoute(vm: vm) != nil else { return }
-
-        // Coming back from Check Out, don't bounce forward again: the pet is
-        // already in session, so offer Next instead.
-        if walkthrough?.lastMoveWasBackward == true {
-            walkthrough?.releaseActionRequirement(reason: "the pet is already checked in")
-            return
-        }
-
-        Task { @MainActor in
-            guard walkthrough?.currentStep?.anchor == .cdCheckIn else { return }
-            walkthrough?.advance()
-        }
+        walkthrough?.releaseActionRequirement(reason: "a pet is already checked in")
     }
 
     /// Check Out can't be tapped without a pet in session. Show Next rather

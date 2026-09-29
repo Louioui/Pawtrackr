@@ -10,7 +10,7 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
     func testRecentHistoryStepKeepsGuideReadableOnIPhone() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 70)
+        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 80)
         assertActiveWalkthroughAnchor("cdHistory")
 
         let bubble = app.otherElements["walkthrough.bubble"]
@@ -52,7 +52,7 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
 
             if target.waitForExistence(timeout: 3) { return }
         }
-        XCTFail("Walkthrough did not reach active anchor \(anchor).")
+        XCTFail("Walkthrough did not reach active anchor \(anchor). current=\(currentActiveWalkthroughAnchor() ?? "none") layout=\(activeWalkthroughLayoutDebug())")
     }
 
     private func tapWalkthroughPrimary(timeout: TimeInterval = 4) -> Bool {
@@ -89,5 +89,13 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "walkthrough.activeAnchor."))
             .firstMatch
             .value as? String ?? "no layout debug"
+    }
+
+    private func currentActiveWalkthroughAnchor() -> String? {
+        let element = app.otherElements
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "walkthrough.activeAnchor."))
+            .firstMatch
+        guard element.exists else { return nil }
+        return element.identifier.replacingOccurrences(of: "walkthrough.activeAnchor.", with: "")
     }
 }

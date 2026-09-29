@@ -42,9 +42,10 @@ final class WalkthroughSetupStopsTests: XCTestCase {
         XCTAssertTrue(step.isOwnerOnly)
 
         // The tour opens Settings > Loyalty for it, and spotlights the card,
-        // not the whole section.
+        // not the whole section. The section as a whole is the ladder stop's.
         XCTAssertEqual(SettingSection.walkthroughSection(for: .loyaltySimulator), .loyalty)
-        XCTAssertNil(SettingSection.loyalty.walkthroughAnchorID)
+        XCTAssertEqual(SettingSection.loyalty.walkthroughAnchorID, .setLoyalty)
+        XCTAssertNotEqual(step.anchor, SettingSection.loyalty.walkthroughAnchorID)
         XCTAssertTrue(WalkthroughOverlayScope.detailAnchors.contains(.loyaltySimulator), "Drawn by the pushed Settings screen on iPad and Mac.")
 
         let frontDesk = WalkthroughController.tour(for: .frontDeskGroomer, context: .practice).map(\.id)
@@ -73,6 +74,42 @@ final class WalkthroughSetupStopsTests: XCTestCase {
         }
         XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.setupChecklist }?.title, "Primeros pasos")
         XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.loyalty }?.title, "Puntos de lealtad")
+    }
+
+    func testLadderStopShowsTheLoyaltySectionRightBeforeThePreview() throws {
+        let owner = WalkthroughController.tour(for: .ownerManager, context: .practice).map(\.id)
+        let ladder = try XCTUnwrap(owner.firstIndex(of: WalkthroughStepID.loyaltyLadder))
+        XCTAssertEqual(owner[ladder + 1], WalkthroughStepID.loyalty, "Same Settings screen: the section, then its preview card.")
+
+        let step = try XCTUnwrap(WalkthroughController.fullTour().first { $0.id == WalkthroughStepID.loyaltyLadder })
+        XCTAssertEqual(step.anchor, .setLoyalty)
+        XCTAssertEqual(SettingSection.walkthroughSection(for: step.anchor), .loyalty)
+        XCTAssertTrue(step.isOwnerOnly)
+        XCTAssertFalse(step.requiresTargetAction || step.allowsTargetInteraction, "Look-only: Reset to Discount Ladder replaces every reward.")
+    }
+
+    func testClientLoyaltyAndDeviceStopsAreInBothTours() throws {
+        for role in OnboardingRole.allCases {
+            let ids = WalkthroughController.tour(for: role, context: .practice).map(\.id)
+            XCTAssertTrue(ids.contains(WalkthroughStepID.clientLoyalty), "\(role)")
+            XCTAssertTrue(ids.contains(WalkthroughStepID.devices), "\(role)")
+            let iCloud = try XCTUnwrap(ids.firstIndex(of: WalkthroughStepID.iCloud))
+            XCTAssertEqual(ids[iCloud + 1], WalkthroughStepID.devices, "\(role)")
+        }
+        // Client details only open the sample client, so without one the
+        // loyalty card stop goes with the other client-detail stops.
+        let noSample = WalkthroughTourContext(hasSampleClient: false, hasRealClients: true)
+        XCTAssertFalse(WalkthroughController.tour(for: .ownerManager, context: noSample).contains { $0.id == WalkthroughStepID.clientLoyalty })
+    }
+
+    func testMergedStopsCopyInSpanishIsTranslated() throws {
+        UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        let ids = [WalkthroughStepID.loyaltyLadder, WalkthroughStepID.clientLoyalty, WalkthroughStepID.devices]
+        let steps = WalkthroughController.fullTour().filter { ids.contains($0.id) }
+        XCTAssertEqual(steps.count, ids.count)
+        XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.loyaltyLadder }?.title, "Escalera de lealtad")
+        XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.clientLoyalty }?.title, "Saldo de lealtad")
+        XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.devices }?.title, "Dispositivos sincronizados")
     }
 
     private func source(_ relativePath: String) throws -> String {

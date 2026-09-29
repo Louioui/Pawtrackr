@@ -1507,10 +1507,14 @@
 "tour.dash.attention.title" = "Needs Attention";
 "tour.dash.attention.directive" = "See who needs a follow-up.";
 "tour.dash.attention.purpose" = "Pets due for their next groom surface here, so you can call, message, and rebook them before they drift away.";
+"tour.dash.attention.empty.title" = "All caught up";
+"tour.dash.attention.empty.message" = "Pets due for their next groom show up here, so the front desk can call and rebook them.";
 "tour.dash.recent.title" = "Recent Clients";
 "tour.dash.recent.directive" = "Pick up where you left off.";
 "tour.dash.recent.purpose" = "Your most recent clients are here for fast rebooking. Tap one to open the full profile, pet history, and safety notes.";
 "tour.dash.recent.tip" = "Aggressive behavior tags appear in red anywhere the team needs to notice them.";
+"tour.dash.recent.empty.title" = "No recent clients yet";
+"tour.dash.recent.empty.message" = "Once you add clients, the ones with the most recent visits show here for a quick jump back to their profile.";
 "tour.dash.revenue.title" = "Revenue (7 Days)";
 "tour.dash.revenue.directive" = "Watch the week while you work.";
 "tour.dash.revenue.purpose" = "Every completed checkout flows into this chart automatically, so you can tell a strong week from a slow one without touching a spreadsheet.";
@@ -1538,6 +1542,10 @@
 "tour.cd.pets.directive" = "This row is where the visit work starts.";
 "tour.cd.pets.purpose" = "Each pet has its own status and actions. The next stops break down check-in, checkout, and history so the workflow is clear before you use it with real clients.";
 "tour.cd.pets.tip" = "Each owner can have multiple pets, and every pet keeps its own status and visit history.";
+"tour.cd.loyalty.title" = "Loyalty Balance";
+"tour.cd.loyalty.directive" = "Open this card to see points, rewards, and loyalty history.";
+"tour.cd.loyalty.purpose" = "After checkout, earned points post here automatically so staff can redeem rewards without doing math or searching old tickets.";
+"tour.cd.loyalty.tip" = "The badge shows the current balance. The detail screen shows reward progress and the points ledger.";
 "tour.cd.checkin.title" = "Check In";
 "tour.cd.checkin.directive" = "Start the grooming session.";
 "tour.cd.checkin.purpose" = "Check In creates an active visit, starts the timer, changes the pet status to in session, and makes checkout available when the groom is finished.";
@@ -1565,7 +1573,7 @@
 "tour.co.confirm.title" = "Confirm & Save";
 "tour.co.confirm.directive" = "This is the real checkout finish line.";
 "tour.co.confirm.purpose" = "Confirm & Pay saves the payment, updates history, refreshes insights, and prepares receipt details. This demo tour does not charge or save.";
-"tour.co.confirm.tip" = "During real use, only press this once the client has paid and the visit details are right.";
+"tour.co.confirm.tip" = "After payment, loyalty points post to the client profile automatically.";
 "tour.cd.pet_history.title" = "Pet History";
 "tour.cd.pet_history.directive" = "Open the pet’s full timeline.";
 "tour.cd.pet_history.purpose" = "History shows past visits for this pet with services, notes, payment details, photos, search, date filters, and export tools when you need records outside the app.";
@@ -1606,6 +1614,10 @@
 "tour.set.icloud.title" = "iCloud sync";
 "tour.set.icloud.directive" = "“Backed up” means iCloud confirmed the upload.";
 "tour.set.icloud.purpose" = "With iCloud on, clients, pets, visits, photos, and checkout history sync to your iPhone, iPad, and Mac, with business name, currency, and brand color. Other settings stay per device.";
+"tour.set.devices.title" = "Synced devices";
+"tour.set.devices.directive" = "See which phones, iPads, and Macs share your data and when each was last seen.";
+"tour.set.devices.purpose" = "Device health shows recently seen workstations, iCloud context, and stale devices so managers can spot sync gaps before staff rely on old records.";
+"tour.set.devices.tip" = "If a device needs a check, use iCloud diagnostics before resetting anything.";
 "tour.set.icloud.tip" = "The top account banner tells you if iCloud needs sign-in or network attention.";
 "tour.set.about.title" = "Replay & Start Fresh";
 "tour.set.about.directive" = "Continue the tour or replay one lesson for someone new.";
@@ -1973,6 +1985,10 @@
 "tour.dash.checklist.directive" = "Finish setting up your salon from this list.";
 "tour.dash.checklist.purpose" = "Each row opens the screen where you finish it. Rows tick themselves from your data, and sample clients don’t count as yours.";
 "tour.dash.checklist.tip" = "The backup row ticks only when iCloud confirms an upload. The list goes away once every row is done.";
+"tour.set.loyalty_ladder.title" = "Loyalty ladder";
+"tour.set.loyalty_ladder.directive" = "Pick rewards before staff start checking out.";
+"tour.set.loyalty_ladder.purpose" = "Discount Ladder gives simple point rewards. Reset to Discount Ladder replaces every reward on the list, custom ones included. Client points stay as they are.";
+"tour.set.loyalty_ladder.tip" = "Keep rewards easy to explain at pickup: points should feel automatic, not like extra paperwork.";
 "tour.set.loyalty.title" = "Loyalty points";
 "tour.set.loyalty.directive" = "Try your loyalty rules before a client earns anything.";
 "tour.set.loyalty.purpose" = "Move the checkout total, pick a tier, and see the points a visit earns. Checkout awards points with this same math, and the rules sit right above.";

@@ -23,9 +23,9 @@ struct WalkthroughAnchorPreferenceKey: PreferenceKey {
 }
 
 /// Collects already-resolved target frames in the nearest walkthrough overlay's
-/// coordinate space. This complements anchor preferences for views inside
-/// containers like `ScrollView`, where anchors can stop propagating before the
-/// viewport overlay that needs to draw the bubble.
+/// global window coordinate space. This complements anchor preferences for views
+/// inside split views, navigation stacks, and scroll views where local anchors can
+/// lose the sidebar, toolbar, or scroll offset before the viewport overlay draws.
 struct WalkthroughFramePreferenceKey: PreferenceKey {
     static let coordinateSpaceName = "walkthrough.overlay.viewport"
     static var defaultValue: [WalkthroughAnchorID: CGRect] { [:] }
@@ -61,7 +61,7 @@ extension View {
                     .anchorPreference(key: WalkthroughAnchorPreferenceKey.self, value: .bounds) { anchor in [id: anchor] }
                     .preference(
                         key: WalkthroughFramePreferenceKey.self,
-                        value: [id: proxy.frame(in: .named(WalkthroughFramePreferenceKey.coordinateSpaceName))]
+                        value: [id: proxy.frame(in: .global)]
                     )
             }
         }

@@ -83,59 +83,45 @@ struct ContentView: View {
     }
 
     var body: some View {
-        rootContent
-            // The root overlay also draws, centered, any step its own screen
-            // never drew, so the tour can't vanish without Back/Skip/Next.
-            .walkthroughOverlay(walkthrough, scope: rootOverlayScope, adoptsOrphanedSteps: true)
-            // Confetti moment when the user finishes the whole tour. Sits above the
-            // walkthrough overlay so it plays as the tour dismisses, then clears
-            // itself after the burst.
-            .overlay {
-                if walkthrough.isCelebrating {
-                    WalkthroughCelebrationView()
-                        .transition(.opacity)
+        lifecycleContent
+    }
+
+    private var lifecycleContent: some View {
+        sheetContent
+            .onAppear {
+                handleContentAppear()
+            }
+            .onChange(of: appSettings.hasSeenAppTour) { _, seen in
+                // Pick up the OnboardingViewModel (or "Replay Getting Started")
+                // arming the tour without requiring a fresh ContentView appear.
+                if !seen, !isExplicitWalkthroughReplayPending {
+                    startWalkthroughIfReady()
                 }
             }
-            .onChange(of: walkthrough.isCelebrating) { _, celebrating in
-                guard celebrating else { return }
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(2.4))
-                    walkthrough.endCelebration()
+    }
+
+    private var sheetContent: some View {
+        notificationContent
+            .adaptiveCover(item: $presentedSheet) { destination in
+                switch destination {
+                case .newClient:
+                    // SwiftUI does not reliably forward the `.environment(walkthrough)`
+                    // injected on the root into a fullScreenCover/sheet, so the in-sheet
+                    // guided-tour overlay never saw the controller (it read nil and
+                    // silently skipped the spotlight). Re-inject it explicitly here so
+                    // the New Client tour steps render inside the cover on iOS and macOS.
+                    NewClientSheet(modelContext: modelContext)
+                        .environment(walkthrough)
+                case .recentHistory(let scope):
+                    NavigationStack {
+                        RecentHistoryView(initialScope: scope)
+                    }
                 }
             }
-            .environment(walkthrough)
-            // The deep-dive tour drives navigation: when a step lives on another
-            // screen, switch to it before the step shows so its anchor exists.
-            .onChange(of: walkthrough.currentStep?.surface) { _, surface in
-                if let surface {
-                    selectSurface(surface)
-                    revealSplitSidebarForWalkthroughIfNeeded()
-                }
-            }
-            .onChange(of: walkthrough.currentStep?.presents) { _, presentation in
-                synchronizeWalkthroughPresentation(presentation)
-            }
-            .onChange(of: walkthrough.currentStep?.id) { _, _ in
-                synchronizeWalkthroughStepLocation()
-            }
-            .onChange(of: walkthrough.isActive) { _, isActive in
-                if !isActive {
-                    closeWalkthroughPresentationIfNeeded()
-                    walkthroughRoutedClientID = nil
-                }
-            }
-            .environment(router)
-            .onChange(of: appSettings.currencySymbol) { _, newValue in
-                Formatters.updateCurrencySymbol(newValue)
-            }
-            .onChange(of: sidebarSelection) { _, newValue in
-                if let newValue {
-                    router.activeNavigationItem = newValue
-                }
-            }
-            .onChange(of: tabSelection) { _, newValue in
-                router.activeNavigationItem = newValue
-            }
+    }
+
+    private var notificationContent: some View {
+        navigationStateContent
             .onReceive(NotificationCenter.default.publisher(for: .showNewClientSheet)) { _ in
                 consumePendingNewClientRequest()
                 presentedSheet = .newClient
@@ -166,30 +152,59 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .replayGettingStartedRequested)) { notification in
                 launchWalkthrough(WalkthroughLaunchRequest(notification: notification))
             }
-            .adaptiveCover(item: $presentedSheet) { destination in
-                switch destination {
-                case .newClient:
-                    // SwiftUI does not reliably forward the `.environment(walkthrough)`
-                    // injected on the root into a fullScreenCover/sheet, so the in-sheet
-                    // guided-tour overlay never saw the controller (it read nil and
-                    // silently skipped the spotlight). Re-inject it explicitly here so
-                    // the New Client tour steps render inside the cover on iOS and macOS.
-                    NewClientSheet(modelContext: modelContext)
-                        .environment(walkthrough)
-                case .recentHistory(let scope):
-                    NavigationStack {
-                        RecentHistoryView(initialScope: scope)
-                    }
+    }
+
+    private var navigationStateContent: some View {
+        walkthroughContent
+            .environment(router)
+            .onChange(of: appSettings.currencySymbol) { _, newValue in
+                Formatters.updateCurrencySymbol(newValue)
+            }
+            .onChange(of: sidebarSelection) { _, newValue in
+                if let newValue {
+                    router.activeNavigationItem = newValue
                 }
             }
-            .onAppear {
-                handleContentAppear()
+            .onChange(of: tabSelection) { _, newValue in
+                router.activeNavigationItem = newValue
             }
-            .onChange(of: appSettings.hasSeenAppTour) { _, seen in
-                // Pick up the OnboardingViewModel (or "Replay Getting Started")
-                // arming the tour without requiring a fresh ContentView appear.
-                if !seen, !isExplicitWalkthroughReplayPending {
-                    startWalkthroughIfReady()
+    }
+
+    private var walkthroughContent: some View {
+        rootContent
+            // The root overlay also draws, centered, any step its own screen
+            // never drew, so the tour can't vanish without Back/Skip/Next.
+            .walkthroughOverlay(walkthrough, scope: rootOverlayScope, adoptsOrphanedSteps: true)
+            // Confetti moment when the user finishes the whole tour. Sits above the
+            // walkthrough overlay so it plays as the tour dismisses, then clears
+            // itself after the burst.
+            .overlay {
+                if walkthrough.isCelebrating {
+                    WalkthroughCelebrationView()
+                        .transition(.opacity)
+                }
+            }
+            .onChange(of: walkthrough.isCelebrating) { _, celebrating in
+                guard celebrating else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2.4))
+                    walkthrough.endCelebration()
+                }
+            }
+            .environment(walkthrough)
+            // The deep-dive tour drives navigation for every step, not only when
+            // the high-level surface value changes. Consecutive steps often live
+            // on the same screen (Clients -> Client Filters), and replaying from
+            // another tab must still move the user to the step's real target.
+            .onChange(of: walkthrough.currentStep?.id) { _, _ in
+                synchronizeWalkthroughStep(walkthrough.currentStep)
+            }
+            .onChange(of: walkthrough.isActive) { _, isActive in
+                if isActive {
+                    synchronizeWalkthroughStep(walkthrough.currentStep)
+                } else {
+                    closeWalkthroughPresentationIfNeeded()
+                    walkthroughRoutedClientID = nil
                 }
             }
     }
@@ -321,6 +336,56 @@ struct ContentView: View {
         !appSettings.hasSeenAppTour || AppRuntime.shouldStartWalkthroughForUITesting
     }
 
+    /// Moves the app to where the current stop lives: its screen, a root or
+    /// pushed screen inside it, and the sheet it needs. Runs for every stop,
+    /// so consecutive stops on one screen and replays started from another
+    /// tab still land on the real target.
+    private func synchronizeWalkthroughStep(_ step: WalkthroughStep?) {
+        guard walkthrough.isActive, let step else {
+            closeWalkthroughPresentationIfNeeded()
+            return
+        }
+
+        // The tour's context was read when it started. By the iCloud stop
+        // the backup status may have changed, so its line is read again:
+        // "Backed up as of…" only while iCloud has confirmed an upload.
+        if step.id == WalkthroughStepID.iCloud {
+            walkthrough.updateCoachTip(
+                WalkthroughController.iCloudTip(for: CloudKitMonitor.shared.backupStatus),
+                forStepID: step.id
+            )
+        }
+
+        if let surface = step.surface {
+            selectSurface(surface)
+            resetRootPathForWalkthroughStepIfNeeded(step)
+            revealSplitSidebarForWalkthroughIfNeeded()
+        }
+
+        synchronizeWalkthroughPresentation(step.presents)
+        synchronizeWalkthroughClientsStack(for: step)
+    }
+
+    /// Dashboard and Insights stops point at the screen's root content, so a
+    /// screen left pushed on top of it is closed. The Settings stop for the
+    /// tab itself shows the Settings list. Settings sections are pushed by
+    /// SettingsView for the stop that needs them, and the Clients stack is
+    /// handled by `synchronizeWalkthroughClientsStack(for:)`.
+    private func resetRootPathForWalkthroughStepIfNeeded(_ step: WalkthroughStep) {
+        guard step.route == nil else { return }
+
+        switch step.surface {
+        case .dashboard:
+            if !router.dashboardPath.isEmpty { router.popDashboardToRoot() }
+        case .insights:
+            if !router.insightsPath.isEmpty { router.insightsPath = NavigationPath() }
+        case .settings:
+            if step.anchor == .settings, !router.settingsPath.isEmpty { router.settingsPath = NavigationPath() }
+        case .clients, .none:
+            break
+        }
+    }
+
     private func synchronizeWalkthroughPresentation(_ presentation: WalkthroughPresentation?) {
         guard walkthrough.isActive else {
             closeWalkthroughPresentationIfNeeded()
@@ -346,21 +411,11 @@ struct ContentView: View {
 
     /// Puts the Clients stack where the current stop needs it. Client-detail
     /// stops need the sample client open (with a pet, for pet stops), even
-    /// after the user wandered off during a hands-on stop. Client-list stops
-    /// need the list itself, not a profile left open by an earlier lesson.
-    private func synchronizeWalkthroughStepLocation() {
-        guard walkthrough.isActive, let step = walkthrough.currentStep else { return }
-
-        // The tour's context was read when it started. By the iCloud stop
-        // the backup status may have changed, so its line is read again:
-        // "Backed up as of…" only while iCloud has confirmed an upload.
-        if step.id == WalkthroughStepID.iCloud {
-            walkthrough.updateCoachTip(
-                WalkthroughController.iCloudTip(for: CloudKitMonitor.shared.backupStatus),
-                forStepID: step.id
-            )
-        }
-
+    /// after the user wandered off during a hands-on stop: whatever client
+    /// is open is never trusted, because the next hands-on stop would check
+    /// its pet in for real. Client-list stops need the list itself, not a
+    /// profile left open by an earlier lesson.
+    private func synchronizeWalkthroughClientsStack(for step: WalkthroughStep) {
         switch step.route {
         case .demoClientDetail:
             if walkthroughNeedsClientDetailNavigation(for: step) {
@@ -374,12 +429,19 @@ struct ContentView: View {
     }
 
     private func walkthroughNeedsClientDetailNavigation(for step: WalkthroughStep) -> Bool {
-        guard router.clientsPath.count == 1,
-              let routedID = walkthroughRoutedClientID,
+        guard let routedID = walkthroughRoutedClientID,
+              isShowingOnlyWalkthroughClient(routedID),
               let client = modelContext.model(for: routedID) as? Client,
               SampleData.isSample(client)
         else { return true }
         return step.needsTourPet && (client.pets ?? []).isEmpty
+    }
+
+    /// The Clients stack holds exactly the profile the tour opened. A count
+    /// alone isn't enough: a user who went back and opened a real client
+    /// also leaves one screen on the stack.
+    private func isShowingOnlyWalkthroughClient(_ clientID: PersistentIdentifier) -> Bool {
+        router.clientsPath == NavigationPath([AppDestination.clientDetail(clientID)])
     }
 
     private func openWalkthroughDemoClientDetail() {
@@ -410,7 +472,7 @@ struct ContentView: View {
             return
         }
         selectClientsSurface()
-        guard !(router.clientsPath.count == 1 && walkthroughRoutedClientID == client.persistentModelID) else { return }
+        guard !(walkthroughRoutedClientID == client.persistentModelID && isShowingOnlyWalkthroughClient(client.persistentModelID)) else { return }
         router.popClientsToRoot()
         router.navigateToClient(client)
         walkthroughRoutedClientID = client.persistentModelID
@@ -535,6 +597,7 @@ struct ContentView: View {
         #if os(iOS)
         guard horizontalSizeClass != .compact else { return }
         #endif
+        guard columnVisibility != .all else { return }
         columnVisibility = .all
     }
 

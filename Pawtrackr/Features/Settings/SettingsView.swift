@@ -81,15 +81,19 @@ enum SettingSection: String, CaseIterable, Identifiable {
         switch self {
         case .business:
             return .setBusiness
+        case .loyalty:
+            return .setLoyalty
         case .security:
             return .setSecurity
         case .dataExport:
             return .setData
         case .icloud:
             return .setICloud
+        case .devices:
+            return .setDevices
         case .about:
             return .setAbout
-        case .preferences, .loyalty, .help, .devices:
+        case .preferences, .help:
             return nil
         }
     }
@@ -158,6 +162,9 @@ struct SettingsView: View {
                 regularMacSettings
             }
         }
+        .onAppear {
+            synchronizeWalkthroughSection(walkthrough?.currentStep?.anchor)
+        }
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughSection(anchor)
         }
@@ -199,6 +206,9 @@ struct SettingsView: View {
                 detail
             }
         }
+        .onAppear {
+            synchronizeWalkthroughSection(walkthrough?.currentStep?.anchor)
+        }
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughSection(anchor)
         }
@@ -209,14 +219,17 @@ struct SettingsView: View {
         guard walkthrough?.currentStep?.surface == .settings else { return }
 
         #if os(macOS)
-        if let section = SettingSection.walkthroughSection(for: anchor) {
+        if let section = SettingSection.walkthroughSection(for: anchor), selection != section {
             selection = section
         }
         #else
         if anchor == .settings {
             if !router.settingsPath.isEmpty { router.settingsPath = NavigationPath() }
         } else if let section = SettingSection.walkthroughSection(for: anchor) {
-            router.settingsPath = NavigationPath([section])
+            // Consecutive stops in one section (the loyalty ladder, then its
+            // preview card) keep the pushed screen instead of re-pushing it.
+            let path = NavigationPath([section])
+            if router.settingsPath != path { router.settingsPath = path }
         }
         #endif
     }
@@ -315,9 +328,11 @@ private struct SettingsDetailView: View {
 
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
         .setBusiness,
+        .setLoyalty,
         .setSecurity,
         .setData,
         .setICloud,
+        .setDevices,
         .setAbout,
         .setStartFresh,
         .loyaltySimulator

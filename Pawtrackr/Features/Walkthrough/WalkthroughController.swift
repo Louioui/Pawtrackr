@@ -45,6 +45,7 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     // Client-detail sections
     case cdOwner
     case cdEmergency
+    case cdLoyalty
     case cdPets
     case petGenderDots
     case emergencyContactBadges
@@ -61,9 +62,11 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case coConfirm
     // Settings sections
     case setBusiness
+    case setLoyalty
     case setSecurity
     case setData
     case setICloud
+    case setDevices
     case setAbout
     case setStartFresh
     // Client list
@@ -278,6 +281,9 @@ enum WalkthroughStepID {
     static let business = "set.business"
     static let setupChecklist = "dash.checklist"
     static let loyalty = "set.loyalty"
+    static let loyaltyLadder = "set.loyalty_ladder"
+    static let devices = "set.devices"
+    static let clientLoyalty = "cd.loyalty"
 }
 
 /// What the store and this device hold when a tour starts. It decides which
@@ -1044,6 +1050,15 @@ extension WalkthroughController {
                 isOwnerOnly: true
             ),
             WalkthroughStep(
+                id: WalkthroughStepID.clientLoyalty, anchor: .cdLoyalty, surface: .clients, route: .demoClientDetail,
+                title: AppLocalization.localized("tour.cd.loyalty.title", value: "Loyalty Balance"),
+                directive: AppLocalization.localized("tour.cd.loyalty.directive", value: "Open this card to see points, rewards, and loyalty history."),
+                purpose: AppLocalization.localized("tour.cd.loyalty.purpose", value: "After checkout, earned points post here automatically so staff can redeem rewards without doing math or searching old tickets."),
+                lesson: .checkoutAndMoney,
+                coachTip: AppLocalization.localized("tour.cd.loyalty.tip", value: "The badge shows the current balance. The detail screen shows reward progress and the points ledger."),
+                icon: "giftcard.fill"
+            ),
+            WalkthroughStep(
                 id: "cd.pets", anchor: .cdPets, surface: .clients, route: .demoClientDetail,
                 title: AppLocalization.localized("tour.cd.pets.title", value: "Pet Actions"),
                 directive: AppLocalization.localized("tour.cd.pets.directive", value: "This row is where the visit work starts."),
@@ -1122,7 +1137,7 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.co.confirm.directive", value: "This is the real checkout finish line."),
                 purpose: AppLocalization.localized("tour.co.confirm.purpose", value: "Confirm & Pay saves the payment, updates history, refreshes insights, and prepares receipt details. This demo tour does not charge or save."),
                 lesson: .checkoutAndMoney,
-                coachTip: AppLocalization.localized("tour.co.confirm.tip", value: "During real use, only press this once the client has paid and the visit details are right."),
+                coachTip: AppLocalization.localized("tour.co.confirm.tip", value: "After payment, loyalty points post to the client profile automatically."),
                 icon: "checkmark.seal.fill",
                 presents: .checkout
             ),
@@ -1236,6 +1251,26 @@ extension WalkthroughController {
                 isOwnerOnly: true
             ),
             WalkthroughStep(
+                id: WalkthroughStepID.loyaltyLadder, anchor: .setLoyalty, surface: .settings,
+                title: AppLocalization.localized("tour.set.loyalty_ladder.title", value: "Loyalty ladder"),
+                directive: AppLocalization.localized("tour.set.loyalty_ladder.directive", value: "Pick rewards before staff start checking out."),
+                purpose: AppLocalization.localized("tour.set.loyalty_ladder.purpose", value: "Discount Ladder gives simple point rewards. Reset to Discount Ladder replaces every reward on the list, custom ones included. Client points stay as they are."),
+                lesson: .settingsAndSafety,
+                coachTip: AppLocalization.localized("tour.set.loyalty_ladder.tip", value: "Keep rewards easy to explain at pickup: points should feel automatic, not like extra paperwork."),
+                icon: "giftcard.fill",
+                isOwnerOnly: true
+            ),
+            WalkthroughStep(
+                id: WalkthroughStepID.loyalty, anchor: .loyaltySimulator, surface: .settings,
+                title: AppLocalization.localized("tour.set.loyalty.title", value: "Loyalty points"),
+                directive: AppLocalization.localized("tour.set.loyalty.directive", value: "Try your loyalty rules before a client earns anything."),
+                purpose: AppLocalization.localized("tour.set.loyalty.purpose", value: "Move the checkout total, pick a tier, and see the points a visit earns. Checkout awards points with this same math, and the rules sit right above."),
+                lesson: .settingsAndSafety,
+                coachTip: AppLocalization.localized("tour.set.loyalty.tip", value: "Clients redeem from Loyalty & Rewards on their profile. You give the reward yourself, for example as a discount."),
+                icon: "giftcard.fill",
+                isOwnerOnly: true
+            ),
+            WalkthroughStep(
                 id: WalkthroughStepID.security, anchor: .setSecurity, surface: .settings,
                 title: AppLocalization.localized("tour.set.security.title", value: "Security"),
                 directive: AppLocalization.localized("tour.set.security.directive", value: "Protect client data."),
@@ -1245,17 +1280,6 @@ extension WalkthroughController {
                     ? AppLocalization.localized("tour.set.security.tip_pin_set", value: "Your PIN is set on this device. Change it here anytime.")
                     : AppLocalization.localized("tour.set.security.tip", value: "Solo users can skip the PIN during setup and enable it later here."),
                 icon: "lock.shield.fill",
-                isOwnerOnly: true
-            ),
-
-            WalkthroughStep(
-                id: WalkthroughStepID.loyalty, anchor: .loyaltySimulator, surface: .settings,
-                title: AppLocalization.localized("tour.set.loyalty.title", value: "Loyalty points"),
-                directive: AppLocalization.localized("tour.set.loyalty.directive", value: "Try your loyalty rules before a client earns anything."),
-                purpose: AppLocalization.localized("tour.set.loyalty.purpose", value: "Move the checkout total, pick a tier, and see the points a visit earns. Checkout awards points with this same math, and the rules sit right above."),
-                lesson: .settingsAndSafety,
-                coachTip: AppLocalization.localized("tour.set.loyalty.tip", value: "Clients redeem from Loyalty & Rewards on their profile. You give the reward yourself, for example as a discount."),
-                icon: "giftcard.fill",
                 isOwnerOnly: true
             ),
 
@@ -1277,6 +1301,15 @@ extension WalkthroughController {
                 lesson: .dataOwnership,
                 coachTip: iCloudTip(for: context.backupStatus),
                 icon: "icloud.fill"
+            ),
+            WalkthroughStep(
+                id: WalkthroughStepID.devices, anchor: .setDevices, surface: .settings,
+                title: AppLocalization.localized("tour.set.devices.title", value: "Synced devices"),
+                directive: AppLocalization.localized("tour.set.devices.directive", value: "See which phones, iPads, and Macs share your data and when each was last seen."),
+                purpose: AppLocalization.localized("tour.set.devices.purpose", value: "Device health shows recently seen workstations, iCloud context, and stale devices so managers can spot sync gaps before staff rely on old records."),
+                lesson: .dataOwnership,
+                coachTip: AppLocalization.localized("tour.set.devices.tip", value: "If a device needs a check, use iCloud diagnostics before resetting anything."),
+                icon: "iphone.gen3.radiowaves.left.and.right"
             ),
             WalkthroughStep(
                 id: "set.about", anchor: .setAbout, surface: .settings,

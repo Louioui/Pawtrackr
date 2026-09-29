@@ -146,7 +146,7 @@ struct DashboardView: View {
                 LazyVStack(spacing: 24) {
                     smartSummary(vm)
 
-                    if !appSettings.isChecklistDismissed && !vm.checklist.isEmpty && !vm.isChecklistComplete {
+                    if shouldShowChecklistSection(vm) {
                         checklistSection(vm)
                             .walkthroughTarget(.setupChecklist)
                     }
@@ -163,8 +163,8 @@ struct DashboardView: View {
 
                             VStack(spacing: 24) {
                                 quickActionsSection.walkthroughTarget(.dashQuickActions)
-                                if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
-                                if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
+                                if shouldShowNeedsAttentionSection(vm) { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
+                                if shouldShowRecentClientsSection(vm) { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
                             }
                             .frame(width: dashboardSideColumnWidth)
                         }
@@ -174,8 +174,8 @@ struct DashboardView: View {
                             quickActionsSection.walkthroughTarget(.dashQuickActions)
                             if !vm.activeVisits.isEmpty { activeSessionsSection(vm) }
                             reengagementSection(vm)
-                            if !vm.overduePets.isEmpty { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
-                            if !vm.recentClients.isEmpty { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
+                            if shouldShowNeedsAttentionSection(vm) { overduePetsSection(vm).walkthroughTarget(.dashNeedsAttention) }
+                            if shouldShowRecentClientsSection(vm) { recentClientsSection(vm).walkthroughTarget(.dashRecentClients) }
                             revenueSection(vm).walkthroughTarget(.dashRevenue)
                         }
                     }
@@ -200,12 +200,19 @@ struct DashboardView: View {
                 _ = await (local, cloud)
             }
             // Scroll the current deep-dive target into view as the tour advances.
-            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
-                guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                    proxy.scrollTo(anchor, anchor: .center)
-                }
+            .onAppear {
+                scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: proxy)
             }
+            .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
+                scrollToWalkthroughAnchorIfNeeded(anchor, proxy: proxy)
+            }
+        }
+    }
+
+    private func scrollToWalkthroughAnchorIfNeeded(_ anchor: WalkthroughAnchorID?, proxy: ScrollViewProxy) {
+        guard let anchor, Self.walkthroughAnchors.contains(anchor) else { return }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            proxy.scrollTo(anchor, anchor: .center)
         }
     }
 
@@ -250,6 +257,27 @@ struct DashboardView: View {
             }
             .padding(16)
         }
+    }
+
+    private func isWalkthroughSpotlighting(_ anchor: WalkthroughAnchorID) -> Bool {
+        walkthrough?.isActive == true && walkthrough?.currentStep?.anchor == anchor
+    }
+
+    /// The Getting Started card shows while it has unfinished rows and hasn't
+    /// been closed, and also while the tour points at it, so its stop always
+    /// has the real card to show. An empty checklist (still loading) never shows.
+    private func shouldShowChecklistSection(_ vm: DashboardViewModel) -> Bool {
+        guard !vm.checklist.isEmpty else { return false }
+        return isWalkthroughSpotlighting(.setupChecklist)
+            || (!appSettings.isChecklistDismissed && !vm.isChecklistComplete)
+    }
+
+    private func shouldShowNeedsAttentionSection(_ vm: DashboardViewModel) -> Bool {
+        !vm.overduePets.isEmpty || isWalkthroughSpotlighting(.dashNeedsAttention)
+    }
+
+    private func shouldShowRecentClientsSection(_ vm: DashboardViewModel) -> Bool {
+        !vm.recentClients.isEmpty || isWalkthroughSpotlighting(.dashRecentClients)
     }
 
     private var dashboardVerticalPadding: CGFloat {
@@ -723,9 +751,16 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(NSLocalizedString("dashboard.needs_attention", comment: "")).font(.headline)
             LazyVStack(spacing: 12) {
-                ForEach(vm.overduePets, id: \.uuid) { pet in
-                    if let owner = pet.owner {
-                        attentionPetCard(pet, owner: owner)
+                if vm.overduePets.isEmpty {
+                    walkthroughEmptyDashboardCard(
+                        title: AppLocalization.localized("tour.dash.attention.empty.title", value: "All caught up"),
+                        message: AppLocalization.localized("tour.dash.attention.empty.message", value: "Pets due for their next groom show up here, so the front desk can call and rebook them.")
+                    )
+                } else {
+                    ForEach(vm.overduePets, id: \.uuid) { pet in
+                        if let owner = pet.owner {
+                            attentionPetCard(pet, owner: owner)
+                        }
                     }
                 }
             }
@@ -855,15 +890,44 @@ struct DashboardView: View {
                 .font(.footnote)
             }
             LazyVStack(spacing: 10) {
-                ForEach(vm.recentClients.prefix(5)) { client in
-                    Button {
-                        openClient(client)
-                    } label: {
-                        ClientRow(client: client)
+                if vm.recentClients.isEmpty {
+                    walkthroughEmptyDashboardCard(
+                        title: AppLocalization.localized("tour.dash.recent.empty.title", value: "No recent clients yet"),
+                        message: AppLocalization.localized("tour.dash.recent.empty.message", value: "Once you add clients, the ones with the most recent visits show here for a quick jump back to their profile.")
+                    )
+                } else {
+                    ForEach(vm.recentClients.prefix(5)) { client in
+                        Button {
+                            openClient(client)
+                        } label: {
+                            ClientRow(client: client)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    private func walkthroughEmptyDashboardCard(title: String, message: String) -> some View {
+        Card(elevation: .regular) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .frame(width: 30, height: 30)
+                    .background(DS.ColorToken.primary.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
