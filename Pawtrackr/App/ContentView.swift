@@ -161,13 +161,7 @@ struct ContentView: View {
                 ])
             }
             .onReceive(NotificationCenter.default.publisher(for: .selectNavigationItem)) { notification in
-                if notification.userInfo?[NavigationSelectionKey.item.rawValue] as? String == "recenthistory" {
-                    selectSurface(.dashboard, resetPath: notification.shouldResetNavigationPath)
-                    presentedSheet = .recentHistory(nil)
-                    return
-                }
-                guard let item = notification.requestedNavigationItem else { return }
-                selectSurface(item, resetPath: notification.shouldResetNavigationPath)
+                handleNavigationSelection(notification)
             }
             .onReceive(NotificationCenter.default.publisher(for: .replayGettingStartedRequested)) { notification in
                 launchWalkthrough(WalkthroughLaunchRequest(notification: notification))
@@ -507,6 +501,20 @@ struct ContentView: View {
             lastNavigationDedupeKey = dedupeKey
             lastNavigationDedupeAt = now
             clearPendingNavigation(kind: type == .client ? .client : .pet, uuid: uuid)
+        }
+    }
+
+    private func handleNavigationSelection(_ notification: Notification) {
+        if notification.userInfo?[NavigationSelectionKey.item.rawValue] as? String == "recenthistory" {
+            selectSurface(.dashboard, resetPath: notification.shouldResetNavigationPath)
+            presentedSheet = .recentHistory(nil)
+            return
+        }
+        guard let item = notification.requestedNavigationItem else { return }
+        selectSurface(item, resetPath: notification.shouldResetNavigationPath)
+        // After the surface switch, which resets the Settings path.
+        if item == .settings, let section = notification.requestedSettingsSection {
+            router.openSettingsSection(section)
         }
     }
 

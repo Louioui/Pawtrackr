@@ -34,16 +34,15 @@ enum LoyaltyCheckoutProcessor {
     ) -> UUID? {
         let client = pet.owner
 
-        let base = LoyaltyEngine.calculatePoints(for: total, config: config)
         let tier = LoyaltyEngine.tier(
             forLifetimeEarned: LoyaltyEngine.lifetimeEarnedPoints(for: client, excluding: visit.uuid)
         )
-        let bonus = LoyaltyEngine.rebookBonus(
+        let isRebook = LoyaltyEngine.isRebook(
             previousVisitEndedAt: LoyaltyEngine.previousCompletedVisitDate(for: client, excluding: visit.uuid),
-            checkoutAt: now,
-            basePoints: base
+            checkoutAt: now
         )
-        let points = LoyaltyEngine.earnedPoints(base: base, tier: tier) + bonus
+        // The same function the loyalty preview card shows, so the two can't drift.
+        let points = LoyaltyEngine.preview(ticket: total, config: config, tier: tier, rebook: isRebook).total
 
         let previousPoints = visit.loyaltyPointsChange
         guard points != previousPoints else { return nil }

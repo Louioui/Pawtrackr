@@ -58,6 +58,23 @@ final class NavigationRouter {
     /// The surface currently hosting user-driven navigation.
     var activeNavigationItem: NavigationItem = .dashboard
 
+    /// macOS only: a Settings section a deep link asked for. The Mac Settings
+    /// screen picks sections with its own selection, not `settingsPath`, so
+    /// it selects this section when it appears and then clears it.
+    var requestedSettingsSection: SettingSection?
+
+    // MARK: - Settings deep links
+
+    /// Opens one Settings section instead of the Settings list. Call it after
+    /// switching to Settings: that switch resets `settingsPath`.
+    func openSettingsSection(_ section: SettingSection) {
+        #if os(macOS)
+        requestedSettingsSection = section
+        #else
+        settingsPath = NavigationPath([section])
+        #endif
+    }
+
     // MARK: - Navigation Actions
 
     func navigateToClient(_ client: Client) {

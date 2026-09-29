@@ -68,6 +68,31 @@ enum SampleData {
         return max(0, total - (try sampleClientCount(in: context)))
     }
 
+    /// Visits that aren't sample data: not a sample visit UUID, not on a
+    /// sample pet, and not on any pet of a sample client (removing the
+    /// samples removes those too). Counts, never names.
+    static func realVisitCount(in context: ModelContext) throws -> Int {
+        let total = try context.fetchCount(FetchDescriptor<Visit>())
+        guard total > 0 else { return 0 }
+        var sampleVisits = Set<PersistentIdentifier>()
+        for client in try sampleClients(in: context) {
+            for pet in client.pets ?? [] {
+                for visit in pet.visits ?? [] { sampleVisits.insert(visit.persistentModelID) }
+            }
+        }
+        for id in petIDList {
+            for pet in try context.fetch(FetchDescriptor<Pet>(predicate: #Predicate { $0.uuid == id })) {
+                for visit in pet.visits ?? [] { sampleVisits.insert(visit.persistentModelID) }
+            }
+        }
+        for id in visitIDList {
+            for visit in try context.fetch(FetchDescriptor<Visit>(predicate: #Predicate { $0.uuid == id })) {
+                sampleVisits.insert(visit.persistentModelID)
+            }
+        }
+        return max(0, total - sampleVisits.count)
+    }
+
     /// The sample client the guided tour opens. It prefers one whose pet is
     /// checked in, so the checkout steps have a sample visit to show. Only
     /// sample rows are ever returned: the tour must never open a real client.

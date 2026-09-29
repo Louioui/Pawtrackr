@@ -1,6 +1,21 @@
 import Foundation
 import SwiftData
 
+/// One checkout's points, as `LoyaltyEngine.preview` works them out.
+struct LoyaltyEarnPreview: Equatable, Sendable {
+    /// From the earning rule alone: points per currency unit of the total,
+    /// or the flat points per visit.
+    let basePoints: Int
+    let tier: LoyaltyTier
+    /// `basePoints` after the tier's multiplier (rounded down).
+    let tierPoints: Int
+    /// `LoyaltyEngine.rebookBonusPoints`, or 0.
+    let rebookBonus: Int
+
+    /// What the visit awards.
+    var total: Int { tierPoints + rebookBonus }
+}
+
 /// Domain engine for loyalty point calculations.
 ///
 /// All functions are pure and integer-deterministic so the two earn paths
@@ -57,16 +72,53 @@ struct LoyaltyEngine {
         return max(0, next.threshold - lifetimeEarned)
     }
 
-    /// Rebook bonus: awarded only when the visit actually earned base points
-    /// and the client's previous completed visit falls inside the window.
+    /// Whether a checkout at `checkoutAt` counts as a rebook: the client's
+    /// previous completed visit ended at most `rebookWindowDays` earlier.
     /// A "previous visit" timestamped after `checkoutAt` (device clock skew)
-    /// earns nothing rather than minting a spurious bonus.
-    static func rebookBonus(previousVisitEndedAt: Date?, checkoutAt: Date, basePoints: Int) -> Int {
-        guard basePoints > 0, let previousVisitEndedAt else { return 0 }
+    /// doesn't count.
+    static func isRebook(previousVisitEndedAt: Date?, checkoutAt: Date) -> Bool {
+        guard let previousVisitEndedAt else { return false }
         let elapsed = checkoutAt.timeIntervalSince(previousVisitEndedAt)
         let window = TimeInterval(rebookWindowDays) * 86_400
-        guard elapsed >= 0, elapsed <= window else { return 0 }
+        return elapsed >= 0 && elapsed <= window
+    }
+
+    /// Rebook bonus: awarded only when the visit actually earned base points
+    /// and the client's previous completed visit falls inside the window.
+    static func rebookBonus(previousVisitEndedAt: Date?, checkoutAt: Date, basePoints: Int) -> Int {
+        guard isRebook(previousVisitEndedAt: previousVisitEndedAt, checkoutAt: checkoutAt) else { return 0 }
+        return rebookBonus(basePoints: basePoints, isRebook: true)
+    }
+
+    private static func rebookBonus(basePoints: Int, isRebook: Bool) -> Int {
+        guard basePoints > 0, isRebook else { return 0 }
         return rebookBonusPoints
+    }
+
+    /// The points one checkout earns, step by step. This is THE earn rule:
+    /// `LoyaltyCheckoutProcessor.applyEarnings` awards `preview(...).total`,
+    /// and the loyalty preview card shows the same value, so what a groomer
+    /// tries out is what a client gets.
+    ///
+    /// - Parameters:
+    ///   - ticket: what the client pays at checkout, tip included (checkout
+    ///     passes services plus tip).
+    ///   - tier: the client's tier before this visit.
+    ///   - rebook: the client's previous completed visit ended within
+    ///     `rebookWindowDays` (`isRebook`).
+    static func preview(
+        ticket: Decimal,
+        config: LoyaltyConfigSnapshot,
+        tier: LoyaltyTier,
+        rebook: Bool
+    ) -> LoyaltyEarnPreview {
+        let base = calculatePoints(for: ticket, config: config)
+        return LoyaltyEarnPreview(
+            basePoints: base,
+            tier: tier,
+            tierPoints: earnedPoints(base: base, tier: tier),
+            rebookBonus: rebookBonus(basePoints: base, isRebook: rebook)
+        )
     }
 
     // MARK: - Client derivations

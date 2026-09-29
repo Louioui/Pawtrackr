@@ -10,7 +10,7 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
     func testRecentHistoryStepKeepsGuideReadableOnIPhone() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 60)
+        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 70)
         assertActiveWalkthroughAnchor("cdHistory")
 
         let bubble = app.otherElements["walkthrough.bubble"]

@@ -52,20 +52,52 @@ final class DashboardViewModel {
 
     /// Where a Getting Started row jumps when tapped. The view owns the actual
     /// navigation (sheets / tab switches); the view model only declares intent so
-    /// it stays free of SwiftUI view state.
-    enum ChecklistAction: Sendable {
-        case branding      // Business profile lives in Settings
-        case services      // Service prices live in Settings
-        case addClient     // Present the New Client sheet
-        case firstVisit    // Present Quick Check-In
-        case iCloudBackup  // iCloud and local backup tools live in Settings
+    /// it stays free of SwiftUI view state. One row per action, so the action
+    /// is also the row's identity.
+    ///
+    /// There is no service-prices row: no screen in the app sets a service's
+    /// price (only sample data does), so a real salon could never finish it.
+    enum ChecklistAction: String, Hashable, Sendable, CaseIterable {
+        case branding      // Settings > Business
+        case addClient     // The New Client sheet
+        case firstVisit    // The client list, where a check-in starts
+        case iCloudBackup  // Settings > iCloud
+
+        /// The Settings section the row opens, when it opens one.
+        var settingsSection: SettingSection? {
+            switch self {
+            case .branding: return .business
+            case .iCloudBackup: return .icloud
+            case .addClient, .firstVisit: return nil
+            }
+        }
     }
 
-    struct ChecklistItem: Identifiable, Sendable {
-        let id = UUID()
+    struct ChecklistItem: Identifiable, Equatable, Sendable {
+        var id: ChecklistAction { action }
         let title: String
         let isCompleted: Bool
         let action: ChecklistAction
+    }
+
+    /// What the store says about setup, read off the main actor. Sample
+    /// clients (fixed UUIDs, `SampleData`) and their visits never count as
+    /// the salon's own.
+    struct ChecklistFacts: Equatable, Sendable {
+        var hasBrandingDetails = false
+        var realClientCount = 0
+        var realVisitCount = 0
+        var sampleClientCount = 0
+
+        static func load(in context: ModelContext) throws -> ChecklistFacts {
+            let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
+            return ChecklistFacts(
+                hasBrandingDetails: configs.contains(where: \.hasBrandingDetails),
+                realClientCount: try SampleData.realClientCount(in: context),
+                realVisitCount: try SampleData.realVisitCount(in: context),
+                sampleClientCount: try SampleData.sampleClientCount(in: context)
+            )
+        }
     }
 
     // MARK: - Observable state
@@ -75,7 +107,21 @@ final class DashboardViewModel {
     var recentClients: [Client] = []
     var overduePets: [Pet] = []
     var revenueSeries: [RevenuePoint] = []
-    var checklist: [ChecklistItem] = []
+    /// nil until the first checklist read finishes.
+    var checklistFacts: ChecklistFacts?
+    /// The Getting Started rows. Empty until the store has been read. The
+    /// backup row follows `backupStatus` live, so it updates as iCloud
+    /// confirms uploads without waiting for a refresh.
+    var checklist: [ChecklistItem] {
+        guard let checklistFacts else { return [] }
+        return Self.checklistItems(facts: checklistFacts, backupStatus: backupStatus())
+    }
+    /// Every row is done. The dashboard then retires the card for good (see
+    /// `DashboardView`), because the backup row can go back to "not yet"
+    /// after any edit until iCloud confirms it.
+    var isChecklistComplete: Bool {
+        Self.isComplete(checklist)
+    }
     /// Sample clients (fixed UUIDs, `SampleData`) are in the store. The
     /// checklist offers to remove them only while this is true.
     var hasSampleData = false
@@ -92,6 +138,9 @@ final class DashboardViewModel {
 
     private var dataStore: DataStoreService
     private var eventBus: GlobalEventBus
+    /// This device's iCloud backup, as the rest of the app reports it.
+    /// Injected so tests don't depend on the host's iCloud state.
+    private let backupStatus: @MainActor () -> BackupStatus
     private var observers: [AnyCancellable] = []
     private var notificationObservers: [NSObjectProtocol] = []
     private var observationTask: Task<Void, Never>?
@@ -101,10 +150,16 @@ final class DashboardViewModel {
     // active, otherwise a completed visit could momentarily reappear as active.
     private var completedVisitIDs: Set<PersistentIdentifier> = []
 
-    init(dataStore: DataStoreService, eventBus: GlobalEventBus, repository: DashboardRepositoryProtocol? = nil) {
+    init(
+        dataStore: DataStoreService,
+        eventBus: GlobalEventBus,
+        repository: DashboardRepositoryProtocol? = nil,
+        backupStatus: @escaping @MainActor () -> BackupStatus = { CloudKitMonitor.shared.backupStatus }
+    ) {
         dashboardLog.info("DashboardViewModel: Initialized")
         self.dataStore = dataStore
         self.eventBus = eventBus
+        self.backupStatus = backupStatus
         self.repository = repository ?? DashboardRepository(modelContext: dataStore.container.mainContext)
         self.predictiveActor = PredictiveSchedulingActor(modelContainer: dataStore.container)
 
@@ -194,46 +249,65 @@ final class DashboardViewModel {
         dashboardLog.info("DashboardViewModel: Refresh complete.")
     }
     private func fetchChecklistStatus() async {
-        // Since we are on @MainActor, we use a background task for SwiftData fetches
-        // that aren't yet in the repository.
+        // A fresh background context: the counts walk sample relationships,
+        // which shouldn't touch the main context's objects.
         let container = dataStore.container
         do {
-            let (isBrandingComplete, hasPrices, hasClient, hasVisit, hasBackupSignal, hasSamples) = try await Task.detached {
-                let context = ModelContext(container)
-
-                let configs = try context.fetch(FetchDescriptor<BusinessConfig>())
-                let branding = configs.first?.isSetupComplete ?? false
-
-                let clientCount = try context.fetchCount(FetchDescriptor<Client>())
-                let visitCount = try context.fetchCount(FetchDescriptor<Visit>())
-                let sampleCount = try SampleData.sampleClientCount(in: context)
-                let hasPrices = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasConfiguredPrices)
-                let uploadRecord = CloudKitMonitor.persistedOrMigratedSyncHealth()
-
-                return (branding, hasPrices, clientCount > 0, visitCount > 0, DashboardViewModel.hasBackupProtection(uploadRecord: uploadRecord), sampleCount > 0)
+            let facts = try await Task.detached {
+                try ChecklistFacts.load(in: ModelContext(container))
             }.value
+            if checklistFacts != facts {
+                checklistFacts = facts
+            }
+            let hasSamples = facts.sampleClientCount > 0
             if hasSampleData != hasSamples {
                 hasSampleData = hasSamples
             }
-
-            checklist = [
-                ChecklistItem(title: AppLocalization.localized("checklist.branding", value: "Add Business Branding"), isCompleted: isBrandingComplete, action: .branding),
-                ChecklistItem(title: AppLocalization.localized("checklist.services", value: "Review Services & Prices"), isCompleted: hasPrices, action: .services),
-                ChecklistItem(title: AppLocalization.localized("checklist.client", value: "Add Your First Client"), isCompleted: hasClient, action: .addClient),
-                ChecklistItem(title: AppLocalization.localized("checklist.visit", value: "Start Your First Visit"), isCompleted: hasVisit, action: .firstVisit),
-                ChecklistItem(title: AppLocalization.localized("checklist.backup", value: "Confirm Backup Protection"), isCompleted: hasBackupSignal, action: .iCloudBackup)
-            ]
         } catch {
             dashboardLog.error("Checklist fetch failed: \(error)")
         }
     }
 
-    /// "Confirm Backup Protection" is complete only when iCloud has confirmed
-    /// an upload. A local package this device made (for example the disabled
-    /// `SecureStoreSnapshotExporter`) doesn't count: it can't be restored and
-    /// is lost with the device, so it must never tick this item.
-    nonisolated static func hasBackupProtection(uploadRecord: SyncHealthReducer.State) -> Bool {
-        uploadRecord.lastSuccessfulExportEndedAt != nil
+    /// The Getting Started rows for what the store holds and the backup
+    /// status.
+    static func checklistItems(facts: ChecklistFacts, backupStatus: BackupStatus) -> [ChecklistItem] {
+        [
+            ChecklistItem(
+                title: AppLocalization.localized("checklist.branding", value: "Add Business Branding"),
+                isCompleted: facts.hasBrandingDetails,
+                action: .branding
+            ),
+            ChecklistItem(
+                title: AppLocalization.localized("checklist.client", value: "Add Your First Client"),
+                isCompleted: facts.realClientCount > 0,
+                action: .addClient
+            ),
+            ChecklistItem(
+                title: AppLocalization.localized("checklist.visit", value: "Start Your First Visit"),
+                isCompleted: facts.realVisitCount > 0,
+                action: .firstVisit
+            ),
+            ChecklistItem(
+                title: AppLocalization.localized("checklist.backup", value: "Confirm Backup Protection"),
+                isCompleted: hasBackupProtection(backupStatus),
+                action: .iCloudBackup
+            )
+        ]
+    }
+
+    /// "Confirm Backup Protection" is complete only while iCloud has
+    /// confirmed this device's changes (`BackupStatus.backedUp`), the same
+    /// "Backed up" the rest of the app shows. Uploading, failing, iCloud off
+    /// and not-yet-checked don't count, and neither does a local package
+    /// this device made (for example the disabled `SecureStoreSnapshotExporter`):
+    /// it can't be restored and is lost with the device.
+    nonisolated static func hasBackupProtection(_ status: BackupStatus) -> Bool {
+        status.isBackedUp
+    }
+
+    /// Whether the rows are loaded and all done.
+    nonisolated static func isComplete(_ items: [ChecklistItem]) -> Bool {
+        !items.isEmpty && items.allSatisfy(\.isCompleted)
     }
 
     /// Removes only the sample clients and what belongs to them

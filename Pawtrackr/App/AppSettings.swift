@@ -24,9 +24,6 @@ enum AppSettingsKeys {
     static let autoLockAfterInactivity = "autoLockAfterInactivity"
     static let businessName = "businessName"
     static let currencySymbol = "currencySymbol"
-    static let hasConfiguredPrices = "hasConfiguredPrices"
-    static let hasAddedFirstClient = "hasAddedFirstClient"
-    static let hasCompletedFirstVisit = "hasCompletedFirstVisit"
     static let isChecklistDismissed = "isChecklistDismissed"
     static let hasSeenAppTour = "hasSeenAppTour"
     static let preferredColorScheme = "preferredColorScheme"
@@ -166,9 +163,6 @@ final class AppSettings {
         static let idleLockMinutes = 5
         static let businessName = "My Pet Grooming"
         static let currencySymbol = "$"
-        static let hasConfiguredPrices = false
-        static let hasAddedFirstClient = false
-        static let hasCompletedFirstVisit = false
         static let isChecklistDismissed = false
         static let preferredColorScheme = AppColorScheme.system.rawValue
         static let hapticsEnabled = true
@@ -181,18 +175,9 @@ final class AppSettings {
 
     // MARK: - Properties
 
-    var hasConfiguredPrices: Bool {
-        didSet { UserDefaults.standard.set(hasConfiguredPrices, forKey: AppSettingsKeys.hasConfiguredPrices) }
-    }
-    
-    var hasAddedFirstClient: Bool {
-        didSet { UserDefaults.standard.set(hasAddedFirstClient, forKey: AppSettingsKeys.hasAddedFirstClient) }
-    }
-    
-    var hasCompletedFirstVisit: Bool {
-        didSet { UserDefaults.standard.set(hasCompletedFirstVisit, forKey: AppSettingsKeys.hasCompletedFirstVisit) }
-    }
-    
+    /// The dashboard's Getting Started card was closed, or every row was
+    /// done. Its rows themselves are read from the store
+    /// (`DashboardViewModel.ChecklistFacts`), never from flags.
     var isChecklistDismissed: Bool {
         didSet { UserDefaults.standard.set(isChecklistDismissed, forKey: AppSettingsKeys.isChecklistDismissed) }
     }
@@ -389,9 +374,6 @@ final class AppSettings {
             AppSettingsKeys.isBiometricLockEnabled: AppRuntime.isUITesting ? false : Defaults.biometricEnabled,
             AppSettingsKeys.autoLockOnBackground: AppRuntime.isUITesting ? false : Defaults.autoLockBackground,
             AppSettingsKeys.autoLockAfterInactivity: AppRuntime.isUITesting ? false : Defaults.autoLockInactivity,
-            AppSettingsKeys.hasConfiguredPrices: Defaults.hasConfiguredPrices,
-            AppSettingsKeys.hasAddedFirstClient: Defaults.hasAddedFirstClient,
-            AppSettingsKeys.hasCompletedFirstVisit: Defaults.hasCompletedFirstVisit,
             AppSettingsKeys.isChecklistDismissed: Defaults.isChecklistDismissed,
             AppSettingsKeys.hasSeenAppTour: true,
             AppSettingsKeys.preferredColorScheme: Defaults.preferredColorScheme,
@@ -421,9 +403,6 @@ final class AppSettings {
         self.autoLockAfterInactivity = UserDefaults.standard.bool(forKey: AppSettingsKeys.autoLockAfterInactivity)
         self.lastPINChangeDate = UserDefaults.standard.object(forKey: AppSettingsKeys.lastPINChangeDate) as? Date
 
-        self.hasConfiguredPrices = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasConfiguredPrices)
-        self.hasAddedFirstClient = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasAddedFirstClient)
-        self.hasCompletedFirstVisit = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasCompletedFirstVisit)
         self.isChecklistDismissed = UserDefaults.standard.bool(forKey: AppSettingsKeys.isChecklistDismissed)
         self.hasSeenAppTour = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasSeenAppTour)
 
@@ -567,11 +546,9 @@ final class AppSettings {
     /// Re-arms the dashboard "getting started" checklist for a clean business
     /// after a Start Fresh wipe. Intentionally leaves `hasSeenAppTour` untouched
     /// (the user has already been guided once) and does NOT alter business config,
-    /// currency, PIN, or the service catalog — only the first-run progress flags.
+    /// currency, PIN, or the service catalog. The checklist's rows come from
+    /// the store, so showing the card again is all there is to reset.
     func resetForFreshStart() {
-        hasConfiguredPrices = false
-        hasAddedFirstClient = false
-        hasCompletedFirstVisit = false
         isChecklistDismissed = false
     }
 

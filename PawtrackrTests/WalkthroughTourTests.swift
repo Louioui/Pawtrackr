@@ -559,6 +559,7 @@ final class WalkthroughTourTests: XCTestCase {
         .dashNeedsAttention: (.rootContent, "Pawtrackr/Features/Dashboard/DashboardView.swift"),
         .dashRecentClients: (.rootContent, "Pawtrackr/Features/Dashboard/DashboardView.swift"),
         .dashRevenue: (.rootContent, "Pawtrackr/Features/Dashboard/DashboardView.swift"),
+        .setupChecklist: (.rootContent, "Pawtrackr/Features/Dashboard/DashboardView.swift"),
         .clientFilters: (.rootContent, "Pawtrackr/Features/Clients/ClientsView.swift"),
         .clientSort: (.rootContent, "Pawtrackr/Features/Clients/ClientsView.swift"),
         .insKpis: (.rootContent, "Pawtrackr/Features/Insights/InsightsView.swift"),
@@ -590,7 +591,8 @@ final class WalkthroughTourTests: XCTestCase {
         .setData: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setICloud: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setAbout: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
-        .setStartFresh: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift")
+        .setStartFresh: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
+        .loyaltySimulator: (.detail, "Pawtrackr/Features/Loyalty/LoyaltyManagementView.swift")
     ]
 
     private func source(_ relativePath: String) throws -> String {

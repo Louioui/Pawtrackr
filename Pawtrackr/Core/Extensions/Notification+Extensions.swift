@@ -71,12 +71,19 @@ extension Notification {
 }
 
 // Top-level navigation selection payload
-enum NavigationSelectionKey: String { case item, resetPath }
+enum NavigationSelectionKey: String { case item, resetPath, settingsSection }
 
 extension Notification {
     var requestedNavigationItem: NavigationItem? {
         guard let rawValue = userInfo?[NavigationSelectionKey.item.rawValue] as? String else { return nil }
         return NavigationItem(rawValue: rawValue)
+    }
+
+    /// A Settings section to open after switching to Settings, e.g. from a
+    /// Getting Started row.
+    var requestedSettingsSection: SettingSection? {
+        guard let rawValue = userInfo?[NavigationSelectionKey.settingsSection.rawValue] as? String else { return nil }
+        return SettingSection(rawValue: rawValue)
     }
 
     var shouldResetNavigationPath: Bool {

@@ -155,7 +155,11 @@ final class OnboardingSampleDataTests: XCTestCase {
         XCTAssertEqual(try SampleData.sampleClientCount(in: fresh), 0, file: file, line: line)
         XCTAssertEqual(try fresh.fetchCount(FetchDescriptor<Client>()), expectedClients, file: file, line: line)
         XCTAssertEqual(try fresh.fetchCount(FetchDescriptor<Visit>()), 0, file: file, line: line)
-        XCTAssertFalse(settings.hasConfiguredPrices, "No sample prices, so the prices step isn't ticked.", file: file, line: line)
+        XCTAssertTrue(
+            try fresh.fetch(FetchDescriptor<Service>()).allSatisfy { $0.basePrice == nil },
+            "No sample clients, so no example prices either.",
+            file: file, line: line
+        )
     }
 
     private func makeViewModel(settings: AppSettings) -> OnboardingViewModel {
@@ -173,9 +177,6 @@ final class OnboardingSampleDataTests: XCTestCase {
             AppSettingsKeys.isBiometricLockEnabled,
             AppSettingsKeys.businessName,
             AppSettingsKeys.currencySymbol,
-            AppSettingsKeys.hasConfiguredPrices,
-            AppSettingsKeys.hasAddedFirstClient,
-            AppSettingsKeys.hasCompletedFirstVisit,
             AppSettingsKeys.isChecklistDismissed,
             AppSettingsKeys.hasSeenAppTour,
             AppSettingsKeys.onboardingRole

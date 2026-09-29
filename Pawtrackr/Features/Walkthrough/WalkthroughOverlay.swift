@@ -483,7 +483,8 @@ enum WalkthroughOverlayScope {
         .cdOwner, .cdEmergency, .emergencyContactBadges, .cdPets, .petGenderDots,
         .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory,
         .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
-        .setBusiness, .setSecurity, .setData, .setICloud, .setAbout, .setStartFresh
+        .setBusiness, .setSecurity, .setData, .setICloud, .setAbout, .setStartFresh,
+        .loyaltySimulator
     ]
 
     func handles(_ step: WalkthroughStep) -> Bool {

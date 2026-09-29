@@ -276,6 +276,8 @@ enum WalkthroughStepID {
     static let iCloud = "set.icloud"
     static let security = "set.security"
     static let business = "set.business"
+    static let setupChecklist = "dash.checklist"
+    static let loyalty = "set.loyalty"
 }
 
 /// What the store and this device hold when a tour starts. It decides which
@@ -851,6 +853,18 @@ extension WalkthroughController {
                 icon: "square.grid.2x2.fill", fallback: .tabBarItem(index: 0, count: 4)
             ),
             WalkthroughStep(
+                id: WalkthroughStepID.setupChecklist, anchor: .setupChecklist, surface: .dashboard,
+                title: AppLocalization.localized("tour.dash.checklist.title", value: "Getting Started"),
+                directive: AppLocalization.localized("tour.dash.checklist.directive", value: "Finish setting up your salon from this list."),
+                purpose: AppLocalization.localized("tour.dash.checklist.purpose", value: "Each row opens the screen where you finish it. Rows tick themselves from your data, and sample clients don’t count as yours."),
+                lesson: .appMap,
+                coachTip: AppLocalization.localized("tour.dash.checklist.tip", value: "The backup row ticks only when iCloud confirms an upload. The list goes away once every row is done."),
+                icon: "checklist",
+                isOwnerOnly: true,
+                // Hidden once every row is done or the owner closed it.
+                skipsWhenTargetMissing: true
+            ),
+            WalkthroughStep(
                 id: "nav.clients", anchor: .clients, surface: .clients,
                 title: AppLocalization.localized("tour.nav.clients.title", value: "Clients & Pets"),
                 directive: AppLocalization.localized("tour.nav.clients.directive", value: "This is your record book."),
@@ -1231,6 +1245,17 @@ extension WalkthroughController {
                     ? AppLocalization.localized("tour.set.security.tip_pin_set", value: "Your PIN is set on this device. Change it here anytime.")
                     : AppLocalization.localized("tour.set.security.tip", value: "Solo users can skip the PIN during setup and enable it later here."),
                 icon: "lock.shield.fill",
+                isOwnerOnly: true
+            ),
+
+            WalkthroughStep(
+                id: WalkthroughStepID.loyalty, anchor: .loyaltySimulator, surface: .settings,
+                title: AppLocalization.localized("tour.set.loyalty.title", value: "Loyalty points"),
+                directive: AppLocalization.localized("tour.set.loyalty.directive", value: "Try your loyalty rules before a client earns anything."),
+                purpose: AppLocalization.localized("tour.set.loyalty.purpose", value: "Move the checkout total, pick a tier, and see the points a visit earns. Checkout awards points with this same math, and the rules sit right above."),
+                lesson: .settingsAndSafety,
+                coachTip: AppLocalization.localized("tour.set.loyalty.tip", value: "Clients redeem from Loyalty & Rewards on their profile. You give the reward yourself, for example as a discount."),
+                icon: "giftcard.fill",
                 isOwnerOnly: true
             ),
 

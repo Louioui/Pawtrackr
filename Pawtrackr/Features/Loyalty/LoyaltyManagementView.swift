@@ -33,6 +33,11 @@ struct LoyaltyManagementView: View {
             earningRulesCard
                 .disabled(!canEdit)
 
+            // Read-only preview of the rules above, with the same math
+            // checkout uses. It stays usable without Pro: it changes nothing.
+            LoyaltySimulatorCard()
+                .walkthroughTarget(.loyaltySimulator)
+
             rewardsCatalogCard
                 .disabled(!canEdit || !(config?.isRewardsCatalogEnabled ?? true))
 

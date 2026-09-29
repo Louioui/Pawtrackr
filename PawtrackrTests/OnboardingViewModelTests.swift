@@ -230,9 +230,7 @@ final class OnboardingViewModelTests: XCTestCase {
         _ = await task?.result
 
         XCTAssertNil(viewModel.saveError)
-        XCTAssertTrue(settings.hasConfiguredPrices)
-        XCTAssertTrue(settings.hasAddedFirstClient)
-        XCTAssertTrue(settings.hasCompletedFirstVisit)
+        XCTAssertFalse(settings.isChecklistDismissed, "Setup shows the Getting Started card.")
 
         // After fix #2 the demo seeder runs on a background context, so the
         // newly inserted records live on the shared store but may not be in the
@@ -242,6 +240,10 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertGreaterThan(try bgContext.fetchCount(FetchDescriptor<Client>()), 0)
         XCTAssertGreaterThan(try bgContext.fetchCount(FetchDescriptor<Visit>()), 0)
         XCTAssertGreaterThan(try bgContext.fetchCount(FetchDescriptor<Service>()), 0)
+        XCTAssertTrue(
+            try bgContext.fetch(FetchDescriptor<Service>()).contains { $0.basePrice != nil },
+            "Loading the samples gives unpriced services an example price."
+        )
     }
 
     // MARK: - Navigation
@@ -939,9 +941,6 @@ final class OnboardingViewModelTests: XCTestCase {
             AppSettingsKeys.autoLockAfterInactivity,
             AppSettingsKeys.businessName,
             AppSettingsKeys.currencySymbol,
-            AppSettingsKeys.hasConfiguredPrices,
-            AppSettingsKeys.hasAddedFirstClient,
-            AppSettingsKeys.hasCompletedFirstVisit,
             AppSettingsKeys.isChecklistDismissed,
             AppSettingsKeys.hasSeenAppTour,
             AppSettingsKeys.appLanguageOverride

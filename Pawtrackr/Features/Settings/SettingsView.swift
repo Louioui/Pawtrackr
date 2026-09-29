@@ -97,6 +97,8 @@ enum SettingSection: String, CaseIterable, Identifiable {
     static func walkthroughSection(for anchor: WalkthroughAnchorID?) -> SettingSection? {
         guard let anchor else { return nil }
         if anchor == .setStartFresh { return .about }
+        // The loyalty preview card inside the section, not the whole section.
+        if anchor == .loyaltySimulator { return .loyalty }
         return allCases.first { $0.walkthroughAnchorID == anchor }
     }
 }
@@ -158,6 +160,13 @@ struct SettingsView: View {
         }
         .onChange(of: walkthrough?.currentStep?.anchor) { _, anchor in
             synchronizeWalkthroughSection(anchor)
+        }
+        // A deep link (e.g. a Getting Started row) asked for one section.
+        // `initial` catches a request made before this screen appeared.
+        .onChange(of: router.requestedSettingsSection, initial: true) { _, section in
+            guard let section else { return }
+            if selection != section { selection = section }
+            router.requestedSettingsSection = nil
         }
         #else
         // No inner NavigationStack — SettingsView already lives inside ContentView's
@@ -310,7 +319,8 @@ private struct SettingsDetailView: View {
         .setData,
         .setICloud,
         .setAbout,
-        .setStartFresh
+        .setStartFresh,
+        .loyaltySimulator
     ]
     
     var body: some View {

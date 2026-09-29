@@ -33,3 +33,14 @@ final class BusinessConfig {
         BusinessConfig(name: "Pawtrackr Grooming")
     }
 }
+
+extension BusinessConfig {
+    /// A logo, or a phone or email clients can reach the business at. What
+    /// the Getting Started branding row checks.
+    var hasBrandingDetails: Bool {
+        if let logoData, !logoData.isEmpty { return true }
+        return [phone, email].contains { value in
+            !(value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+}

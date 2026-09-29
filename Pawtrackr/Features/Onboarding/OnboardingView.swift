@@ -274,6 +274,7 @@ struct OnboardingView: View {
                             .hairlineBorder(role == viewModel.selectedRole ? DS.ColorToken.primary : DS.ColorToken.border, cornerRadius: 14)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityAddTraits(role == viewModel.selectedRole ? .isSelected : [])
                         .accessibilityIdentifier("onboarding.role.\(role.rawValue)")
                     }
                 }
@@ -803,7 +804,7 @@ struct OnboardingView: View {
                     Text(NSLocalizedString("onboarding.loyalty.title", value: "Rewards without extra math", comment: ""))
                         .font(.title2.bold())
                         .multilineTextAlignment(.center)
-                    Text(NSLocalizedString("onboarding.loyalty.message", value: "Move the ticket total to see the points a new client earns with the default rules. You can change the rules later in Settings.", comment: ""))
+                    Text(NSLocalizedString("onboarding.loyalty.message", value: "Move the checkout total, pick a tier, and see the points a visit earns. Checkout uses this same math.", comment: ""))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -811,8 +812,9 @@ struct OnboardingView: View {
                 }
                 .padding(.horizontal, DS.Spacing.xxl)
 
-                LoyaltySimulatorCard()
-                    .walkthroughTarget(.loyaltySimulator)
+                // The currency picked on the Regional step isn't saved until
+                // Finish, so the card is told which symbol to show.
+                LoyaltySimulatorCard(currencySymbol: viewModel.currencySymbol)
                     .padding(.horizontal, DS.Spacing.xxl)
             }
             .padding(.top, DS.Spacing.xl)

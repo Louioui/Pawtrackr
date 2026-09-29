@@ -137,7 +137,7 @@ struct DashboardView: View {
 
     /// Dashboard sections the deep-dive tour can scroll to and spotlight.
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> =
-        [.dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients, .dashRevenue]
+        [.setupChecklist, .dashKpis, .dashQuickActions, .dashNeedsAttention, .dashRecentClients, .dashRevenue]
 
     @ViewBuilder
     private func content(_ vm: DashboardViewModel) -> some View {
@@ -146,7 +146,7 @@ struct DashboardView: View {
                 LazyVStack(spacing: 24) {
                     smartSummary(vm)
 
-                    if !appSettings.isChecklistDismissed && !vm.checklist.allSatisfy({ $0.isCompleted }) {
+                    if !appSettings.isChecklistDismissed && !vm.checklist.isEmpty && !vm.isChecklistComplete {
                         checklistSection(vm)
                             .walkthroughTarget(.setupChecklist)
                     }
@@ -186,6 +186,14 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity)
             }
             .accessibilityIdentifier("dashboard.scroll")
+            // Once every row has been done, the card is retired like a tap
+            // on its X. Otherwise the next edit would bring it back until
+            // iCloud confirms that change. Replay and Start Fresh re-arm it.
+            .onChange(of: vm.isChecklistComplete, initial: true) { _, isComplete in
+                if isComplete && !appSettings.isChecklistDismissed {
+                    appSettings.isChecklistDismissed = true
+                }
+            }
             .refreshable {
                 async let local: Void = vm.refresh()
                 async let cloud: Void = CloudKitMonitor.shared.forceSync()
@@ -381,6 +389,7 @@ struct DashboardView: View {
                         .accessibilityHint(item.isCompleted
                             ? AppLocalization.localized("checklist.hint.review", value: "Opens this section to review")
                             : AppLocalization.localized("checklist.hint.complete", value: "Opens the screen to finish this step"))
+                        .accessibilityIdentifier("dashboard.checklist.\(item.action.rawValue)")
                     }
                 }
 
@@ -438,20 +447,28 @@ struct DashboardView: View {
     /// Deep-links a Getting Started row to the screen where the step is finished.
     private func handleChecklistTap(_ action: DashboardViewModel.ChecklistAction) {
         HapticManager.impact(.light)
+        if let section = action.settingsSection {
+            // The section itself (Business, iCloud), not the Settings list.
+            openSettings(section)
+            return
+        }
         switch action {
-        case .branding:
-            // Business branding lives under Settings.
-            selectSurface(.settings, resetPath: true)
-        case .services:
-            selectSurface(.settings, resetPath: true)
         case .addClient:
             showNewClient = true
         case .firstVisit:
             // Starting a visit happens from a client/pet in the Clients tab.
             selectSurface(.clients, resetPath: true)
-        case .iCloudBackup:
-            selectSurface(.settings, resetPath: true)
+        case .branding, .iCloudBackup:
+            break
         }
+    }
+
+    private func openSettings(_ section: SettingSection) {
+        NotificationCenter.default.post(name: .selectNavigationItem, object: nil, userInfo: [
+            NavigationSelectionKey.item.rawValue: NavigationItem.settings.rawValue,
+            NavigationSelectionKey.resetPath.rawValue: true,
+            NavigationSelectionKey.settingsSection.rawValue: section.rawValue
+        ])
     }
 
     private func reengagementSection(_ vm: DashboardViewModel) -> some View {

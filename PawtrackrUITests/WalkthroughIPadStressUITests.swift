@@ -42,7 +42,13 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         assertActiveWalkthroughAnchor("dashboard", timeout: 15)
         XCTAssertTrue(tapWalkthroughPrimary(timeout: 8), "Walkthrough Next should be tappable.")
 
-        assertActiveWalkthroughAnchor("clients", timeout: 8)
+        // The owner tour's App Map: Dashboard, the Getting Started card, then
+        // Clients. The card's stop is skipped when the card is hidden (every
+        // row done, or closed earlier on this simulator).
+        XCTAssertTrue(waitForAny([
+            { self.app.otherElements["walkthrough.activeAnchor.setupChecklist"].exists },
+            { self.app.otherElements["walkthrough.activeAnchor.clients"].exists }
+        ], timeout: 10), "Next from Dashboard should reach Getting Started or Clients.")
         let back = app.buttons["walkthrough.back"]
         XCTAssertTrue(waitUntilHittable(back, timeout: 8), "Walkthrough Back should be tappable.")
         back.tap()
@@ -84,7 +90,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     func testClientDetailActionTargetsStayHittableAndOpenCheckoutOnIPad() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("cdAddPet", maxTaps: 40)
+        advanceWalkthroughUntilActiveAnchor("cdAddPet", maxTaps: 44)
         assertActiveWalkthroughAnchor("cdAddPet")
         XCTAssertTrue(
             waitUntilHittable(app.buttons["clientDetail.addPet.inline"], timeout: 8),
@@ -119,7 +125,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     func testSettingsWalkthroughDetailTargetsRenderOnIPad() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("setBusiness", maxTaps: 48)
+        advanceWalkthroughUntilActiveAnchor("setBusiness", maxTaps: 20)
         assertActiveWalkthroughAnchor("setBusiness")
         XCTAssertTrue(app.otherElements["walkthrough.bubble"].exists)
     }
@@ -149,7 +155,11 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         XCTAssertTrue(app.otherElements["walkthrough.card"].waitForExistence(timeout: 12))
         let stepCounter = app.staticTexts["walkthrough.stepCounter"]
         XCTAssertTrue(stepCounter.waitForExistence(timeout: 6), "Step counter should appear after replay")
-        XCTAssertTrue(stepCounter.label.hasPrefix("Step 1") || stepCounter.label.hasPrefix("1 /") || stepCounter.label.contains("1/") || stepCounter.label.contains("1 of"), "Step counter should show step 1 after replay")
+        // The counter reads "1 / N" (WalkthroughOverlay).
+        XCTAssertNotNil(
+            stepCounter.label.range(of: #"^1 / \d+$"#, options: .regularExpression),
+            "Step counter should show step 1 after replay, got \(stepCounter.label)"
+        )
     }
 
     private func advanceWalkthroughUntilNewClientOwnerForm(maxTaps: Int = 32) {

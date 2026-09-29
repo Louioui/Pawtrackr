@@ -59,6 +59,8 @@ struct LoyaltyConfigSnapshot: Equatable, Sendable {
 }
 
 enum LoyaltyConfigResolver {
+    /// The rules checkout uses: the oldest `LoyaltyConfig`, or the defaults
+    /// when there is none yet.
     static func snapshot(in context: ModelContext) -> LoyaltyConfigSnapshot {
         var descriptor = FetchDescriptor<LoyaltyConfig>(
             sortBy: [SortDescriptor(\.createdAt)]
@@ -66,6 +68,12 @@ enum LoyaltyConfigResolver {
         descriptor.fetchLimit = 1
         let config = try? context.fetch(descriptor).first
         return LoyaltyConfigSnapshot(config: config)
+    }
+
+    /// The same choice over rows a view already holds (for example from a
+    /// `@Query`), so a view updates live when the rules change.
+    static func snapshot(from configs: [LoyaltyConfig]) -> LoyaltyConfigSnapshot {
+        LoyaltyConfigSnapshot(config: configs.min { $0.createdAt < $1.createdAt })
     }
 }
 

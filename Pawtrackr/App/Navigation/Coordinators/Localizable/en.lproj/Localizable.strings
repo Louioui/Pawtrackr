@@ -899,7 +899,6 @@
 
 // Bilingual enforcement: keys used by Swift but previously missing from this locale.
 "checklist.branding" = "Add Business Branding";
-"checklist.services" = "Review Services & Prices";
 "checklist.client" = "Add Your First Client";
 "checklist.backup" = "Confirm Backup Protection";
 "checklist.hint.complete" = "Opens the screen to finish this step";
@@ -915,7 +914,7 @@
 "onboarding.subtitle.loyalty" = "See how points build automatically after each completed visit.";
 "onboarding.role.note" = "This only changes the guided tour. You can still use every Pawtrackr feature.";
 "onboarding.loyalty.title" = "Rewards without extra math";
-"onboarding.loyalty.message" = "Move the ticket total to see the points a new client earns with the default rules. You can change the rules later in Settings.";
+"onboarding.loyalty.message" = "Move the checkout total, pick a tier, and see the points a visit earns. Checkout uses this same math.";
 
 "tour.clients.filters.title" = "Client Filters";
 "tour.clients.filters.directive" = "Switch between All, Active, Needs Attention, and Missing Info.";
@@ -1463,10 +1462,6 @@
 "onboarding.role.front_desk.title" = "Front Desk / Groomer";
 "onboarding.role.front_desk.subtitle" = "Check-in, check-out, safety notes, contacts, and active work.";
 "onboarding.loyalty_sim.title" = "Loyalty Points";
-"onboarding.loyalty_sim.explainer_fmt" = "Each completed visit earns points from its ticket total, 1 point per %@ by default. Clients trade points for visit credits and add-on discounts.";
-"onboarding.loyalty_sim.ticket" = "Ticket";
-"onboarding.loyalty_sim.points_fmt" = "%d points";
-"onboarding.loyalty_sim.no_extra_math" = "No extra math";
 "onboarding.loyalty_sim.reward.visit_credit_5" = "$5 Visit Credit";
 "onboarding.loyalty_sim.reward.visit_credit_10" = "$10 Visit Credit";
 "onboarding.loyalty_sim.reward.addon_discount_15" = "15% Off Add-On";
@@ -1945,3 +1940,40 @@
 "settings.tour.role_caption" = "The role sets the lesson order and some tips on this device.";
 "settings.tour.restart_for_role" = "Restart the Tour for This Role";
 "clients.sort.inline_fmt" = "Sort: %@";
+
+/* Loyalty preview card and the Getting Started / loyalty tour stops */
+"loyalty.preview.how_title" = "How points work";
+"loyalty.preview.try_title" = "Try it";
+"loyalty.preview.ticket" = "Checkout total, tip included";
+"loyalty.preview.tier" = "Client tier";
+"loyalty.preview.tier_choice_fmt" = "%1$@ %2$@";
+"loyalty.preview.rebook_toggle_fmt" = "Back within %d days";
+"loyalty.preview.base_total_fmt" = "From the total: %@";
+"loyalty.preview.base_flat_fmt" = "Per visit: %@";
+"loyalty.preview.tier_line_fmt" = "%1$@: %2$@";
+"loyalty.preview.rebook_line_fmt" = "Rebook bonus: +%@";
+"loyalty.preview.points_decimal_fmt" = "%@ points";
+"loyalty.preview.earn_rate_fmt" = "Each checkout earns %1$@ for every %2$@ the client pays, tip included. Points are rounded down to a whole number.";
+"loyalty.preview.earn_rate_off_fmt" = "Checkouts earn no points right now: the rule is 0 points per %@.";
+"loyalty.preview.earn_flat_fmt" = "Each checkout earns %@, whatever the total. The tip doesn't change it.";
+"loyalty.preview.earn_flat_off" = "Checkouts earn no points right now: the rule is 0 points per visit.";
+"loyalty.preview.tiers_fmt" = "Points earned at checkout move a client up: Silver at %1$@, Gold at %2$@ and Platinum at %3$@. Each tier multiplies the points of every visit. Spending points never lowers a tier.";
+"loyalty.preview.rebook_fmt" = "A visit that earns points gets %1$@ more when the client's last visit ended %2$d days ago or less.";
+"loyalty.preview.redeem" = "To redeem, open Loyalty & Rewards on the client's profile and pick a reward. Its points come off the balance. Then give the reward yourself, for example as a discount at checkout.";
+"loyalty.preview.redeem_paused" = "Rewards are paused, so points can't be redeemed right now. Clients keep their balance.";
+"loyalty.preview.rewards_starter" = "Starter rewards";
+"loyalty.preview.rewards_salon" = "Your rewards";
+"loyalty.preview.rewards_none" = "No rewards are turned on. Clients keep earning points.";
+"loyalty.preview.rewards_paused" = "Rewards are paused. Clients keep earning points.";
+"loyalty.preview.reward_chip_fmt" = "%1$@ · %2$@";
+"loyalty.preview.rewards_hint" = "A check means this one visit earns enough points for it.";
+"loyalty.preview.rules_saved" = "These are your salon's current rules. Checkout awards points with this same math.";
+"loyalty.preview.rules_default" = "These are the default rules. Checkout awards points with this same math, and you can change the rules in Settings > Loyalty.";
+"tour.dash.checklist.title" = "Getting Started";
+"tour.dash.checklist.directive" = "Finish setting up your salon from this list.";
+"tour.dash.checklist.purpose" = "Each row opens the screen where you finish it. Rows tick themselves from your data, and sample clients don’t count as yours.";
+"tour.dash.checklist.tip" = "The backup row ticks only when iCloud confirms an upload. The list goes away once every row is done.";
+"tour.set.loyalty.title" = "Loyalty points";
+"tour.set.loyalty.directive" = "Try your loyalty rules before a client earns anything.";
+"tour.set.loyalty.purpose" = "Move the checkout total, pick a tier, and see the points a visit earns. Checkout awards points with this same math, and the rules sit right above.";
+"tour.set.loyalty.tip" = "Clients redeem from Loyalty & Rewards on their profile. You give the reward yourself, for example as a discount.";

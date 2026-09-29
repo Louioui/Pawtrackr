@@ -528,9 +528,6 @@ final class OnboardingViewModel {
             settings.currencySymbol = currentCurrency
             settings.businessName = businessName
             settings.isChecklistDismissed = false
-            settings.hasConfiguredPrices = shouldSeed
-            settings.hasAddedFirstClient = shouldSeed
-            settings.hasCompletedFirstVisit = shouldSeed
             settings.onboardingRole = selectedRole
 
             if !pinSkipped {

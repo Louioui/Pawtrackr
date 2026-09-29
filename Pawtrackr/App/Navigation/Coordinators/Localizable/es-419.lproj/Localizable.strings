@@ -901,7 +901,6 @@
 
 // Bilingual enforcement: keys used by Swift but previously missing from this locale.
 "checklist.branding" = "Agrega la imagen de tu negocio";
-"checklist.services" = "Revisa servicios y precios";
 "checklist.client" = "Agrega tu primer cliente";
 "checklist.backup" = "Confirma la protección de respaldo";
 "checklist.hint.complete" = "Abre la pantalla para completar este paso";
@@ -917,7 +916,7 @@
 "onboarding.subtitle.loyalty" = "Mira cómo los puntos se acumulan automáticamente después de cada visita completada.";
 "onboarding.role.note" = "Esto solo cambia el recorrido guiado. Puedes seguir usando todas las funciones de Pawtrackr.";
 "onboarding.loyalty.title" = "Recompensas sin hacer cuentas";
-"onboarding.loyalty.message" = "Mueve el total del ticket para ver los puntos que gana un cliente nuevo con las reglas predeterminadas. Puedes cambiar las reglas después en Ajustes.";
+"onboarding.loyalty.message" = "Mueve el total del cobro, elige un nivel y mira los puntos que gana una visita. El cobro usa esta misma cuenta.";
 
 "tour.clients.filters.title" = "Filtros de clientes";
 "tour.clients.filters.directive" = "Cambia entre Todos, Activos, Necesita atención e Información faltante.";
@@ -1604,10 +1603,6 @@
 "onboarding.role.front_desk.title" = "Recepción o groomer";
 "onboarding.role.front_desk.subtitle" = "Registro de entrada, cobro, notas de seguridad, contactos y trabajo en curso.";
 "onboarding.loyalty_sim.title" = "Puntos de lealtad";
-"onboarding.loyalty_sim.explainer_fmt" = "Cada visita completada suma puntos según el total del ticket, 1 punto por cada %@ de forma predeterminada. Los clientes cambian sus puntos por créditos para visitas y descuentos en complementos.";
-"onboarding.loyalty_sim.ticket" = "Ticket";
-"onboarding.loyalty_sim.points_fmt" = "%d puntos";
-"onboarding.loyalty_sim.no_extra_math" = "Sin hacer cuentas";
 "onboarding.loyalty_sim.reward.visit_credit_5" = "Crédito de $5 para una visita";
 "onboarding.loyalty_sim.reward.visit_credit_10" = "Crédito de $10 para una visita";
 "onboarding.loyalty_sim.reward.addon_discount_15" = "15% de descuento en un complemento";
@@ -1953,3 +1948,40 @@
 "settings.tour.role_caption" = "El rol define el orden de las lecciones y algunos consejos en este dispositivo.";
 "settings.tour.restart_for_role" = "Reiniciar el recorrido para este rol";
 "clients.sort.inline_fmt" = "Orden: %@";
+
+/* Loyalty preview card and the Getting Started / loyalty tour stops */
+"loyalty.preview.how_title" = "Cómo funcionan los puntos";
+"loyalty.preview.try_title" = "Pruébalo";
+"loyalty.preview.ticket" = "Total del cobro, con propina";
+"loyalty.preview.tier" = "Nivel del cliente";
+"loyalty.preview.tier_choice_fmt" = "%1$@ %2$@";
+"loyalty.preview.rebook_toggle_fmt" = "Volvió en %d días o menos";
+"loyalty.preview.base_total_fmt" = "Del total: %@";
+"loyalty.preview.base_flat_fmt" = "Por visita: %@";
+"loyalty.preview.tier_line_fmt" = "%1$@: %2$@";
+"loyalty.preview.rebook_line_fmt" = "Bono por volver: +%@";
+"loyalty.preview.points_decimal_fmt" = "%@ puntos";
+"loyalty.preview.earn_rate_fmt" = "Cada cobro suma %1$@ por cada %2$@ que paga el cliente, propina incluida. Los puntos se redondean hacia abajo a un número entero.";
+"loyalty.preview.earn_rate_off_fmt" = "Por ahora los cobros no suman puntos: la regla es 0 puntos por cada %@.";
+"loyalty.preview.earn_flat_fmt" = "Cada cobro suma %@, sin importar el total. La propina no lo cambia.";
+"loyalty.preview.earn_flat_off" = "Por ahora los cobros no suman puntos: la regla es 0 puntos por visita.";
+"loyalty.preview.tiers_fmt" = "Los puntos ganados en el cobro suben de nivel al cliente: Plata con %1$@, Oro con %2$@ y Platino con %3$@. Cada nivel multiplica los puntos de cada visita. Gastar puntos nunca baja el nivel.";
+"loyalty.preview.rebook_fmt" = "Una visita que suma puntos gana %1$@ más cuando la última visita del cliente terminó hace %2$d días o menos.";
+"loyalty.preview.redeem" = "Para canjear, abre Lealtad y recompensas en el perfil del cliente y elige una recompensa. Sus puntos se descuentan del saldo. Luego entrega tú la recompensa, por ejemplo como descuento en el cobro.";
+"loyalty.preview.redeem_paused" = "Las recompensas están en pausa, así que por ahora no se pueden canjear puntos. Los clientes conservan su saldo.";
+"loyalty.preview.rewards_starter" = "Recompensas iniciales";
+"loyalty.preview.rewards_salon" = "Tus recompensas";
+"loyalty.preview.rewards_none" = "No hay recompensas activas. Los clientes siguen ganando puntos.";
+"loyalty.preview.rewards_paused" = "Las recompensas están en pausa. Los clientes siguen ganando puntos.";
+"loyalty.preview.reward_chip_fmt" = "%1$@ · %2$@";
+"loyalty.preview.rewards_hint" = "Una marca significa que esta visita sola gana suficientes puntos para esa recompensa.";
+"loyalty.preview.rules_saved" = "Estas son las reglas actuales de tu salón. El cobro da los puntos con esta misma cuenta.";
+"loyalty.preview.rules_default" = "Estas son las reglas predeterminadas. El cobro da los puntos con esta misma cuenta, y puedes cambiar las reglas en Ajustes > Lealtad.";
+"tour.dash.checklist.title" = "Primeros pasos";
+"tour.dash.checklist.directive" = "Termina de configurar tu salón desde esta lista.";
+"tour.dash.checklist.purpose" = "Cada fila abre la pantalla donde se completa. Las filas se marcan solas según tus datos, y los clientes de ejemplo no cuentan como tuyos.";
+"tour.dash.checklist.tip" = "La fila de respaldo se marca solo cuando iCloud confirma una subida. La lista desaparece cuando todas las filas están hechas.";
+"tour.set.loyalty.title" = "Puntos de lealtad";
+"tour.set.loyalty.directive" = "Prueba tus reglas de lealtad antes de que un cliente gane puntos.";
+"tour.set.loyalty.purpose" = "Mueve el total del cobro, elige un nivel y mira los puntos que gana una visita. El cobro da los puntos con esta misma cuenta, y las reglas están justo arriba.";
+"tour.set.loyalty.tip" = "Los clientes canjean desde Lealtad y recompensas en su perfil. Tú entregas la recompensa, por ejemplo como descuento.";
