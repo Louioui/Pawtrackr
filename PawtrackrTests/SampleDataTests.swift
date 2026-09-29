@@ -140,7 +140,7 @@ final class SampleDataTests: XCTestCase {
         SummaryUpdater.rebuildDay(for: sharedDay, in: context)
         try context.save()
 
-        let result = try DataReset.removeSampleData(in: context, userDefaults: defaults)
+        let result = try DataReset.removeSampleData(in: context)
 
         XCTAssertEqual(result.clients, 3, "Both copies of Ava and Jordan go.")
         XCTAssertEqual(try SampleData.sampleClientCount(in: context), 0)
@@ -184,35 +184,49 @@ final class SampleDataTests: XCTestCase {
         XCTAssertTrue(SampleDataCopy.removeMessage(for: inventory).contains("Biscuit"),
                       "The confirmation names the added pet before it is deleted.")
 
-        try DataReset.removeSampleData(in: context, userDefaults: defaults)
+        try DataReset.removeSampleData(in: context)
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<Pet>()), 0)
         XCTAssertTrue(try DataReset.sampleDataInventory(in: context).isEmpty)
     }
 
-    func testRemovingSampleClientsIsNotReadAsDataLossOnTheNextLaunch() throws {
-        let appSupport = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+    func testSampleClientsNeverCountTowardTheDataLossBaseline() throws {
+        let appSupport = try makeAppSupportDirectory()
         defer { try? FileManager.default.removeItem(at: appSupport) }
 
         XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
         DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: appSupport, userDefaults: defaults)
-        XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 2)
+        XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 0,
+                       "Only real clients count.")
 
-        try DataReset.removeSampleData(in: context, userDefaults: defaults)
+        // The samples disappear the way another device's removal arrives
+        // through iCloud: plain deletes, no removeSampleData bookkeeping here.
+        for client in try SampleData.sampleClients(in: context) {
+            context.delete(client)
+        }
+        try context.save()
         DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: appSupport, userDefaults: defaults)
 
         XCTAssertFalse(defaults.bool(forKey: DataSafetyMonitor.suspectedDataLossKey),
-                       "Going from 2 sample clients to none was on purpose, not a loss.")
+                       "Losing sample clients is never data loss.")
     }
 
-    func testSampleRemovalNeverClearsARealDataLossFlag() {
-        defaults.set(true, forKey: DataSafetyMonitor.suspectedDataLossKey)
-        defaults.set(12, forKey: DataSafetyMonitor.lastKnownClientCountKey)
+    func testLosingRealClientsIsStillFlaggedWhileSamplesRemain() throws {
+        let appSupport = try makeAppSupportDirectory()
+        defer { try? FileManager.default.removeItem(at: appSupport) }
 
-        DataSafetyMonitor.recordIntentionalSampleRemoval(remainingClientCount: 0, userDefaults: defaults)
+        XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
+        let real = (1...3).map { Client(firstName: "Real \($0)", lastName: "Client") }
+        real.forEach(context.insert)
+        try context.save()
+        DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: appSupport, userDefaults: defaults)
+        XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 3)
 
-        XCTAssertTrue(defaults.bool(forKey: DataSafetyMonitor.suspectedDataLossKey))
-        XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 12)
+        real.forEach(context.delete)
+        try context.save()
+        DataSafetyMonitor.evaluateClientStoreState(in: context, appSupportURL: appSupport, userDefaults: defaults)
+
+        XCTAssertTrue(defaults.bool(forKey: DataSafetyMonitor.suspectedDataLossKey),
+                      "The two sample clients left behind don't hide that every real client is gone.")
     }
 
     func testBackupsNeverOfferSampleClientsBack() {
@@ -285,6 +299,12 @@ final class SampleDataTests: XCTestCase {
 
     private func service(named name: String) throws -> Service {
         try XCTUnwrap(try context.fetch(FetchDescriptor<Service>()).first { $0.name == name }, "No service named \(name)")
+    }
+
+    private func makeAppSupportDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
     private func visit(_ id: UUID) throws -> Visit {

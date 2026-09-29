@@ -29,16 +29,22 @@ enum DataSafetyMonitor {
         fileManager: FileManager = .default
     ) {
         do {
-            let currentCount = try context.fetchCount(FetchDescriptor<Client>())
+            // Sample clients (fixed UUIDs, `SampleData`) are practice rows, so
+            // they never count. Otherwise loading them would raise the baseline
+            // and removing them, on this device or through iCloud on another,
+            // would read as "had 2 clients, now none" and lock Start Fresh. A
+            // store holding only samples is empty of real clients.
+            var uuidDescriptor = FetchDescriptor<Client>()
+            uuidDescriptor.propertiesToFetch = [\.uuid]
+            let realClientUUIDs = try context.fetch(uuidDescriptor).map(\.uuid).filter { !SampleData.clientIDs.contains($0) }
+            let currentCount = realClientUUIDs.count
             let lastKnownCount = userDefaults.integer(forKey: lastKnownClientCountKey)
 
             // Offer on-device backups on their own evidence: 1.0.1 and 1.0.2
             // never wrote lastKnownClientCount, so users who lost clients to the
             // 1.0.2 recovery screen read 0 here. Only clients missing from this
             // store count, so data iCloud already brought back isn't offered.
-            var uuidDescriptor = FetchDescriptor<Client>()
-            uuidDescriptor.propertiesToFetch = [\.uuid]
-            let liveClientUUIDs = Set(try context.fetch(uuidDescriptor).map(\.uuid))
+            let liveClientUUIDs = Set(realClientUUIDs)
             StoreBackupRestore.publishOffer(
                 liveClientUUIDs: liveClientUUIDs,
                 appSupportURL: overrideAppSupportURL,
@@ -70,16 +76,6 @@ enum DataSafetyMonitor {
         userDefaults.removeObject(forKey: suspectedDataLossKey)
         userDefaults.removeObject(forKey: suspectedDataLossMessageKey)
         userDefaults.removeObject(forKey: suspectedDataLossRecoveryDetailKey)
-    }
-
-    /// Removing the sample clients lowers the client count on purpose. Record
-    /// the new count so the next launch doesn't read it as data loss. A loss
-    /// already flagged stays flagged: that signal is about real clients, and
-    /// removing samples says nothing about them.
-    static func recordIntentionalSampleRemoval(remainingClientCount: Int, userDefaults: UserDefaults = .standard) {
-        guard !userDefaults.bool(forKey: suspectedDataLossKey) else { return }
-        userDefaults.set(max(0, remainingClientCount), forKey: lastKnownClientCountKey)
-        userDefaults.set(appBuildIdentifier, forKey: lastKnownClientCountBuildKey)
     }
 
     static func clearAfterIntentionalWipe() {

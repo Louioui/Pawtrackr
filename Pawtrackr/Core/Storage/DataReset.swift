@@ -111,7 +111,7 @@ extension DataReset {
     /// Day summaries for the affected days are rebuilt from what remains.
     /// The deletions sync to iCloud like any other delete.
     @discardableResult
-    static func removeSampleData(in context: ModelContext, userDefaults: UserDefaults = .standard) throws -> SampleRemovalResult {
+    static func removeSampleData(in context: ModelContext) throws -> SampleRemovalResult {
         var result = SampleRemovalResult()
 
         let clients = unique(try SampleData.sampleClients(in: context))
@@ -222,10 +222,9 @@ extension DataReset {
             SpotlightIndexer.shared.removePetFromIndex(petID: pet.uuid)
         }
 
-        // The client count dropped on purpose. Without this the next launch
-        // reads "had 2 clients, now 0" as data loss and locks Start Fresh.
-        let remaining = try context.fetchCount(FetchDescriptor<Client>())
-        DataSafetyMonitor.recordIntentionalSampleRemoval(remainingClientCount: remaining, userDefaults: userDefaults)
+        // No data-safety bookkeeping is needed: DataSafetyMonitor never counts
+        // sample clients, so their removal (here, or synced from another
+        // device) can't look like data loss.
 
         log.info("Removed sample data: clients=\(result.clients), pets=\(result.pets), visits=\(result.visits), ledger=\(result.ledgerEntries), transactions=\(result.checkoutTransactions)")
         return result
