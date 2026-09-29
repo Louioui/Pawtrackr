@@ -73,4 +73,35 @@ extension View {
     func walkthroughTarget(_ id: WalkthroughAnchorID) -> some View {
         self.id(id).walkthroughAnchor(id)
     }
+
+    /// `walkthroughTarget(_:)` on one view out of many, e.g. the one pet row
+    /// the tour points at. Every row in a `ForEach` registering the same
+    /// anchor would leave the spotlight on whichever row merged last, and
+    /// give `ScrollViewReader` duplicate IDs.
+    @ViewBuilder
+    func walkthroughTarget(_ id: WalkthroughAnchorID, isActive: Bool) -> some View {
+        if isActive {
+            walkthroughTarget(id)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func optionalWalkthroughAnchor(_ id: WalkthroughAnchorID?) -> some View {
+        if let id {
+            walkthroughAnchor(id)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func optionalWalkthroughTarget(_ id: WalkthroughAnchorID?) -> some View {
+        if let id {
+            walkthroughTarget(id)
+        } else {
+            self
+        }
+    }
 }

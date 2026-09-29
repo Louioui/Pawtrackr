@@ -586,6 +586,14 @@ private struct SettingsDetailView: View {
         case .about: AboutSectionView(
             showResetFirstRunConfirm: $showResetFirstRunConfirm,
             showWipeConfirm: $showWipeConfirm,
+            tourProgress: appSettings.tourProgress,
+            tourRole: appSettings.onboardingRole,
+            onTourRoleChange: { role in
+                if appSettings.onboardingRole != role {
+                    appSettings.onboardingRole = role
+                }
+            },
+            onLaunchTour: { $0.post() },
             dataLossSuspected: dataLossSuspected,
             sampleStatus: sampleStatus,
             isLoadingSamples: isLoadingSamples,
@@ -596,7 +604,7 @@ private struct SettingsDetailView: View {
     }
 
     private func replayGettingStarted() {
-        NotificationCenter.default.post(name: .replayGettingStartedRequested, object: nil)
+        WalkthroughLaunchRequest.replayGettingStarted.post()
     }
 }
 
@@ -1527,6 +1535,10 @@ struct SampleDataStatus: Equatable {
 private struct AboutSectionView: View {
     @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
+    let tourProgress: WalkthroughProgress
+    let tourRole: OnboardingRole
+    let onTourRoleChange: (OnboardingRole) -> Void
+    let onLaunchTour: (WalkthroughLaunchRequest) -> Void
     let dataLossSuspected: Bool
     let sampleStatus: SampleDataStatus
     let isLoadingSamples: Bool
@@ -1545,16 +1557,40 @@ private struct AboutSectionView: View {
 
                 Divider()
 
+                Label(settingsLocalized("settings.tour.title", value: "Guided Tour"), systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    onLaunchTour(.continueTour)
+                } label: {
+                    Label(continueTourTitle, systemImage: "play.fill")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("settings.continueTour")
+
                 Button {
                     showResetFirstRunConfirm = true
                 } label: {
-                    Label(settingsLocalized("settings.about.replay_guide", value: "Replay Getting Started"), systemImage: "sparkles")
+                    Label(settingsLocalized("settings.about.replay_guide", value: "Replay Getting Started"), systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("settings.replayGettingStarted")
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(settingsLocalized(
+                    "settings.tour.caption",
+                    value: "When your salon has real clients, the tour only explains. It never checks pets in, creates clients, or saves a checkout."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .walkthroughTarget(.setAbout)
+
+            tourLessonsCard
 
             sampleClientsCard
 
@@ -1595,6 +1631,107 @@ private struct AboutSectionView: View {
                 .walkthroughTarget(.setStartFresh)
             }
         }
+    }
+
+    /// "Continue Tour (Lesson 3 of 7)" from saved progress and the role's
+    /// lesson order, or "Replay the Tour" once every lesson is done.
+    private var continueTourTitle: String {
+        let order = tourRole.tourLessonOrder
+        guard let position = tourProgress.continuePosition(in: order) else {
+            return settingsLocalized("settings.tour.replay", value: "Replay the Tour")
+        }
+        return String(
+            format: settingsLocalized("settings.tour.continue_fmt", value: "Continue Tour (Lesson %1$d of %2$d)"),
+            position.lesson,
+            position.of
+        )
+    }
+
+    private var tourRoleBinding: Binding<OnboardingRole> {
+        Binding(
+            get: { tourRole },
+            set: { onTourRoleChange($0) }
+        )
+    }
+
+    /// Replay any lesson on its own, and pick whose tour this device shows.
+    private var tourLessonsCard: some View {
+        CardView {
+            Label(settingsLocalized("settings.tour.lessons", value: "Lessons"), systemImage: "list.bullet.rectangle")
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(settingsLocalized("settings.tour.lessons_caption", value: "Replay any lesson on its own. A check mark means you finished it."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 8) {
+                ForEach(Array(tourRole.tourLessonOrder.enumerated()), id: \.element) { index, lesson in
+                    tourLessonRow(lesson, number: index + 1)
+                }
+            }
+
+            Divider()
+
+            Picker(selection: tourRoleBinding) {
+                ForEach(OnboardingRole.allCases) { role in
+                    Text(role.title).tag(role)
+                }
+            } label: {
+                Label(settingsLocalized("settings.tour.role", value: "Tour for"), systemImage: "person.2.fill")
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("settings.tourRole")
+
+            Text(settingsLocalized("settings.tour.role_caption", value: "The role sets the lesson order and some tips on this device."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                onLaunchTour(.startOver)
+            } label: {
+                Label(settingsLocalized("settings.tour.restart_for_role", value: "Restart the Tour for This Role"), systemImage: "arrow.counterclockwise.circle")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("settings.restartTourForRole")
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func tourLessonRow(_ lesson: WalkthroughLesson, number: Int) -> some View {
+        let isDone = tourProgress.isComplete(lesson)
+        return Button {
+            onLaunchTour(.lesson(lesson))
+        } label: {
+            HStack(spacing: 10) {
+                Text("\(number)")
+                    .font(.caption.weight(.bold).monospacedDigit())
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .frame(width: 22, height: 22)
+                    .background(DS.ColorToken.primary.opacity(0.12), in: Circle())
+                Label(lesson.title, systemImage: lesson.icon)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                if isDone {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(DS.ColorToken.success)
+                        .accessibilityLabel(settingsLocalized("settings.tour.lesson_done", value: "Finished"))
+                }
+                Image(systemName: "play.circle")
+                    .foregroundStyle(DS.ColorToken.primary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(settingsLocalized("settings.tour.lesson_hint", value: "Replays this lesson."))
+        .accessibilityIdentifier("settings.tourLesson.\(lesson.rawValue)")
     }
 
     /// Remove the sample clients while they exist; offer to load them while
@@ -1672,26 +1809,6 @@ private struct CardView<Content: View>: View {
             .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
             .onHover { isHovering = $0 }
             .animation(.easeInOut(duration: 0.15), value: isHovering)
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func optionalWalkthroughAnchor(_ id: WalkthroughAnchorID?) -> some View {
-        if let id {
-            walkthroughAnchor(id)
-        } else {
-            self
-        }
-    }
-
-    @ViewBuilder
-    func optionalWalkthroughTarget(_ id: WalkthroughAnchorID?) -> some View {
-        if let id {
-            walkthroughTarget(id)
-        } else {
-            self
-        }
     }
 }
 

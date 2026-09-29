@@ -21,6 +21,7 @@ struct ClientsView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(EntitlementStore.self) private var entitlements
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     var namespace: Namespace.ID
 
     init(namespace: Namespace.ID) {
@@ -160,6 +161,17 @@ struct ClientsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .focusClientSearch)) { _ in
                 focusSearch()
             }
+            .onChange(of: viewModel?.sortOption) { oldValue, newValue in
+                guard oldValue != nil, oldValue != newValue,
+                      walkthrough?.currentStep?.advancesOn == .clientSortChanged
+                else { return }
+                // Leave the re-sorted list on screen for a moment, so the
+                // names visibly flip before the next stop.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(1200))
+                    walkthrough?.observe(.clientSortChanged)
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
                 if let id = note.createdClientID, note.clientCreatePhase == .created {
                     storedNotifications.insert(
@@ -257,6 +269,39 @@ struct ClientsView: View {
         }
     }
 
+    /// The current order, named, next to the list it orders. It also explains
+    /// why names read last-name-first. The guided tour's sort stop points
+    /// here, since toolbar items can't be spotlighted.
+    private var inlineSortMenu: some View {
+        Menu {
+            Picker(selection: sortOptionBinding) {
+                ForEach(ClientsViewModel.SortOption.allCases, id: \.self) { option in
+                    Label(option.displayName, systemImage: sortIcon(for: option))
+                        .tag(option)
+                }
+            } label: {
+                Text(NSLocalizedString("clients.sort_by", value: "Sort By", comment: ""))
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(
+                String(
+                    format: AppLocalization.localized("clients.sort.inline_fmt", value: "Sort: %@"),
+                    (viewModel?.sortOption ?? .lastName).displayName
+                ),
+                systemImage: "arrow.up.arrow.down"
+            )
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+        }
+        #if os(macOS)
+        .menuStyle(.borderlessButton)
+        #endif
+        .fixedSize()
+        .accessibilityIdentifier("clients.sortMenu.inline")
+        .walkthroughTarget(.clientSort)
+    }
+
     private func sortIcon(for option: ClientsViewModel.SortOption) -> String {
         switch option {
         case .lastName: return "textformat.abc"
@@ -281,7 +326,7 @@ struct ClientsView: View {
             clientList(for: viewModel.inProgressClients, isInProgress: true)
         }
 
-        sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: 16)
+        sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: 16, showsSort: true)
         VStack(spacing: 10) {
             clientList(for: viewModel.otherClients, isInProgress: false, enableInfiniteScroll: true)
             if viewModel.canLoadMore {
@@ -433,12 +478,15 @@ struct ClientsView: View {
         .padding(40)
     }
 
-    private func sectionHeader(_ title: String, count: Int, topPadding: CGFloat = 0) -> some View {
+    private func sectionHeader(_ title: String, count: Int, topPadding: CGFloat = 0, showsSort: Bool = false) -> some View {
         HStack {
             Text(title)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
+            if showsSort {
+                inlineSortMenu
+            }
             if count > 0 {
                 Text("\(count)")
                     .font(.caption.monospacedDigit())

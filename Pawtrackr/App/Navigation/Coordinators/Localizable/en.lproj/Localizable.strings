@@ -581,7 +581,7 @@
 "clients.sort.newest" = "Newest";
 "clients.filter.all" = "All";
 "clients.filter.active" = "Active";
-"clients.filter.overdue" = "Overdue";
+"clients.filter.overdue" = "Needs Attention";
 "clients.filter.missing_info" = "Missing Info";
 
 "payment.method.cash" = "Cash";
@@ -918,15 +918,15 @@
 "onboarding.loyalty.message" = "Move the ticket total to see the points a new client earns with the default rules. You can change the rules later in Settings.";
 
 "tour.clients.filters.title" = "Client Filters";
-"tour.clients.filters.directive" = "Switch between everyone, active visits, overdue pets, and missing info.";
+"tour.clients.filters.directive" = "Switch between All, Active, Needs Attention, and Missing Info.";
 "tour.clients.filters.purpose" = "Filters turn a large client book into a working queue, so the front desk can find what needs action right now.";
 "tour.clients.filters.tip" = "Missing Info helps clean up incomplete phone and email records before they cause pickup problems.";
-"tour.cd.emergency_badges.title" = "Call-Ready Backup";
-"tour.cd.emergency_badges.directive" = "Use the emergency contact card before a problem gets stressful.";
-"tour.cd.emergency_badges.purpose" = "The card surfaces name, relation, phone, call, message, copy, and missing-info prompts so staff do not hunt through notes.";
+"tour.cd.emergency_badges.title" = "Add a Backup Contact";
+"tour.cd.emergency_badges.directive" = "The + button adds a backup person staff can call.";
+"tour.cd.emergency_badges.purpose" = "Save a name, relation, and phone so staff can reach someone if the owner can’t answer. Open it now to try, or use Next.";
 "tour.cd.gender_dots.title" = "Gender Dots";
-"tour.cd.gender_dots.directive" = "Read the household mix at a glance.";
-"tour.cd.gender_dots.purpose" = "Color-coded pet markers make multi-pet homes easier to scan when staff are juggling intake, safety notes, and pickup timing.";
+"tour.cd.gender_dots.directive" = "Blue means male and pink means female.";
+"tour.cd.gender_dots.purpose" = "Each pet’s name sits in a colored capsule with a dot. The same colors show on client cards, this profile, and the dashboard, so multi-pet homes are quick to scan.";
 "checkout.no_active_session_message" = "This pet is not checked in right now. Start a visit before opening checkout.";
 "checkout.no_active_session_title" = "No Active Session";
 "checkout.safety_alert.aggressive" = "Aggressive behavior selected. Warn the team before handling, use a second worker if needed, and avoid rushed movements.";
@@ -1083,7 +1083,7 @@
 "settings.pin.new" = "New PIN";
 "settings.pin.set" = "Set PIN";
 "settings.reset_guide.confirm" = "Replay";
-"settings.reset_guide.message" = "This re-shows the new-user tour and the dashboard checklist. When your salon has real clients, the tour only explains each screen. It doesn't check pets in, create clients, or save checkouts.";
+"settings.reset_guide.message" = "This starts the new-user tour again from lesson 1 and re-shows the dashboard checklist. When your salon has real clients, the tour only explains each screen. It doesn't check pets in, create clients, or save checkouts.";
 "settings.reset_guide.title" = "Replay Getting Started?";
 "settings.security.disable_lock_confirm" = "Disable";
 "settings.security.disable_lock_message" = "Pawtrackr will stop requiring your PIN when the app opens or returns to the foreground.";
@@ -1099,7 +1099,7 @@
 "tour.done" = "Done";
 "tour.back" = "Back";
 "tour.cd.addpet.title" = "Add a New Pet";
-"tour.cd.addpet.directive" = "Tap the highlighted button to add another pet to this owner.";
+"tour.cd.addpet.directive" = "Add another pet to this owner with this button.";
 "tour.cd.addpet.purpose" = "When an owner gets a new dog or cat, add the pet here. The pet keeps its own photo, breed, health notes, tags, and visit history.";
 "tour.cd.addpet.tip" = "One owner can have any number of pets. Add them anytime as the family grows.";
 "tour.nav.clients.directive" = "Open Clients to see everyone you groom.";
@@ -1112,7 +1112,7 @@
 "tour.nav.insights.purpose" = "See revenue, top services, and overdue pets in simple charts. No spreadsheets needed.";
 "tour.nav.insights.title" = "Insights";
 "tour.nav.settings.directive" = "Settings is where you finish setup.";
-"tour.nav.settings.purpose" = "Tune your services, prices, lock, and iCloud sync. When you're done exploring, “Wipe & Start Fresh” clears the demo for your real business.";
+"tour.nav.settings.purpose" = "Tune business details, preferences, security, exports, service setup, iCloud sync, help tools, and the Start Fresh reset from Settings.";
 "tour.nav.settings.title" = "Settings & Start Fresh";
 "tour.next" = "Next";
 "tour.skip" = "Skip tour";
@@ -1503,7 +1503,7 @@
 "tour.dash.kpis.tip" = "If a number looks off, Recent History and Insights help you reconcile the visit behind it.";
 "tour.dash.quick.title" = "Quick Actions";
 "tour.dash.quick.directive" = "Use these when the salon gets busy.";
-"tour.dash.quick.purpose" = "Add a new client, check a pet in to start the visit timer, check out to take payment, or open Reports without hunting through menus.";
+"tour.dash.quick.purpose" = "New Client opens the intake form. Check Out lists the pets in session so you can finish a visit and take payment.";
 "tour.dash.quick.tip" = "These shortcuts mirror the real front-desk workflow so you can move fast with one hand.";
 "tour.workflow.checkout.title" = "Check-In to Checkout";
 "tour.workflow.checkout.directive" = "This is the main working loop.";
@@ -1538,7 +1538,7 @@
 "tour.cd.owner.tip" = "Use this screen before every appointment when you need contact info, pet notes, or history in one place.";
 "tour.cd.emergency.title" = "Emergency Contacts";
 "tour.cd.emergency.directive" = "Keep backup contacts close.";
-"tour.cd.emergency.purpose" = "If the owner cannot answer, emergency contacts give your team another safe way to reach someone responsible for the pet.";
+"tour.cd.emergency.purpose" = "Each backup person shows relation and phone. Call dials them, and the row’s menu offers Message, Copy Phone, Edit, and Delete. A yellow note lists what’s missing.";
 "tour.cd.pets.title" = "Pet Actions";
 "tour.cd.pets.directive" = "This row is where the visit work starts.";
 "tour.cd.pets.purpose" = "Each pet has its own status and actions. The next stops break down check-in, checkout, and history so the workflow is clear before you use it with real clients.";
@@ -1562,7 +1562,7 @@
 "tour.co.payment.title" = "Checkout: Payment";
 "tour.co.payment.directive" = "Confirm the amount and how the client paid.";
 "tour.co.payment.purpose" = "Payment captures the final amount, payment method, tip, and any required card or transfer reference so receipts and bookkeeping match the real transaction.";
-"tour.co.payment.tip" = "You can change the amount when needed. Tips and totals still stay separate for reports.";
+"tour.co.payment.tip" = "The tip is added to the total you collect, so revenue reports include it.";
 "tour.co.review.title" = "Checkout: Review";
 "tour.co.review.directive" = "Check the record before saving it.";
 "tour.co.review.purpose" = "Review shows the pet, duration, services, notes, photos, payment details, and what will save to history before anything updates insights.";
@@ -1597,7 +1597,7 @@
 "tour.ins.category.title" = "Visits by Category";
 "tour.ins.category.directive" = "See where your time goes.";
 "tour.ins.category.purpose" = "A breakdown of grooms, add-ons, packages, and special care shows what your shop actually does most.";
-"tour.nav.settings.tip" = "Settings is also where you replay this walkthrough after training someone new.";
+"tour.nav.settings.tip" = "Settings is also where you continue this tour or replay one lesson for someone new.";
 "tour.set.business.title" = "Business profile";
 "tour.set.business.directive" = "Brand the workspace.";
 "tour.set.business.purpose" = "Set your business name, currency, logo, brand color, language, theme, haptics, and default opening tab so receipts and reports feel like yours.";
@@ -1609,12 +1609,12 @@
 "tour.set.data.directive" = "Your records are yours.";
 "tour.set.data.purpose" = "Export clients and visits to CSV anytime for bookkeeping, backups, support, or moving data between workflows.";
 "tour.set.icloud.title" = "iCloud sync";
-"tour.set.icloud.directive" = "Same shop, every device.";
-"tour.set.icloud.purpose" = "With iCloud enabled, clients, pets, visits, photos, settings, and checkout history sync across iPhone, iPad, and Mac with diagnostics when something needs attention.";
+"tour.set.icloud.directive" = "“Backed up” means iCloud confirmed the upload.";
+"tour.set.icloud.purpose" = "With iCloud on, clients, pets, visits, photos, and checkout history sync to your iPhone, iPad, and Mac, with business name, currency, and brand color. Other settings stay per device.";
 "tour.set.icloud.tip" = "The top account banner tells you if iCloud needs sign-in or network attention.";
 "tour.set.about.title" = "Replay & Start Fresh";
-"tour.set.about.directive" = "Replay this walkthrough whenever someone needs training.";
-"tour.set.about.purpose" = "Replay brings this tour back. When your salon has real clients, it only explains each screen. It never checks pets in, creates clients, or saves a checkout.";
+"tour.set.about.directive" = "Continue the tour or replay one lesson for someone new.";
+"tour.set.about.purpose" = "Pick up where you stopped or replay a lesson. When your salon has real clients, the tour only explains. It never checks pets in, creates clients, or saves a checkout.";
 "tour.set.start_fresh.title" = "Wipe & Start Fresh";
 "tour.set.start_fresh.directive" = "Only for erasing the whole salon, real clients included.";
 "tour.set.start_fresh.purpose" = "Wipe & Start Fresh erases every client, pet, visit, payment and report, real or sample, on all your devices through iCloud. Use it to begin with an empty workspace for real business.";
@@ -1909,3 +1909,39 @@
 "settings.sample.load_skipped" = "Sample clients weren't added because your salon already has clients.";
 "settings.sample.loaded_caption_fmt" = "%@ are practice clients. Removing them leaves your own clients alone.";
 "settings.sample.title" = "Sample Clients";
+
+/* Guided tour: roles, lessons, progress and live state */
+"tour.nav.dashboard.tip_front_desk" = "Come back here between pets. In Progress shows who is still in your care.";
+"tour.dash.kpis.tip_front_desk" = "If In Progress doesn’t match the pets in your care, finish the check-out that was missed.";
+"tour.clients.filters.tip_front_desk" = "Start a shift on Needs Attention to see overdue pets nobody has contacted yet.";
+"tour.clients.sort.title" = "Sort & Name Order";
+"tour.clients.sort.directive" = "Sort by changes the order and how names read.";
+"tour.clients.sort.purpose" = "Last Name is the default and lists last names first. Pick First Name here and watch the names flip. The tour moves on by itself.";
+"tour.clients.sort.purpose_explain" = "Last Name is the default and lists last names first. Sort by also offers First Name, Pet’s Name, Last Visit, and Newest.";
+"tour.clients.sort.tip" = "Sorted by Last Name, “Jane Doe” shows as “Doe Jane” in the list. Her profile still reads “Jane Doe”.";
+"tour.cd.emergency_badges.purpose_explain" = "Save a name, relation, and phone. If the owner can’t be reached, staff call this person instead of searching through notes.";
+"tour.workflow.checkout.tip_front_desk" = "Check in when the pet arrives and check out at pickup, so times and totals stay right.";
+"tour.cd.checkin.tip_owner" = "Check-in times set visit length and today’s counts, so ask the team to check in on arrival.";
+"tour.set.business.directive_filled" = "Your business details are in. Update them here anytime.";
+"tour.set.business.tip_filled" = "Receipts show the phone and email saved here, so keep them current.";
+"tour.set.business.tip" = "Add your phone or email so receipts show clients how to reach you.";
+"tour.set.security.tip_pin_set" = "Your PIN is set on this device. Change it here anytime.";
+"tour.set.icloud.tip_backed_up_fmt" = "Backed up as of %@. iCloud confirmed every change this device made before then.";
+"tour.set.icloud.tip_uploading" = "Uploading now. Changes count as backed up only after iCloud confirms them.";
+"tour.set.icloud.tip_not_backed_up" = "Not backed up yet. Some changes on this device are still waiting for iCloud to confirm them.";
+"tour.set.icloud.tip_failing" = "Uploads to iCloud are failing right now. This section shows what went wrong.";
+"tour.set.icloud.tip_signed_out" = "No iCloud account is signed in, so nothing uploads from this device.";
+"tour.set.icloud.tip_local_only" = "iCloud backup is off on this device, so nothing uploads from here.";
+"tour.set.icloud.tip_checking" = "Still checking the iCloud account. “Backed up” shows only after iCloud confirms an upload.";
+"settings.tour.title" = "Guided Tour";
+"settings.tour.continue_fmt" = "Continue Tour (Lesson %1$d of %2$d)";
+"settings.tour.replay" = "Replay the Tour";
+"settings.tour.caption" = "When your salon has real clients, the tour only explains. It never checks pets in, creates clients, or saves a checkout.";
+"settings.tour.lessons" = "Lessons";
+"settings.tour.lessons_caption" = "Replay any lesson on its own. A check mark means you finished it.";
+"settings.tour.lesson_done" = "Finished";
+"settings.tour.lesson_hint" = "Replays this lesson.";
+"settings.tour.role" = "Tour for";
+"settings.tour.role_caption" = "The role sets the lesson order and some tips on this device.";
+"settings.tour.restart_for_role" = "Restart the Tour for This Role";
+"clients.sort.inline_fmt" = "Sort: %@";

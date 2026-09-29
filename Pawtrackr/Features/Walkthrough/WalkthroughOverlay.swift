@@ -467,7 +467,7 @@ enum WalkthroughOverlayScope {
     case rootContent   // content in a column ROOT view (dashboard / insights) — NOT a pushed detail
     case detailContent // content whose anchors live in a PUSHED detail view
 
-    private static let navigationAnchors: Set<WalkthroughAnchorID> = [
+    static let navigationAnchors: Set<WalkthroughAnchorID> = [
         .dashboard, .clients, .insights, .settings
     ]
 
@@ -479,8 +479,9 @@ enum WalkthroughOverlayScope {
     /// (`.rootContent`) stops a SECOND overlay from drawing a stray spotlight and
     /// double-dimming the real target (which left e.g. the Add Pet button un-lit
     /// with a faint stray circle elsewhere).
-    private static let detailAnchors: Set<WalkthroughAnchorID> = [
-        .cdOwner, .cdEmergency, .cdPets, .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory,
+    static let detailAnchors: Set<WalkthroughAnchorID> = [
+        .cdOwner, .cdEmergency, .emergencyContactBadges, .cdPets, .petGenderDots,
+        .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory,
         .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
         .setBusiness, .setSecurity, .setData, .setICloud, .setAbout, .setStartFresh
     ]
@@ -496,6 +497,22 @@ enum WalkthroughOverlayScope {
             return Self.detailAnchors.contains(step.anchor)
         }
     }
+
+    /// Whether an overlay draws `step`. Each step has one home overlay (the
+    /// sheet it lives in, or the scope that owns its anchor). When that home
+    /// never draws it, for example because checkout couldn't open or a pushed
+    /// screen never appeared, the root overlay adopts it so the tour always
+    /// shows a bubble with Back, Skip and Next.
+    static func hostDraws(
+        _ step: WalkthroughStep,
+        presenting: WalkthroughPresentation?,
+        scope: WalkthroughOverlayScope,
+        adoptsOrphanedSteps: Bool,
+        isOrphaned: Bool
+    ) -> Bool {
+        if step.presents == presenting && scope.handles(step) { return true }
+        return adoptsOrphanedSteps && isOrphaned
+    }
 }
 
 extension View {
@@ -509,16 +526,20 @@ extension View {
     ///   fallback at nothing on the main window.
     /// - Parameter scope: which steps this overlay should draw. See
     ///   `WalkthroughOverlayScope`. Defaults to `.all` (iPhone single overlay).
+    /// - Parameter adoptsOrphanedSteps: the app's root overlay passes true so
+    ///   it draws, centered, any step no other overlay drew in time.
     func walkthroughOverlay(
         _ controller: WalkthroughController,
         presenting: WalkthroughPresentation? = nil,
-        scope: WalkthroughOverlayScope = .all
+        scope: WalkthroughOverlayScope = .all,
+        adoptsOrphanedSteps: Bool = false
     ) -> some View {
         WalkthroughOverlayHost(
             content: self,
             controller: controller,
             presenting: presenting,
-            scope: scope
+            scope: scope,
+            adoptsOrphanedSteps: adoptsOrphanedSteps
         )
     }
 }
@@ -528,6 +549,7 @@ private struct WalkthroughOverlayHost<Content: View>: View {
     let controller: WalkthroughController
     let presenting: WalkthroughPresentation?
     let scope: WalkthroughOverlayScope
+    let adoptsOrphanedSteps: Bool
 
     @State private var frames: [WalkthroughAnchorID: CGRect] = [:]
 
@@ -538,7 +560,13 @@ private struct WalkthroughOverlayHost<Content: View>: View {
             .overlayPreferenceValue(WalkthroughAnchorPreferenceKey.self) { anchors in
                 GeometryReader { proxy in
                     if controller.isActive, let step = controller.currentStep,
-                       step.presents == presenting, scope.handles(step) {
+                       WalkthroughOverlayScope.hostDraws(
+                           step,
+                           presenting: presenting,
+                           scope: scope,
+                           adoptsOrphanedSteps: adoptsOrphanedSteps,
+                           isOrphaned: controller.isCurrentStepOrphaned
+                       ) {
                         // Prefer the live viewport frame, then the live anchor,
                         // then a computed fallback for targets SwiftUI won't expose.
                         let rawFrameTarget = frames[step.anchor]
@@ -555,14 +583,22 @@ private struct WalkthroughOverlayHost<Content: View>: View {
                             safeAreaInsets: proxy.safeAreaInsets
                         )
                         let target = liveTarget ?? fallbackTarget
-                        WalkthroughOverlayView(
-                            step: step,
-                            rawTargetRect: rawLiveTarget,
-                            targetRect: target,
-                            containerSize: proxy.size,
-                            containerInsets: proxy.safeAreaInsets,
-                            controller: controller
-                        )
+                        let isAdopted = !(step.presents == presenting && scope.handles(step))
+                        // A section that only exists with data (Needs
+                        // Attention) isn't drawn centered while the tour waits
+                        // to see whether it appears. Without it the step is
+                        // skipped (`WalkthroughController.checkTargets`).
+                        if !(step.skipsWhenTargetMissing && target == nil) {
+                            WalkthroughOverlayView(
+                                step: step,
+                                rawTargetRect: rawLiveTarget,
+                                targetRect: target,
+                                containerSize: proxy.size,
+                                containerInsets: proxy.safeAreaInsets,
+                                controller: controller,
+                                isAdopted: isAdopted
+                            )
+                        }
                     }
                 }
                 .ignoresSafeArea()
@@ -652,6 +688,8 @@ private struct WalkthroughOverlayView: View {
     let containerSize: CGSize
     let containerInsets: EdgeInsets
     let controller: WalkthroughController
+    /// The root overlay is drawing a step its own screen never drew.
+    var isAdopted = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Gentle, continuous "breathing" of the spotlight ring to draw the eye to
@@ -712,6 +750,18 @@ private struct WalkthroughOverlayView: View {
         // the target frame moves (e.g. a macOS window resize mid-tour).
         .motionAnimation(MotionSystem.fluid, value: step.id)
             .motionAnimation(MotionSystem.fluid, value: targetRect)
+            // Tell the controller this step is on screen, and whether it has a
+            // target. Reported from a task (never from body) and only when the
+            // step or the presence of a target changes.
+            .task(id: ShownReport(stepID: step.id, hasTarget: targetRect != nil, isAdopted: isAdopted)) {
+                controller.noteStepShown(step.id, hasTarget: targetRect != nil, adopted: isAdopted)
+            }
+    }
+
+    private struct ShownReport: Equatable {
+        let stepID: String
+        let hasTarget: Bool
+        let isAdopted: Bool
     }
 
     private var accessibilityProbe: some View {
@@ -1021,7 +1071,7 @@ private struct WalkthroughOverlayView: View {
 
     @ViewBuilder
     private var footerPrimaryControl: some View {
-        if step.requiresTargetAction {
+        if !controller.currentStepShowsNext {
             Label(AppLocalization.localized("tour.tap_highlighted", value: "Tap highlighted button"), systemImage: "hand.tap.fill")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)

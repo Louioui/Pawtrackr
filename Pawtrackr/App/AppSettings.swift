@@ -38,6 +38,10 @@ enum AppSettingsKeys {
     static let deviceName = "deviceName"
     static let idleLockMinutes = "idleLockMinutes"
     static let onboardingRole = "onboardingRole"
+    /// Guided tour progress, per device: finished lesson raw values, and the
+    /// stable ID of the last stop moved past.
+    static let tourCompletedLessons = "tourCompletedLessons"
+    static let tourLastCompletedStepID = "tourLastCompletedStepID"
 }
 
 /// User-selected app language. `system` defers to the device language.
@@ -347,7 +351,17 @@ final class AppSettings {
 
     var onboardingRole: OnboardingRole {
         didSet {
+            guard onboardingRole != oldValue else { return }
             UserDefaults.standard.set(onboardingRole.rawValue, forKey: AppSettingsKeys.onboardingRole)
+        }
+    }
+
+    /// How far this device got through the guided tour. Settings reads it for
+    /// "Continue Tour (Lesson n of N)" and the lesson list.
+    var tourProgress: WalkthroughProgress {
+        didSet {
+            guard tourProgress != oldValue else { return }
+            Self.storeTourProgress(tourProgress)
         }
     }
 
@@ -423,6 +437,7 @@ final class AppSettings {
         self.optimizeMediaForICloud = UserDefaults.standard.bool(forKey: AppSettingsKeys.optimizeMediaForICloud)
         let storedOnboardingRole = UserDefaults.standard.string(forKey: AppSettingsKeys.onboardingRole) ?? Defaults.onboardingRole
         self.onboardingRole = OnboardingRole(rawValue: storedOnboardingRole) ?? .ownerManager
+        self.tourProgress = Self.loadTourProgress()
         
         #if os(iOS)
         let defaultDeviceName = UIDevice.current.model
@@ -511,6 +526,42 @@ final class AppSettings {
     func replayGettingStarted() {
         hasSeenAppTour = false
         isChecklistDismissed = false
+    }
+
+    /// Records one stop of the guided tour. Writes only when progress changed.
+    func recordTourProgress(_ event: WalkthroughProgressEvent) {
+        let updated = tourProgress.recording(event)
+        if updated != tourProgress {
+            tourProgress = updated
+        }
+    }
+
+    /// Forgets which lessons were finished, so Continue starts from lesson 1.
+    func resetTourProgress() {
+        if tourProgress != WalkthroughProgress() {
+            tourProgress = WalkthroughProgress()
+        }
+    }
+
+    static func loadTourProgress(from defaults: UserDefaults = .standard) -> WalkthroughProgress {
+        let rawLessons = defaults.stringArray(forKey: AppSettingsKeys.tourCompletedLessons) ?? []
+        return WalkthroughProgress(
+            completedLessons: Set(rawLessons.compactMap(WalkthroughLesson.init(rawValue:))),
+            lastCompletedStepID: defaults.string(forKey: AppSettingsKeys.tourLastCompletedStepID)
+        )
+    }
+
+    static func storeTourProgress(_ progress: WalkthroughProgress, in defaults: UserDefaults = .standard) {
+        if progress.completedLessons.isEmpty {
+            defaults.removeObject(forKey: AppSettingsKeys.tourCompletedLessons)
+        } else {
+            defaults.set(progress.completedLessons.map(\.rawValue).sorted(), forKey: AppSettingsKeys.tourCompletedLessons)
+        }
+        if let stepID = progress.lastCompletedStepID {
+            defaults.set(stepID, forKey: AppSettingsKeys.tourLastCompletedStepID)
+        } else {
+            defaults.removeObject(forKey: AppSettingsKeys.tourLastCompletedStepID)
+        }
     }
 
     /// Re-arms the dashboard "getting started" checklist for a clean business

@@ -56,6 +56,8 @@ struct EmergencyContactSummaryCard: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
                     .accessibilityLabel(AppLocalization.localized("client_detail.add_emergency_contact", value: "Add emergency contact"))
+                    // The guided tour's "Add a Backup Contact" stop.
+                    .walkthroughTarget(.emergencyContactBadges)
                 }
 
                 if !missingItems.isEmpty {

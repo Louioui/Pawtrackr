@@ -37,6 +37,9 @@ struct ClientDetailView: View {
     @State private var sheetDestination: SheetDestination?
     @State private var checkoutRoute: ClientCheckoutRoute? = nil
     @State private var isWalkthroughDrivingCheckout = false
+    /// The emergency contact form was opened on the tour's "+" stop, so
+    /// closing it moves the tour on.
+    @State private var walkthroughOpenedContactEditor = false
 
     enum SheetDestination: Identifiable {
         case addPet
@@ -117,10 +120,13 @@ struct ClientDetailView: View {
     @Environment(NavigationRouter.self) private var router
     @Query private var devices: [DeviceMetadata]
     private var namespace: Namespace.ID
-    private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
+    /// Every tour stop on this screen, so each one is scrolled into view.
+    static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
         .cdOwner,
         .cdEmergency,
+        .emergencyContactBadges,
         .cdPets,
+        .petGenderDots,
         .cdAddPet,
         .cdCheckIn,
         .cdCheckOut,
@@ -185,12 +191,17 @@ struct ClientDetailView: View {
             .onAppear {
                 synchronizeWalkthroughCheckoutPresentation(walkthrough?.currentStep?.presents, vm: vm)
                 advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
+                releaseWalkthroughCheckOutIfNothingIsCheckedIn(vm: vm)
             }
             .onChange(of: walkthrough?.currentStep?.presents) { _, presentation in
                 synchronizeWalkthroughCheckoutPresentation(presentation, vm: vm)
             }
             .onChange(of: walkthrough?.currentStep?.anchor) { _, _ in
                 advanceWalkthroughIfCheckInAlreadySatisfied(vm: vm)
+                releaseWalkthroughCheckOutIfNothingIsCheckedIn(vm: vm)
+            }
+            .onChange(of: showContactEditor) { _, isShowing in
+                continueWalkthroughAfterContactEditor(isShowing: isShowing)
             }
             .onReceive(NotificationCenter.default.publisher(for: .visitDidStart)) { notification in
                 continueWalkthroughAfterVisitStart(notification, vm: vm)
@@ -214,8 +225,12 @@ struct ClientDetailView: View {
                     alertMessage(for: destination)
                 }
             )
-            .onChange(of: (vm.client.pets ?? []).count) { _, _ in
+            .onChange(of: (vm.client.pets ?? []).count) { oldCount, newCount in
                 vm.refreshPets()
+                // The tour's Add a New Pet stop moves on once a pet is saved.
+                if newCount > oldCount {
+                    walkthrough?.observe(.petAdded)
+                }
             }
             .onChange(of: (vm.client.emergencyContacts ?? []).count) { _, _ in
                 vm.refreshEmergencyContacts()
@@ -447,9 +462,9 @@ struct ClientDetailView: View {
                         .walkthroughTarget(.cdOwner)
                         .showsRecentlyOpenElsewhere(recordID: vm.client.uuid)
                     clientSafetyBanner(client: vm.client)
+                    // The card's "+" button carries `.emergencyContactBadges`.
                     emergencyContactsCard(contacts: vm.emergencyContacts)
                         .walkthroughTarget(.cdEmergency)
-                        .walkthroughTarget(.emergencyContactBadges)
                     notesCard(client: vm.client)
                     loyaltySection(client: vm.client)
                     petsSection(vm: vm)
@@ -926,6 +941,7 @@ struct ClientDetailView: View {
                 }
             }
             .padding(.horizontal)
+            let tourPets = walkthroughAnchorPets(vm: vm)
             VStack(spacing: 12) {
                 ForEach(vm.pets) { pet in
                     let activeVisit = vm.activeVisit(for: pet)
@@ -938,7 +954,7 @@ struct ClientDetailView: View {
                                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         PetGenderNameBadge(pet: pet, maxNameWidth: 220)
-                                            .walkthroughTarget(.petGenderDots)
+                                            .walkthroughTarget(.petGenderDots, isActive: pet.persistentModelID == tourPets.featured)
                                         Text(pet.shortDescriptor).font(.subheadline).foregroundStyle(.secondary)
                                     }
                                     Spacer()
@@ -973,7 +989,7 @@ struct ClientDetailView: View {
                                     .opacity(activeVisit == nil && !isCheckingIn ? 1.0 : 0.55)
                                     .disabled(activeVisit != nil || isCheckingIn)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkIn")
-                                    .walkthroughTarget(.cdCheckIn)
+                                    .walkthroughTarget(.cdCheckIn, isActive: pet.persistentModelID == tourPets.checkIn)
 
                                     actionButton(title: NSLocalizedString("client_detail.check_out", comment: ""), systemImage: "stop.fill", tint: .blue) {
                                         if let visit = vm.activeVisit(for: pet) {
@@ -988,13 +1004,13 @@ struct ClientDetailView: View {
                                     .opacity(activeVisit == nil ? 0.3 : 1.0)
                                     .disabled(activeVisit == nil)
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).checkOut")
-                                    .walkthroughTarget(.cdCheckOut)
+                                    .walkthroughTarget(.cdCheckOut, isActive: pet.persistentModelID == tourPets.featured)
 
                                     actionButton(title: NSLocalizedString("client_detail.history", comment: ""), systemImage: "clock.arrow.circlepath", borderOnly: true) {
                                         sheetDestination = .history(pet)
                                     }
                                     .accessibilityIdentifier("clientDetail.pet.\(pet.name).history")
-                                    .walkthroughTarget(.cdPetHistory)
+                                    .walkthroughTarget(.cdPetHistory, isActive: pet.persistentModelID == tourPets.featured)
                                 }
                             }
                         }
@@ -1251,10 +1267,53 @@ struct ClientDetailView: View {
         vm.refreshPets()
         guard firstActiveCheckoutRoute(vm: vm) != nil else { return }
 
+        // Coming back from Check Out, don't bounce forward again: the pet is
+        // already in session, so offer Next instead.
+        if walkthrough?.lastMoveWasBackward == true {
+            walkthrough?.releaseActionRequirement(reason: "the pet is already checked in")
+            return
+        }
+
         Task { @MainActor in
             guard walkthrough?.currentStep?.anchor == .cdCheckIn else { return }
             walkthrough?.advance()
         }
+    }
+
+    /// Check Out can't be tapped without a pet in session. Show Next rather
+    /// than wait for a tap that can't happen.
+    private func releaseWalkthroughCheckOutIfNothingIsCheckedIn(vm: ClientDetailViewModel) {
+        guard walkthrough?.isActive == true,
+              walkthrough?.currentStep?.anchor == .cdCheckOut,
+              walkthrough?.currentStep?.requiresTargetAction == true
+        else { return }
+        vm.refreshPets()
+        if firstActiveCheckoutRoute(vm: vm) == nil {
+            walkthrough?.releaseActionRequirement(reason: "no pet is checked in")
+        }
+    }
+
+    /// The tour's "+" stop moves on once the emergency contact form it
+    /// opened is closed, whether a contact was saved or not.
+    private func continueWalkthroughAfterContactEditor(isShowing: Bool) {
+        if isShowing {
+            walkthroughOpenedContactEditor = walkthrough?.currentStep?.advancesOn == .emergencyContactEditorClosed
+        } else if walkthroughOpenedContactEditor {
+            walkthroughOpenedContactEditor = false
+            walkthrough?.observe(.emergencyContactEditorClosed)
+        }
+    }
+
+    /// The pets the tour's per-pet stops point at, one each: Check In on a
+    /// pet that isn't in session, the rest on the pet in session (checkout
+    /// opens its visit), else the first pet.
+    private func walkthroughAnchorPets(vm: ClientDetailViewModel) -> (featured: PersistentIdentifier?, checkIn: PersistentIdentifier?) {
+        let inSession = vm.pets.first { vm.activeVisit(for: $0) != nil }
+        let waiting = vm.pets.first { vm.activeVisit(for: $0) == nil }
+        return (
+            featured: (inSession ?? vm.pets.first)?.persistentModelID,
+            checkIn: (waiting ?? vm.pets.first)?.persistentModelID
+        )
     }
 
     private func advanceWalkthroughIntoCheckoutIfNeeded() {

@@ -585,7 +585,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughInteractiveTargetBubbleDoesNotOverlapIPadCheckoutTarget() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .cdCheckOut,
             title: "Check Out",
             directive: "Tap the highlighted button.",
@@ -611,7 +611,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughLayoutShrinksInsteadOfClampingBubbleOverTarget() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .cdCheckOut,
             title: "Check Out",
             directive: "Tap the highlighted button.",
@@ -637,7 +637,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughRightSideCheckoutTargetUsesLeadingBubbleOnIPadLandscape() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .cdCheckOut,
             title: "Check Out",
             directive: "Tap the highlighted button.",
@@ -663,7 +663,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughRightSideCheckoutTargetUsesLeadingBubbleInShortDetailHost() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .cdCheckOut,
             title: "Check Out",
             directive: "Tap the highlighted button.",
@@ -689,7 +689,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughBubbleStaysInBoundsForIPadLandscapePetHistoryTarget() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .cdPetHistory,
             title: "Pet History",
             directive: "Open the pet timeline.",
@@ -713,7 +713,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughCompactTabBarBubbleAppearsAboveTarget() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .dashboard,
             title: "Dashboard",
             directive: "Start here.",
@@ -737,7 +737,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughMacSettingsBubbleIsInBoundsAndOffTarget() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .setBusiness,
             title: "Business Settings",
             directive: "Check your shop profile.",
@@ -766,7 +766,7 @@ final class OnboardingViewModelTests: XCTestCase {
         // the spotlight), then fall back to a cramped strip above the section —
         // clipping the copy down to a bare Back / Skip / Next bar under the toolbar.
         let step = WalkthroughStep(
-            id: 1,
+            id: "dash.kpis",
             anchor: .dashKpis,
             title: "Today at a glance",
             directive: "Read your live day before opening any list.",
@@ -794,7 +794,7 @@ final class OnboardingViewModelTests: XCTestCase {
         // (Business, Security, iCloud, About) hit the same trailing-cap rejection
         // and rendered an empty bubble pinned against the window toolbar.
         let step = WalkthroughStep(
-            id: 32,
+            id: "set.business",
             anchor: .setBusiness,
             title: "Business profile",
             directive: "Brand the workspace.",
@@ -819,7 +819,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughCompactRecentHistoryHeaderKeepsGuideReadable() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .cdHistory,
             title: "Recent History",
             directive: "Review what happened last time.",
@@ -844,7 +844,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughMacNewClientSaveFooterTargetStaysReadableAndOffButton() {
         let step = WalkthroughStep(
-            id: 0,
+            id: "layout",
             anchor: .ncSave,
             title: "Save the client",
             directive: "Create once, reuse every visit.",

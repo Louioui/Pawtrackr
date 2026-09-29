@@ -35,7 +35,9 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
     // MARK: - Tour context
 
     func testTourContextTellsSampleAndRealClientsApartByUUIDOnly() throws {
-        XCTAssertEqual(WalkthroughTourContext.resolve(in: context), WalkthroughTourContext(hasSampleClient: false, hasRealClients: false))
+        let empty = WalkthroughTourContext.resolve(in: context)
+        XCTAssertFalse(empty.hasSampleClient)
+        XCTAssertFalse(empty.hasRealClients)
 
         XCTAssertTrue(try DemoDataSeeder.seedIfNeeded(in: context))
         XCTAssertEqual(WalkthroughTourContext.resolve(in: context), WalkthroughTourContext(hasSampleClient: true, hasRealClients: false))
@@ -44,7 +46,8 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
         context.insert(Client(firstName: "Ava", lastName: "Martinez"))
         try context.save()
         let resolved = WalkthroughTourContext.resolve(in: context)
-        XCTAssertEqual(resolved, WalkthroughTourContext(hasSampleClient: true, hasRealClients: true))
+        XCTAssertTrue(resolved.hasSampleClient)
+        XCTAssertTrue(resolved.hasRealClients)
         XCTAssertTrue(resolved.isExplainOnly)
     }
 
@@ -67,7 +70,9 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
             XCTAssertFalse(steps.contains { $0.presents == .checkout }, "\(role)")
             XCTAssertFalse(steps.isEmpty)
         }
-        XCTAssertEqual(WalkthroughController.tour(for: .ownerManager, context: context).last?.anchor, .setStartFresh)
+        // The owner's tour still teaches Start Fresh. Roles order the lessons,
+        // so it is no longer necessarily the last stop.
+        XCTAssertTrue(WalkthroughController.tour(for: .ownerManager, context: context).contains { $0.anchor == .setStartFresh })
     }
 
     func testLookOnlyCopyDoesNotInviteATapOnCreateAndStaysShort() {
@@ -104,7 +109,13 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
     func testAPracticeStoreKeepsTheHandsOnTour() {
         let practice = WalkthroughTourContext(hasSampleClient: true, hasRealClients: false)
         let steps = WalkthroughController.tour(for: .ownerManager, context: practice)
-        XCTAssertEqual(steps, WalkthroughController.fullTour())
+        // Same stops as the catalog, hands-on flags intact. Only the lesson
+        // order differs, which the role decides.
+        XCTAssertEqual(Set(steps.map(\.id)), Set(WalkthroughController.fullTour().map(\.id)))
+        let catalog = Dictionary(uniqueKeysWithValues: WalkthroughController.fullTour().map { ($0.id, $0) })
+        for step in steps {
+            XCTAssertEqual(step, catalog[step.id], step.id)
+        }
         XCTAssertEqual(steps.first { $0.anchor == .cdCheckIn }?.requiresTargetAction, true)
     }
 

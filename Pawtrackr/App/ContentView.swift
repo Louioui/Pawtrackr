@@ -43,6 +43,9 @@ struct ContentView: View {
     @State private var walkthrough = WalkthroughController()
     @State private var walkthroughStartTask: Task<Void, Never>?
     @State private var isExplicitWalkthroughReplayPending = false
+    /// The sample client the tour last opened, so later stops can tell
+    /// whether client details are still showing it.
+    @State private var walkthroughRoutedClientID: PersistentIdentifier?
     /// Last-handled (kind, uuid, timestamp) used to dedupe near-simultaneous
     /// navigation requests coming from both `.onReceive` and `consumePendingNavigation`
     /// at app launch / cold-start time.
@@ -81,7 +84,9 @@ struct ContentView: View {
 
     var body: some View {
         rootContent
-            .walkthroughOverlay(walkthrough, scope: rootOverlayScope)
+            // The root overlay also draws, centered, any step its own screen
+            // never drew, so the tour can't vanish without Back/Skip/Next.
+            .walkthroughOverlay(walkthrough, scope: rootOverlayScope, adoptsOrphanedSteps: true)
             // Confetti moment when the user finishes the whole tour. Sits above the
             // walkthrough overlay so it plays as the tour dismisses, then clears
             // itself after the burst.
@@ -110,12 +115,13 @@ struct ContentView: View {
             .onChange(of: walkthrough.currentStep?.presents) { _, presentation in
                 synchronizeWalkthroughPresentation(presentation)
             }
-            .onChange(of: walkthrough.currentStep?.route) { _, route in
-                synchronizeWalkthroughRoute(route)
+            .onChange(of: walkthrough.currentStep?.id) { _, _ in
+                synchronizeWalkthroughStepLocation()
             }
             .onChange(of: walkthrough.isActive) { _, isActive in
                 if !isActive {
                     closeWalkthroughPresentationIfNeeded()
+                    walkthroughRoutedClientID = nil
                 }
             }
             .environment(router)
@@ -163,8 +169,8 @@ struct ContentView: View {
                 guard let item = notification.requestedNavigationItem else { return }
                 selectSurface(item, resetPath: notification.shouldResetNavigationPath)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .replayGettingStartedRequested)) { _ in
-                replayGettingStartedFromRoot()
+            .onReceive(NotificationCenter.default.publisher(for: .replayGettingStartedRequested)) { notification in
+                launchWalkthrough(WalkthroughLaunchRequest(notification: notification))
             }
             .adaptiveCover(item: $presentedSheet) { destination in
                 switch destination {
@@ -183,17 +189,7 @@ struct ContentView: View {
                 }
             }
             .onAppear {
-                if !hasAppliedDefaultLaunchTab && !AppRuntime.isUITesting,
-                   let tab = NavigationItem(rawValue: appSettings.defaultLaunchTab) {
-                    sidebarSelection = tab
-                    tabSelection = tab
-                }
-                hasAppliedDefaultLaunchTab = true
-                router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
-                applyUITestLaunchOverrides()
-                consumePendingNewClientRequest()
-                consumePendingNavigation()
-                startWalkthroughIfReady()
+                handleContentAppear()
             }
             .onChange(of: appSettings.hasSeenAppTour) { _, seen in
                 // Pick up the OnboardingViewModel (or "Replay Getting Started")
@@ -202,6 +198,26 @@ struct ContentView: View {
                     startWalkthroughIfReady()
                 }
             }
+    }
+
+    private func handleContentAppear() {
+        if !hasAppliedDefaultLaunchTab && !AppRuntime.isUITesting,
+           let tab = NavigationItem(rawValue: appSettings.defaultLaunchTab) {
+            sidebarSelection = tab
+            tabSelection = tab
+        }
+        hasAppliedDefaultLaunchTab = true
+        router.activeNavigationItem = horizontalSizeClass == .compact ? tabSelection : (sidebarSelection ?? .dashboard)
+        // Each stop moved past is saved, so Settings can continue the tour
+        // where it stopped.
+        let settings = appSettings
+        walkthrough.onProgress = { event in
+            settings.recordTourProgress(event)
+        }
+        applyUITestLaunchOverrides()
+        consumePendingNewClientRequest()
+        consumePendingNavigation()
+        startWalkthroughIfReady()
     }
 
     private func startWalkthroughIfReady() {
@@ -225,18 +241,56 @@ struct ContentView: View {
             selectSurface(.dashboard, resetPath: true)
             revealSplitSidebarForWalkthroughIfNeeded()
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.start(currentWalkthroughSteps())
+            // A tour cut short (the app was closed mid-tour) picks up where
+            // it stopped.
+            let steps = currentWalkthroughSteps()
+            walkthrough.start(steps, at: appSettings.tourProgress.resumeStepID(in: steps))
         }
     }
 
-    private func replayGettingStartedFromRoot() {
+    /// Settings asks for the tour: from the start, from where it stopped, or
+    /// one lesson.
+    private func launchWalkthrough(_ request: WalkthroughLaunchRequest) {
         guard canStartWalkthroughInCurrentRuntime else { return }
 
         isExplicitWalkthroughReplayPending = true
-        appSettings.replayGettingStarted()
+        switch request {
+        case .replayGettingStarted:
+            appSettings.replayGettingStarted()
+            appSettings.resetTourProgress()
+        case .startOver:
+            appSettings.resetTourProgress()
+        case .continueTour, .lesson:
+            break
+        }
         walkthroughStartTask?.cancel()
         closeWalkthroughPresentationIfNeeded()
         presentedSheet = nil
+
+        let steps: [WalkthroughStep]
+        let startStepID: String?
+        switch request {
+        case .replayGettingStarted, .startOver:
+            steps = currentWalkthroughSteps()
+            startStepID = nil
+        case .continueTour:
+            steps = currentWalkthroughSteps()
+            // Every lesson done: Continue replays from the start.
+            startStepID = appSettings.tourProgress.resumeStepID(in: steps)
+        case .lesson(let lesson):
+            steps = WalkthroughController.steps(
+                for: lesson,
+                role: appSettings.onboardingRole,
+                context: currentWalkthroughContext()
+            )
+            startStepID = nil
+        }
+        guard !steps.isEmpty else {
+            Logger.contentNav.notice("Walkthrough request had no stops for this role and salon.")
+            isExplicitWalkthroughReplayPending = false
+            return
+        }
+
         selectSurface(.dashboard, resetPath: true)
         revealSplitSidebarForWalkthroughIfNeeded()
 
@@ -246,7 +300,7 @@ struct ContentView: View {
             guard !Task.isCancelled else { return }
             guard presentedSheet == nil else { return }
             walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
-            walkthrough.restart(currentWalkthroughSteps())
+            walkthrough.restart(steps, at: startStepID)
         }
     }
 
@@ -254,9 +308,14 @@ struct ContentView: View {
     /// now: explain-only when real clients exist, and client-detail/checkout
     /// steps only when a sample client is there to open.
     private func currentWalkthroughSteps() -> [WalkthroughStep] {
-        WalkthroughController.tour(
-            for: appSettings.onboardingRole,
-            context: WalkthroughTourContext.resolve(in: modelContext)
+        WalkthroughController.tour(for: appSettings.onboardingRole, context: currentWalkthroughContext())
+    }
+
+    private func currentWalkthroughContext() -> WalkthroughTourContext {
+        WalkthroughTourContext.resolve(
+            in: modelContext,
+            isPINSet: appSettings.isPINSet,
+            backupStatus: CloudKitMonitor.shared.backupStatus
         )
     }
 
@@ -291,13 +350,32 @@ struct ContentView: View {
         isWalkthroughDrivingSheet = false
     }
 
-    private func synchronizeWalkthroughRoute(_ route: WalkthroughRoute?) {
-        guard walkthrough.isActive, let route else { return }
+    /// Puts the Clients stack where the current stop needs it. Client-detail
+    /// stops need the sample client open (with a pet, for pet stops), even
+    /// after the user wandered off during a hands-on stop. Client-list stops
+    /// need the list itself, not a profile left open by an earlier lesson.
+    private func synchronizeWalkthroughStepLocation() {
+        guard walkthrough.isActive, let step = walkthrough.currentStep else { return }
 
-        switch route {
+        switch step.route {
         case .demoClientDetail:
-            openWalkthroughDemoClientDetail()
+            if walkthroughNeedsClientDetailNavigation(for: step) {
+                openWalkthroughDemoClientDetail()
+            }
+        case .none:
+            guard step.surface == .clients, !router.clientsPath.isEmpty else { return }
+            router.popClientsToRoot()
+            walkthroughRoutedClientID = nil
         }
+    }
+
+    private func walkthroughNeedsClientDetailNavigation(for step: WalkthroughStep) -> Bool {
+        guard router.clientsPath.count == 1,
+              let routedID = walkthroughRoutedClientID,
+              let client = modelContext.model(for: routedID) as? Client,
+              SampleData.isSample(client)
+        else { return true }
+        return step.needsTourPet && (client.pets ?? []).isEmpty
     }
 
     private func openWalkthroughDemoClientDetail() {
@@ -311,7 +389,10 @@ struct ContentView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
             guard walkthrough.isActive,
-                  walkthrough.currentStep?.route == .demoClientDetail else { return }
+                  let step = walkthrough.currentStep,
+                  step.route == .demoClientDetail,
+                  walkthroughNeedsClientDetailNavigation(for: step)
+            else { return }
             performDemoClientDetailNavigation()
         }
     }
@@ -325,8 +406,10 @@ struct ContentView: View {
             return
         }
         selectClientsSurface()
+        guard !(router.clientsPath.count == 1 && walkthroughRoutedClientID == client.persistentModelID) else { return }
         router.popClientsToRoot()
         router.navigateToClient(client)
+        walkthroughRoutedClientID = client.persistentModelID
     }
 
     private func continueWalkthroughAfterClientCreate(_ notification: Notification) {

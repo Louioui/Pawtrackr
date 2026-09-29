@@ -736,7 +736,6 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 PetGenderNameBadge(pet: pet, maxNameWidth: 150)
-                                    .walkthroughTarget(.petGenderDots)
                                 Spacer(minLength: 8)
                                 if let status = pet.nextVisitStatus {
                                     Chip(status, style: .tinted, size: .xs, tint: attentionTint(for: pet))

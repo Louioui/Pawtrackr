@@ -571,6 +571,8 @@ final class OnboardingViewModel {
                 }
 
                 await MainActor.run {
+                    // A new setup starts the tour from its first lesson.
+                    settings.resetTourProgress()
                     settings.hasSeenAppTour = false
                     onComplete()
                 }
