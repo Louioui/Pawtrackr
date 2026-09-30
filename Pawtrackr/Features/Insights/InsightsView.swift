@@ -453,6 +453,13 @@ struct InsightsView: View {
                     reportPDFData = nil
                     reportCSVDocument = nil
                     Task { await vm.refreshRevenue() }
+                    // The Academy's period mission: let the chart redraw first.
+                    if walkthrough?.currentStep?.advancesOn == .insightsPeriodChanged {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(900))
+                            walkthrough?.observe(.insightsPeriodChanged)
+                        }
+                    }
                 } label: {
                     Text("\(period)D")
                         .font(.caption.weight(.semibold))

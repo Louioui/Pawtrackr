@@ -32,6 +32,8 @@ struct ContentView: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(AuthenticationViewModel.self) private var authViewModel
     @Environment(DataStoreService.self) private var dataStore
+    /// The Academy's sandbox (RootView owns it). Open while the tour runs.
+    @Environment(PracticeSalon.self) private var practiceSalon: PracticeSalon?
 
     @State private var router = NavigationRouter()
     @SceneStorage("content.sidebarSelection") private var sidebarSelectionRaw = NavigationItem.dashboard.rawValue
@@ -43,6 +45,9 @@ struct ContentView: View {
     @State private var walkthrough = WalkthroughController()
     @State private var walkthroughStartTask: Task<Void, Never>?
     @State private var isExplicitWalkthroughReplayPending = false
+    /// The running tour is the whole Academy, not one replayed chapter, so
+    /// finishing it earns the graduate badge.
+    @State private var isRunningFullAcademy = false
     /// The sample client the tour last opened, so later stops can tell
     /// whether client details are still showing it.
     @State private var walkthroughRoutedClientID: PersistentIdentifier?
@@ -163,15 +168,21 @@ struct ContentView: View {
             .onChange(of: sidebarSelection) { _, newValue in
                 if let newValue {
                     router.activeNavigationItem = newValue
+                    reportTabMission(newValue)
                 }
             }
             .onChange(of: tabSelection) { _, newValue in
                 router.activeNavigationItem = newValue
+                reportTabMission(newValue)
             }
     }
 
     private var walkthroughContent: some View {
         rootContent
+            // Screens keep view models built on the store they opened with.
+            // Rebuild them when the window moves to or from the practice
+            // salon. The tour and its overlay live above, and carry on.
+            .id(practiceSalon?.session?.id)
             // The root overlay also draws, centered, any step its own screen
             // never drew, so the tour can't vanish without Back/Skip/Next.
             .walkthroughOverlay(walkthrough, scope: rootOverlayScope, adoptsOrphanedSteps: true)
@@ -191,6 +202,18 @@ struct ContentView: View {
                     walkthrough.endCelebration()
                 }
             }
+            // A medal when an Academy chapter ends; the tour carries on under it.
+            .overlay(alignment: .top) {
+                if let win = walkthrough.chapterWin {
+                    WalkthroughChapterWinToast(win: win)
+                        .padding(.top, 12)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .task(id: win.id) {
+                            try? await Task.sleep(for: .seconds(2.4))
+                            walkthrough.endChapterWin(win)
+                        }
+                }
+            }
             .environment(walkthrough)
             // The deep-dive tour drives navigation for every step, not only when
             // the high-level surface value changes. Consecutive steps often live
@@ -206,6 +229,15 @@ struct ContentView: View {
                     closeWalkthroughPresentationIfNeeded()
                     walkthroughRoutedClientID = nil
                 }
+            }
+            // Pushed screens and open sheets hold records from the store
+            // they came from: start clean when the window switches between
+            // the real salon and the practice one.
+            .onChange(of: practiceSalon?.session?.id) { _, _ in
+                router.popAllToRoot()
+                presentedSheet = nil
+                isWalkthroughDrivingSheet = false
+                walkthroughRoutedClientID = nil
             }
     }
 
@@ -236,24 +268,70 @@ struct ContentView: View {
         // spotlight can actually land on the sidebar / tab bar.
         guard presentedSheet == nil else { return }
         guard shouldAutoStartWalkthrough, !walkthrough.isActive else { return }
+        // The tour runs in the practice salon. Opening it now lets the window
+        // switch stores during the delay below.
+        openPracticeSalonForTour()
         // Brief delay lets the post-onboarding transition settle so the sidebar /
         // tab-bar anchors are measured in their final positions before we spotlight.
         walkthroughStartTask?.cancel()
         walkthroughStartTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(600))
+            // Cancelled by a newer start, which owns the practice salon now.
             guard !Task.isCancelled else { return }
             guard canStartWalkthroughInCurrentRuntime,
                   shouldAutoStartWalkthrough,
                   !walkthrough.isActive,
                   presentedSheet == nil
-            else { return }
+            else {
+                closePracticeSalonIfNoTour()
+                return
+            }
             selectSurface(.dashboard, resetPath: true)
             revealSplitSidebarForWalkthroughIfNeeded()
-            walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
+            walkthrough.onFinish = { completed in finishWalkthrough(completed: completed) }
+            isRunningFullAcademy = true
             // A tour cut short (the app was closed mid-tour) picks up where
             // it stopped.
             let steps = currentWalkthroughSteps()
             walkthrough.start(steps, at: appSettings.tourProgress.resumeStepID(in: steps))
+            closePracticeSalonIfNoTour()
+        }
+    }
+
+    /// The practice salon the tour runs in. If it can't open, the tour runs
+    /// on the real salon in its explain-only form (`WalkthroughTourContext`).
+    private func openPracticeSalonForTour() {
+        guard let practiceSalon, !practiceSalon.isOpen else { return }
+        if !practiceSalon.open() {
+            Logger.contentNav.error("Practice salon unavailable; the tour explains the real salon instead.")
+        }
+    }
+
+    /// Never leave the window on the practice salon without a tour in it.
+    private func closePracticeSalonIfNoTour() {
+        guard !walkthrough.isActive, practiceSalon?.isOpen == true else { return }
+        practiceSalon?.close()
+    }
+
+    /// The tour ended: it never starts on its own again, a finished run is
+    /// recorded, and the window goes back to the real salon.
+    private func finishWalkthrough(completed: Bool) {
+        appSettings.hasSeenAppTour = true
+        if completed, isRunningFullAcademy {
+            appSettings.hasCompletedAcademy = true
+        }
+        isRunningFullAcademy = false
+        practiceSalon?.close()
+        selectSurface(.dashboard, resetPath: true)
+    }
+
+    /// The Academy's "open Clients" and "open Insights" missions: the user
+    /// picked the tab themselves.
+    private func reportTabMission(_ item: NavigationItem) {
+        switch item {
+        case .clients: walkthrough.observe(.clientsTabOpened)
+        case .insights: walkthrough.observe(.insightsTabOpened)
+        case .dashboard, .settings: break
         }
     }
 
@@ -275,6 +353,7 @@ struct ContentView: View {
         walkthroughStartTask?.cancel()
         closeWalkthroughPresentationIfNeeded()
         presentedSheet = nil
+        openPracticeSalonForTour()
 
         let steps: [WalkthroughStep]
         let startStepID: String?
@@ -297,6 +376,7 @@ struct ContentView: View {
         guard !steps.isEmpty else {
             Logger.contentNav.notice("Walkthrough request had no stops for this role and salon.")
             isExplicitWalkthroughReplayPending = false
+            closePracticeSalonIfNoTour()
             return
         }
 
@@ -306,9 +386,18 @@ struct ContentView: View {
         walkthroughStartTask = Task { @MainActor in
             defer { isExplicitWalkthroughReplayPending = false }
             try? await Task.sleep(for: .milliseconds(450))
+            // Cancelled by a newer start, which owns the practice salon now.
             guard !Task.isCancelled else { return }
-            guard presentedSheet == nil else { return }
-            walkthrough.onFinish = { appSettings.hasSeenAppTour = true }
+            guard presentedSheet == nil else {
+                closePracticeSalonIfNoTour()
+                return
+            }
+            walkthrough.onFinish = { completed in finishWalkthrough(completed: completed) }
+            if case .lesson = request {
+                isRunningFullAcademy = false
+            } else {
+                isRunningFullAcademy = true
+            }
             walkthrough.restart(steps, at: startStepID)
         }
     }
@@ -322,9 +411,16 @@ struct ContentView: View {
 
     private func currentWalkthroughContext() -> WalkthroughTourContext {
         WalkthroughTourContext.resolve(
-            in: modelContext,
+            in: tourModelContext,
             isPINSet: appSettings.isPINSet
         )
+    }
+
+    /// The store the tour runs on: the practice salon while it is open. Read
+    /// from the salon itself, not the environment, so a task started before
+    /// the window switched stores still gets the right one.
+    private var tourModelContext: ModelContext {
+        practiceSalon?.session?.container.mainContext ?? modelContext
     }
 
     private var canStartWalkthroughInCurrentRuntime: Bool {
@@ -418,9 +514,16 @@ struct ContentView: View {
     }
 
     private func walkthroughNeedsClientDetailNavigation(for step: WalkthroughStep) -> Bool {
+        // The client-list mission: the user opened the tour client's card
+        // themselves. Keep that screen rather than pushing it a second time.
+        if walkthroughRoutedClientID == nil,
+           let tourClient = SampleData.tourClient(in: tourModelContext),
+           isShowingOnlyWalkthroughClient(tourClient.persistentModelID) {
+            walkthroughRoutedClientID = tourClient.persistentModelID
+        }
         guard let routedID = walkthroughRoutedClientID,
               isShowingOnlyWalkthroughClient(routedID),
-              let client = modelContext.model(for: routedID) as? Client,
+              let client = tourModelContext.model(for: routedID) as? Client,
               SampleData.isSample(client)
         else { return true }
         return step.needsTourPet && (client.pets ?? []).isEmpty
@@ -456,7 +559,7 @@ struct ContentView: View {
         // Only a sample client (fixed UUID) is ever opened. A client created
         // during the tour, or any other real client, is never the target: the
         // hands-on steps that follow would check its pet in for real.
-        guard let client = SampleData.tourClient(in: modelContext) else {
+        guard let client = SampleData.tourClient(in: tourModelContext) else {
             Logger.contentNav.info("Walkthrough client-detail route skipped: no sample client in the store.")
             return
         }
@@ -703,6 +806,8 @@ struct ContentView: View {
             }
         }
         .frame(height: 49)
+        // The Academy's first stop points at the whole tab bar.
+        .walkthroughAnchor(.appNavigation)
         .allowsHitTesting(false)
     }
 

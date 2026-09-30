@@ -171,6 +171,8 @@ final class PetDetailViewModel {
 // MARK: - View
 struct PetDetailView: View {
     @Environment(\.dismiss) private var dismiss
+    /// Practice pets are never offered to Handoff or Siri.
+    @Environment(\.isPracticeSalon) private var isPracticeSalon
     @Environment(\.modelContext) private var modelContext
     @Environment(GlobalEventBus.self) private var eventBus
     @State private var viewModel: PetDetailViewModel?
@@ -202,7 +204,7 @@ struct PetDetailView: View {
 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
 #endif
-                .userActivity("com.pawtrackr.viewPet") { activity in
+                .userActivity("com.pawtrackr.viewPet", isActive: !isPracticeSalon) { activity in
                     activity.title = String(
                         format: AppLocalization.localized("handoff.viewing_fmt", value: "Viewing %@"),
                         vm.pet.name

@@ -95,7 +95,14 @@ struct NewClientSheet: View {
                             focus: .firstName,
                             nextFocus: .lastName
                         )
-                        .onChange(of: viewModel.first) { _, _ in viewModel.clearValidationError(for: .first) }
+                        .onChange(of: viewModel.first) { _, newValue in
+                            viewModel.clearValidationError(for: .first)
+                            // The Academy's "Add a client" stop waits for a name.
+                            if walkthrough?.currentStep?.id == WalkthroughStepID.newClientOwner,
+                               !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                walkthrough?.releaseActionRequirement(reason: "a first name was typed")
+                            }
+                        }
 
                         inputField(
                             NSLocalizedString("new_client.last_name", comment: ""),

@@ -572,6 +572,7 @@ private struct SettingsDetailView: View {
             showResetFirstRunConfirm: $showResetFirstRunConfirm,
             showWipeConfirm: $showWipeConfirm,
             tourProgress: appSettings.tourProgress,
+            hasCompletedAcademy: appSettings.hasCompletedAcademy,
             tourRole: appSettings.onboardingRole,
             onTourRoleChange: { role in
                 if appSettings.onboardingRole != role {
@@ -1296,6 +1297,8 @@ private struct AboutSectionView: View {
     @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
     let tourProgress: WalkthroughProgress
+    /// Finished the whole Academy once: shows the graduate badge.
+    let hasCompletedAcademy: Bool
     let tourRole: OnboardingRole
     let onTourRoleChange: (OnboardingRole) -> Void
     let onLaunchTour: (WalkthroughLaunchRequest) -> Void
@@ -1317,9 +1320,20 @@ private struct AboutSectionView: View {
 
                 Divider()
 
-                Label(settingsLocalized("settings.tour.title", value: "Guided Tour"), systemImage: "sparkles")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack {
+                    Label(settingsLocalized("settings.tour.title", value: "Pawtrackr Academy"), systemImage: "graduationcap.fill")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 8)
+                    if hasCompletedAcademy {
+                        Label(settingsLocalized("settings.tour.graduate", value: "Graduate"), systemImage: "medal.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(DS.ColorToken.primary, in: Capsule())
+                            .accessibilityIdentifier("settings.academyGraduate")
+                    }
+                }
 
                 Button {
                     onLaunchTour(.continueTour)
@@ -1329,6 +1343,19 @@ private struct AboutSectionView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("settings.continueTour")
+
+                if hasCompletedAcademy {
+                    // Unlocked by finishing the Academy: the whole thing again,
+                    // for training someone new.
+                    Button {
+                        onLaunchTour(.startOver)
+                    } label: {
+                        Label(settingsLocalized("settings.tour.rerun_academy", value: "Re-run Academy"), systemImage: "graduationcap")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("settings.rerunAcademy")
+                }
 
                 Button {
                     showResetFirstRunConfirm = true
@@ -1341,7 +1368,7 @@ private struct AboutSectionView: View {
 
                 Text(settingsLocalized(
                     "settings.tour.caption",
-                    value: "When your salon has real clients, the tour only explains. It never checks pets in, creates clients, or saves a checkout."
+                    value: "The Academy runs in a practice salon with sample clients, so you can try everything. Your real clients are never changed."
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1393,15 +1420,15 @@ private struct AboutSectionView: View {
         }
     }
 
-    /// "Continue Tour (Lesson 3 of 6)" from saved progress and the role's
-    /// lesson order, or "Replay the Tour" once every lesson is done.
+    /// "Continue Academy (Chapter 3 of 5)" from saved progress and the role's
+    /// chapter order, or "Replay the Academy" once every chapter is done.
     private var continueTourTitle: String {
         let order = tourRole.tourLessonOrder
         guard let position = tourProgress.continuePosition(in: order) else {
-            return settingsLocalized("settings.tour.replay", value: "Replay the Tour")
+            return settingsLocalized("settings.tour.replay", value: "Replay the Academy")
         }
         return String(
-            format: settingsLocalized("settings.tour.continue_fmt", value: "Continue Tour (Lesson %1$d of %2$d)"),
+            format: settingsLocalized("settings.tour.continue_fmt", value: "Continue Academy (Chapter %1$d of %2$d)"),
             position.lesson,
             position.of
         )
@@ -1417,11 +1444,11 @@ private struct AboutSectionView: View {
     /// Replay any lesson on its own, and pick whose tour this device shows.
     private var tourLessonsCard: some View {
         CardView {
-            Label(settingsLocalized("settings.tour.lessons", value: "Lessons"), systemImage: "list.bullet.rectangle")
+            Label(settingsLocalized("settings.tour.lessons", value: "Chapters"), systemImage: "list.bullet.rectangle")
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(settingsLocalized("settings.tour.lessons_caption", value: "Replay any lesson on its own. A check mark means you finished it."))
+            Text(settingsLocalized("settings.tour.lessons_caption", value: "Replay any chapter on its own. A check mark means you finished it."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1445,7 +1472,7 @@ private struct AboutSectionView: View {
             .pickerStyle(.menu)
             .accessibilityIdentifier("settings.tourRole")
 
-            Text(settingsLocalized("settings.tour.role_caption", value: "The role sets which lessons and tips this device shows. Every tour follows the app screen by screen."))
+            Text(settingsLocalized("settings.tour.role_caption", value: "The role picks a few tips for this device. Everyone takes the same chapters, screen by screen."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1454,7 +1481,7 @@ private struct AboutSectionView: View {
             Button {
                 onLaunchTour(.startOver)
             } label: {
-                Label(settingsLocalized("settings.tour.restart_for_role", value: "Restart the Tour for This Role"), systemImage: "arrow.counterclockwise.circle")
+                Label(settingsLocalized("settings.tour.restart_for_role", value: "Restart the Academy for This Role"), systemImage: "arrow.counterclockwise.circle")
             }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("settings.restartTourForRole")
@@ -1490,7 +1517,7 @@ private struct AboutSectionView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityHint(settingsLocalized("settings.tour.lesson_hint", value: "Replays this lesson."))
+        .accessibilityHint(settingsLocalized("settings.tour.lesson_hint", value: "Replays this chapter."))
         .accessibilityIdentifier("settings.tourLesson.\(lesson.rawValue)")
     }
 

@@ -2,10 +2,9 @@
 //  WalkthroughSetupStopsTests.swift
 //  PawtrackrTests
 //
-//  The two tour stops that point at setup surfaces: the dashboard's Getting
-//  Started card and the loyalty preview in Settings > Loyalty. Both anchors
-//  used to be attached with no stop pointing at them (the loyalty one on the
-//  onboarding cover, where no tour overlay exists).
+//  The Academy's chapters and the stops that bracket it: the app map it
+//  opens on, the Settings stop it ends on, the loyalty card on client
+//  details, and chapter names in Spanish.
 //
 
 import XCTest
@@ -18,43 +17,28 @@ final class WalkthroughSetupStopsTests: XCTestCase {
         super.tearDown()
     }
 
-    func testGettingStartedStopClosesTheDashboardForOwners() throws {
-        let owner = WalkthroughController.tour(for: .ownerManager, context: .practice)
-        let ids = owner.map(\.id)
-        let checklist = try XCTUnwrap(ids.firstIndex(of: WalkthroughStepID.setupChecklist))
-        // The dashboard's last stop: everything before it is on the
-        // dashboard, and the tour moves on to the Clients tab after it.
-        XCTAssertEqual(ids.first, WalkthroughStepID.dashboard)
-        XCTAssertTrue(owner[..<checklist].allSatisfy { $0.surface == .dashboard })
-        XCTAssertEqual(ids[checklist + 1], "nav.clients")
+    func testTheAcademyOpensOnTheAppMapAndEndsInSettings() throws {
+        let steps = WalkthroughController.tour(for: .ownerManager, context: .practice)
+        let first = try XCTUnwrap(steps.first)
+        XCTAssertEqual(first.id, WalkthroughStepID.first)
+        XCTAssertEqual(first.anchor, .appNavigation)
+        XCTAssertEqual(first.surface, .dashboard)
+        XCTAssertFalse(first.allowsTargetInteraction, "Look-only: a tap on the menu moves the tour on, not the app.")
 
-        let step = try XCTUnwrap(WalkthroughController.fullTour().first { $0.id == WalkthroughStepID.setupChecklist })
-        XCTAssertEqual(step.anchor, .setupChecklist)
-        XCTAssertEqual(step.surface, .dashboard)
-        XCTAssertEqual(step.lesson, .dailyWorkflow)
-        XCTAssertTrue(step.skipsWhenTargetMissing, "The card is hidden once every row is done or it was closed.")
-        XCTAssertFalse(step.requiresTargetAction || step.allowsTargetInteraction, "Look-only: a tap mustn't open a sheet mid-tour.")
-
-        let frontDesk = WalkthroughController.tour(for: .frontDeskGroomer, context: .practice).map(\.id)
-        XCTAssertFalse(frontDesk.contains(WalkthroughStepID.setupChecklist), "Setup is the owner's job.")
+        let last = try XCTUnwrap(steps.last)
+        XCTAssertEqual(last.id, WalkthroughStepID.academyHome)
+        XCTAssertEqual(last.anchor, .setAbout)
+        XCTAssertEqual(last.surface, .settings)
+        XCTAssertEqual(SettingSection.walkthroughSection(for: last.anchor), .about, "The tour opens Settings > About for it.")
     }
 
-    func testLoyaltyStopOpensTheLoyaltySectionAndPointsAtThePreview() throws {
-        let step = try XCTUnwrap(WalkthroughController.fullTour().first { $0.id == WalkthroughStepID.loyalty })
-        XCTAssertEqual(step.anchor, .loyaltySimulator)
-        XCTAssertEqual(step.surface, .settings)
-        XCTAssertEqual(step.lesson, .settingsAndSafety)
-        XCTAssertTrue(step.isOwnerOnly)
-
-        // The tour opens Settings > Loyalty for it, and spotlights the card,
-        // not the whole section. The section as a whole is the ladder stop's.
-        XCTAssertEqual(SettingSection.walkthroughSection(for: .loyaltySimulator), .loyalty)
-        XCTAssertEqual(SettingSection.loyalty.walkthroughAnchorID, .setLoyalty)
-        XCTAssertNotEqual(step.anchor, SettingSection.loyalty.walkthroughAnchorID)
-        XCTAssertTrue(WalkthroughOverlayScope.detailAnchors.contains(.loyaltySimulator), "Drawn by the pushed Settings screen on iPad and Mac.")
-
-        let frontDesk = WalkthroughController.tour(for: .frontDeskGroomer, context: .practice).map(\.id)
-        XCTAssertFalse(frontDesk.contains(WalkthroughStepID.loyalty))
+    func testTheBackupStopOnlyExplainsTheExport() throws {
+        let step = try XCTUnwrap(WalkthroughController.fullTour().first { $0.id == WalkthroughStepID.backups })
+        XCTAssertEqual(step.anchor, .setData)
+        XCTAssertEqual(SettingSection.walkthroughSection(for: step.anchor), .dataExport)
+        XCTAssertFalse(step.allowsTargetInteraction, "An export reads the real salon, so the stop never runs one.")
+        XCTAssertNil(step.advancesOn)
+        XCTAssertFalse(SecureStoreSnapshotExporter.isUserFacingExportEnabled, "If encrypted backups ship, teach them here.")
     }
 
     func testTheLoyaltyAnchorIsNoLongerOnTheOnboardingCover() throws {
@@ -62,35 +46,6 @@ final class WalkthroughSetupStopsTests: XCTestCase {
         XCTAssertFalse(onboarding.contains("walkthroughTarget(.loyaltySimulator)"), "No tour overlay exists on the onboarding cover.")
         let loyalty = try source("Pawtrackr/Features/Loyalty/LoyaltyManagementView.swift")
         XCTAssertTrue(loyalty.contains("LoyaltySimulatorCard()\n                .walkthroughTarget(.loyaltySimulator)"))
-    }
-
-    func testNewStopsCopyInSpanishIsTranslatedAndShort() throws {
-        UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
-        let steps = WalkthroughController.fullTour().filter { [WalkthroughStepID.setupChecklist, WalkthroughStepID.loyalty].contains($0.id) }
-        XCTAssertEqual(steps.count, 2)
-        for step in steps {
-            XCTAssertLessThanOrEqual(step.directive.count, 86, step.directive)
-            XCTAssertLessThanOrEqual(step.purpose.count, 190, step.purpose)
-            XCTAssertLessThanOrEqual(step.coachTip?.count ?? 0, 150, step.coachTip ?? "")
-            for text in [step.title, step.directive, step.purpose, step.coachTip ?? ""] {
-                XCTAssertFalse(text.contains(";"), text)
-                XCTAssertFalse(text.contains(" — "), text)
-            }
-        }
-        XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.setupChecklist }?.title, "Primeros pasos")
-        XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.loyalty }?.title, "Puntos de lealtad")
-    }
-
-    func testLadderStopShowsTheLoyaltySectionRightBeforeThePreview() throws {
-        let owner = WalkthroughController.tour(for: .ownerManager, context: .practice).map(\.id)
-        let ladder = try XCTUnwrap(owner.firstIndex(of: WalkthroughStepID.loyaltyLadder))
-        XCTAssertEqual(owner[ladder + 1], WalkthroughStepID.loyalty, "Same Settings screen: the section, then its preview card.")
-
-        let step = try XCTUnwrap(WalkthroughController.fullTour().first { $0.id == WalkthroughStepID.loyaltyLadder })
-        XCTAssertEqual(step.anchor, .setLoyalty)
-        XCTAssertEqual(SettingSection.walkthroughSection(for: step.anchor), .loyalty)
-        XCTAssertTrue(step.isOwnerOnly)
-        XCTAssertFalse(step.requiresTargetAction || step.allowsTargetInteraction, "Look-only: Reset to Discount Ladder replaces every reward.")
     }
 
     func testClientLoyaltyStopsAreInBothTours() throws {
@@ -104,13 +59,26 @@ final class WalkthroughSetupStopsTests: XCTestCase {
         XCTAssertFalse(WalkthroughController.tour(for: .ownerManager, context: noSample).contains { $0.id == WalkthroughStepID.clientLoyalty })
     }
 
-    func testMergedStopsCopyInSpanishIsTranslated() throws {
+    func testChapterNamesAreTranslated() {
         UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
-        let ids = [WalkthroughStepID.loyaltyLadder, WalkthroughStepID.clientLoyalty]
-        let steps = WalkthroughController.fullTour().filter { ids.contains($0.id) }
-        XCTAssertEqual(steps.count, ids.count)
-        XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.loyaltyLadder }?.title, "Escalera de lealtad")
-        XCTAssertEqual(steps.first { $0.id == WalkthroughStepID.clientLoyalty }?.title, "Saldo de lealtad")
+        XCTAssertEqual(
+            WalkthroughLesson.allCases.map(\.title),
+            ["Panel", "Directorio de clientes", "Perfiles y mascotas", "Visitas y pagos", "Estadísticas y respaldos"]
+        )
+        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        XCTAssertEqual(
+            WalkthroughLesson.allCases.map(\.title),
+            ["Dashboard", "Client Directory", "Profiles & Pets", "Visits & Payments", "Insights & Backups"]
+        )
+    }
+
+    func testMissionCopyInSpanishNamesTheRealButtons() throws {
+        UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        let steps = Dictionary(uniqueKeysWithValues: WalkthroughController.fullTour().map { ($0.id, $0) })
+        XCTAssertTrue(try XCTUnwrap(steps[WalkthroughStepID.checkIn]?.action).contains("Registrar entrada"))
+        XCTAssertTrue(try XCTUnwrap(steps[WalkthroughStepID.checkOut]?.action).contains("Registrar salida"))
+        XCTAssertTrue(try XCTUnwrap(steps[WalkthroughStepID.clientsTab]?.action).contains("Clientes"))
+        XCTAssertTrue(try XCTUnwrap(steps[WalkthroughStepID.insightsTab]?.action).contains("Estadísticas"))
     }
 
     private func source(_ relativePath: String) throws -> String {

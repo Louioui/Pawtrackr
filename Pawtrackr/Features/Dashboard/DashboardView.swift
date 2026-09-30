@@ -16,6 +16,8 @@ struct DashboardView: View {
     @Environment(NavigationRouter.self) private var router
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// The practice salon's checklist never retires the real one.
+    @Environment(\.isPracticeSalon) private var isPracticeSalon
     /// Present only while a guided tour is running; used to scroll deep-dive
     /// targets into view. Optional so previews / non-tour contexts don't require it.
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
@@ -163,7 +165,7 @@ struct DashboardView: View {
             // Once every local setup row is done, retire the card.
             // Replay and Start Fresh re-arm it.
             .onChange(of: vm.isChecklistComplete, initial: true) { _, isComplete in
-                if isComplete && !appSettings.isChecklistDismissed {
+                if isComplete && !isPracticeSalon && !appSettings.isChecklistDismissed {
                     appSettings.isChecklistDismissed = true
                 }
             }
@@ -355,6 +357,10 @@ struct DashboardView: View {
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    // Closing it in the practice salon would retire the real one.
+                    .disabled(isPracticeSalon)
+                    .opacity(isPracticeSalon ? 0 : 1)
+                    .accessibilityHidden(isPracticeSalon)
                 }
                 
                 ProgressView(value: Double(vm.checklist.filter({ $0.isCompleted }).count), total: Double(vm.checklist.count))

@@ -39,20 +39,20 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     func testWalkthroughBackButtonReturnsToPreviousStepOnIPad() throws {
         launch(startWalkthrough: true)
 
-        // Every tour opens on the dashboard's Today cards. The owner's next
-        // stop is the Revenue chart on the same screen.
-        assertActiveWalkthroughAnchor("dashKpis", timeout: 15)
+        // The Academy opens on the app's map, then the dashboard's Today cards.
+        assertActiveWalkthroughAnchor("appNavigation", timeout: 15)
+        XCTAssertTrue(app.descendants(matching: .any)["practiceSalon.banner"].firstMatch.waitForExistence(timeout: 8), "The Academy runs in the practice salon.")
         XCTAssertTrue(tapWalkthroughPrimary(timeout: 8), "Walkthrough Next should be tappable.")
 
-        assertActiveWalkthroughAnchor("dashRevenue", timeout: 10)
+        assertActiveWalkthroughAnchor("dashKpis", timeout: 10)
         let back = app.buttons["walkthrough.back"]
         XCTAssertTrue(waitUntilHittable(back, timeout: 8), "Walkthrough Back should be tappable.")
         back.tap()
 
-        assertActiveWalkthroughAnchor("dashKpis", timeout: 8)
+        assertActiveWalkthroughAnchor("appNavigation", timeout: 8)
     }
 
-    func testWalkthroughContinuesIntoClientDetailsAfterCreatingClient() throws {
+    func testWalkthroughContinuesToTheNewClientsCardAfterCreatingClient() throws {
         launch(startWalkthrough: true)
 
         advanceWalkthroughUntilNewClientOwnerForm()
@@ -73,7 +73,10 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         XCTAssertTrue(waitUntilHittable(create, timeout: 8), "Create should be hittable after the walkthrough has introduced the owner form.")
         create.tap()
 
-        XCTAssertTrue(app.staticTexts["Client Details"].waitForExistence(timeout: 12))
+        // Created in the practice salon, the new client shows among the cards
+        // the next stop points at.
+        assertActiveWalkthroughAnchor("clientList", timeout: 12)
+        XCTAssertTrue(app.buttons["clients.row.Tour Ipad"].waitForExistence(timeout: 8), "The practice client appears in the list.")
         XCTAssertTrue(waitForAny([
             { self.app.otherElements["walkthrough.card"].exists },
             { self.app.staticTexts["walkthrough.stepCounter"].exists }
@@ -107,7 +110,8 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         app.buttons["walkthrough.primary"].tap()
         assertActiveWalkthroughAnchor("cdCheckOut")
 
-        let checkoutButton = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
+        // Milo is the practice salon's pet in session.
+        let checkoutButton = app.buttons["clientDetail.pet.Milo.checkOut"]
         XCTAssertTrue(checkoutButton.waitForExistence(timeout: 8), "Checkout should be visible for the highlighted walkthrough target.")
         assertBubbleDoesNotCover(checkoutButton, named: "Check Out")
         XCTAssertTrue(
@@ -118,23 +122,18 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
 
         assertActiveWalkthroughAnchor("coServices", timeout: 12)
 
-        advanceWalkthroughUntilActiveAnchor("cdPetHistory", maxTaps: 8)
-        assertActiveWalkthroughAnchor("cdPetHistory")
-        XCTAssertTrue(
-            waitUntilHittable(app.buttons["clientDetail.pet.UITest Pet.history"], timeout: 8),
-            "The pet History button should be the highlighted, tappable target."
-        )
-        assertBubbleDoesNotCover(app.buttons["clientDetail.pet.UITest Pet.history"], named: "Pet History")
-
-        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 3)
+        advanceWalkthroughUntilActiveAnchor("cdHistory", maxTaps: 6)
         assertActiveWalkthroughAnchor("cdHistory")
+
+        advanceWalkthroughUntilActiveAnchor("cdVisitRow", maxTaps: 3)
+        assertActiveWalkthroughAnchor("cdVisitRow")
     }
 
     func testSettingsWalkthroughDetailTargetsRenderOnIPad() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("setBusiness", maxTaps: 64)
-        assertActiveWalkthroughAnchor("setBusiness")
+        advanceWalkthroughUntilActiveAnchor("setData", maxTaps: 64)
+        assertActiveWalkthroughAnchor("setData")
         XCTAssertTrue(app.otherElements["walkthrough.bubble"].exists)
     }
 
@@ -163,12 +162,12 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         XCTAssertTrue(app.otherElements["walkthrough.card"].waitForExistence(timeout: 12))
         let stepCounter = app.staticTexts["walkthrough.stepCounter"]
         XCTAssertTrue(stepCounter.waitForExistence(timeout: 6), "Step counter should appear after replay")
-        // The counter reads "1 / N" (WalkthroughOverlay).
+        // The counter reads "Step 1 of N" (WalkthroughOverlay).
         XCTAssertNotNil(
-            stepCounter.label.range(of: #"^1 / \d+$"#, options: .regularExpression),
+            stepCounter.label.range(of: #"^Step 1 of \d+$"#, options: .regularExpression),
             "Step counter should show step 1 after replay, got \(stepCounter.label)"
         )
-        assertActiveWalkthroughAnchor("dashKpis", timeout: 8)
+        assertActiveWalkthroughAnchor("appNavigation", timeout: 8)
     }
 
     private func advanceWalkthroughUntilNewClientOwnerForm(maxTaps: Int = 32) {
@@ -194,7 +193,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
             if target.exists { return }
 
             if app.otherElements["walkthrough.activeAnchor.cdCheckIn"].exists {
-                let checkIn = app.buttons["clientDetail.pet.UITest Pet.checkIn"]
+                let checkIn = app.buttons["clientDetail.pet.Pepper.checkIn"]
                 if waitUntilHittable(checkIn, timeout: 2) {
                     checkIn.tap()
                     if target.waitForExistence(timeout: 4) { return }
@@ -202,7 +201,7 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
             }
 
             if app.otherElements["walkthrough.activeAnchor.cdCheckOut"].exists {
-                let checkOut = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
+                let checkOut = app.buttons["clientDetail.pet.Milo.checkOut"]
                 if waitUntilHittable(checkOut, timeout: 2) {
                     checkOut.tap()
                     if target.waitForExistence(timeout: 4) { return }

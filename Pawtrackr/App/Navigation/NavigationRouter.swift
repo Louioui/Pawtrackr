@@ -151,6 +151,16 @@ final class NavigationRouter {
         }
     }
 
+    /// Every tab back to its root, e.g. when the window switches between the
+    /// real store and the practice salon: pushed screens hold record IDs
+    /// from the store they were opened in.
+    func popAllToRoot() {
+        dashboardPath = NavigationPath()
+        clientsPath = NavigationPath()
+        insightsPath = NavigationPath()
+        settingsPath = NavigationPath()
+    }
+
     func popDashboardToRoot() {
         dashboardPath = NavigationPath()
     }

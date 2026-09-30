@@ -24,6 +24,8 @@ struct ClientDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Practice clients are never offered to Handoff or Siri.
+    @Environment(\.isPracticeSalon) private var isPracticeSalon
     @Environment(\.openWindow) private var openWindow
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(GlobalEventBus.self) private var eventBus
@@ -131,7 +133,8 @@ struct ClientDetailView: View {
         .cdCheckIn,
         .cdCheckOut,
         .cdPetHistory,
-        .cdHistory
+        .cdHistory,
+        .cdVisitRow
     ]
 
     // MARK: - Init
@@ -166,7 +169,7 @@ struct ClientDetailView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .userActivity("com.pawtrackr.viewClient") { activity in
+            .userActivity("com.pawtrackr.viewClient", isActive: !isPracticeSalon) { activity in
                 activity.title = String(
                     format: AppLocalization.localized("handoff.viewing_fmt", value: "Viewing %@"),
                     client.fullName
@@ -202,6 +205,13 @@ struct ClientDetailView: View {
             }
             .onChange(of: showContactEditor) { _, isShowing in
                 continueWalkthroughAfterContactEditor(isShowing: isShowing)
+            }
+            // The Academy's Add Pet mission ends when the form closes, whether
+            // a pet was saved or not.
+            .onChange(of: sheetDestination?.id) { oldID, newID in
+                if oldID == SheetDestination.addPet.id, newID == nil {
+                    walkthrough?.observe(.addPetClosed)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .visitDidStart)) { notification in
                 continueWalkthroughAfterVisitStart(notification, vm: vm)
@@ -1031,7 +1041,10 @@ struct ClientDetailView: View {
                 Spacer()
                 Picker(NSLocalizedString("client_detail.history_range", value: "History range", comment: ""), selection: Binding(
                     get: { vm.historyRange },
-                    set: { vm.historyRange = $0 }
+                    set: {
+                        vm.historyRange = $0
+                        walkthrough?.observe(.historyRangeChanged)
+                    }
                 )) {
                     ForEach(ClientDetailViewModel.HistoryRange.pickerOptions, id: \.self) { range in
                         Text(range.title).tag(range)
@@ -1053,6 +1066,10 @@ struct ClientDetailView: View {
                 // Group by day to mirror the sample design
                 let grouped = Dictionary(grouping: vm.recentVisits) { Calendar.current.startOfDay(for: $0.sortKeyDate) }
                 let orderedDays = grouped.keys.sorted(by: >)
+                // The newest visit: the Academy's "open a visit" stop points here.
+                let tourVisitID = orderedDays.first.flatMap { day in
+                    (grouped[day] ?? []).max(by: { $0.sortKeyDate < $1.sortKeyDate })?.id
+                }
                 VStack(spacing: 14) {
                     ForEach(orderedDays, id: \.self) { day in
                         let visits = (grouped[day] ?? []).sorted(by: { $0.sortKeyDate > $1.sortKeyDate })
@@ -1067,10 +1084,14 @@ struct ClientDetailView: View {
                             Spacer()
                         }
                         ForEach(visits) { visit in
-                            Button(action: { router.navigateToVisit(visit) }) {
+                            Button(action: {
+                                router.navigateToVisit(visit)
+                                walkthrough?.observe(.visitOpened)
+                            }) {
                                 CardFactory.makeVisitTimelineRow(visit: visit)
                             }
                             .buttonStyle(.plain)
+                            .walkthroughTarget(.cdVisitRow, isActive: visit.id == tourVisitID)
                         }
                     }
                     if vm.canLoadMore {
@@ -1261,10 +1282,10 @@ struct ClientDetailView: View {
         walkthrough?.advance()
     }
 
-    /// A pet already in session: the hands-on Check In stop shows Next
-    /// instead of waiting for a tap, in either direction. The stop isn't
-    /// skipped, so its explanation stays readable, and Check In still works
-    /// on a pet that isn't in session yet.
+    /// Every pet already in session: nothing is left to check in, so the
+    /// hands-on Check In stop shows Next instead of waiting for a tap, in
+    /// either direction. The stop isn't skipped, so its explanation stays
+    /// readable.
     private func releaseWalkthroughCheckInIfAlreadyInSession(vm: ClientDetailViewModel) {
         // Only a hands-on step waits for a check-in. An explain-only one
         // already shows Next.
@@ -1274,8 +1295,9 @@ struct ClientDetailView: View {
         else { return }
 
         vm.refreshPets()
-        guard firstActiveCheckoutRoute(vm: vm) != nil else { return }
-        walkthrough?.releaseActionRequirement(reason: "a pet is already checked in")
+        // Still a real mission while some pet is waiting to be checked in.
+        guard !vm.pets.isEmpty, vm.pets.allSatisfy({ vm.activeVisit(for: $0) != nil }) else { return }
+        walkthrough?.releaseActionRequirement(reason: "every pet is already checked in")
     }
 
     /// Check Out can't be tapped without a pet in session. Show Next rather

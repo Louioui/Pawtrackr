@@ -47,12 +47,12 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
             if target.exists { return }
 
             if app.otherElements["walkthrough.activeAnchor.cdCheckIn"].exists {
-                let checkIn = app.buttons["clientDetail.pet.UITest Pet.checkIn"]
+                let checkIn = app.buttons["clientDetail.pet.Pepper.checkIn"]
                 if tapVisible(checkIn, timeout: 2), target.waitForExistence(timeout: 4) { return }
             }
 
             if app.otherElements["walkthrough.activeAnchor.cdCheckOut"].exists {
-                let checkOut = app.buttons["clientDetail.pet.UITest Pet.checkOut"]
+                let checkOut = app.buttons["clientDetail.pet.Milo.checkOut"]
                 if tapVisible(checkOut, timeout: 2), target.waitForExistence(timeout: 4) { return }
             }
 

@@ -127,7 +127,7 @@ enum WalkthroughOverlayLayout {
         }
 
         var readableBubbleMaxHeight: CGFloat {
-            min(isCompactViewport ? 300 : 348, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
+            min(isCompactViewport ? 340 : 400, max(220, containerSize.height - safeTopPadding - safeBottomPadding - 20))
         }
     }
 
@@ -493,7 +493,7 @@ enum WalkthroughOverlayScope {
     case detailContent // content whose anchors live in a PUSHED detail view
 
     static let navigationAnchors: Set<WalkthroughAnchorID> = [
-        .dashboard, .clients, .insights, .settings
+        .appNavigation, .dashboard, .clients, .insights, .settings
     ]
 
     /// Anchors that live inside a PUSHED `NavigationStack` destination
@@ -506,7 +506,7 @@ enum WalkthroughOverlayScope {
     /// with a faint stray circle elsewhere).
     static let detailAnchors: Set<WalkthroughAnchorID> = [
         .cdOwner, .cdEmergency, .emergencyContactBadges, .cdLoyalty, .cdPets, .petGenderDots,
-        .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory,
+        .cdAddPet, .cdCheckIn, .cdCheckOut, .cdPetHistory, .cdHistory, .cdVisitRow,
         .coServices, .coDetails, .coPayment, .coReview, .coConfirm,
         .setBusiness, .setLoyalty, .loyaltySimulator, .setSecurity, .setData, .setAbout, .setStartFresh
     ]
@@ -751,6 +751,9 @@ private struct WalkthroughOverlayView: View {
     var isAdopted = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// With VoiceOver on, every stop offers Next: tapping a highlighted
+    /// region isn't something VoiceOver users can be asked to find.
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     /// Gentle, continuous "breathing" of the spotlight ring to draw the eye to
     /// the highlighted control. Disabled under Reduce Motion.
     @State private var ringPulse = false
@@ -788,8 +791,9 @@ private struct WalkthroughOverlayView: View {
         isCompactViewport ? 13 : 16
     }
 
+    /// Header, progress, "mastered" line and footer: what the body can't use.
     private var bubbleChromeHeightEstimate: CGFloat {
-        isCompactViewport ? 124 : 140
+        isCompactViewport ? 142 : 158
     }
 
     private var placement: WalkthroughOverlayLayout.Placement {
@@ -1031,7 +1035,7 @@ private struct WalkthroughOverlayView: View {
 
         return VStack(alignment: .leading, spacing: isCompactViewport ? 8 : 10) {
             HStack(spacing: 8) {
-                Label(step.lesson.title, systemImage: step.lesson.icon)
+                Label(chapterChipText, systemImage: step.lesson.icon)
                     .font(.caption2.weight(.bold))
                     .textCase(.uppercase)
                     .foregroundStyle(DS.ColorToken.primary)
@@ -1042,14 +1046,29 @@ private struct WalkthroughOverlayView: View {
                     .padding(.vertical, 4)
                     .background(DS.ColorToken.primary.opacity(0.12), in: Capsule())
                 Spacer(minLength: 8)
-                Text("\(controller.stepNumber) / \(controller.stepCount)")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .accessibilityIdentifier("walkthrough.stepCounter")
+                Text(String(
+                    format: AppLocalization.localized("tour.step_counter_fmt", value: "Step %1$d of %2$d"),
+                    controller.stepNumber,
+                    controller.stepCount
+                ))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .accessibilityIdentifier("walkthrough.stepCounter")
             }
 
-            tourProgressBar
+            VStack(alignment: .trailing, spacing: 4) {
+                tourProgressBar
+                Text(String(
+                    format: AppLocalization.localized("tour.mastered_fmt", value: "%d%% mastered"),
+                    Int((controller.masteredFraction * 100).rounded(.down))
+                ))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(DS.ColorToken.primary)
+                .monospacedDigit()
+                .accessibilityIdentifier("walkthrough.mastered")
+            }
 
             ViewThatFits(in: .vertical) {
                 bubbleBody
@@ -1101,9 +1120,24 @@ private struct WalkthroughOverlayView: View {
     }
 
     private var walkthroughProgress: CGFloat {
-        guard controller.stepCount > 0 else { return 0 }
-        let rawValue = CGFloat(controller.stepNumber) / CGFloat(controller.stepCount)
-        return min(max(rawValue, 0), 1)
+        min(max(CGFloat(controller.masteredFraction), 0), 1)
+    }
+
+    /// Next on every stop: VoiceOver users can't be asked to find a
+    /// highlighted region, and UI tests drive the tour with Next (unit tests
+    /// cover the stops that wait).
+    private var showsNextAnyway: Bool {
+        voiceOverEnabled || AppRuntime.isUITesting
+    }
+
+    /// "2 · Client Directory": the chapter's place in the Academy and its name.
+    private var chapterChipText: String {
+        guard controller.chapterNumber > 0 else { return step.lesson.title }
+        return String(
+            format: AppLocalization.localized("tour.chapter_chip_fmt", value: "%1$d · %2$@"),
+            controller.chapterNumber,
+            step.lesson.title
+        )
     }
 
     @ViewBuilder
@@ -1162,8 +1196,13 @@ private struct WalkthroughOverlayView: View {
     private var footerPrimaryControl: some View {
         // Next shows when the step doesn't wait for a tap, when the host
         // released it, or when the highlighted control isn't on screen.
-        if !controller.currentStepShowsNext, targetRect != nil {
-            Label(AppLocalization.localized("tour.tap_highlighted", value: "Tap highlighted button"), systemImage: "hand.tap.fill")
+        if !controller.currentStepShowsNext, targetRect != nil, !showsNextAnyway {
+            Label(
+                step.allowsTargetInteraction
+                    ? AppLocalization.localized("tour.your_turn", value: "Your turn")
+                    : AppLocalization.localized("tour.tap_the_highlight", value: "Tap the highlight"),
+                systemImage: "hand.tap.fill"
+            )
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
@@ -1197,6 +1236,8 @@ private struct WalkthroughOverlayView: View {
         }
     }
 
+    /// Every stop reads the same way: what the control is, why it matters,
+    /// and the one thing to try (missing on look-only stops).
     private var bubbleBody: some View {
         VStack(alignment: .leading, spacing: isCompactViewport ? 8 : 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -1209,15 +1250,24 @@ private struct WalkthroughOverlayView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(step.directive)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(DS.ColorToken.primary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(step.purpose)
-                .font(isCompactViewport ? .footnote : .callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            anatomyRow(
+                label: AppLocalization.localized("tour.anatomy.what", value: "What it is"),
+                systemImage: "eye.fill",
+                text: step.directive
+            )
+            anatomyRow(
+                label: AppLocalization.localized("tour.anatomy.why", value: "Why it matters"),
+                systemImage: "star.fill",
+                text: step.purpose
+            )
+            if let action = step.action {
+                anatomyRow(
+                    label: AppLocalization.localized("tour.anatomy.try", value: "Try it"),
+                    systemImage: "hand.tap.fill",
+                    text: action,
+                    isAction: true
+                )
+            }
 
             if let coachTip = step.coachTip {
                 HStack(alignment: .top, spacing: 8) {
@@ -1236,6 +1286,86 @@ private struct WalkthroughOverlayView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One labeled line of the stop: a small caption over the sentence. The
+    /// "Try it" line stands out, since it is what moves the Academy on.
+    private func anatomyRow(label: String, systemImage: String, text: String, isAction: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(label, systemImage: systemImage)
+                .font(.caption2.weight(.bold))
+                .textCase(.uppercase)
+                .foregroundStyle(isAction ? DS.ColorToken.primary : Color.secondary)
+            Text(text)
+                .font(anatomyFont(isAction: isAction))
+                .foregroundStyle(isAction ? DS.ColorToken.primary : Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(isAction ? (isCompactViewport ? 8 : 9) : 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if isAction {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DS.ColorToken.primary.opacity(0.10))
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func anatomyFont(isAction: Bool) -> Font {
+        if isAction { return Font.subheadline.weight(.semibold) }
+        return isCompactViewport ? Font.footnote : Font.callout
+    }
+}
+
+// MARK: - Chapter win
+
+/// A short reward when a chapter of the Academy ends: a medal, the chapter's
+/// name and how many chapters are done. Decorative; the tour carries on
+/// underneath it.
+struct WalkthroughChapterWinToast: View {
+    let win: WalkthroughChapterWin
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var medalBounce = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "medal.fill")
+                .font(.title2)
+                .foregroundStyle(.yellow)
+                .scaleEffect(medalBounce ? 1.0 : 0.6)
+                .rotationEffect(.degrees(medalBounce ? 0 : -25))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(
+                    format: AppLocalization.localized("tour.chapter_win.title_fmt", value: "%@ mastered!"),
+                    win.chapter.title
+                ))
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+                Text(String(
+                    format: AppLocalization.localized("tour.chapter_win.progress_fmt", value: "Chapter %1$d of %2$d done"),
+                    win.number,
+                    win.of
+                ))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .monospacedDigit()
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(DS.ColorToken.primary, in: Capsule())
+        .shadow(color: .black.opacity(0.28), radius: 14, x: 0, y: 6)
+        .onAppear {
+            guard MotionGovernor.shouldAnimate(reduceMotion: reduceMotion) else {
+                medalBounce = true
+                return
+            }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.5)) { medalBounce = true }
+        }
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("walkthrough.chapterWin")
     }
 }
 
@@ -1263,8 +1393,8 @@ struct WalkthroughCelebrationView: View {
         .ignoresSafeArea()
         .overlay(alignment: .top) {
             Label(
-                AppLocalization.localized("onboarding.finish.title", value: "You're all set!"),
-                systemImage: "checkmark.seal.fill"
+                AppLocalization.localized("tour.academy.complete", value: "Academy complete! You're ready for your first shift."),
+                systemImage: "graduationcap.fill"
             )
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)

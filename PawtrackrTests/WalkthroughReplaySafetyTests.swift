@@ -70,9 +70,8 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
             XCTAssertFalse(steps.contains { $0.presents == .checkout }, "\(role)")
             XCTAssertFalse(steps.isEmpty)
         }
-        // The owner's tour still teaches Start Fresh. Roles order the lessons,
-        // so it is no longer necessarily the last stop.
-        XCTAssertTrue(WalkthroughController.tour(for: .ownerManager, context: context).contains { $0.anchor == .setStartFresh })
+        // The Academy still ends in Settings, where it can be replayed.
+        XCTAssertEqual(WalkthroughController.tour(for: .ownerManager, context: context).last?.anchor, .setAbout)
     }
 
     func testLookOnlyCopyDoesNotInviteATapOnCreateAndStaysShort() {
@@ -93,18 +92,6 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
                 }
             }
         }
-    }
-
-    func testStartFreshCopySaysItErasesEverythingOnThisDevice() {
-        defer { UserDefaults.standard.removeObject(forKey: AppSettingsKeys.appLanguageOverride) }
-        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
-        let startFresh = WalkthroughController.fullTour().first { $0.anchor == .setStartFresh }
-        let purpose = startFresh?.purpose ?? ""
-        XCTAssertTrue(purpose.contains("every client"), purpose)
-        XCTAssertTrue(purpose.contains("real or sample"), purpose)
-        XCTAssertTrue(purpose.contains("on this device"), purpose)
-        XCTAssertFalse(purpose.contains("iCloud"), purpose)
-        XCTAssertFalse((startFresh?.coachTip ?? "").contains("Only practice records"), "The old tip promised a partial wipe.")
     }
 
     func testAPracticeStoreKeepsTheHandsOnTour() {

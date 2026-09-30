@@ -61,6 +61,8 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        // The Academy's first stop points at the whole menu.
+        .walkthroughAnchor(.appNavigation)
         .glassmorphicSidebar()
         .navigationTitle("Pawtrackr")
     }

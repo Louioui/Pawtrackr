@@ -15,7 +15,10 @@ struct RootView: View {
     @Environment(AuthenticationViewModel.self) private var authViewModel
     @Environment(AppSettings.self) private var appSettings
     @Environment(EntitlementStore.self) private var entitlements
+    @Environment(DataStoreService.self) private var dataStore: DataStoreService?
     @Query private var businessConfigs: [BusinessConfig]
+    /// The Academy's sandbox. While it is open the main window runs on it.
+    @State private var practiceSalon = PracticeSalon()
     @State private var showOnboarding = false
     @State private var didEvaluateOnboarding = false
     @State private var didRunStartupMaintenance = false
@@ -139,9 +142,22 @@ struct RootView: View {
 
     private var mainShell: some View {
         VStack(spacing: 0) {
+            // Always about the real store, so it sits outside the practice salon.
             DataSafetyBannerHost(onReviewRestore: presentStoreRestore)
+            if practiceSalon.isOpen {
+                PracticeSalonBanner()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            // The same modifiers in both cases, only their values change, so
+            // ContentView (and the tour it runs) keeps its identity when the
+            // window switches between the real store and the practice salon.
             ContentView()
+                .modelContainer(practiceSalon.session?.container ?? modelContext.container)
+                .environment(practiceSalon.session?.dataStore ?? dataStore)
+                .environment(practiceSalon)
+                .environment(\.isPracticeSalon, practiceSalon.isOpen)
         }
+        .animation(.easeInOut(duration: 0.25), value: practiceSalon.isOpen)
     }
 
     private func evaluateWhatIsNew() {

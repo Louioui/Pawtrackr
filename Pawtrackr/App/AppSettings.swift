@@ -26,6 +26,8 @@ enum AppSettingsKeys {
     static let currencySymbol = "currencySymbol"
     static let isChecklistDismissed = "isChecklistDismissed"
     static let hasSeenAppTour = "hasSeenAppTour"
+    /// Set once the user goes through the whole Academy to its last stop.
+    static let hasCompletedAcademy = "hasCompletedFullAcademy"
     static let preferredColorScheme = "preferredColorScheme"
     static let hapticsEnabled = "hapticsEnabled"
     static let brandColorHex = "brandColorHex"
@@ -186,6 +188,12 @@ final class AppSettings {
     /// Defaults to `false` so a fresh install gets the tour after onboarding.
     var hasSeenAppTour: Bool {
         didSet { UserDefaults.standard.set(hasSeenAppTour, forKey: AppSettingsKeys.hasSeenAppTour) }
+    }
+
+    /// The user finished the whole Academy (not just one chapter). Settings
+    /// shows the graduate badge and Re-run Academy. Never reset by Replay.
+    var hasCompletedAcademy: Bool {
+        didSet { UserDefaults.standard.set(hasCompletedAcademy, forKey: AppSettingsKeys.hasCompletedAcademy) }
     }
 
     var businessName: String {
@@ -400,6 +408,7 @@ final class AppSettings {
 
         self.isChecklistDismissed = UserDefaults.standard.bool(forKey: AppSettingsKeys.isChecklistDismissed)
         self.hasSeenAppTour = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasSeenAppTour)
+        self.hasCompletedAcademy = UserDefaults.standard.bool(forKey: AppSettingsKeys.hasCompletedAcademy)
 
         let storedSchemeRaw = UserDefaults.standard.string(forKey: AppSettingsKeys.preferredColorScheme) ?? Defaults.preferredColorScheme
         self.preferredColorScheme = AppColorScheme(rawValue: storedSchemeRaw) ?? .system

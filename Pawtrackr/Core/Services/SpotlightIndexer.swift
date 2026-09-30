@@ -75,6 +75,9 @@ final class SpotlightIndexer: @unchecked Sendable {
     /// rebuild stops at its next submit.
     private var generation = 0
     private var container: ModelContainer?
+    /// The Academy's practice salons (in-memory stores). Nothing in them is
+    /// indexed, so practice clients never show up in system search.
+    private var practiceContainers: Set<ObjectIdentifier> = []
 
     init(
         index: SpotlightIndexWriting = SystemSpotlightIndex(),
@@ -102,6 +105,30 @@ final class SpotlightIndexer: @unchecked Sendable {
     /// swapped in different records.
     func markIndexStale() {
         stateLock.withLock { writeStateLocked(nil) }
+    }
+
+    /// Keeps a practice salon's records out of Spotlight until
+    /// `endPracticeSalon(_:)`. Register it before seeding: model setters
+    /// schedule items.
+    func beginPracticeSalon(_ container: ModelContainer) {
+        _ = stateLock.withLock { practiceContainers.insert(ObjectIdentifier(container)) }
+    }
+
+    func endPracticeSalon(_ container: ModelContainer) {
+        _ = stateLock.withLock { practiceContainers.remove(ObjectIdentifier(container)) }
+    }
+
+    /// A record that belongs to an open practice salon. While one is open, a
+    /// record not saved anywhere yet counts too: practice clients are built
+    /// with setters before they are inserted, and a real new record is
+    /// indexed again once it is saved (`ClientRepository`, `AddPetSheet`).
+    private func isPracticeRecord(in context: ModelContext?) -> Bool {
+        let container = context?.container
+        return stateLock.withLock {
+            guard !practiceContainers.isEmpty else { return false }
+            guard let container else { return true }
+            return practiceContainers.contains(ObjectIdentifier(container))
+        }
     }
 
     var isIndexingAllowed: Bool {
@@ -197,7 +224,7 @@ final class SpotlightIndexer: @unchecked Sendable {
     /// added, its pets, whose items carry the owner's name and phone).
     /// Call on the thread that owns the client's ModelContext.
     func scheduleIndex(client: Client, includingPets: Bool = false) {
-        guard isIndexingAllowed else { return }
+        guard isIndexingAllowed, !isPracticeRecord(in: client.modelContext) else { return }
         let snapshot = SpotlightClientSnapshot(client: client)
         let pets = includingPets ? (client.pets ?? []).map(SpotlightPetSnapshot.init(pet:)) : []
         enqueue(clients: [snapshot], pets: pets)
@@ -205,7 +232,7 @@ final class SpotlightIndexer: @unchecked Sendable {
 
     /// Queues a pet. Call on the thread that owns the pet's ModelContext.
     func scheduleIndex(pet: Pet) {
-        guard isIndexingAllowed else { return }
+        guard isIndexingAllowed, !isPracticeRecord(in: pet.modelContext) else { return }
         enqueue(clients: [], pets: [SpotlightPetSnapshot(pet: pet)])
     }
 

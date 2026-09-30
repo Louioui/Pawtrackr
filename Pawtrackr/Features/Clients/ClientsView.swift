@@ -36,6 +36,9 @@ struct ClientsView: View {
     @State private var clientToDelete: Client?
     @State private var isSearchPresented = false
     @State private var searchFocusRequest = 0
+    /// The notifications list was opened on the Academy's bell stop, so
+    /// closing it moves the tour on.
+    @State private var walkthroughOpenedNotifications = false
 
     var body: some View {
         NavigationStack {
@@ -144,6 +147,27 @@ struct ClientsView: View {
             .onReceive(NotificationCenter.default.publisher(for: .focusClientSearch)) { _ in
                 focusSearch()
             }
+            .onChange(of: viewModel?.searchText) { _, newValue in
+                guard !(newValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      walkthrough?.currentStep?.advancesOn == .clientSearched
+                else { return }
+                // Let the list narrow for a moment, then move on and show
+                // everyone again for the stops that follow.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(1100))
+                    if walkthrough?.observe(.clientSearched) == true {
+                        viewModel?.searchText = ""
+                    }
+                }
+            }
+            .onChange(of: showNotifications) { _, isShowing in
+                if isShowing {
+                    walkthroughOpenedNotifications = walkthrough?.currentStep?.advancesOn == .notificationsClosed
+                } else if walkthroughOpenedNotifications {
+                    walkthroughOpenedNotifications = false
+                    walkthrough?.observe(.notificationsClosed)
+                }
+            }
             .onChange(of: viewModel?.sortOption) { oldValue, newValue in
                 guard oldValue != nil, oldValue != newValue,
                       walkthrough?.currentStep?.advancesOn == .clientSortChanged
@@ -218,6 +242,7 @@ struct ClientsView: View {
                         withAnimation(.spring(duration: 0.3)) {
                             viewModel.selectedFilter = filter
                         }
+                        reportFilterMission(viewModel)
                     } label: {
                         Text(filter.displayName)
                             .font(.subheadline.weight(.medium))
@@ -236,6 +261,21 @@ struct ClientsView: View {
             // scroll strip around them.
             .walkthroughAnchor(.clientFilters)
             .padding(.horizontal)
+        }
+    }
+
+    /// The Academy's filter mission: the user picked a pill. The filtered
+    /// list shows for a moment, then the tour moves on with All again, so
+    /// the next stops have every client to point at.
+    private func reportFilterMission(_ viewModel: ClientsViewModel) {
+        guard walkthrough?.currentStep?.advancesOn == .clientFilterChanged else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1100))
+            if walkthrough?.observe(.clientFilterChanged) == true {
+                withAnimation(.spring(duration: 0.3)) {
+                    viewModel.selectedFilter = .all
+                }
+            }
         }
     }
 
@@ -328,7 +368,10 @@ struct ClientsView: View {
     ) -> some View {
         LazyVGrid(columns: clientGridColumns, spacing: 12) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
-                Button(action: { router.navigateToClient(client) }) {
+                Button(action: {
+                    router.navigateToClient(client)
+                    walkthrough?.observe(.clientOpened)
+                }) {
                     ClientCard(
                         client: client,
                         namespace: namespace,

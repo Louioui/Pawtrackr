@@ -392,6 +392,42 @@ final class SpotlightIndexingTests: XCTestCase {
 
     // MARK: - Indexer: live edits and policy transitions
 
+    /// The Academy's practice salon: its clients never reach system search,
+    /// nor do records still being built while it is open. Real edits made
+    /// meanwhile (another window) are indexed as usual.
+    @MainActor
+    func testPracticeSalonRecordsAreNeverIndexed() async throws {
+        let practice = try makeContainer()
+        let real = try makeContainer()
+        let practiceClient = Client(firstName: "Ava", lastName: "Practice")
+        practice.mainContext.insert(practiceClient)
+        let realClient = Client(firstName: "Rosa", lastName: "Real")
+        real.mainContext.insert(realClient)
+        let unsaved = Client(firstName: "Typed", lastName: "Unsaved")
+
+        let index = RecordingSpotlightIndex()
+        let indexer = makeIndexer(index)
+        indexer.applyPrivacyPolicy(allowsIndexing: true)
+        indexer.beginPracticeSalon(practice)
+        indexer.scheduleIndex(client: practiceClient)
+        indexer.scheduleIndex(client: unsaved)
+        indexer.scheduleIndex(client: realClient, includingPets: true)
+        try await Task.sleep(for: .milliseconds(300))
+
+        let indexed = Set(index.indexCalls.flatMap { $0 })
+        XCTAssertTrue(indexed.contains("client-\(realClient.uuid.uuidString)"), "Real edits are indexed as usual.")
+        XCTAssertFalse(indexed.contains("client-\(practiceClient.uuid.uuidString)"), "Practice clients stay out of Spotlight.")
+        XCTAssertFalse(indexed.contains("client-\(unsaved.uuid.uuidString)"), "A record being built is indexed once saved, never from its setters.")
+
+        indexer.endPracticeSalon(practice)
+        indexer.scheduleIndex(client: unsaved)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertTrue(
+            Set(index.indexCalls.flatMap { $0 }).contains("client-\(unsaved.uuid.uuidString)"),
+            "With no practice salon open, edits index as before."
+        )
+    }
+
     @MainActor
     func testScheduledEditIsIndexedOnlyWhenAllowed() async throws {
         let container = try makeContainer()
