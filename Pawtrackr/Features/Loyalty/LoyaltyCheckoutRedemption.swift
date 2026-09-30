@@ -23,30 +23,43 @@ struct CheckoutRewardRedemption: Equatable, Sendable {
 }
 
 extension LoyaltyCheckoutProcessor {
+    /// The visit's `.redeemed` ledger row, if an earlier attempt left one.
+    /// Checkout looks it up before changing anything, so a failed lookup
+    /// throws with the visit untouched instead of reading as "nothing spent
+    /// yet", which would spend the points twice.
+    static func redeemedEntry(visitUUID: UUID, in context: ModelContext) throws -> LoyaltyLedgerEntry? {
+        let redeemedRaw = LoyaltyLedgerEntry.Kind.redeemed.rawValue
+        var descriptor = FetchDescriptor<LoyaltyLedgerEntry>(
+            predicate: #Predicate<LoyaltyLedgerEntry> {
+                $0.visitUUID == visitUUID && $0.kindRaw == redeemedRaw
+            }
+        )
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first
+    }
+
     /// Whether the client can pay `redemption` from their balance, counting
-    /// points this visit already spent on it (a retried checkout). Call it
-    /// before changing anything, so a short balance fails the checkout clean.
-    static func canAfford(_ redemption: CheckoutRewardRedemption, client: Client, visitUUID: UUID, in context: ModelContext) throws -> Bool {
-        let alreadySpent = -(try redeemedEntry(visitUUID: visitUUID, in: context)?.points ?? 0)
+    /// the points `existing` (this visit's earlier attempt) already spent.
+    static func canAfford(_ redemption: CheckoutRewardRedemption, client: Client, existing: LoyaltyLedgerEntry?) -> Bool {
+        let alreadySpent = -(existing?.points ?? 0)
         return client.loyaltyPoints + alreadySpent >= redemption.pointCost
     }
 
-    /// Makes the visit's `.redeemed` ledger row match `redemption`: one row per
-    /// visit, the client balance moved by the difference only, so processing
-    /// the same checkout twice spends the points once. A nil redemption
-    /// refunds and removes a row an earlier attempt left behind.
+    /// Makes the visit's `.redeemed` ledger row (`existing`, from
+    /// `redeemedEntry`) match `redemption`: one row per visit, the client
+    /// balance moved by the difference only, so processing the same checkout
+    /// twice spends the points once. A nil redemption refunds and removes a
+    /// row an earlier attempt left behind.
     ///
-    /// Returns true when the client balance changed; the caller saves. A
-    /// failed ledger lookup throws rather than reading as "nothing spent
-    /// yet", which would spend the points twice.
+    /// Returns true when the client balance changed; the caller saves.
     @discardableResult
     static func applyRedemption(
         _ redemption: CheckoutRewardRedemption?,
+        existing: LoyaltyLedgerEntry?,
         visitUUID: UUID,
         client: Client,
         in context: ModelContext
-    ) throws -> Bool {
-        let existing = try redeemedEntry(visitUUID: visitUUID, in: context)
+    ) -> Bool {
         let previousCost = -(existing?.points ?? 0)
         let newCost = redemption?.pointCost ?? 0
         guard newCost != previousCost || existing?.reason != redemption?.title else { return false }
@@ -75,16 +88,5 @@ extension LoyaltyCheckoutProcessor {
             context.delete(existing)
         }
         return newCost != previousCost
-    }
-
-    private static func redeemedEntry(visitUUID: UUID, in context: ModelContext) throws -> LoyaltyLedgerEntry? {
-        let redeemedRaw = LoyaltyLedgerEntry.Kind.redeemed.rawValue
-        var descriptor = FetchDescriptor<LoyaltyLedgerEntry>(
-            predicate: #Predicate<LoyaltyLedgerEntry> {
-                $0.visitUUID == visitUUID && $0.kindRaw == redeemedRaw
-            }
-        )
-        descriptor.fetchLimit = 1
-        return try context.fetch(descriptor).first
     }
 }

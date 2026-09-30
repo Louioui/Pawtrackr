@@ -154,16 +154,43 @@ final class LoyaltyRewards2Tests: XCTestCase {
         let visitUUID = UUID()
         let redemption = CheckoutRewardRedemption(rewardID: "five-off", title: "$5 Off", pointCost: 50, discount: 5)
 
-        XCTAssertTrue(try LoyaltyCheckoutProcessor.applyRedemption(redemption, visitUUID: visitUUID, client: client, in: context))
-        XCTAssertFalse(try LoyaltyCheckoutProcessor.applyRedemption(redemption, visitUUID: visitUUID, client: client, in: context))
+        func existing() throws -> LoyaltyLedgerEntry? {
+            try LoyaltyCheckoutProcessor.redeemedEntry(visitUUID: visitUUID, in: context)
+        }
+
+        XCTAssertTrue(LoyaltyCheckoutProcessor.applyRedemption(redemption, existing: try existing(), visitUUID: visitUUID, client: client, in: context))
+        XCTAssertFalse(LoyaltyCheckoutProcessor.applyRedemption(redemption, existing: try existing(), visitUUID: visitUUID, client: client, in: context))
         XCTAssertEqual(client.loyaltyPoints, 250)
-        XCTAssertTrue(try LoyaltyCheckoutProcessor.canAfford(redemption, client: client, visitUUID: visitUUID, in: context),
+        XCTAssertTrue(LoyaltyCheckoutProcessor.canAfford(redemption, client: client, existing: try existing()),
                       "Points this visit already spent count toward affording it again.")
 
-        XCTAssertTrue(try LoyaltyCheckoutProcessor.applyRedemption(nil, visitUUID: visitUUID, client: client, in: context))
+        XCTAssertTrue(LoyaltyCheckoutProcessor.applyRedemption(nil, existing: try existing(), visitUUID: visitUUID, client: client, in: context))
         XCTAssertEqual(client.loyaltyPoints, 300, "Dropping the reward on a retry refunds it.")
         try context.save()
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<LoyaltyLedgerEntry>()), 0)
+    }
+
+    func testOverlappingCheckoutsForOneVisitSpendTheRewardOnce() async throws {
+        let (client, pet) = try seedClient(points: 300)
+        let visitUUID = UUID()
+        let redemption = CheckoutRewardRedemption(rewardID: "twenty-off", title: "$20 Off", pointCost: 200, discount: 20)
+        let actor = CheckoutTransactionActor(modelContainer: container)
+        let checkout = request(visitUUID: visitUUID, pet: pet, client: client, amount: 60, redemption: redemption)
+
+        // Both calls suspend on image processing before either commits.
+        async let first = actor.process(checkout)
+        async let second = actor.process(checkout)
+        _ = try await (first, second)
+
+        let fresh = ModelContext(container)
+        let clientUUID = client.uuid
+        let saved = try XCTUnwrap(try fresh.fetch(FetchDescriptor<Client>(predicate: #Predicate { $0.uuid == clientUUID })).first)
+        XCTAssertEqual(saved.loyaltyPoints, 160)
+        XCTAssertEqual(try fresh.fetchCount(FetchDescriptor<Payment>()), 1)
+        let redeemedRaw = LoyaltyLedgerEntry.Kind.redeemed.rawValue
+        XCTAssertEqual(try fresh.fetchCount(FetchDescriptor<LoyaltyLedgerEntry>(
+            predicate: #Predicate { $0.visitUUID == visitUUID && $0.kindRaw == redeemedRaw }
+        )), 1)
     }
 
     func testCheckoutFailsCleanWhenTheClientCantAffordTheReward() async throws {

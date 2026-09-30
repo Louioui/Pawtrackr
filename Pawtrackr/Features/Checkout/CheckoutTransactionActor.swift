@@ -69,12 +69,22 @@ final actor CheckoutTransactionActor {
             let visit = try fetchOrCreateVisit(uuid: request.visitUUID, petUUID: request.petUUID)
             let pet = try fetchPet(uuid: request.petUUID)
             visit.ensureSessionToken()
+            
+            // 3. Process Images (Parallelized background work)
+            let (pBefore, pBeforeThumb, pAfter, pAfterThumb) = await processImages(
+                before: request.beforePhotoData,
+                after: request.afterPhotoData
+            )
 
-            // A reward the client can no longer afford (spent on another
-            // device meanwhile) fails the checkout before anything changes.
+            // Resolve the reward after the last suspension point and before
+            // the visit, payment or balance change, so a failed lookup or a
+            // short balance (points spent on another device meanwhile) fails
+            // the checkout clean, and an overlapping retry for this visit
+            // sees the ledger row this attempt writes.
+            let redeemedEntry = try LoyaltyCheckoutProcessor.redeemedEntry(visitUUID: visit.uuid, in: modelContext)
             if let redemption = request.rewardRedemption {
                 guard let client = pet.owner,
-                      try LoyaltyCheckoutProcessor.canAfford(redemption, client: client, visitUUID: request.visitUUID, in: modelContext)
+                      LoyaltyCheckoutProcessor.canAfford(redemption, client: client, existing: redeemedEntry)
                 else {
                     throw AppError.validation(.custom(message: AppLocalization.localized(
                         "checkout.error.reward_unaffordable",
@@ -82,12 +92,6 @@ final actor CheckoutTransactionActor {
                     )))
                 }
             }
-            
-            // 3. Process Images (Parallelized background work)
-            let (pBefore, pBeforeThumb, pAfter, pAfterThumb) = await processImages(
-                before: request.beforePhotoData,
-                after: request.afterPhotoData
-            )
             
             // 4. Sync State
             visit.note = request.sessionNotes
@@ -111,7 +115,7 @@ final actor CheckoutTransactionActor {
             pet.reconcileBehaviorTagsFromCompletedVisits()
             var redemptionClientUUID: UUID?
             if let client = pet.owner,
-               try LoyaltyCheckoutProcessor.applyRedemption(request.rewardRedemption, visitUUID: visit.uuid, client: client, in: modelContext) {
+               LoyaltyCheckoutProcessor.applyRedemption(request.rewardRedemption, existing: redeemedEntry, visitUUID: visit.uuid, client: client, in: modelContext) {
                 redemptionClientUUID = client.uuid
             }
             let loyaltyConfig = LoyaltyConfigResolver.snapshot(in: modelContext)
