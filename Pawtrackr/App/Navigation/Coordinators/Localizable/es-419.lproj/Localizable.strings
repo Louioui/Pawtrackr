@@ -1996,7 +1996,7 @@
 "tour.dash.checklist.tip" = "La fila de respaldo se marca solo cuando iCloud confirma una subida. La lista desaparece cuando todas las filas están hechas.";
 "tour.set.loyalty_ladder.title" = "Escalera de lealtad";
 "tour.set.loyalty_ladder.directive" = "Elige recompensas antes de que el personal cobre visitas.";
-"tour.set.loyalty_ladder.purpose" = "Recompensas 2.0 son $5 de descuento, $20 de descuento, 25% de descuento y Baño gratis, y el cobro las descuenta de la cuenta. Usar Recompensas 2.0 reemplaza todas las recompensas, también las personalizadas. Los puntos de los clientes no cambian.";
+"tour.set.loyalty_ladder.purpose" = "Recompensas 2.0: $5 o $20 de descuento, 25% de descuento o Baño gratis, restados al cobrar. Usar Recompensas 2.0 reemplaza todas las recompensas. Los puntos de los clientes no cambian.";
 "tour.set.loyalty_ladder.tip" = "Haz que las recompensas sean fáciles de explicar: puntos automáticos, sin papeleo extra.";
 "tour.set.loyalty.title" = "Puntos de lealtad";
 "tour.set.loyalty.directive" = "Prueba tus reglas de lealtad antes de que un cliente gane puntos.";

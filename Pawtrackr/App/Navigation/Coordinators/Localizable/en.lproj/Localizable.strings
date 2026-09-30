@@ -1988,7 +1988,7 @@
 "tour.dash.checklist.tip" = "The backup row ticks only when iCloud confirms an upload. The list goes away once every row is done.";
 "tour.set.loyalty_ladder.title" = "Loyalty ladder";
 "tour.set.loyalty_ladder.directive" = "Pick rewards before staff start checking out.";
-"tour.set.loyalty_ladder.purpose" = "Rewards 2.0 is $5 Off, $20 Off, 25% Off and Free Bath, and checkout takes them off the bill. Use Rewards 2.0 replaces every reward on the list, custom ones included. Client points stay as they are.";
+"tour.set.loyalty_ladder.purpose" = "Rewards 2.0 is $5 Off, $20 Off, 25% Off and Free Bath, taken off the bill at checkout. Use Rewards 2.0 replaces every reward, custom ones included. Client points stay as they are.";
 "tour.set.loyalty_ladder.tip" = "Keep rewards easy to explain at pickup: points should feel automatic, not like extra paperwork.";
 "tour.set.loyalty.title" = "Loyalty points";
 "tour.set.loyalty.directive" = "Try your loyalty rules before a client earns anything.";
