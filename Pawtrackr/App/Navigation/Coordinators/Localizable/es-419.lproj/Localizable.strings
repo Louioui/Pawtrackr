@@ -1111,14 +1111,16 @@
 "message_template.follow_up.content" = "Hola [OwnerName], ¡gracias por traer a [PetName] a Pawtrackr hoy! Esperamos que haya disfrutado su día de spa.";
 "whats_new.title" = "Novedades de Pawtrackr";
 "whats_new.continue" = "Continuar";
-"whats_new.guided_tour.title" = "Tour guiado práctico";
-"whats_new.guided_tour.description" = "¿Eres nuevo? Resaltamos cada herramienta y explicamos qué hace, paso a paso, encima de un salón de ejemplo.";
-"whats_new.safety_flag.title" = "Marca de seguridad para mascotas agresivas";
-"whats_new.safety_flag.description" = "Las mascotas marcadas como agresivas ahora muestran una advertencia roja en tu lista de clientes, para que el equipo las maneje con cuidado.";
-"whats_new.start_fresh.title" = "Explora y luego empieza desde cero";
-"whats_new.start_fresh.description" = "Prueba datos de demo realistas y luego bórralos con un toque desde Ajustes para empezar con tu negocio real.";
-"whats_new.setup.title" = "Configuración más rápida y amable";
-"whats_new.setup.description" = "Una bienvenida animada más fluida; además puedes configurar un PIN u omitirlo para acceder al instante sin código.";
+"whats_new.local_data.title" = "Tus datos se quedan en este dispositivo";
+"whats_new.local_data.description" = "La sincronización con iCloud está desactivada. Todo lo que ya tienes aquí se queda, y desde ahora cada iPhone, iPad y Mac guarda sus propios registros. Exporta una copia cuando quieras en Ajustes › Exportar datos.";
+"whats_new.academy.title" = "Academia Pawtrackr";
+"whats_new.academy.description" = "Aprende la app en cinco capítulos cortos con misiones prácticas, en un salón de práctica que nunca toca a tus clientes reales. Empiézala en Ajustes › Acerca de.";
+"whats_new.exports.title" = "Mejores informes y exportaciones";
+"whats_new.exports.description" = "El informe del negocio en PDF ahora muestra tendencias, gráficas y puntos clave, y los CSV se abren bien en Excel y Numbers. Envíalos por AirDrop, Mensajes o Mail.";
+"whats_new.missing_info.title" = "Filtro de información faltante más inteligente";
+"whats_new.missing_info.description" = "Los clientes sin contacto de emergencia, teléfono o correo ahora aparecen en Información faltante, y su tarjeta dice qué agregar.";
+"whats_new.checkout.title" = "Cobro más amplio y sencillo";
+"whats_new.checkout.description" = "El cobro es más ancho en la Mac y ya no pide propina: el total son tus servicios o el monto que escribas.";
 
 // Raw SwiftUI literal localization cleanup.
 "dashboard.activity.title" = "Actividad del salón";

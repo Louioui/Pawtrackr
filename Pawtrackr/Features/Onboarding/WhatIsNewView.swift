@@ -11,42 +11,56 @@ struct WhatIsNewView: View {
         let color: Color
     }
     
+    /// What changed in this version. It shows once per version, on the
+    /// first launch after an update.
     let features = [
-        Feature(title: AppLocalization.localized("whats_new.guided_tour.title", value: "Guided Hands-On Tour"), description: AppLocalization.localized("whats_new.guided_tour.description", value: "New here? We spotlight each tool and explain what it does, step by step — right on top of a sample salon."), icon: "hand.tap.fill", color: .blue),
-        Feature(title: AppLocalization.localized("whats_new.safety_flag.title", value: "Aggressive-Pet Safety Flag"), description: AppLocalization.localized("whats_new.safety_flag.description", value: "Pets marked aggressive now show a bold red warning across your client list, so the team handles them with care."), icon: "exclamationmark.triangle.fill", color: .red),
-        Feature(title: AppLocalization.localized("whats_new.start_fresh.title", value: "Explore, Then Start Fresh"), description: AppLocalization.localized("whats_new.start_fresh.description", value: "Play with realistic demo data, then wipe it in one tap from Settings to begin with your real business."), icon: "wand.and.stars", color: .purple),
-        Feature(title: AppLocalization.localized("whats_new.setup.title", value: "Faster, Friendlier Setup"), description: AppLocalization.localized("whats_new.setup.description", value: "A smoother animated welcome — and you can set a PIN or skip it for instant, passcode-free access."), icon: "bolt.fill", color: .orange)
+        Feature(title: AppLocalization.localized("whats_new.local_data.title", value: "Your Data Stays on This Device"), description: AppLocalization.localized("whats_new.local_data.description", value: "iCloud sync is off. Everything already here stays, and from now on each iPhone, iPad and Mac keeps its own records. Export a copy anytime in Settings › Data Export."), icon: "icloud.slash.fill", color: .blue),
+        Feature(title: AppLocalization.localized("whats_new.academy.title", value: "Pawtrackr Academy"), description: AppLocalization.localized("whats_new.academy.description", value: "Learn the app in five short chapters with hands-on missions, in a practice salon that never touches your real clients. Start it in Settings › About."), icon: "graduationcap.fill", color: .purple),
+        Feature(title: AppLocalization.localized("whats_new.exports.title", value: "Better Reports and Exports"), description: AppLocalization.localized("whats_new.exports.description", value: "The business report PDF now shows trends, charts and highlights, and CSV files open cleanly in Excel and Numbers. Send them by AirDrop, Messages or Mail."), icon: "chart.bar.doc.horizontal.fill", color: .orange),
+        Feature(title: AppLocalization.localized("whats_new.missing_info.title", value: "Smarter Missing Info Filter"), description: AppLocalization.localized("whats_new.missing_info.description", value: "Clients without an emergency contact, phone or email now show up under Missing Info, and their cards say what to add."), icon: "person.crop.circle.badge.exclamationmark", color: .red),
+        Feature(title: AppLocalization.localized("whats_new.checkout.title", value: "Roomier, Simpler Checkout"), description: AppLocalization.localized("whats_new.checkout.description", value: "Checkout is wider on the Mac, and the tip step is gone: the total is your services, or the amount you type."), icon: "creditcard.fill", color: .green)
     ]
     
     var body: some View {
-        VStack(spacing: 30) {
-            Text(AppLocalization.localized("whats_new.title", value: "What's New in Pawtrackr"))
-                .font(.largeTitle.weight(.bold))
-                .multilineTextAlignment(.center)
-                .padding(.top, 40)
-            
-            VStack(alignment: .leading, spacing: 25) {
-                ForEach(features) { feature in
-                    HStack(spacing: 20) {
-                        Image(systemName: feature.icon)
-                            .font(.title)
-                            .foregroundStyle(feature.color)
-                            .frame(width: 40)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(feature.title)
-                                .font(.headline)
-                            Text(feature.description)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            // Scrolls on small iPhones and at large text sizes, so Continue
+            // stays on screen.
+            ScrollView {
+                VStack(spacing: 30) {
+                    Text(AppLocalization.localized("whats_new.title", value: "What's New in Pawtrackr"))
+                        .font(.largeTitle.weight(.bold))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 40)
+
+                    VStack(alignment: .leading, spacing: 25) {
+                        ForEach(features) { feature in
+                            HStack(alignment: .top, spacing: 20) {
+                                Image(systemName: feature.icon)
+                                    .font(.title)
+                                    .foregroundStyle(feature.color)
+                                    .frame(width: 40)
+                                    .accessibilityHidden(true)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(feature.title)
+                                        .font(.headline)
+                                    Text(feature.description)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .accessibilityElement(children: .combine)
                         }
                     }
+                    .padding(.horizontal, 30)
                 }
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 30)
-            
-            Spacer()
-            
+            .scrollBounceBehavior(.basedOnSize)
+
             Button {
                 onDismiss()
             } label: {
@@ -58,8 +72,13 @@ struct WhatIsNewView: View {
                     .background(.purple)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             }
+            .frame(maxWidth: 500)
             .padding(.horizontal, 30)
+            .padding(.top, 12)
             .padding(.bottom, 40)
         }
+        #if os(macOS)
+        .frame(minWidth: 480, idealWidth: 560, minHeight: 560, idealHeight: 680)
+        #endif
     }
 }
