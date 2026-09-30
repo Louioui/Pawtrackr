@@ -93,11 +93,15 @@ struct CheckoutView: View {
             guard !didLoadViewModel else { return }
             didLoadViewModel = true
             viewModel = CheckoutViewModel(pet: viewModel.pet, visit: viewModel.visit, eventBus: eventBus)
+            viewModel.setLoyaltyRewardsEntitled(entitlements?.isPremium ?? false)
             viewModel.loadServices(modelContext: modelContext)
             notesEditorText = viewModel.sessionNotes
             amountEditorText = viewModel.amountString
             referenceEditorText = viewModel.externalReference
             synchronizeWalkthroughCheckoutStep(walkthrough?.currentStep?.anchor)
+        }
+        .onChange(of: entitlements?.isPremium ?? false) { _, isPremium in
+            viewModel.setLoyaltyRewardsEntitled(isPremium)
         }
         .onDisappear {
             notesSyncTask?.cancel()
@@ -704,7 +708,7 @@ struct CheckoutView: View {
 
     /// Rewards are part of the Pro loyalty suite; earning stays free.
     private var showsLoyaltyRewards: Bool {
-        (entitlements?.isPremium ?? false) && viewModel.canUseLoyaltyRewards && !viewModel.isWalkthroughPreview
+        viewModel.canUseLoyaltyRewards && !viewModel.isWalkthroughPreview
     }
 
     @ViewBuilder

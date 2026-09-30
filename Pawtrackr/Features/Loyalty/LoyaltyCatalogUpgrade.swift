@@ -11,36 +11,51 @@ import Foundation
 import SwiftData
 
 enum LoyaltyCatalogUpgrade {
-    /// True when `templates` are the five 1.x starter rewards as seeded: same
-    /// titles, costs and order, all enabled, none carrying a 2.0 benefit.
-    static func isUntouchedLegacyCatalog(_ templates: [LoyaltyRewardTemplate]) -> Bool {
+    /// The rows to keep, one per 1.x starter reward in catalog order, when
+    /// `templates` are only untouched 1.x starter rows (same titles and costs,
+    /// enabled, no 2.0 benefit) covering the whole starter set. Two devices
+    /// that each seeded before syncing hold every row twice; the copy with the
+    /// smallest UUID is kept, so every device picks the same one. Nil when the
+    /// salon changed anything.
+    static func untouchedLegacyRows(_ templates: [LoyaltyRewardTemplate]) -> [LoyaltyRewardTemplate]? {
         let legacy = LoyaltyReward.legacyStarterCatalog
-        guard templates.count == legacy.count else { return false }
-        let ordered = templates.sorted { $0.sortOrder < $1.sortOrder }
-        return zip(ordered, legacy).allSatisfy { template, reward in
-            template.title == reward.title
-                && template.pointCost == reward.pointCost
-                && template.isEnabled
-                && template.benefitKindRaw.isEmpty
+        guard !templates.isEmpty else { return nil }
+
+        var keepers: [LoyaltyRewardTemplate?] = Array(repeating: nil, count: legacy.count)
+        for template in templates {
+            guard template.isEnabled, template.benefitKindRaw.isEmpty,
+                  let index = legacy.firstIndex(where: { $0.title == template.title && $0.pointCost == template.pointCost })
+            else { return nil }
+            if let kept = keepers[index], kept.uuid.uuidString <= template.uuid.uuidString { continue }
+            keepers[index] = template
         }
+        let rows = keepers.compactMap { $0 }
+        return rows.count == legacy.count ? rows : nil
+    }
+
+    static func isUntouchedLegacyCatalog(_ templates: [LoyaltyRewardTemplate]) -> Bool {
+        untouchedLegacyRows(templates) != nil
     }
 
     /// Rewrites an untouched 1.x catalog as the 2.0 catalog in place and
-    /// deletes the leftover row. Returns true when it changed anything; the
-    /// caller saves. Updating rows in place keeps two devices that run this
-    /// at once converging on one catalog.
+    /// deletes the leftover row and any duplicate copies. Returns true when it
+    /// changed anything; the caller saves. Updating rows in place keeps two
+    /// devices that run this at once converging on one catalog.
     @discardableResult
     static func upgradeIfUntouched(_ templates: [LoyaltyRewardTemplate], in context: ModelContext) -> Bool {
-        guard isUntouchedLegacyCatalog(templates) else { return false }
+        guard let rows = untouchedLegacyRows(templates) else { return false }
 
-        let ordered = templates.sorted { $0.sortOrder < $1.sortOrder }
+        let kept = Set(rows.map(\.uuid))
         let catalog = LoyaltyReward.builtInCatalog
-        for (index, template) in ordered.enumerated() {
+        for (index, template) in rows.enumerated() {
             if index < catalog.count {
                 template.adopt(catalog[index], sortOrder: index)
             } else {
                 context.delete(template)
             }
+        }
+        for template in templates where !kept.contains(template.uuid) {
+            context.delete(template)
         }
         return true
     }

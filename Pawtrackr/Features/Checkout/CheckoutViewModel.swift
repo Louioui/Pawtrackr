@@ -112,6 +112,21 @@ final class CheckoutViewModel {
     private(set) var appliedReward: LoyaltyReward?
     /// The salon's Bath price, which a Free Bath reward takes off.
     private(set) var bathServicePrice: Decimal?
+    /// Rewards are part of the Pro loyalty suite. The view sets this from the
+    /// entitlement before services load and whenever it changes; while it is
+    /// false no reward is offered, restored from a draft, or sent to the
+    /// transaction.
+    private(set) var isLoyaltyRewardsEntitled = false
+
+    func setLoyaltyRewardsEntitled(_ entitled: Bool) {
+        guard entitled != isLoyaltyRewardsEntitled else { return }
+        isLoyaltyRewardsEntitled = entitled
+        if !entitled, appliedReward != nil {
+            appliedReward = nil
+            recalculateCachedStrings()
+            scheduleCriticalDraftSave(reason: "reward_cleared_not_entitled")
+        }
+    }
 
     var clientLoyaltyPoints: Int {
         pet.owner?.loyaltyPoints ?? 0
@@ -119,10 +134,11 @@ final class CheckoutViewModel {
 
     /// Rewards only apply to a pet with an owner (points live on the client).
     var canUseLoyaltyRewards: Bool {
-        pet.owner != nil && !loyaltyRewards.isEmpty
+        isLoyaltyRewardsEntitled && pet.owner != nil && !loyaltyRewards.isEmpty
     }
 
     func availability(of reward: LoyaltyReward) -> RewardAvailability {
+        guard isLoyaltyRewardsEntitled else { return .notApplicable }
         guard let discount = LoyaltyRewardPricing.discount(
             for: reward.benefit,
             subtotal: subtotalDecimal,
@@ -907,7 +923,9 @@ final class CheckoutViewModel {
         let addOnIDs = Set(addOnServices.filter { draft.selectedAddOnUUIDs.contains($0.uuid) }.map(\.persistentModelID))
         selectedServiceIDs = mainIDs
         selectedAddOnIDs = addOnIDs
-        appliedReward = draft.appliedRewardID.flatMap { id in loyaltyRewards.first { $0.id == id } }
+        appliedReward = isLoyaltyRewardsEntitled
+            ? draft.appliedRewardID.flatMap { id in loyaltyRewards.first { $0.id == id } }
+            : nil
         if let restoredStep = CheckoutFlowStep(rawValue: draft.currentStepRawValue) {
             currentStep = restoredStep
         } else {

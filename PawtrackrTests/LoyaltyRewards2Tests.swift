@@ -102,6 +102,17 @@ final class LoyaltyRewards2Tests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<LoyaltyRewardTemplate>()), LoyaltyReward.builtInCatalog.count, "Running again changes nothing.")
     }
 
+    func testDuplicatedLegacyCatalogFromTwoDevicesMovesToOneRewards2Catalog() throws {
+        insertLegacyCatalog()
+        insertLegacyCatalog()
+        try context.save()
+
+        DataMigrations.ensureLoyaltyDefaults(in: context)
+
+        let rewards = try context.fetch(FetchDescriptor<LoyaltyRewardTemplate>(sortBy: [SortDescriptor(\.sortOrder)]))
+        XCTAssertEqual(rewards.map(\.title), LoyaltyReward.builtInCatalog.map(\.title))
+    }
+
     func testEditedLegacyCatalogIsLeftAlone() throws {
         let templates = insertLegacyCatalog()
         templates[1].pointCost = 120
@@ -143,13 +154,13 @@ final class LoyaltyRewards2Tests: XCTestCase {
         let visitUUID = UUID()
         let redemption = CheckoutRewardRedemption(rewardID: "five-off", title: "$5 Off", pointCost: 50, discount: 5)
 
-        XCTAssertTrue(LoyaltyCheckoutProcessor.applyRedemption(redemption, visitUUID: visitUUID, client: client, in: context))
-        XCTAssertFalse(LoyaltyCheckoutProcessor.applyRedemption(redemption, visitUUID: visitUUID, client: client, in: context))
+        XCTAssertTrue(try LoyaltyCheckoutProcessor.applyRedemption(redemption, visitUUID: visitUUID, client: client, in: context))
+        XCTAssertFalse(try LoyaltyCheckoutProcessor.applyRedemption(redemption, visitUUID: visitUUID, client: client, in: context))
         XCTAssertEqual(client.loyaltyPoints, 250)
-        XCTAssertTrue(LoyaltyCheckoutProcessor.canAfford(redemption, client: client, visitUUID: visitUUID, in: context),
+        XCTAssertTrue(try LoyaltyCheckoutProcessor.canAfford(redemption, client: client, visitUUID: visitUUID, in: context),
                       "Points this visit already spent count toward affording it again.")
 
-        XCTAssertTrue(LoyaltyCheckoutProcessor.applyRedemption(nil, visitUUID: visitUUID, client: client, in: context))
+        XCTAssertTrue(try LoyaltyCheckoutProcessor.applyRedemption(nil, visitUUID: visitUUID, client: client, in: context))
         XCTAssertEqual(client.loyaltyPoints, 300, "Dropping the reward on a retry refunds it.")
         try context.save()
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<LoyaltyLedgerEntry>()), 0)

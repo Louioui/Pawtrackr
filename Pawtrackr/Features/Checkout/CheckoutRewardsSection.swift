@@ -125,6 +125,7 @@ struct CheckoutRewardsSection: View {
             .opacity(isReady || isApplied ? 1 : 0.6)
         }
         .buttonStyle(.plain)
+        .pressScaleStyle()
         .disabled(!isReady && !isApplied)
         .accessibilityLabel(accessibilityLabel(for: reward, availability: availability, isApplied: isApplied))
         .accessibilityAddTraits(isApplied ? .isSelected : [])
@@ -161,6 +162,7 @@ struct CheckoutRewardsSection: View {
                 viewModel.removeAppliedReward()
             }
             .buttonStyle(.bordered)
+            .pressScaleStyle()
             .controlSize(.small)
             .accessibilityIdentifier("checkout.reward.remove")
         }

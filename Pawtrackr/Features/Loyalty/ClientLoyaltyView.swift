@@ -39,6 +39,7 @@ struct ClientLoyaltyView: View {
     @State private var showsAllActivity = false
     @State private var redeemedRewardID: LoyaltyReward.ID?
     @State private var statusMessage: String?
+    @State private var feedbackResetTask: Task<Void, Never>?
 
     init(client: Client) {
         self.client = client
@@ -423,8 +424,13 @@ struct ClientLoyaltyView: View {
                 LoyaltyCopy.title(for: reward)
             )
         }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2.4))
+        feedbackResetTask?.cancel()
+        feedbackResetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2.4))
+            } catch {
+                return
+            }
             withAnimation(animation) {
                 redeemedRewardID = nil
                 statusMessage = nil

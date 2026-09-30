@@ -74,7 +74,7 @@ final actor CheckoutTransactionActor {
             // device meanwhile) fails the checkout before anything changes.
             if let redemption = request.rewardRedemption {
                 guard let client = pet.owner,
-                      LoyaltyCheckoutProcessor.canAfford(redemption, client: client, visitUUID: request.visitUUID, in: modelContext)
+                      try LoyaltyCheckoutProcessor.canAfford(redemption, client: client, visitUUID: request.visitUUID, in: modelContext)
                 else {
                     throw AppError.validation(.custom(message: AppLocalization.localized(
                         "checkout.error.reward_unaffordable",
@@ -111,7 +111,7 @@ final actor CheckoutTransactionActor {
             pet.reconcileBehaviorTagsFromCompletedVisits()
             var redemptionClientUUID: UUID?
             if let client = pet.owner,
-               LoyaltyCheckoutProcessor.applyRedemption(request.rewardRedemption, visitUUID: visit.uuid, client: client, in: modelContext) {
+               try LoyaltyCheckoutProcessor.applyRedemption(request.rewardRedemption, visitUUID: visit.uuid, client: client, in: modelContext) {
                 redemptionClientUUID = client.uuid
             }
             let loyaltyConfig = LoyaltyConfigResolver.snapshot(in: modelContext)

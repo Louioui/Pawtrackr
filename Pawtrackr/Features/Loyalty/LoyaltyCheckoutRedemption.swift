@@ -26,8 +26,8 @@ extension LoyaltyCheckoutProcessor {
     /// Whether the client can pay `redemption` from their balance, counting
     /// points this visit already spent on it (a retried checkout). Call it
     /// before changing anything, so a short balance fails the checkout clean.
-    static func canAfford(_ redemption: CheckoutRewardRedemption, client: Client, visitUUID: UUID, in context: ModelContext) -> Bool {
-        let alreadySpent = -(redeemedEntry(visitUUID: visitUUID, in: context)?.points ?? 0)
+    static func canAfford(_ redemption: CheckoutRewardRedemption, client: Client, visitUUID: UUID, in context: ModelContext) throws -> Bool {
+        let alreadySpent = -(try redeemedEntry(visitUUID: visitUUID, in: context)?.points ?? 0)
         return client.loyaltyPoints + alreadySpent >= redemption.pointCost
     }
 
@@ -36,15 +36,17 @@ extension LoyaltyCheckoutProcessor {
     /// the same checkout twice spends the points once. A nil redemption
     /// refunds and removes a row an earlier attempt left behind.
     ///
-    /// Returns true when the client balance changed; the caller saves.
+    /// Returns true when the client balance changed; the caller saves. A
+    /// failed ledger lookup throws rather than reading as "nothing spent
+    /// yet", which would spend the points twice.
     @discardableResult
     static func applyRedemption(
         _ redemption: CheckoutRewardRedemption?,
         visitUUID: UUID,
         client: Client,
         in context: ModelContext
-    ) -> Bool {
-        let existing = redeemedEntry(visitUUID: visitUUID, in: context)
+    ) throws -> Bool {
+        let existing = try redeemedEntry(visitUUID: visitUUID, in: context)
         let previousCost = -(existing?.points ?? 0)
         let newCost = redemption?.pointCost ?? 0
         guard newCost != previousCost || existing?.reason != redemption?.title else { return false }
@@ -75,7 +77,7 @@ extension LoyaltyCheckoutProcessor {
         return newCost != previousCost
     }
 
-    private static func redeemedEntry(visitUUID: UUID, in context: ModelContext) -> LoyaltyLedgerEntry? {
+    private static func redeemedEntry(visitUUID: UUID, in context: ModelContext) throws -> LoyaltyLedgerEntry? {
         let redeemedRaw = LoyaltyLedgerEntry.Kind.redeemed.rawValue
         var descriptor = FetchDescriptor<LoyaltyLedgerEntry>(
             predicate: #Predicate<LoyaltyLedgerEntry> {
@@ -83,6 +85,6 @@ extension LoyaltyCheckoutProcessor {
             }
         )
         descriptor.fetchLimit = 1
-        return (try? context.fetch(descriptor))?.first
+        return try context.fetch(descriptor).first
     }
 }

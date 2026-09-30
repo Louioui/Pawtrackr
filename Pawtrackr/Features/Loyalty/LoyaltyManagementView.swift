@@ -225,6 +225,9 @@ struct LoyaltyManagementView: View {
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("loyaltySettings.newRewardBenefit")
+            .onChange(of: newRewardBenefitKind) { _, kind in
+                newRewardBenefitValue = kind == .percentOff ? 25 : 10
+            }
 
             switch newRewardBenefitKind {
             case .amountOff:
