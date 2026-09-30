@@ -649,6 +649,8 @@ final class WalkthroughTourTests: XCTestCase {
         .coServices: (.sheet(.checkout), "Pawtrackr/Features/Checkout/CheckoutView.swift"),
         .coPayment: (.sheet(.checkout), "Pawtrackr/Features/Checkout/CheckoutView.swift"),
         .coConfirm: (.sheet(.checkout), "Pawtrackr/Features/Checkout/CheckoutView.swift"),
+        // Settings > Loyalty hands it to the preview card's Try it box.
+        .loyaltySimulator: (.detail, "Pawtrackr/Features/Loyalty/LoyaltyManagementView.swift"),
         .setData: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setAbout: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift")
     ]
@@ -672,7 +674,9 @@ final class WalkthroughTourTests: XCTestCase {
             }
             let steps = WalkthroughController.fullTour().filter { $0.anchor == anchor }
             let text = try source(file)
-            let literal = text.range(of: #"walkthrough(Target|Anchor)\(\.\#(anchor.rawValue)[,)]"#, options: .regularExpression) != nil
+            // Attached there, or handed to a view that attaches it
+            // (`LoyaltySimulatorCard(tryItTourAnchor:)`).
+            let literal = text.range(of: #"(walkthrough(Target|Anchor)\(|TourAnchor: )\.\#(anchor.rawValue)[,)]"#, options: .regularExpression) != nil
             let mapped = text.contains("return .\(anchor.rawValue)")
             if case .toolbar = home {
                 XCTAssertFalse(literal, "\(anchor): a toolbar item's frame never reaches the overlay")
