@@ -95,6 +95,11 @@ struct InsightsView: View {
                 .allowsHitTesting(false)
         }
         .navigationTitle(NSLocalizedString("insights.title", value: "Insights", comment: ""))
+        // A prepared report holds the numbers from when it was made. Drop it
+        // when they or the salon's name change, so Export makes a new one.
+        .onChange(of: viewModel?.totalRevenue) { reportExports = nil }
+        .onChange(of: viewModel?.totalVisitsInPeriod) { reportExports = nil }
+        .onChange(of: appSettings.businessName) { reportExports = nil }
         .refreshable {
             await viewModel?.refresh()
         }
@@ -734,11 +739,16 @@ struct InsightsView: View {
                     isPreparingReport = true
                     Task {
                         if let vm = viewModel {
+                            let period = vm.revenuePeriodDays
                             do {
-                                reportExports = try await vm.makeReportExports(
+                                let exports = try await vm.makeReportExports(
                                     businessName: appSettings.businessName,
                                     currencySymbol: appSettings.currencySymbol
                                 )
+                                // The period changed while it was being made.
+                                if vm.revenuePeriodDays == period {
+                                    reportExports = exports
+                                }
                             } catch {
                                 Logger.insightsExport.error("Report export failed: \(error.localizedDescription, privacy: .public)")
                             }

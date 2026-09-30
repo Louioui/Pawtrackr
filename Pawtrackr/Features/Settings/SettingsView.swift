@@ -645,20 +645,24 @@ private struct DataExportSectionView: View {
             isExportingVisits = true
         }
 
-        defer {
-            isExportingClients = false
-            isExportingVisits = false
-        }
-
-        do {
-            switch kind {
-            case .clients:
-                exportDocument = try ExportService.shared.exportClientsToCSV(modelContext: modelContext)
-            case .visits:
-                exportDocument = try ExportService.shared.exportVisitsToCSV(modelContext: modelContext)
+        // Off the main actor on a context of its own: a client's row walks
+        // every pet and visit, which a large salon would feel on the UI.
+        let container = modelContext.container
+        Task { @MainActor in
+            defer {
+                isExportingClients = false
+                isExportingVisits = false
             }
-        } catch {
-            exportError = String(format: settingsLocalized("settings.export.failed_fmt", value: "Export failed: %@"), error.localizedDescription)
+            do {
+                switch kind {
+                case .clients:
+                    exportDocument = try await ExportService.shared.exportClientsToCSVAsync(container: container)
+                case .visits:
+                    exportDocument = try await ExportService.shared.exportVisitsToCSVAsync(container: container)
+                }
+            } catch {
+                exportError = String(format: settingsLocalized("settings.export.failed_fmt", value: "Export failed: %@"), error.localizedDescription)
+            }
         }
     }
 
