@@ -37,8 +37,8 @@ final class ClientsViewModelListTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    /// Complete clients "Aaron000"... sorting before any "Z" surname, all
-    /// created well in the past.
+    /// Complete clients "Aaron000"... (phone, email and an emergency
+    /// contact) sorting before any "Z" surname, all created well in the past.
     @discardableResult
     private func seedBook() throws -> [Client] {
         var clients: [Client] = []
@@ -51,6 +51,9 @@ final class ClientsViewModelListTests: XCTestCase {
             )
             client.createdAt = Date(timeIntervalSince1970: 1_700_000_000 + Double(index))
             context.insert(client)
+            let contact = EmergencyContact(name: "Contact \(index)", phone: String(format: "+1555111%04d", index))
+            contact.owner = client
+            context.insert(contact)
             clients.append(client)
         }
         try context.save()
@@ -84,6 +87,28 @@ final class ClientsViewModelListTests: XCTestCase {
 
         XCTAssertEqual(viewModel.otherClients.map(\.lastName), ["Zimmerman"],
                        "A filter match past row 100 by last name must still show.")
+    }
+
+    /// The profile says "Missing: Emergency contact" for a client with a
+    /// phone and an email but nobody to call. The filter lists them too.
+    func testMissingInfoFilterListsAClientWithoutAnEmergencyContact() async throws {
+        try seedBook()
+        let noBackup = Client(firstName: "Alien", lastName: "Cullen", phone: "+14453453443", email: "l@gamil.com")
+        let blankEmail = Client(firstName: "Bo", lastName: "Blank", phone: "+15559990002", email: "   ")
+        for client in [noBackup, blankEmail] {
+            context.insert(client)
+        }
+        let contact = EmergencyContact(name: "Rosa", phone: "+15559990003")
+        contact.owner = blankEmail
+        context.insert(contact)
+        try context.save()
+
+        let viewModel = await makeViewModel()
+        viewModel.selectedFilter = .missingInfo
+        await viewModel.waitForPendingFetch()
+
+        XCTAssertEqual(Set(viewModel.otherClients.map(\.lastName)), ["Cullen", "Blank"], "Blank text counts as missing too.")
+        XCTAssertEqual(ClientMissingInfo.items(for: noBackup), [.emergencyContact])
     }
 
     func testNewestSortPutsALateSurnameFirst() async throws {

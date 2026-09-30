@@ -176,8 +176,9 @@ final class ClientsViewModel {
                         (client.pets ?? []).contains { $0.needsAttention }
                     }
                 case .missingInfo:
-                    inProgress = inProgress.filter { $0.phone == nil || $0.email == nil }
-                    others = others.filter { $0.phone == nil || $0.email == nil }
+                    // The same rule as the profile's "Missing:" note.
+                    inProgress = inProgress.filter(ClientMissingInfo.isIncomplete)
+                    others = others.filter(ClientMissingInfo.isIncomplete)
                 }
 
                 // Apply Sorting

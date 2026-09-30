@@ -13,28 +13,13 @@ struct EmergencyContactSummaryCard: View {
     let onEdit: (EmergencyContact) -> Void
     let onDelete: (EmergencyContact) -> Void
 
-    private var missingItems: [String] {
-        var values: [String] = []
-        if contacts.isEmpty {
-            values.append(AppLocalization.localized("client_detail.missing.emergency_contact", value: "Emergency contact"))
-        }
-        if (ownerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            values.append(AppLocalization.localized("client_detail.missing.owner_phone", value: "Owner phone"))
-        }
-        if (ownerEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            values.append(AppLocalization.localized("client_detail.missing.owner_email", value: "Owner email"))
-        }
-        return values
+    /// The same rule as the client list's Missing Info filter.
+    private var missingItems: [ClientMissingInfo] {
+        ClientMissingInfo.items(hasEmergencyContact: !contacts.isEmpty, phone: ownerPhone, email: ownerEmail)
     }
 
     private var missingSummary: String {
-        let formatter = ListFormatter()
-        formatter.locale = AppLocalization.currentLocale
-        let list = formatter.string(from: missingItems) ?? missingItems.joined(separator: ", ")
-        return String(
-            format: AppLocalization.localized("client_detail.missing_fmt", value: "Missing: %@"),
-            list
-        )
+        ClientMissingInfo.summary(missingItems) ?? ""
     }
 
     var body: some View {

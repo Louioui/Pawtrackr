@@ -535,7 +535,7 @@
 "clients.empty.overdue_title" = "Todo al día";
 "clients.empty.overdue_desc" = "Ningún cliente tiene mascotas con una visita atrasada.";
 "clients.empty.missing_info_title" = "Los datos se ven bien";
-"clients.empty.missing_info_desc" = "Todos tus clientes tienen teléfono y correo registrados.";
+"clients.empty.missing_info_desc" = "Todos tus clientes tienen teléfono, correo y contacto de emergencia registrados.";
 "clients.notifications.title" = "Notificaciones";
 "clients.notifications.empty_title" = "Sin notificaciones";
 "clients.notification.client_created_title" = "Cliente creado";

@@ -376,7 +376,8 @@ struct ClientsView: View {
                         client: client,
                         namespace: namespace,
                         isInProgressOverride: isInProgress,
-                        displaysLastNameFirst: viewModel?.sortOption == .lastName
+                        displaysLastNameFirst: viewModel?.sortOption == .lastName,
+                        showsMissingDetails: viewModel?.selectedFilter == .missingInfo
                     )
                 }
                 .buttonStyle(.plain)
@@ -484,7 +485,7 @@ struct ClientsView: View {
                 icon = "checkmark.seal.fill"
             case .missingInfo:
                 title = NSLocalizedString("clients.empty.missing_info_title", value: "Data looks great!", comment: "")
-                description = NSLocalizedString("clients.empty.missing_info_desc", value: "All your clients have phone numbers and emails on file.", comment: "")
+                description = NSLocalizedString("clients.empty.missing_info_desc", value: "Every client has a phone, an email and an emergency contact on file.", comment: "")
                 icon = "vial.viewfinder"
             default:
                 break

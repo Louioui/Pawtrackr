@@ -543,7 +543,7 @@
 "clients.empty.overdue_title" = "All Caught Up!";
 "clients.empty.overdue_desc" = "No clients have pets that are overdue for a visit.";
 "clients.empty.missing_info_title" = "Data looks great!";
-"clients.empty.missing_info_desc" = "All your clients have phone numbers and emails on file.";
+"clients.empty.missing_info_desc" = "Every client has a phone, an email and an emergency contact on file.";
 "clients.notifications.title" = "Notifications";
 "clients.notifications.empty_title" = "No Notifications";
 "clients.notification.client_created_title" = "Client Created";

@@ -18,6 +18,8 @@ struct ClientCard: View {
     /// so prefer the caller's query-derived value when available.
     var isInProgressOverride: Bool? = nil
     var displaysLastNameFirst: Bool = false
+    /// Spell out what the record lacks (the Missing Info filter).
+    var showsMissingDetails: Bool = false
 
     private var visualState: VisualState {
         VisualState(client: client, isInProgressOverride: isInProgressOverride)
@@ -25,7 +27,8 @@ struct ClientCard: View {
     private var isInProgress: Bool { visualState.isInProgress }
     private var isAggressive: Bool { visualState.showsAggressiveWarning }
     private var needsAttention: Bool { visualState.needsAttention }
-    private var hasMissingInfo: Bool { client.phone == nil || client.email == nil }
+    private var missingInfo: [ClientMissingInfo] { ClientMissingInfo.items(for: client) }
+    private var hasMissingInfo: Bool { !missingInfo.isEmpty }
     private var displayName: String { client.displayName(lastNameFirst: displaysLastNameFirst) }
     private var sortedPets: [Pet] {
         (client.pets ?? []).sorted {
@@ -52,6 +55,12 @@ struct ClientCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 if state.showsAggressiveWarning { aggressiveBanner }
                 header
+                if showsMissingDetails, let summary = ClientMissingInfo.summary(missingInfo) {
+                    Label(summary, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 phoneInfo
                 petsInfo
             }
@@ -85,7 +94,7 @@ struct ClientCard: View {
             } else if needsAttention {
                 Chip.warning(NSLocalizedString("clients.needs_attention", value: "Needs Attention", comment: ""))
             } else if hasMissingInfo {
-                Chip.info("Missing Info")
+                Chip.info(NSLocalizedString("clients.filter.missing_info", value: "Missing Info", comment: ""))
             }
         }
     }
