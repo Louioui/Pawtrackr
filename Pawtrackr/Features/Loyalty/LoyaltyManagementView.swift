@@ -14,6 +14,8 @@ struct LoyaltyManagementView: View {
     @State private var newRewardDetail = ""
     @State private var newRewardCost = 100
     @State private var newRewardStyle: LoyaltyReward.Style = .credit
+    @State private var newRewardBenefitKind: NewRewardBenefitKind = .amountOff
+    @State private var newRewardBenefitValue = 10
     @State private var showResetCatalogConfirmation = false
 
     private var config: LoyaltyConfig? {
@@ -62,18 +64,18 @@ struct LoyaltyManagementView: View {
             DataMigrations.ensureLoyaltyDefaults(in: modelContext)
         }
         .confirmationDialog(
-            AppLocalization.localized("loyalty.reset_ladder.title", value: "Reset rewards to Discount Ladder?"),
+            AppLocalization.localized("loyalty2.reset.title", value: "Switch to the Rewards 2.0 catalog?"),
             isPresented: $showResetCatalogConfirmation,
             titleVisibility: .visible
         ) {
-            Button(AppLocalization.localized("loyalty.reset_ladder.action", value: "Reset to Discount Ladder"), role: .destructive) {
+            Button(AppLocalization.localized("loyalty2.reset.action", value: "Use Rewards 2.0"), role: .destructive) {
                 resetToDiscountLadder()
             }
             Button(AppLocalization.localized("common.cancel", value: "Cancel"), role: .cancel) {}
         } message: {
             Text(AppLocalization.localized(
-                "loyalty.reset_ladder.message",
-                value: "This replaces the current reward templates with the five default discount-credit rewards. Client point balances stay unchanged."
+                "loyalty2.reset.message",
+                value: "This replaces the current rewards with $5 Off, $20 Off, 25% Off and Free Bath, which checkout takes off the bill by itself. Client point balances stay unchanged."
             ))
         }
     }
@@ -159,13 +161,14 @@ struct LoyaltyManagementView: View {
                     showResetCatalogConfirmation = true
                 } label: {
                     Label(
-                        AppLocalization.localized("loyalty.reset_ladder.action", value: "Reset to Discount Ladder"),
+                        AppLocalization.localized("loyalty2.reset.action", value: "Use Rewards 2.0"),
                         systemImage: "arrow.counterclockwise.circle.fill"
                     )
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(rewards.isEmpty)
+                .accessibilityIdentifier("loyaltySettings.useRewards2")
 
                 if rewards.isEmpty {
                     ContentUnavailableView(
@@ -215,6 +218,35 @@ struct LoyaltyManagementView: View {
             .pickerStyle(.menu)
             .accessibilityIdentifier("loyaltySettings.newRewardStyle")
 
+            Picker(AppLocalization.localized("loyalty2.settings.benefit", value: "At checkout"), selection: $newRewardBenefitKind) {
+                ForEach(NewRewardBenefitKind.allCases) { kind in
+                    Text(kind.title).tag(kind)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("loyaltySettings.newRewardBenefit")
+
+            switch newRewardBenefitKind {
+            case .amountOff:
+                Stepper(value: $newRewardBenefitValue, in: 1...500) {
+                    settingsValueRow(
+                        title: AppLocalization.localized("loyalty2.settings.amount_off", value: "Amount off"),
+                        value: LoyaltyMoney.compact(Decimal(newRewardBenefitValue))
+                    )
+                }
+                .accessibilityIdentifier("loyaltySettings.newRewardAmount")
+            case .percentOff:
+                Stepper(value: $newRewardBenefitValue, in: 1...100, step: 5) {
+                    settingsValueRow(
+                        title: AppLocalization.localized("loyalty2.settings.percent_off", value: "Percent off"),
+                        value: "\(newRewardBenefitValue)%"
+                    )
+                }
+                .accessibilityIdentifier("loyaltySettings.newRewardPercent")
+            case .freeBath, .manual:
+                EmptyView()
+            }
+
             Button {
                 createReward()
             } label: {
@@ -247,9 +279,13 @@ struct LoyaltyManagementView: View {
                     .background(reward.style.tint, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(reward.title)
+                    Text(LoyaltyCopy.title(for: reward.displayReward))
                         .font(.subheadline.weight(.semibold))
-                    Text(LoyaltyCopy.points(reward.pointCost))
+                    Text(String(
+                        format: AppLocalization.localized("loyalty2.settings.reward_row_fmt", value: "%1$@ · %2$@"),
+                        LoyaltyCopy.points(reward.pointCost),
+                        reward.displayReward.benefitSummary
+                    ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -333,6 +369,7 @@ struct LoyaltyManagementView: View {
             : newRewardDetail
         let cost = newRewardCost
         let style = newRewardStyle
+        let benefit = newRewardBenefitKind.benefit(value: newRewardBenefitValue)
 
         mutate { service in
             try await service.createRewardTemplate(
@@ -340,12 +377,15 @@ struct LoyaltyManagementView: View {
                 detail: detail,
                 pointCost: cost,
                 systemImage: style.systemImage,
-                style: style
+                style: style,
+                benefit: benefit
             )
             newRewardTitle = ""
             newRewardDetail = ""
             newRewardCost = 100
             newRewardStyle = .credit
+            newRewardBenefitKind = .amountOff
+            newRewardBenefitValue = 10
         }
     }
 
@@ -364,6 +404,38 @@ struct LoyaltyManagementView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+}
+
+/// What a new reward takes off at checkout, as the add-reward form offers it.
+private enum NewRewardBenefitKind: String, CaseIterable, Identifiable {
+    case amountOff
+    case percentOff
+    case freeBath
+    case manual
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .amountOff:
+            AppLocalization.localized("loyalty2.settings.kind.amount", value: "Amount off")
+        case .percentOff:
+            AppLocalization.localized("loyalty2.settings.kind.percent", value: "Percent off")
+        case .freeBath:
+            AppLocalization.localized("loyalty2.settings.kind.bath", value: "Free Bath")
+        case .manual:
+            AppLocalization.localized("loyalty2.settings.kind.manual", value: "Applied by hand")
+        }
+    }
+
+    func benefit(value: Int) -> LoyaltyReward.Benefit {
+        switch self {
+        case .amountOff: .amountOff(Decimal(max(1, value)))
+        case .percentOff: .percentOff(Decimal(min(100, max(1, value))))
+        case .freeBath: .freeBath
+        case .manual: .manual
         }
     }
 }
@@ -409,19 +481,6 @@ private extension LoyaltyReward.Style {
             "scissors"
         case .vip:
             "sparkles"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .credit:
-            DS.ColorToken.success
-        case .care:
-            DS.ColorToken.info
-        case .upgrade:
-            DS.ColorToken.warning
-        case .vip:
-            Color.purple
         }
     }
 }

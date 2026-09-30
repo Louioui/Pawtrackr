@@ -29,6 +29,10 @@ struct CheckoutRequest: Sendable {
     
     let selectedServiceIDs: [PersistentIdentifier]
     let selectedAddOnIDs: [PersistentIdentifier]
+
+    /// The loyalty reward this checkout spends, if any. `amount` is already
+    /// net of its discount.
+    var rewardRedemption: CheckoutRewardRedemption? = nil
 }
 
 struct CheckoutResult: Sendable {
@@ -65,6 +69,19 @@ final actor CheckoutTransactionActor {
             let visit = try fetchOrCreateVisit(uuid: request.visitUUID, petUUID: request.petUUID)
             let pet = try fetchPet(uuid: request.petUUID)
             visit.ensureSessionToken()
+
+            // A reward the client can no longer afford (spent on another
+            // device meanwhile) fails the checkout before anything changes.
+            if let redemption = request.rewardRedemption {
+                guard let client = pet.owner,
+                      LoyaltyCheckoutProcessor.canAfford(redemption, client: client, visitUUID: request.visitUUID, in: modelContext)
+                else {
+                    throw AppError.validation(.custom(message: AppLocalization.localized(
+                        "checkout.error.reward_unaffordable",
+                        value: "This client no longer has enough points for the reward. Remove it and try again."
+                    )))
+                }
+            }
             
             // 3. Process Images (Parallelized background work)
             let (pBefore, pBeforeThumb, pAfter, pAfterThumb) = await processImages(
@@ -92,8 +109,13 @@ final actor CheckoutTransactionActor {
             // 7. Finalize Visit
             visit.markCheckedOut(total: request.amount, now: endedAt)
             pet.reconcileBehaviorTagsFromCompletedVisits()
+            var redemptionClientUUID: UUID?
+            if let client = pet.owner,
+               LoyaltyCheckoutProcessor.applyRedemption(request.rewardRedemption, visitUUID: visit.uuid, client: client, in: modelContext) {
+                redemptionClientUUID = client.uuid
+            }
             let loyaltyConfig = LoyaltyConfigResolver.snapshot(in: modelContext)
-            let loyaltyClientUUID = LoyaltyCheckoutProcessor.applyEarnings(
+            let earningsClientUUID = LoyaltyCheckoutProcessor.applyEarnings(
                 visit: visit,
                 pet: pet,
                 total: request.amount,
@@ -101,6 +123,7 @@ final actor CheckoutTransactionActor {
                 now: endedAt,
                 config: loyaltyConfig
             )
+            let loyaltyClientUUID = earningsClientUUID ?? redemptionClientUUID
             
             // 8. Commit
             transaction.markSucceeded(completedAt: endedAt)

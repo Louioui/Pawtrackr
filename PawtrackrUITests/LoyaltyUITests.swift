@@ -2,7 +2,7 @@
 //  LoyaltyUITests.swift
 //  PawtrackrUITests
 //
-//  Focused UI coverage for the premium loyalty gate and rewards catalog.
+//  Focused UI coverage for the premium loyalty gate and Loyalty 2.0 rewards.
 //
 
 import XCTest
@@ -59,22 +59,24 @@ final class LoyaltyUITests: XCTestCase {
             { self.app.staticTexts["100 points"].exists }
         ], timeout: 8))
 
-        let redeemRewards = app.buttons["clientLoyalty.redeemRewards"]
-        XCTAssertTrue(redeemRewards.waitForHittable(timeout: 6))
-        redeemRewards.tap()
+        // Loyalty 2.0: rewards sit on the loyalty screen as cards. With 100
+        // points the $5 Off card (50 points) is ready.
+        let readyReward = app.buttons
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "clientLoyalty.reward."))
+            .matching(NSPredicate(format: "isEnabled == true"))
+            .firstMatch
+        XCTAssertTrue(readyReward.waitForHittable(timeout: 6))
+        readyReward.tap()
 
-        XCTAssertTrue(app.staticTexts["Rewards Catalog"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.otherElements["rewardsCatalog.balance"].waitForExistence(timeout: 4)
-                      || app.staticTexts["100 points"].waitForExistence(timeout: 4))
-        let salonCreditReward = app.buttons["rewardsCatalog.reward.salon-credit-10.redeem"]
-        XCTAssertTrue(salonCreditReward.waitForHittable(timeout: 6))
-        salonCreditReward.tap()
+        let confirm = app.buttons["rewardRedeem.confirm"]
+        XCTAssertTrue(confirm.waitForHittable(timeout: 6))
+        confirm.tap()
 
         XCTAssertTrue(waitForAny([
-            { self.app.otherElements["rewardsCatalog.status"].exists },
-            { self.app.staticTexts["Redeemed $10 Salon Credit"].exists }
+            { self.app.otherElements["clientLoyalty.status"].exists },
+            { self.app.staticTexts["Redeemed $5 Off"].exists }
         ], timeout: 8))
-        XCTAssertFalse(salonCreditReward.isEnabled)
+        XCTAssertTrue(app.staticTexts["50"].waitForExistence(timeout: 6), "100 points less the 50-point reward.")
     }
 
     private enum EntitlementLaunch {

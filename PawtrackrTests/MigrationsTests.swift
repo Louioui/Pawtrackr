@@ -76,7 +76,8 @@ final class MigrationsTests: XCTestCase {
         )
         XCTAssertEqual(rewards.count, LoyaltyReward.builtInCatalog.count)
         XCTAssertEqual(rewards.first?.pointCost, 50)
-        XCTAssertEqual(rewards.first?.title, "$5 Visit Credit")
+        XCTAssertEqual(rewards.first?.title, "$5 Off")
+        XCTAssertEqual(rewards.first?.benefit, .amountOff(5))
     }
 
     func testEnsureLoyaltyDefaults_IsIdempotent() throws {

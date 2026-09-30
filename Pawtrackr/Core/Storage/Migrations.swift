@@ -353,6 +353,8 @@ enum DataMigrations {
                     context.insert(template)
                     didChange = true
                 }
+            } else if LoyaltyCatalogUpgrade.upgradeIfUntouched(existingRewards, in: context) {
+                didChange = true
             }
 
             if didChange || context.hasChanges {

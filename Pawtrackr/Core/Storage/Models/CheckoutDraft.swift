@@ -23,6 +23,9 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
     var hadAfterPhoto: Bool
     var externalReference: String
     var tags: [String]
+    /// Loyalty 2.0: the reward applied on the Payment step. Absent in drafts
+    /// written before 2.0, which decode as no reward.
+    var appliedRewardID: String?
 
     private enum CodingKeys: String, CodingKey {
         case visitID
@@ -42,6 +45,7 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         case hadAfterPhoto
         case externalReference
         case tags
+        case appliedRewardID
     }
 
     init(
@@ -61,7 +65,8 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         hadBeforePhoto: Bool = false,
         hadAfterPhoto: Bool = false,
         externalReference: String,
-        tags: [String]
+        tags: [String],
+        appliedRewardID: String? = nil
     ) {
         self.visitID = visitID
         self.petID = petID
@@ -80,6 +85,7 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         self.hadAfterPhoto = hadAfterPhoto
         self.externalReference = externalReference
         self.tags = tags
+        self.appliedRewardID = appliedRewardID
     }
 
     init(from decoder: Decoder) throws {
@@ -101,5 +107,6 @@ struct CheckoutDraft: Codable, Equatable, Sendable {
         hadAfterPhoto = try container.decodeIfPresent(Bool.self, forKey: .hadAfterPhoto) ?? (afterPhotoData != nil)
         externalReference = try container.decode(String.self, forKey: .externalReference)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        appliedRewardID = try container.decodeIfPresent(String.self, forKey: .appliedRewardID)
     }
 }

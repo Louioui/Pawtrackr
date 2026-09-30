@@ -23,12 +23,28 @@ final class LoyaltyRewardTemplate {
     var styleRaw: String = LoyaltyReward.Style.credit.rawValue
     var sortOrder: Int = 0
     var isEnabled: Bool = true
+    /// Loyalty 2.0: what the reward takes off a checkout. Added with
+    /// defaults (additive, ADR-0004); "" is a manual reward, which is what
+    /// every row written before 2.0 reads as.
+    var benefitKindRaw: String = ""
+    /// Dollars for an amount-off reward, percent for a percent-off one.
+    var benefitValue: Decimal = Decimal(0)
 
     @Transient
     var style: LoyaltyReward.Style {
         get { LoyaltyReward.Style(rawValue: styleRaw) ?? .credit }
         set {
             styleRaw = newValue.rawValue
+            markModified()
+        }
+    }
+
+    @Transient
+    var benefit: LoyaltyReward.Benefit {
+        get { LoyaltyReward.Benefit(kindRaw: benefitKindRaw, value: benefitValue) }
+        set {
+            benefitKindRaw = newValue.kindRaw
+            benefitValue = newValue.value
             markModified()
         }
     }
@@ -40,7 +56,8 @@ final class LoyaltyRewardTemplate {
         systemImage: String,
         styleRaw: String,
         sortOrder: Int,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        benefit: LoyaltyReward.Benefit = .manual
     ) {
         uuid = UUID()
         createdAt = .now
@@ -53,6 +70,8 @@ final class LoyaltyRewardTemplate {
         self.styleRaw = LoyaltyReward.Style(rawValue: styleRaw)?.rawValue ?? LoyaltyReward.Style.credit.rawValue
         self.sortOrder = sortOrder
         self.isEnabled = isEnabled
+        self.benefitKindRaw = benefit.kindRaw
+        self.benefitValue = benefit.value
     }
 
     convenience init(reward: LoyaltyReward, sortOrder: Int) {
@@ -62,7 +81,8 @@ final class LoyaltyRewardTemplate {
             pointCost: reward.pointCost,
             systemImage: reward.systemImage,
             styleRaw: reward.style.rawValue,
-            sortOrder: sortOrder
+            sortOrder: sortOrder,
+            benefit: reward.benefit
         )
     }
 
@@ -79,7 +99,8 @@ final class LoyaltyRewardTemplate {
             detail: detail,
             pointCost: pointCost,
             systemImage: systemImage,
-            style: style
+            style: style,
+            benefit: benefit
         )
     }
 
@@ -103,6 +124,23 @@ final class LoyaltyRewardTemplate {
         self.styleRaw = style.rawValue
         self.sortOrder = sortOrder
         self.isEnabled = isEnabled
+        markModified()
+    }
+
+    /// Rewrites this row as `reward` in place. Used to move an untouched 1.x
+    /// starter row to its 2.0 replacement: updating (not deleting and
+    /// re-inserting) means two devices doing it at once converge on the same
+    /// values instead of uploading two catalogs.
+    func adopt(_ reward: LoyaltyReward, sortOrder: Int) {
+        title = TextInputLimits.clamped(reward.title, to: TextInputLimits.name)
+        detail = TextInputLimits.clamped(reward.detail, to: TextInputLimits.notes)
+        pointCost = max(1, reward.pointCost)
+        systemImage = Self.normalizedSystemImage(reward.systemImage)
+        styleRaw = reward.style.rawValue
+        benefitKindRaw = reward.benefit.kindRaw
+        benefitValue = reward.benefit.value
+        self.sortOrder = sortOrder
+        isEnabled = true
         markModified()
     }
 
