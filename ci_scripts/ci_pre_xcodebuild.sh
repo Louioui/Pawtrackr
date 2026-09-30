@@ -154,11 +154,20 @@ list_schema_entries() {
 if [ "${CI_XCODEBUILD_ACTION:-}" = "archive" ]; then
   CKTOOL_TOKEN="${CKTOOL_MANAGEMENT_TOKEN:-${CLOUDKIT_MANAGEMENT_TOKEN:-}}"
   if [ -z "$CKTOOL_TOKEN" ]; then
+    # This used to warn and carry on. A warning in an archive log is easy to
+    # miss, and a build whose uploads Production rejects only shows up when a
+    # groomer reinstalls or changes device and iCloud has nothing to give back.
+    if [ "${PAWTRACKR_SKIP_CLOUDKIT_PRODUCTION_CHECK:-}" != "1" ]; then
+      echo "Build failed: CKTOOL_MANAGEMENT_TOKEN isn't set, so this archive can't be"
+      echo "checked against the CloudKit Production schema. Add the token as an Xcode"
+      echo "Cloud secret (docs/icloud-validation.md#cloudkit-management-token). To archive"
+      echo "anyway after checking Production by hand, set PAWTRACKR_SKIP_CLOUDKIT_PRODUCTION_CHECK=1."
+      exit 1
+    fi
     echo "=================================================================="
-    echo "warning: CKTOOL_MANAGEMENT_TOKEN isn't set, so this archive was NOT"
-    echo "warning: checked against the CloudKit Production schema."
-    echo "warning: Check Production in CloudKit Console before submitting, and"
-    echo "warning: add the token as an Xcode Cloud secret (docs/icloud-validation.md)."
+    echo "warning: PAWTRACKR_SKIP_CLOUDKIT_PRODUCTION_CHECK=1, so this archive was"
+    echo "warning: NOT checked against the CloudKit Production schema."
+    echo "warning: Check Production in CloudKit Console before submitting."
     echo "=================================================================="
   else
     # cktool reads the token from the environment, so it never shows up in the

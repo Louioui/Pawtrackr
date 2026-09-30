@@ -23,8 +23,10 @@ Do these in order. Steps 2 and 3 are only needed when a model changed since the 
    healthy.
 4. **Archive.** With `CKTOOL_MANAGEMENT_TOKEN` set, `ci_pre_xcodebuild.sh`
    fails the archive if Production lacks anything
-   ([token setup](#cloudkit-management-token)). Without the token it prints a
-   warning and carries on. In that case, check Production by hand before you submit.
+   ([token setup](#cloudkit-management-token)). Without the token the archive
+   fails too. If you can't add the token yet, check Production by hand and set
+   `PAWTRACKR_SKIP_CLOUDKIT_PRODUCTION_CHECK=1` on the workflow; the archive then
+   passes with a warning. Remove the variable once the token is in place.
 5. **Run the install-over upgrade test** ([Existing Data Migration](#existing-data-migration)).
    Install the previous App Store build, add data, then install the new build
    over it without deleting the app.
