@@ -75,7 +75,8 @@ copies (option C) **and** add a fixture for every shipped build before the relea
 - The inference relies on Core Data's cached model (`Z_MODELCACHE`), which isn't documented as a
   contract. The fixture tests are what make that safe to depend on; keep adding fixtures.
 - New record types and fields still need **Deploy Schema Changes to Production** in the CloudKit
-  Console before release (unchanged from ADR-0003). The archive gate checks it only when the
-  management token is configured; without it the script warns and the check is manual
+  Console before release (unchanged from ADR-0003). The archive gate checks it with the
+  management token; without the token the archive fails unless
+  `PAWTRACKR_SKIP_CLOUDKIT_PRODUCTION_CHECK=1` says Production was checked by hand
   (`docs/icloud-validation.md`).
 - Users who already reset on 1.0.2 keep their data in `RecoveryBackup-*`; 1.0.3 offers it back.

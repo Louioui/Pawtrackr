@@ -25,7 +25,7 @@ Configure these Xcode Cloud environment variables:
 
 - `PAWTRACKR_ENTERPRISE_ENVIRONMENT`: non-secret build environment label, for example `production`
 - `VAULT_SECRET_TOKEN`: secret token available to scripts or signing/upload tools
-- `CKTOOL_MANAGEMENT_TOKEN`: secret CloudKit management token for the Production-schema gate on archives. Setup is in `docs/icloud-validation.md`. Without it, archives print a warning and skip the gate.
+- `CKTOOL_MANAGEMENT_TOKEN`: secret CloudKit management token for the Production-schema gate on archives. Setup is in `docs/icloud-validation.md`. Without it, archives fail unless `PAWTRACKR_SKIP_CLOUDKIT_PRODUCTION_CHECK=1` is set after checking Production by hand.
 
 Do not write `VAULT_SECRET_TOKEN` into `Info.plist`. Values stored in `Info.plist` are bundled into the app and are visible to anyone with the app binary. The preflight script only injects non-secret environment metadata and confirms when the secret exists.
 
