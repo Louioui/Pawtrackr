@@ -196,141 +196,24 @@ class InsightsViewModel {
         await revenueFetchTask?.value
     }
 
-    func generateReportSummary() async -> BusinessReportService.MonthlySummary {
-        let now = Date()
-        let cal = Calendar.current
-        let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+    /// The exported report: the PDF and the CSV, built from one read of the
+    /// store for the selected period so both show the same numbers.
+    struct ReportExports {
+        let pdf: ReportDocument
+        let csv: ExportDocument
+    }
 
-        let topSvc = serviceDistribution.prefix(5).map {
-            (name: $0.name, count: $0.count, revenue: $0.revenue)
+    func makeReportExports(businessName: String, currencySymbol: String) async throws -> ReportExports {
+        let facts = try await BusinessReportFacts.build(container: dataStore.container, periodDays: revenuePeriodDays)
+        let reviewItems = dataQualityIssues.map {
+            BusinessReportReviewItem(title: $0.title, count: $0.count, detail: $0.detail)
         }
-
-        let fmt = DateFormatter()
-        fmt.dateFormat = "MMM"
-        let currentMonthLabel = fmt.string(from: now)
-        let monthlyVisits = monthlyGrowth.first(where: { $0.month == currentMonthLabel })?.visitCount ?? 0
-
-        let container = dataStore.container
-        let newClientsCount: Int = await Task.detached(priority: .utility) {
-            let bg = ModelContext(container)
-            let descriptor = FetchDescriptor<Client>(
-                predicate: #Predicate<Client> { $0.createdAt >= startOfMonth }
-            )
-            return (try? bg.fetchCount(descriptor)) ?? 0
+        let document = BusinessReportService.makeDocument(facts: facts, businessName: businessName, reviewItems: reviewItems)
+        async let pdfData = BusinessReportService.renderAsync(document)
+        let csv = await Task.detached(priority: .userInitiated) {
+            BusinessReportCSV.make(facts: facts, businessName: businessName, currencySymbol: currencySymbol, reviewItems: reviewItems)
         }.value
-
-        return BusinessReportService.MonthlySummary(
-            month: now,
-            totalRevenue: totalRevenue,
-            visitCount: monthlyVisits,
-            newClients: newClientsCount,
-            topServices: topSvc,
-            retentionRate: retentionRate
-        )
-    }
-
-    struct ExportSnapshot: Sendable {
-        let dateString: String
-        let totalRevenue: String
-        let totalVisits: Int
-        let revenuePeriodDays: Int
-        let averageVisitValue: String
-        let retentionRate: Int
-        let churnRiskCount: Int
-        let serviceProfitability: [(name: String, revenue: String, count: Int, avg: String, trend: String)]
-        let paymentMix: [(method: String, amount: String, count: Int)]
-        let qualityIssues: [(title: String, count: Int, detail: String)]
-    }
-
-    @MainActor
-    private func makeExportSnapshot() -> ExportSnapshot {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        
-        return ExportSnapshot(
-            dateString: dateFormatter.string(from: Date()),
-            totalRevenue: totalRevenue.moneyString,
-            totalVisits: totalVisitsInPeriod,
-            revenuePeriodDays: revenuePeriodDays,
-            averageVisitValue: averageVisitValue.moneyString,
-            retentionRate: Int((retentionRate * 100).clampedToValueRange()),
-            churnRiskCount: churnRiskCount,
-            serviceProfitability: serviceProfitability.map { ($0.name, $0.revenue.moneyString, $0.count, $0.averageTicket.moneyString, Self.percentString($0.trendPercent)) },
-            paymentMix: paymentMethodDistribution.map { ($0.method.displayName, $0.amount.moneyString, $0.count) },
-            qualityIssues: dataQualityIssues.map { ($0.title, $0.count, $0.detail) }
-        )
-    }
-
-    @MainActor
-    func generateInsightsCSVDocument() async -> ExportDocument {
-        let snapshot = makeExportSnapshot()
-        
-        return await Task.detached(priority: .userInitiated) {
-            var rows: [[String]] = [
-                [
-                    NSLocalizedString("insights.csv.header.section", value: "Section", comment: ""),
-                    NSLocalizedString("insights.csv.header.metric", value: "Metric", comment: ""),
-                    NSLocalizedString("insights.csv.header.value", value: "Value", comment: ""),
-                    NSLocalizedString("insights.csv.header.detail", value: "Detail", comment: "")
-                ],
-                [
-                    NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
-                    String(format: NSLocalizedString("insights.csv.metric.revenue_total_fmt", value: "%d-day total", comment: ""), snapshot.revenuePeriodDays),
-                    snapshot.totalRevenue,
-                    String(format: NSLocalizedString("insights.csv.detail.visits_fmt", value: "%d visits", comment: ""), snapshot.totalVisits)
-                ],
-                [
-                    NSLocalizedString("insights.csv.section.revenue", value: "Revenue", comment: ""),
-                    NSLocalizedString("insights.csv.metric.average_visit", value: "Average visit", comment: ""),
-                    snapshot.averageVisitValue,
-                    String(format: NSLocalizedString("insights.csv.detail.window_fmt", value: "%d-day window", comment: ""), snapshot.revenuePeriodDays)
-                ],
-                [
-                    NSLocalizedString("insights.csv.section.retention", value: "Retention", comment: ""),
-                    NSLocalizedString("insights.csv.metric.recurring_clients", value: "Recurring clients", comment: ""),
-                    "\(snapshot.retentionRate)%",
-                    String(format: NSLocalizedString("insights.csv.detail.churn_risk_fmt", value: "%d churn-risk clients", comment: ""), snapshot.churnRiskCount)
-                ]
-            ]
-
-            rows += snapshot.serviceProfitability.map {
-                [
-                    NSLocalizedString("insights.csv.section.service", value: "Service", comment: ""),
-                    $0.name,
-                    $0.revenue,
-                    String(
-                        format: NSLocalizedString("insights.csv.detail.service_profitability_fmt", value: "%d sales, avg %@, trend %@", comment: ""),
-                        $0.count,
-                        $0.avg,
-                        $0.trend
-                    )
-                ]
-            }
-
-            rows += snapshot.paymentMix.map {
-                [
-                    NSLocalizedString("insights.csv.section.payment", value: "Payment", comment: ""),
-                    $0.method,
-                    $0.amount,
-                    String(format: NSLocalizedString("insights.csv.detail.payments_fmt", value: "%d payments", comment: ""), $0.count)
-                ]
-            }
-
-            rows += snapshot.qualityIssues.map {
-                [
-                    NSLocalizedString("insights.csv.section.data_quality", value: "Data Quality", comment: ""),
-                    $0.title,
-                    "\($0.count)",
-                    $0.detail
-                ]
-            }
-
-            let csv = rows.map { row in
-                row.map(\.csvEscaped).joined(separator: ",")
-            }.joined(separator: "\n")
-
-            return ExportDocument(csvData: csv + "\n", filename: "Pawtrackr_Insights_\(snapshot.dateString).csv")
-        }.value
+        return ReportExports(pdf: ReportDocument(pdfData: await pdfData, filename: document.filename), csv: csv)
     }
 
     // MARK: - Actor Delegations
@@ -399,20 +282,6 @@ class InsightsViewModel {
             guard let self else { return }
             await self.fetchActionableInsights()
         }
-    }
-
-    private static func percentString(_ value: Double) -> String {
-        guard value.isFinite else { return "0%" }
-        let sign = value > 0 ? "+" : ""
-        let clampedValue = max(Double(Int.min) / 100.0, min(Double(Int.max) / 100.0, value))
-        return "\(sign)\(Int((clampedValue * 100).rounded()))%"
-    }
-}
-
-private extension Double {
-    func clampedToValueRange() -> Double {
-        guard self.isFinite else { return 0 }
-        return max(Double(Int.min), min(Double(Int.max), self))
     }
 }
 

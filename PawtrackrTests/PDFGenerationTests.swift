@@ -47,24 +47,4 @@ final class PDFGenerationTests: XCTestCase {
         XCTAssertEqual(snapshot.payment?.referenceLine, "Reference: TXN-123")
         XCTAssertTrue(snapshot.petLine.contains("Bella"))
     }
-    
-    @MainActor
-    func testReportSnapshot_BuildsCorrectSummary() {
-        let summary = BusinessReportService.MonthlySummary(
-            month: Date(),
-            totalRevenue: Decimal(5000),
-            visitCount: 60,
-            newClients: 5,
-            topServices: [(name: "Bath", count: 20, revenue: Decimal(1000))],
-            retentionRate: 0.85
-        )
-        
-        let snapshot = BusinessReportService.shared.makeSnapshot(summary: summary)
-        
-        XCTAssertEqual(snapshot.totalRevenueString, "$5,000.00")
-        XCTAssertEqual(snapshot.visitCountString, "60")
-        XCTAssertEqual(snapshot.retentionString, "85%")
-        XCTAssertEqual(snapshot.topServices.count, 1)
-        XCTAssertEqual(snapshot.topServices.first?.name, "Bath")
-    }
 }

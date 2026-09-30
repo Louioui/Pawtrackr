@@ -119,29 +119,12 @@ final class PDFReceiptService {
     }
 
     nonisolated static func render(snapshot: ReceiptSnapshot) -> Data {
-        let bounds = CGRect(x: 0, y: 0, width: 612, height: 792)
-
-        #if canImport(UIKit)
-        let pdfRenderer = UIGraphicsPDFRenderer(bounds: bounds)
-        return pdfRenderer.pdfData { rendererContext in
-            rendererContext.beginPage()
-            drawContent(in: rendererContext.cgContext, snapshot: snapshot, bounds: bounds)
+        let bounds = PDFCanvas.letter
+        // PDFCanvas makes the PDF the current context on the Mac too, where
+        // the receipt's text otherwise never reached the page.
+        return PDFCanvas.render(bounds: bounds, pageCount: 1) { _, context in
+            drawContent(in: context, snapshot: snapshot, bounds: bounds)
         }
-        #else
-        let data = NSMutableData()
-        guard let consumer = CGDataConsumer(data: data),
-              let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
-            return Data()
-        }
-        context.beginPDFPage(nil)
-        // macOS coordinate system flip to match iOS top-down drawing.
-        context.translateBy(x: 0, y: bounds.height)
-        context.scaleBy(x: 1, y: -1)
-        drawContent(in: context, snapshot: snapshot, bounds: bounds)
-        context.endPDFPage()
-        context.closePDF()
-        return data as Data
-        #endif
     }
 
     private nonisolated static func drawContent(in context: CGContext, snapshot: ReceiptSnapshot, bounds: CGRect) {

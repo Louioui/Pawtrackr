@@ -36,8 +36,11 @@ final class ExportServiceTests: XCTestCase {
 
         let doc = try ExportService.shared.exportClientsToCSV(modelContext: context)
 
-        let lines = doc.csvData.components(separatedBy: "\n").filter { !$0.isEmpty }
-        XCTAssertEqual(lines.first, "First Name,Last Name,Phone,Email,Address,Notes,Last Visit")
+        let lines = doc.csvData.components(separatedBy: "\r\n").filter { !$0.isEmpty }
+        XCTAssertEqual(
+            lines.first,
+            "First Name,Last Name,Phone,Email,Address,Pets,Pet Count,Emergency Contact,Emergency Phone,Visits,Lifetime Spend,Average Visit,Loyalty Points,First Visit,Last Visit,Client Since,Notes,Client ID"
+        )
         XCTAssertEqual(lines.count, 3, "1 header + 2 client rows")
         XCTAssertTrue(doc.filename.hasPrefix("Pawtrackr_Clients_"))
         XCTAssertTrue(doc.filename.hasSuffix(".csv"))
@@ -89,9 +92,72 @@ final class ExportServiceTests: XCTestCase {
 
     func testExportEmptyStore_ReturnsHeaderOnlyDocument() async throws {
         let doc = try await ExportService.shared.exportClientsToCSVAsync(container: container)
-        let lines = doc.csvData.components(separatedBy: "\n").filter { !$0.isEmpty }
+        let lines = doc.csvData.components(separatedBy: "\r\n").filter { !$0.isEmpty }
         XCTAssertEqual(lines.count, 1)
         XCTAssertTrue(lines[0].hasPrefix("First Name,"))
+    }
+
+    /// A client's row carries their pets, emergency contact and what their
+    /// visits add up to, with dates and money a spreadsheet can use.
+    func testClientRowsAddUpPetsVisitsAndSpend() throws {
+        let client = Client(firstName: "Ava", lastName: "Martinez", phone: "3125550110", email: "ava@example.com")
+        context.insert(client)
+        let milo = Pet(name: "Milo", species: .dog)
+        milo.owner = client
+        context.insert(milo)
+        let contact = EmergencyContact(name: "Rosa Diaz", relation: "Sister", phone: "3125550199")
+        contact.owner = client
+        context.insert(contact)
+        let calendar = Calendar(identifier: .gregorian)
+        for (day, total) in [(3, "40.00"), (17, "62.50")] {
+            let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 9, day: day, hour: 10)))
+            let visit = Visit(pet: milo, startedAt: date)
+            visit.markCheckedOut(total: try XCTUnwrap(Decimal(string: total)), now: date.addingTimeInterval(3_600))
+            context.insert(visit)
+        }
+        try context.save()
+
+        let doc = try ExportService.shared.exportClientsToCSV(modelContext: context)
+        let row = try XCTUnwrap(doc.csvData.components(separatedBy: "\r\n").first { $0.hasPrefix("Ava,") })
+        XCTAssertTrue(row.contains("Milo (Dog),1,Rosa Diaz (Sister),(312) 555-0199,2,102.50,51.25,"), row)
+        XCTAssertTrue(row.contains(",(312) 555-0110,"), "Phones as the app shows them: \(row)")
+        XCTAssertTrue(row.contains(",2026-09-03,2026-09-17,"), "First and last visit as yyyy-MM-dd: \(row)")
+        XCTAssertTrue(row.hasSuffix(client.uuid.uuidString))
+    }
+
+    /// Each visit row says what was done and how it was paid.
+    func testVisitRowsListServicesAndPayment() async throws {
+        let owner = Client(firstName: "Jordan", lastName: "Lee", phone: "4155550142")
+        context.insert(owner)
+        let pet = Pet(name: "Biscuit", species: .cat)
+        pet.owner = owner
+        context.insert(pet)
+        let service = Service(name: "Full Groom", category: .groom, basePrice: Decimal(85))
+        context.insert(service)
+        let start = try XCTUnwrap(Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 9, day: 12, hour: 9, minute: 30)))
+        let visit = Visit(pet: pet, startedAt: start)
+        context.insert(visit)
+        let item = VisitItem.from(service: service, visit: visit)
+        context.insert(item)
+        visit.items = [item]
+        let payment = Payment(amount: Decimal(85), method: .zelle, paidAt: start, externalReference: "ZL-889")
+        context.insert(payment)
+        visit.attachPayment(payment)
+        visit.markCheckedOut(total: Decimal(85), now: start.addingTimeInterval(90 * 60))
+        try context.save()
+
+        let doc = try await ExportService.shared.exportVisitsToCSVAsync(container: container)
+        let lines = doc.csvData.components(separatedBy: "\r\n").filter { !$0.isEmpty }
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertTrue(lines[0].hasPrefix("Date,Check-In,Check-Out,Minutes,Client,"), lines[0])
+        XCTAssertTrue(lines[1].hasPrefix("2026-09-12,09:30,11:00,90,Jordan Lee,(415) 555-0142,Biscuit,Cat,,Full Groom,85.00,85.00,Zelle,ZL-889,Completed,"), lines[1])
+    }
+
+    /// Excel reads the file as UTF-8 only with a byte order mark.
+    func testSharedFileStartsWithAByteOrderMark() {
+        let doc = ExportDocument(csvData: "Name\r\nJosé\r\n", filename: "x.csv")
+        XCTAssertEqual(Array(doc.fileData.prefix(3)), [0xEF, 0xBB, 0xBF])
+        XCTAssertEqual(String(data: doc.fileData.dropFirst(3), encoding: .utf8), doc.csvData)
     }
 
     // MARK: - Fixtures

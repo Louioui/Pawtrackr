@@ -7,6 +7,7 @@ import SwiftUI
 import Charts
 import SwiftData
 import CoreTransferable
+import OSLog
 
 private struct InsightsDrilldown: Identifiable {
     let id = UUID()
@@ -39,14 +40,14 @@ struct InsightsView: View {
     @Environment(DataStoreService.self) private var dataStore
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(EntitlementStore.self) private var entitlements
+    @Environment(AppSettings.self) private var appSettings
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Present only while a guided tour is running; used to scroll deep-dive
     /// targets into view. Optional so previews / non-tour contexts don't require it.
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @State private var viewModel: InsightsViewModel?
-    @State private var reportPDFData: Data?
-    @State private var reportCSVDocument: ExportDocument?
+    @State private var reportExports: InsightsViewModel.ReportExports?
     @State private var isPreparingReport = false
     @State private var selectedDrilldown: InsightsDrilldown?
     @State private var selectedRevenueDate: Date?
@@ -450,8 +451,7 @@ struct InsightsView: View {
                         vm.revenuePeriodDays = period
                         selectedRevenueDate = nil
                     }
-                    reportPDFData = nil
-                    reportCSVDocument = nil
+                    reportExports = nil
                     Task { await vm.refreshRevenue() }
                     // The Academy's period mission: let the chart redraw first.
                     if walkthrough?.currentStep?.advancesOn == .insightsPeriodChanged {
@@ -716,13 +716,12 @@ struct InsightsView: View {
 
     private var reportButton: some View {
         Group {
-            if let pdfData = reportPDFData, let csvDoc = reportCSVDocument {
+            if let exports = reportExports {
                 Menu {
-                    let pdfDoc = ReportDocument(pdfData: pdfData, filename: "Report.pdf")
-                    ShareLink(item: pdfDoc, preview: SharePreview(localized("insights.export.pdf_report", value: "PDF Report"), image: Image(systemName: "doc.pdf"))) {
+                    ShareLink(item: exports.pdf, preview: SharePreview(localized("insights.export.pdf_report", value: "PDF Report"), image: Image(systemName: "doc.pdf"))) {
                         Label(localized("insights.export.pdf_report", value: "PDF Report"), systemImage: "doc.richtext")
                     }
-                    ShareLink(item: csvDoc, preview: SharePreview(localized("insights.export.csv", value: "Insights CSV"), image: Image(systemName: "tablecells"))) {
+                    ShareLink(item: exports.csv, preview: SharePreview(localized("insights.export.csv", value: "Insights CSV"), image: Image(systemName: "tablecells"))) {
                         Label(localized("insights.export.csv_data", value: "CSV Data"), systemImage: "tablecells")
                     }
                 } label: {
@@ -735,11 +734,14 @@ struct InsightsView: View {
                     isPreparingReport = true
                     Task {
                         if let vm = viewModel {
-                            let summary = await vm.generateReportSummary()
-                            async let pdfData = BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
-                            let csvDoc = await vm.generateInsightsCSVDocument()
-                            reportPDFData = await pdfData
-                            reportCSVDocument = csvDoc
+                            do {
+                                reportExports = try await vm.makeReportExports(
+                                    businessName: appSettings.businessName,
+                                    currencySymbol: appSettings.currencySymbol
+                                )
+                            } catch {
+                                Logger.insightsExport.error("Report export failed: \(error.localizedDescription, privacy: .public)")
+                            }
                         }
                         isPreparingReport = false
                     }
@@ -955,4 +957,8 @@ struct SkeletonChart: View {
             .padding(10)
         }
     }
+}
+
+private extension Logger {
+    static let insightsExport = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "InsightsExport")
 }
