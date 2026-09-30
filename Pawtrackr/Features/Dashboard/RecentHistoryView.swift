@@ -180,7 +180,7 @@ struct RecentHistoryView: View {
             let csv = viewModel.exportCSV()
             ShareLink(
                 item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_History.csv"),
-                preview: SharePreview(NSLocalizedString("history.title", value: "Recent History", comment: ""), icon: Image(systemName: "doc.text.fill"))
+                preview: SharePreview("Pawtrackr_History.csv")
             ) {
                 Label(NSLocalizedString("common.export", comment: ""), systemImage: "square.and.arrow.up")
             }

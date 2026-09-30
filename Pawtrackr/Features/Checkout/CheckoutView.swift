@@ -896,7 +896,7 @@ struct CheckoutView: View {
                         pdfData: pdfData,
                         filename: "Receipt_\(viewModel.pet.name).pdf"
                     ),
-                    preview: SharePreview(localized("receipt.title", value: "Receipt"), image: Image(systemName: "doc.pdf"))
+                    preview: SharePreview(localized("receipt.title", value: "Receipt"))
                 ) {
                     HStack {
                         Image(systemName: "square.and.arrow.up")

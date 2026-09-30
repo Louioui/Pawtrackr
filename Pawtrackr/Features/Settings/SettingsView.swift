@@ -579,7 +579,7 @@ private struct DataExportSectionView: View {
                 if let exportDocument {
                     ShareLink(
                         item: exportDocument,
-                        preview: SharePreview(exportDocument.filename, icon: Image(systemName: "doc.text.fill"))
+                        preview: SharePreview(exportDocument.filename)
                     ) {
                         Label(
                             String(format: settingsLocalized("settings.export.share_fmt", value: "Share %@"), exportDocument.filename),

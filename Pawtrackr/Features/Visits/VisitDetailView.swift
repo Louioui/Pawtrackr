@@ -184,7 +184,7 @@ struct VisitDetailView: View {
         let csv = exportCSVForVisit()
         return ShareLink(
             item: CSVDoc(data: Data(csv.utf8), filename: "Pawtrackr_Visit.csv"),
-            preview: SharePreview("Pawtrackr_Visit.csv", icon: Image(systemName: "doc.text.fill"))
+            preview: SharePreview("Pawtrackr_Visit.csv")
         ) {
             Label(NSLocalizedString("common.export", comment: ""), systemImage: "square.and.arrow.up")
         }

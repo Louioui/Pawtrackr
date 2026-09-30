@@ -3,6 +3,55 @@ import SwiftData
 import UniformTypeIdentifiers
 import CoreTransferable
 
+/// A copy of an export on disk, so the share sheet can hand it over as a
+/// named file. AirDrop, Mail and Messages (and Save to Files) take files,
+/// not bare data: shared as data only, macOS offered little more than Copy
+/// and Books. Copies live in the temporary folder under their own UUID
+/// folder, and ones older than an hour are removed when the next is made.
+enum SharedExportFile {
+    static func write(_ data: Data, named filename: String) throws -> URL {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent("SharedExports", isDirectory: true)
+        removeStaleCopies(in: root)
+        let folder = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(safeName(filename))
+        #if os(iOS)
+        // Client details: readable only once the device has been unlocked.
+        try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        #else
+        try data.write(to: url, options: .atomic)
+        #endif
+        return url
+    }
+
+    /// A name every file system and receiving app accepts: no slashes or
+    /// colons from a pet's or salon's name.
+    static func safeName(_ filename: String) -> String {
+        let cleaned = filename
+            .components(separatedBy: CharacterSet(charactersIn: "/\\:"))
+            .joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Pawtrackr" : cleaned
+    }
+
+    private static func removeStaleCopies(in root: URL) {
+        let fileManager = FileManager.default
+        guard let folders = try? fileManager.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.creationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-3_600)
+        for folder in folders {
+            let created = (try? folder.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+            if created < cutoff {
+                try? fileManager.removeItem(at: folder)
+            }
+        }
+    }
+}
+
 public struct ExportDocument: Transferable, Identifiable {
     let csvData: String
     let filename: String
@@ -10,6 +59,11 @@ public struct ExportDocument: Transferable, Identifiable {
     public var id: String { filename }
 
     public static var transferRepresentation: some TransferRepresentation {
+        // A named file first, for AirDrop, Mail, Messages and Files. The
+        // data after it serves Copy and apps that only take data.
+        FileRepresentation(exportedContentType: .commaSeparatedText) { doc in
+            SentTransferredFile(try SharedExportFile.write(doc.fileData, named: doc.filename))
+        }
         DataRepresentation(exportedContentType: .commaSeparatedText) { doc in
             doc.fileData
         }
@@ -26,8 +80,11 @@ public struct ExportDocument: Transferable, Identifiable {
 struct ReceiptDocument: Transferable {
     let pdfData: Data
     let filename: String
-    
+
     static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .pdf) { doc in
+            SentTransferredFile(try SharedExportFile.write(doc.pdfData, named: doc.filename))
+        }
         DataRepresentation(exportedContentType: .pdf) { doc in
             doc.pdfData
         }
@@ -38,8 +95,11 @@ struct ReceiptDocument: Transferable {
 struct ReportDocument: Transferable {
     let pdfData: Data
     let filename: String
-    
+
     static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .pdf) { doc in
+            SentTransferredFile(try SharedExportFile.write(doc.pdfData, named: doc.filename))
+        }
         DataRepresentation(exportedContentType: .pdf) { doc in
             doc.pdfData
         }

@@ -16,6 +16,10 @@ struct CSVDoc: Transferable {
     let filename: String
 
     static var transferRepresentation: some TransferRepresentation {
+        // A named file first, for AirDrop, Mail, Messages and Files.
+        FileRepresentation(exportedContentType: .commaSeparatedText) { doc in
+            SentTransferredFile(try SharedExportFile.write(doc.data, named: doc.filename))
+        }
         DataRepresentation(contentType: .commaSeparatedText) { doc in
             doc.data
         } importing: { data in
@@ -208,7 +212,7 @@ struct PetHistoryView: View {
                 let csvData = vm.exportCSV()
                 ShareLink(
                     item: CSVDoc(data: csvData, filename: "\(vm.pet.name)_History.csv"),
-                    preview: SharePreview("Pet History", icon: Image(systemName: "doc.text.fill"))
+                    preview: SharePreview("\(vm.pet.name)_History.csv")
                 ) {
                     Label("common.export", systemImage: "tablecells")
                 }
@@ -217,7 +221,7 @@ struct PetHistoryView: View {
                 let textData = vm.exportPlainText()
                 ShareLink(
                     item: textData,
-                    preview: SharePreview("Pet History", icon: Image(systemName: "doc.text"))
+                    preview: SharePreview(vm.pet.name)
                 ) {
                     Label("common.export_text", systemImage: "doc.text")
                 }
