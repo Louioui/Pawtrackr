@@ -3,8 +3,8 @@
 //  PawtrackrTests
 //
 //  The Academy's chapters and the stops that bracket it: the app map it
-//  opens on, the Settings stop it ends on, the loyalty card on client
-//  details, and chapter names in Spanish.
+//  opens on, the Settings stop it ends on, the loyalty stops on client
+//  details and in Settings, and chapter names in Spanish.
 //
 
 import XCTest
@@ -44,8 +44,57 @@ final class WalkthroughSetupStopsTests: XCTestCase {
     func testTheLoyaltyAnchorIsNoLongerOnTheOnboardingCover() throws {
         let onboarding = try source("Pawtrackr/Features/Onboarding/OnboardingView.swift")
         XCTAssertFalse(onboarding.contains("walkthroughTarget(.loyaltySimulator)"), "No tour overlay exists on the onboarding cover.")
+        XCTAssertFalse(onboarding.contains("tryItTourAnchor"))
         let loyalty = try source("Pawtrackr/Features/Loyalty/LoyaltyManagementView.swift")
-        XCTAssertTrue(loyalty.contains("LoyaltySimulatorCard()\n                .walkthroughTarget(.loyaltySimulator)"))
+        XCTAssertTrue(loyalty.contains("LoyaltySimulatorCard(tryItTourAnchor: .loyaltySimulator)"))
+    }
+
+    /// Settings > Loyalty: a hands-on stop on the preview's Try it box. The
+    /// preview writes nothing, and playing with it shows Next instead of
+    /// moving on, so the new points stay on screen.
+    func testTheLoyaltyPreviewStopIsHandsOn() throws {
+        for role in OnboardingRole.allCases {
+            let ids = WalkthroughController.tour(for: role, context: .practice).map(\.id)
+            let index = try XCTUnwrap(ids.firstIndex(of: WalkthroughStepID.loyaltyPoints), "\(role)")
+            XCTAssertEqual(ids[index + 1], WalkthroughStepID.backups, "Settings in sidebar order: Loyalty, then Data Export. \(role)")
+        }
+
+        let step = try XCTUnwrap(WalkthroughController.fullTour().first { $0.id == WalkthroughStepID.loyaltyPoints })
+        XCTAssertEqual(step.anchor, .loyaltySimulator)
+        XCTAssertEqual(step.surface, .settings)
+        XCTAssertEqual(SettingSection.walkthroughSection(for: step.anchor), .loyalty)
+        XCTAssertEqual(step.lesson, .businessInsights)
+        XCTAssertTrue(step.allowsTargetInteraction, "The slider, tier and rebook switch must be usable.")
+        XCTAssertTrue(step.requiresTargetAction)
+        XCTAssertNil(step.advancesOn, "The first drag would move the tour on before the points could be read.")
+
+        let controller = WalkthroughController()
+        controller.targetWatchdogDelay = nil
+        controller.missionPatience = nil
+        controller.start(WalkthroughController.tour(for: .frontDeskGroomer, context: .practice), at: step.id)
+        XCTAssertFalse(controller.currentStepShowsNext, "Waits for a first try.")
+        controller.releaseActionRequirement(reason: "the loyalty preview changed")
+        XCTAssertTrue(controller.currentStepShowsNext)
+        XCTAssertEqual(controller.currentStep?.id, step.id, "Playing with the preview never skips ahead.")
+        controller.skip()
+
+        let card = try source("Pawtrackr/Features/Onboarding/LoyaltySimulatorCard.swift")
+        XCTAssertTrue(card.contains(".optionalWalkthroughTarget(tryItTourAnchor)"))
+        XCTAssertTrue(card.contains("walkthrough?.currentStep?.id == WalkthroughStepID.loyaltyPoints"))
+    }
+
+    func testLoyaltyCopyNamesTheRealScreens() throws {
+        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        var steps = Dictionary(uniqueKeysWithValues: WalkthroughController.fullTour().map { ($0.id, $0) })
+        let client = try XCTUnwrap(steps[WalkthroughStepID.clientLoyalty])
+        XCTAssertTrue(client.directive.contains("Loyalty & Rewards"), client.directive)
+        XCTAssertTrue(try XCTUnwrap(client.coachTip).contains("redeem"), "Says how points are spent.")
+        XCTAssertTrue(try XCTUnwrap(steps[WalkthroughStepID.loyaltyPoints]?.coachTip).contains("Loyalty Earning Rules"))
+
+        UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
+        steps = Dictionary(uniqueKeysWithValues: WalkthroughController.fullTour().map { ($0.id, $0) })
+        XCTAssertTrue(try XCTUnwrap(steps[WalkthroughStepID.clientLoyalty]).directive.contains("Lealtad y recompensas"))
+        XCTAssertTrue(try XCTUnwrap(steps[WalkthroughStepID.loyaltyPoints]?.coachTip).contains("Reglas para ganar puntos"))
     }
 
     func testClientLoyaltyStopsAreInBothTours() throws {

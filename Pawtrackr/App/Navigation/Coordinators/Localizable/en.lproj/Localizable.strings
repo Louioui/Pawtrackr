@@ -1268,7 +1268,7 @@
 "tour.nc.save.title" = "Save the client";
 "tour.cd.emergency.title" = "Emergency Contacts";
 "tour.cd.emergency.purpose" = "Each backup person shows relation and phone. Call dials them, and the row’s menu offers Message, Copy Phone, Edit, and Delete. A “Missing:” note lists what’s left to add.";
-"tour.cd.loyalty.tip" = "The badge shows the current balance. The detail screen shows reward progress and the points ledger.";
+"tour.cd.loyalty.tip" = "To redeem, open Loyalty & Rewards and pick a reward. Its points come off the balance, then you give the reward, like a discount at checkout.";
 "tour.cd.checkin.title" = "Check In";
 "tour.cd.checkin.purpose" = "Check In creates an active visit, starts the timer, changes the pet status to in session, and makes checkout available when the groom is finished.";
 "tour.cd.checkin.tip" = "Use it when the pet is physically in your care so duration and dashboard counts stay accurate.";
@@ -1613,9 +1613,9 @@
 "tour.academy.cd_owner.why" = "Confirm details at booking or pickup and reach the owner in one tap. A red Caution banner under it means a pet is flagged aggressive.";
 "tour.academy.cd_emergency.what" = "Backup people staff can call when the owner can’t be reached.";
 "tour.academy.cd_emergency.try" = "Tap + to add a backup contact, then save or close the form.";
-"tour.academy.cd_loyalty.title" = "Loyalty crown";
-"tour.academy.cd_loyalty.what" = "The crown card shows this client’s points and rewards.";
-"tour.academy.cd_loyalty.why" = "Every checkout adds points on its own, so staff can offer a reward at pickup without doing any math.";
+"tour.academy.cd_loyalty.title" = "Loyalty points";
+"tour.academy.cd_loyalty.what" = "Loyalty & Rewards shows this client’s points. The badge color shows their tier.";
+"tour.academy.cd_loyalty.why" = "Every checkout adds points on its own, by default from what the client pays, tip included. Points buy rewards like a visit credit, so regulars have a reason to come back.";
 "tour.academy.cd_addpet.title" = "Pets & Add Pet";
 "tour.academy.cd_addpet.what" = "Each pet card shows breed, color and a gender dot. Add Pet adds another.";
 "tour.academy.cd_addpet.why" = "Every pet keeps its own photo, health notes, behavior tags and visit history, so multi-pet families stay organized.";
@@ -1640,6 +1640,11 @@
 "tour.academy.ins_revenue.what" = "Revenue over 7, 30 or 90 days, with the number of visits.";
 "tour.academy.ins_revenue.why" = "Tell a strong stretch from a slow one and see where the business is heading.";
 "tour.academy.ins_revenue.try" = "Tap 30D to change the period.";
+"tour.academy.set_loyalty.title" = "How points add up";
+"tour.academy.set_loyalty.what" = "A live preview of your loyalty rules, using the same math as checkout.";
+"tour.academy.set_loyalty.why" = "Silver, Gold and Platinum clients earn more on every visit, and coming back soon adds a rebook bonus. Staff can tell a client exactly what a visit earns.";
+"tour.academy.set_loyalty.try" = "Drag the checkout total or pick a tier, and watch the points change.";
+"tour.academy.set_loyalty.tip" = "A check on a reward means one visit earns enough for it. Owners set the earning rule in Loyalty Earning Rules above.";
 "tour.academy.set_data.title" = "Export your data";
 "tour.academy.set_data.what" = "Settings exports your clients and visits as spreadsheet files.";
 "tour.academy.set_data.why" = "Your records live on this device. An export is a copy you control, for bookkeeping, your accountant or a backup.";

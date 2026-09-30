@@ -143,7 +143,7 @@ enum WalkthroughLesson: String, CaseIterable, Hashable, Codable, Sendable {
     case clientProfiles
     /// D: checkout, payments and visit history.
     case checkoutAndMoney
-    /// E: Insights and keeping the salon's data safe.
+    /// E: Insights, loyalty points and keeping the salon's data safe.
     case businessInsights
 
     var title: String {
@@ -306,6 +306,7 @@ enum WalkthroughStepID {
     static let visit = "cd.visit"
     static let insightsTab = "nav.insights"
     static let insightsPeriod = "ins.revenue"
+    static let loyaltyPoints = "set.loyalty"
     static let backups = "set.data"
     static let academyHome = "set.about"
 }
@@ -1184,12 +1185,12 @@ extension WalkthroughController {
             ),
             WalkthroughStep(
                 id: WalkthroughStepID.clientLoyalty, anchor: .cdLoyalty, surface: .clients, route: .demoClientDetail,
-                title: text("tour.academy.cd_loyalty.title", "Loyalty crown"),
-                directive: text("tour.academy.cd_loyalty.what", "The crown card shows this client’s points and rewards."),
-                purpose: text("tour.academy.cd_loyalty.why", "Every checkout adds points on its own, so staff can offer a reward at pickup without doing any math."),
+                title: text("tour.academy.cd_loyalty.title", "Loyalty points"),
+                directive: text("tour.academy.cd_loyalty.what", "Loyalty & Rewards shows this client’s points. The badge color shows their tier."),
+                purpose: text("tour.academy.cd_loyalty.why", "Every checkout adds points on its own, by default from what the client pays, tip included. Points buy rewards like a visit credit, so regulars have a reason to come back."),
                 action: tapToContinue,
                 lesson: .clientProfiles,
-                coachTip: text("tour.cd.loyalty.tip", "The badge shows the current balance. The detail screen shows reward progress and the points ledger."),
+                coachTip: text("tour.cd.loyalty.tip", "To redeem, open Loyalty & Rewards and pick a reward. Its points come off the balance, then you give the reward, like a discount at checkout."),
                 icon: "crown.fill",
                 requiresTargetAction: true
             ),
@@ -1343,6 +1344,20 @@ extension WalkthroughController {
                 action: tapToContinue,
                 lesson: .businessInsights,
                 icon: "creditcard.fill",
+                requiresTargetAction: true
+            ),
+            WalkthroughStep(
+                // The preview writes nothing. Playing with it shows Next
+                // (LoyaltySimulatorCard), so there's time to watch the points.
+                id: WalkthroughStepID.loyaltyPoints, anchor: .loyaltySimulator, surface: .settings,
+                title: text("tour.academy.set_loyalty.title", "How points add up"),
+                directive: text("tour.academy.set_loyalty.what", "A live preview of your loyalty rules, using the same math as checkout."),
+                purpose: text("tour.academy.set_loyalty.why", "Silver, Gold and Platinum clients earn more on every visit, and coming back soon adds a rebook bonus. Staff can tell a client exactly what a visit earns."),
+                action: text("tour.academy.set_loyalty.try", "Drag the checkout total or pick a tier, and watch the points change."),
+                lesson: .businessInsights,
+                coachTip: text("tour.academy.set_loyalty.tip", "A check on a reward means one visit earns enough for it. Owners set the earning rule in Loyalty Earning Rules above."),
+                icon: "star.circle.fill",
+                allowsTargetInteraction: true,
                 requiresTargetAction: true
             ),
             WalkthroughStep(

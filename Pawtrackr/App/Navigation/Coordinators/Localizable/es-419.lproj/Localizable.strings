@@ -1092,7 +1092,7 @@
 "tour.nc.save.title" = "Guarda el cliente";
 "tour.cd.emergency.title" = "Contactos de emergencia";
 "tour.cd.emergency.purpose" = "Cada contacto muestra relación y teléfono. El botón Llamar marca su número y el menú ofrece Enviar mensaje, Copiar teléfono, Editar y Eliminar. La nota “Falta:” indica qué agregar.";
-"tour.cd.loyalty.tip" = "La insignia muestra el saldo actual. El detalle muestra el progreso de recompensas y el historial de puntos.";
+"tour.cd.loyalty.tip" = "Para canjear, abre Lealtad y recompensas y elige una recompensa. Sus puntos se descuentan del saldo y tú entregas la recompensa, como un descuento.";
 "tour.cd.addpet.tip" = "Un dueño puede tener cualquier número de mascotas. Agrégalas cuando la familia crezca.";
 "tour.cd.checkin.title" = "Registrar entrada";
 "tour.cd.checkin.purpose" = "Registrar entrada crea una visita activa, inicia el cronómetro, cambia el estado de la mascota a en sesión y habilita el cobro cuando el aseo termina.";
@@ -1626,9 +1626,9 @@
 "tour.academy.cd_owner.why" = "Confirma datos al agendar o entregar y contacta al dueño con un toque. Un aviso rojo de Precaución debajo indica una mascota marcada como agresiva.";
 "tour.academy.cd_emergency.what" = "Personas de respaldo a las que el equipo puede llamar si no localiza al dueño.";
 "tour.academy.cd_emergency.try" = "Toca + para agregar un contacto de respaldo y luego guarda o cierra el formulario.";
-"tour.academy.cd_loyalty.title" = "Corona de lealtad";
-"tour.academy.cd_loyalty.what" = "La tarjeta de la corona muestra los puntos y premios de este cliente.";
-"tour.academy.cd_loyalty.why" = "Cada cobro suma puntos solo, así el equipo puede ofrecer un premio al entregar sin hacer cuentas.";
+"tour.academy.cd_loyalty.title" = "Puntos de lealtad";
+"tour.academy.cd_loyalty.what" = "Lealtad y recompensas muestra los puntos. El color de la insignia indica el nivel.";
+"tour.academy.cd_loyalty.why" = "Cada cobro suma puntos solo, por defecto según lo que paga el cliente, con propina. Se canjean por recompensas como un crédito de visita, así los clientes habituales vuelven.";
 "tour.academy.cd_addpet.title" = "Mascotas y Agregar mascota";
 "tour.academy.cd_addpet.what" = "Cada mascota muestra raza, color y un punto de género. Agregar mascota suma otra.";
 "tour.academy.cd_addpet.why" = "Cada mascota guarda su foto, notas de salud, etiquetas de conducta e historial, así las familias con varias mascotas se mantienen en orden.";
@@ -1653,6 +1653,11 @@
 "tour.academy.ins_revenue.what" = "Ingresos de 7, 30 o 90 días, con el número de visitas.";
 "tour.academy.ins_revenue.why" = "Distingue una buena racha de una lenta y ve hacia dónde va el negocio.";
 "tour.academy.ins_revenue.try" = "Toca 30D para cambiar el periodo.";
+"tour.academy.set_loyalty.title" = "Cómo se suman los puntos";
+"tour.academy.set_loyalty.what" = "Una vista previa de tus reglas de lealtad, con el mismo cálculo que el cobro.";
+"tour.academy.set_loyalty.why" = "Los clientes Plata, Oro y Platino ganan más en cada visita, y regresar pronto suma el bono por volver. Así el equipo le dice al cliente cuánto gana cada visita.";
+"tour.academy.set_loyalty.try" = "Mueve el total del cobro o elige un nivel y mira cómo cambian los puntos.";
+"tour.academy.set_loyalty.tip" = "Una marca en una recompensa significa que una visita sola alcanza. El dueño cambia la regla en Reglas para ganar puntos, arriba.";
 "tour.academy.set_data.title" = "Exporta tus datos";
 "tour.academy.set_data.what" = "Ajustes exporta tus clientes y visitas como archivos de hoja de cálculo.";
 "tour.academy.set_data.why" = "Tus registros viven en este dispositivo. Una exportación es una copia que tú controlas, para la contabilidad, tu contador o un respaldo.";

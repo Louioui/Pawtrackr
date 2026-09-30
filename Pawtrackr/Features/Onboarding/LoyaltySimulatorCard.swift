@@ -19,8 +19,12 @@ struct LoyaltySimulatorCard: View {
     /// picked on the Regional step, which isn't saved yet. `nil` uses the
     /// saved setting.
     var currencySymbol: String? = nil
+    /// Settings passes `.loyaltySimulator` so the Academy can spotlight the
+    /// Try it box. The onboarding cover has no tour.
+    var tryItTourAnchor: WalkthroughAnchorID? = nil
 
     @Environment(AppSettings.self) private var appSettings
+    @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @Query(sort: \LoyaltyConfig.createdAt, order: .forward) private var configs: [LoyaltyConfig]
     @Query(sort: \LoyaltyRewardTemplate.sortOrder, order: .forward) private var templates: [LoyaltyRewardTemplate]
 
@@ -157,6 +161,17 @@ struct LoyaltySimulatorCard: View {
         }
         .padding(12)
         .background(DS.ColorToken.primary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .optionalWalkthroughTarget(tryItTourAnchor)
+        .onChange(of: ticket) { notePreviewTried() }
+        .onChange(of: tier) { notePreviewTried() }
+        .onChange(of: isRebook) { notePreviewTried() }
+    }
+
+    /// The Academy's loyalty stop waits for a first try, then shows Next
+    /// instead of moving on, so the new total stays on screen.
+    private func notePreviewTried() {
+        guard walkthrough?.currentStep?.id == WalkthroughStepID.loyaltyPoints else { return }
+        walkthrough?.releaseActionRequirement(reason: "the loyalty preview changed")
     }
 
     private var result: some View {

@@ -25,10 +25,12 @@ enum WalkthroughTargetFrame {
               containerSize.width >= 2, containerSize.height >= 2
         else { return nil }
 
+        // Only the top and bottom insets clip a target, where content scrolls
+        // under the toolbar. See `WalkthroughOverlayLayout.spotlightRect`.
         let visibleBounds = CGRect(
-            x: max(0, safeAreaInsets.leading) + 8,
+            x: 8,
             y: max(0, safeAreaInsets.top) + 8,
-            width: max(1, containerSize.width - max(0, safeAreaInsets.leading) - max(0, safeAreaInsets.trailing) - 16),
+            width: max(1, containerSize.width - 16),
             height: max(1, containerSize.height - max(0, safeAreaInsets.top) - max(0, safeAreaInsets.bottom) - 16)
         )
 
@@ -198,10 +200,15 @@ enum WalkthroughOverlayLayout {
     private static func spotlightRect(for targetRect: CGRect?, metrics: Metrics) -> CGRect? {
         guard let targetRect, targetRect.width > 0, targetRect.height > 0 else { return nil }
         let padded = targetRect.insetBy(dx: -spotlightPadding, dy: -spotlightPadding)
+        // The side insets don't clip the spotlight. In a split-view column
+        // they are the sidebar's width, which the target's own layout already
+        // keeps clear of, and macOS reports that width even when the column
+        // starts beside the sidebar. Clipping by it cut the left part off
+        // targets in Settings, such as the Academy card on About.
         let bounds = CGRect(
-            x: max(6, metrics.safeAreaInsets.leading + 6),
+            x: 6,
             y: max(6, metrics.safeAreaInsets.top + 6),
-            width: max(1, metrics.containerSize.width - metrics.safeAreaInsets.leading - metrics.safeAreaInsets.trailing - 12),
+            width: max(1, metrics.containerSize.width - 12),
             height: max(1, metrics.containerSize.height - metrics.safeAreaInsets.top - metrics.safeAreaInsets.bottom - 12)
         )
         let clamped = padded.intersection(bounds)

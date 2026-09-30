@@ -132,7 +132,11 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
     func testSettingsWalkthroughDetailTargetsRenderOnIPad() throws {
         launch(startWalkthrough: true)
 
-        advanceWalkthroughUntilActiveAnchor("setData", maxTaps: 64)
+        advanceWalkthroughUntilActiveAnchor("loyaltySimulator", maxTaps: 64)
+        assertActiveWalkthroughAnchor("loyaltySimulator")
+        XCTAssertTrue(app.sliders["onboarding.loyaltySimulator.slider"].exists, "The loyalty stop sits on the preview's Try it box.")
+
+        advanceWalkthroughUntilActiveAnchor("setData", maxTaps: 3)
         assertActiveWalkthroughAnchor("setData")
         XCTAssertTrue(app.otherElements["walkthrough.bubble"].exists)
     }

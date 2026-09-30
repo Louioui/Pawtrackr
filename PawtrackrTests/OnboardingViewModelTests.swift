@@ -584,6 +584,29 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(visible?.maxY, 740)
     }
 
+    /// Settings > About on the Mac: the detail column reports the sidebar's
+    /// width as a leading inset although it already starts beside the
+    /// sidebar. The Academy card's spotlight used to lose its left part to it.
+    func testSplitViewSidebarInsetDoesNotClipTheSpotlight() throws {
+        let step = WalkthroughStep(
+            id: "layout",
+            anchor: .setAbout,
+            title: "Your Academy home",
+            directive: "Continue, replay a chapter or re-run the whole Academy from here.",
+            purpose: "Train new staff any time."
+        )
+        let container = CGSize(width: 1_817, height: 1_150)
+        let insets = EdgeInsets(top: 52, leading: 183, bottom: 0, trailing: 0)
+        let card = CGRect(x: 30, y: 110, width: 914, height: 200)
+
+        XCTAssertEqual(WalkthroughTargetFrame.validated(card, in: container, safeAreaInsets: insets), card)
+
+        let result = WalkthroughOverlayLayout.layout(step: step, targetRect: card, containerSize: container, safeAreaInsets: insets)
+        let spotlight = try XCTUnwrap(result.spotlight)
+        XCTAssertEqual(spotlight, card.insetBy(dx: -10, dy: -10), "The spotlight frames the whole card.")
+        XCTAssertFalse(result.bubbleFrame.intersects(spotlight))
+    }
+
     func testWalkthroughInteractiveTargetBubbleDoesNotOverlapIPadCheckoutTarget() {
         let step = WalkthroughStep(
             id: "layout",
