@@ -72,6 +72,12 @@ final class RecordingSpotlightIndex: SpotlightIndexWriting, @unchecked Sendable 
 }
 
 final class SpotlightIndexingTests: XCTestCase {
+    /// How long to wait for an index call. The indexer flushes on a utility
+    /// queue, which a loaded CI simulator can starve for seconds (a 3 s wait
+    /// timed out there), so this is a ceiling, not an expected time: a passing
+    /// test returns as soon as the call lands.
+    private static let indexTimeout: TimeInterval = 30
+
     private var suiteName = ""
     private var defaults: UserDefaults!
 
@@ -412,7 +418,7 @@ final class SpotlightIndexingTests: XCTestCase {
         let openIndexer = makeIndexer(open)
         openIndexer.applyPrivacyPolicy(allowsIndexing: true)
         openIndexer.scheduleIndex(client: client)
-        await fulfillment(of: [indexed], timeout: 3)
+        await fulfillment(of: [indexed], timeout: Self.indexTimeout)
 
         let item = try XCTUnwrap(open.indexedItems["client-\(client.uuid.uuidString)"])
         XCTAssertTrue(item.attributeSet.keywords?.contains("5552345678") == true, "Live edits carry the phone keywords too.")
@@ -437,7 +443,7 @@ final class SpotlightIndexingTests: XCTestCase {
         let indexer = makeIndexer(index)
         indexer.applyPrivacyPolicy(allowsIndexing: true)
         indexer.scheduleIndex(client: client, includingPets: true)
-        await fulfillment(of: [indexed], timeout: 3)
+        await fulfillment(of: [indexed], timeout: Self.indexTimeout)
 
         let petItem = try XCTUnwrap(index.indexedItems["pet-\(pet.uuid.uuidString)"])
         XCTAssertTrue(petItem.attributeSet.keywords?.contains("5559876543") == true)
@@ -465,7 +471,7 @@ final class SpotlightIndexingTests: XCTestCase {
         rebuilt.assertForOverFulfill = false
         index.onCall = { call in if case .index = call { rebuilt.fulfill() } }
         XCTAssertEqual(indexer.applyPrivacyPolicy(allowsIndexing: true), .rebuild)
-        await fulfillment(of: [rebuilt], timeout: 5)
+        await fulfillment(of: [rebuilt], timeout: Self.indexTimeout)
         XCTAssertEqual(index.indexedItems.count, 1)
     }
 
@@ -502,12 +508,34 @@ final class SpotlightIndexingTests: XCTestCase {
         container.mainContext.insert(client)
 
         let index = RecordingSpotlightIndex()
+        let cleared = expectation(description: "index cleared")
+        let probed = expectation(description: "probe reached the index")
+        index.onCall = { call in
+            switch call {
+            case .deleteAll: cleared.fulfill()
+            case .delete: probed.fulfill()
+            case .index: break
+            }
+        }
         let indexer = makeIndexer(index, debounce: .milliseconds(150))
         indexer.applyPrivacyPolicy(allowsIndexing: true)
         indexer.scheduleIndex(client: client)
         indexer.removeAllItems()
-        try await Task.sleep(for: .milliseconds(400))
+        await fulfillment(of: [cleared], timeout: Self.indexTimeout)
 
-        XCTAssertEqual(index.calls, [.deleteAll], "A debounced edit must not re-add a wiped client.")
+        // A fixed sleep alone wasn't proof: on a starved CI queue the wipe
+        // itself hadn't run yet. Once the debounce has passed, the edit's
+        // flush is already queued, so a removal queued now runs after it and
+        // everything the flush would send is recorded before the probe.
+        try await Task.sleep(for: .milliseconds(300))
+        let probeID = UUID()
+        indexer.removePetFromIndex(petID: probeID)
+        await fulfillment(of: [probed], timeout: Self.indexTimeout)
+
+        XCTAssertEqual(
+            index.calls,
+            [.deleteAll, .delete([SpotlightIdentifier.pet(probeID).rawValue])],
+            "A debounced edit must not re-add a wiped client."
+        )
     }
 }
