@@ -439,50 +439,6 @@ struct CheckoutView: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(NSLocalizedString("checkout.tip_amount", comment: "")).font(.headline).padding(.horizontal)
-                        Card {
-                            VStack(spacing: 16) {
-                                HStack(spacing: 10) {
-                                    ForEach([15, 20, 25], id: \.self) { pct in
-                                        Button {
-                                            HapticManager.impact(.light)
-                                            viewModel.selectTip(percentage: pct)
-                                        } label: {
-                                            VStack(spacing: 4) {
-                                                Text("\(pct)%")
-                                                    .font(.subheadline.weight(.bold))
-                                                Text((viewModel.subtotalDecimal * Decimal(pct) / 100).moneyString)
-                                                    .font(.caption2)
-                                            }
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 8)
-                                            .background(RoundedRectangle(cornerRadius: 10).fill(viewModel.selectedTipPercentage == pct ? Color.blue.opacity(0.1) : Color.gray.opacity(0.05)))
-                                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(viewModel.selectedTipPercentage == pct ? Color.blue : Color.clear, lineWidth: 1.5))
-                                            .foregroundStyle(viewModel.selectedTipPercentage == pct ? .blue : .primary)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                
-                                HStack {
-                                    Text(NSLocalizedString("checkout.custom_tip", comment: "")).font(.subheadline).foregroundStyle(.secondary)
-                                    Spacer()
-                                    HStack(spacing: 4) {
-                                        Text("$").font(.subheadline.bold())
-                                        TextField("0.00", text: tipBinding)
-                                            #if os(iOS)
-                                            .keyboardType(.decimalPad)
-                                            #endif
-                                            .multilineTextAlignment(.trailing)
-                                            .font(.subheadline.bold())
-                                            .frame(width: 80)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     if viewModel.requiresExternalReference {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(viewModel.referenceFieldTitle).font(Font.subheadline.weight(.medium)).padding(.horizontal)
@@ -1245,18 +1201,6 @@ struct CheckoutView: View {
                 let limited = TextInputLimits.limited(normalized, to: TextInputLimits.shortText)
                 referenceEditorText = limited
                 viewModel.setExternalReference(limited)
-            }
-        )
-    }
-
-    var tipBinding: Binding<String> {
-        Binding(
-            get: { viewModel.tipAmountString },
-            set: { newValue in
-                let allowed = "0123456789" + (Locale.current.decimalSeparator ?? ".")
-                let filtered = newValue.filter { allowed.contains($0) }
-                viewModel.tipAmountString = filtered
-                viewModel.selectedTipPercentage = nil // Clear percentage if manual edit
             }
         )
     }

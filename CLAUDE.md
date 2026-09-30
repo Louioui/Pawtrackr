@@ -3,8 +3,9 @@
 ## Checkout Pilot Decisions
 
 - `CheckoutViewModel` is the only owner of checkout UI state. `CheckoutView` can bind to editor buffers, but every persisted value must flow back through the view model before navigation or confirmation.
-- Checkout money is Decimal-only. Service subtotal, manual amount overrides, tips, payments, and line-item reconciliation must avoid `Double` currency math.
-- The 4-step checkout draft is a crash-recovery boundary. Step transitions, payment method changes, external references, and tips are critical state and must be saved immediately through `CheckoutDraftStore`.
+- Checkout money is Decimal-only. Service subtotal, manual amount overrides, payments, and line-item reconciliation must avoid `Double` currency math.
+- Checkout takes no tips: the total is the selected services or the amount typed over them. `CheckoutDraft` keeps its tip fields so older drafts still decode, but restore ignores them.
+- The 4-step checkout draft is a crash-recovery boundary. Step transitions, payment method changes, and external references are critical state and must be saved immediately through `CheckoutDraftStore`.
 - Draft disk I/O belongs off the main actor. `CheckoutDraftStore` remains an actor for serialization, while JSON/file reads and writes execute through detached utility tasks.
 - Confirm-and-pay is protected at two layers: a UI/view-model debounce blocks rapid duplicate taps, and `CheckoutTransactionActor` keeps persistence idempotent by visit UUID.
 - Checkout success must not hide cleanup or refresh failures. Draft deletion and main-context refresh errors are logged instead of swallowed with `try?`.

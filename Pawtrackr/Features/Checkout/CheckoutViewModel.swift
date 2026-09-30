@@ -126,8 +126,6 @@ final class CheckoutViewModel {
                 addOnServices: addOnServices,
                 sessionNotes: sessionNotes,
                 amountString: amountString,
-                tipAmountString: tipAmountString,
-                selectedTipPercentage: selectedTipPercentage,
                 selectedPaymentMethodRawValue: selectedPaymentMethod.rawValue,
                 externalReference: externalReference,
                 tags: Array(tags),
@@ -164,13 +162,6 @@ final class CheckoutViewModel {
     var amountString: String = ""
     var selectedServiceIDs: Set<PersistentIdentifier> = [] { didSet { triggerBackgroundCalculation(reason: "services_changed") } }
     var selectedPaymentMethod: Payment.Method = .cash { didSet { triggerBackgroundCalculation(reason: "payment_method_changed") } }
-    var selectedTipPercentage: Int? { didSet { triggerBackgroundCalculation(reason: "tip_percentage_changed", immediate: true) } }
-    var tipAmountString: String = "" {
-        didSet {
-            recalculateCachedStrings()
-            triggerBackgroundCalculation(reason: "tip_amount_changed", immediate: true)
-        }
-    }
     var beforePhotoData: Data? { didSet { triggerBackgroundCalculation(reason: "before_photo_changed") } }
     var afterPhotoData: Data? { didSet { triggerBackgroundCalculation(reason: "after_photo_changed") } }
     var externalReference: String = "" { didSet { triggerBackgroundCalculation(reason: "reference_changed", immediate: true) } }
@@ -448,8 +439,10 @@ final class CheckoutViewModel {
         baseAmountDecimal
     }
 
+    /// What the client pays: the selected services, or the amount typed
+    /// over them. Checkout doesn't take tips.
     var servicesTotalDecimal: Decimal {
-        (baseAmountDecimal + tipAmountDecimal).roundedMoney()
+        baseAmountDecimal.roundedMoney()
     }
 
     private var baseAmountDecimal: Decimal {
@@ -457,28 +450,6 @@ final class CheckoutViewModel {
             return manual.roundedMoney()
         }
         return calculateTotalLocally()
-    }
-
-    private var tipAmountDecimal: Decimal {
-        guard let tip = Formatters.parseCurrency(tipAmountString), tip > .zero else {
-            return .zero
-        }
-        return tip.roundedMoney()
-    }
-
-    func selectTip(percentage: Int) {
-        guard percentage > 0 else {
-            selectedTipPercentage = nil
-            tipAmountString = ""
-            trace("tip_cleared")
-            return
-        }
-
-        let tip = (subtotalDecimal * Decimal(percentage) / Decimal(100)).roundedMoney()
-        selectedTipPercentage = percentage
-        tipAmountString = tip.moneyString
-        recalculateCachedStrings()
-        trace("tip_selected_\(percentage)")
     }
 
     func toggleTag(_ raw: String) {
@@ -790,8 +761,8 @@ final class CheckoutViewModel {
         suppressDraftAutosave = true
         sessionNotes = TextInputLimits.limited(draft.sessionNotes, to: TextInputLimits.notes)
         amountString = draft.amountString
-        tipAmountString = draft.tipAmountString
-        selectedTipPercentage = draft.selectedTipPercentage
+        // A tip saved by an earlier version is left out: checkout no longer
+        // takes tips, and a hidden one would change the total.
         externalReference = TextInputLimits.limited(draft.externalReference, to: TextInputLimits.shortText)
         tags = Set(draft.tags)
         
@@ -838,8 +809,6 @@ final class CheckoutViewModel {
             String(currentStep.rawValue),
             sessionNotes,
             amountString,
-            tipAmountString,
-            String(selectedTipPercentage ?? 0),
             serviceUUIDs,
             addOnUUIDs,
             selectedPaymentMethod.rawValue,
@@ -906,8 +875,6 @@ final class CheckoutViewModel {
             currentStepRawValue: currentStep.rawValue,
             sessionNotes: sessionNotes,
             amountString: amountString,
-            tipAmountString: tipAmountString,
-            selectedTipPercentage: selectedTipPercentage,
             selectedServiceUUIDs: allServices.filter { selectedServiceIDs.contains($0.persistentModelID) }.map(\.uuid),
             selectedAddOnUUIDs: addOnServices.filter { selectedAddOnIDs.contains($0.persistentModelID) }.map(\.uuid),
             selectedPaymentMethodRawValue: selectedPaymentMethod.rawValue,

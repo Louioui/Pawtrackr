@@ -205,7 +205,6 @@
 "checkout.behavior_tags" = "Etiquetas de comportamiento";
 "checkout.before_after_photos" = "Fotos de antes y después";
 "checkout.service_charge" = "Cargo por servicio";
-"checkout.tip_amount" = "Propina";
 "checkout.total" = "Total";
 "checkout.payment_method" = "Método de pago";
 "checkout.payment_summary" = "Resumen de pago";
@@ -294,7 +293,6 @@
 "common.yes" = "Sí";
 "common.success" = "Éxito";
 "common.load_more" = "Cargar más";
-"checkout.custom_tip" = "Monto de propina personalizado";
 "checkout.reference" = "ID de referencia";
 "checkout.transaction_reference" = "Referencia de transacción";
 
@@ -1173,7 +1171,7 @@
 "tour.cd.checkin.purpose" = "Registrar entrada crea una visita activa, inicia el cronómetro, cambia el estado de la mascota a en sesión y habilita el cobro cuando el aseo termina.";
 "tour.cd.checkin.tip" = "Úsalo cuando la mascota ya está físicamente bajo tu cuidado para que duración y conteos del panel sean precisos.";
 "tour.cd.checkout.title" = "Cobrar salida";
-"tour.cd.checkout.purpose" = "Cobrar salida se abre después de registrar entrada. Guarda servicios, notas, fotos, forma de pago, propina, recibo y revisión.";
+"tour.cd.checkout.purpose" = "Cobrar salida se abre después de registrar entrada. Guarda servicios, notas, fotos, forma de pago, recibo y revisión.";
 "tour.cd.checkout.tip" = "Si este botón está atenuado, la mascota aún no tiene entrada registrada.";
 "tour.co.services.title" = "Cobro: servicios";
 "tour.co.services.directive" = "Arma el ticket desde el menú real de servicios.";
@@ -1181,8 +1179,8 @@
 "tour.co.services.tip" = "Los servicios principales y complementos vienen de Ajustes, así tu cobro se mantiene consistente con el menú del negocio.";
 "tour.co.payment.title" = "Cobro: pago";
 "tour.co.payment.directive" = "Confirma el importe y cómo pagó el cliente.";
-"tour.co.payment.purpose" = "Pago captura el importe final, método de pago, propina y cualquier referencia requerida de tarjeta o transferencia para que recibos y contabilidad coincidan con la transacción real.";
-"tour.co.payment.tip" = "La propina se suma al total que cobras, así que los reportes de ingresos la incluyen.";
+"tour.co.payment.purpose" = "Pago captura el importe final, método de pago y cualquier referencia requerida de tarjeta o transferencia para que recibos y contabilidad coincidan con la transacción real.";
+"tour.co.payment.tip" = "El total se llena con los servicios. Escribe encima para un descuento o un cargo extra.";
 "tour.co.confirm.title" = "Confirmar y guardar";
 "tour.co.confirm.directive" = "Esta es la meta real del cobro.";
 "tour.co.confirm.tip" = "Después del pago, los puntos se agregan al perfil del cliente.";
@@ -1599,7 +1597,7 @@
 /* Loyalty preview card and the Getting Started / loyalty tour stops */
 "loyalty.preview.how_title" = "Cómo funcionan los puntos";
 "loyalty.preview.try_title" = "Pruébalo";
-"loyalty.preview.ticket" = "Total del cobro, con propina";
+"loyalty.preview.ticket" = "Total del cobro";
 "loyalty.preview.tier" = "Nivel del cliente";
 "loyalty.preview.tier_choice_fmt" = "%1$@ %2$@";
 "loyalty.preview.rebook_toggle_fmt" = "Volvió en %d días o menos";
@@ -1608,9 +1606,9 @@
 "loyalty.preview.tier_line_fmt" = "%1$@: %2$@";
 "loyalty.preview.rebook_line_fmt" = "Bono por volver: +%@";
 "loyalty.preview.points_decimal_fmt" = "%@ puntos";
-"loyalty.preview.earn_rate_fmt" = "Cada cobro suma %1$@ por cada %2$@ que paga el cliente, propina incluida. Los puntos se redondean hacia abajo a un número entero.";
+"loyalty.preview.earn_rate_fmt" = "Cada cobro suma %1$@ por cada %2$@ que paga el cliente. Los puntos se redondean hacia abajo a un número entero.";
 "loyalty.preview.earn_rate_off_fmt" = "Por ahora los cobros no suman puntos: la regla es 0 puntos por cada %@.";
-"loyalty.preview.earn_flat_fmt" = "Cada cobro suma %@, sin importar el total. La propina no lo cambia.";
+"loyalty.preview.earn_flat_fmt" = "Cada cobro suma %@, sin importar el total.";
 "loyalty.preview.earn_flat_off" = "Por ahora los cobros no suman puntos: la regla es 0 puntos por visita.";
 "loyalty.preview.tiers_fmt" = "Los puntos ganados en el cobro suben de nivel al cliente: Plata con %1$@, Oro con %2$@ y Platino con %3$@. Cada nivel multiplica los puntos de cada visita. Gastar puntos nunca baja el nivel.";
 "loyalty.preview.rebook_fmt" = "Una visita que suma puntos gana %1$@ más cuando la última visita del cliente terminó hace %2$d días o menos.";
@@ -1696,7 +1694,7 @@
 "tour.academy.cd_emergency.try" = "Toca + para agregar un contacto de respaldo y luego guarda o cierra el formulario.";
 "tour.academy.cd_loyalty.title" = "Puntos de lealtad";
 "tour.academy.cd_loyalty.what" = "Lealtad y recompensas muestra los puntos. El color de la insignia indica el nivel.";
-"tour.academy.cd_loyalty.why" = "Cada cobro suma puntos solo, por defecto según lo que paga el cliente, con propina. Se canjean por recompensas como un crédito de visita, así los clientes habituales vuelven.";
+"tour.academy.cd_loyalty.why" = "Cada cobro suma puntos solo, por defecto según lo que paga el cliente. Se canjean por recompensas como un crédito de visita, así los clientes habituales vuelven.";
 "tour.academy.cd_addpet.title" = "Mascotas y Agregar mascota";
 "tour.academy.cd_addpet.what" = "Cada mascota muestra raza, color y un punto de género. Agregar mascota suma otra.";
 "tour.academy.cd_addpet.why" = "Cada mascota guarda su foto, notas de salud, etiquetas de conducta e historial, así las familias con varias mascotas se mantienen en orden.";
@@ -1711,7 +1709,7 @@
 "tour.academy.cd_history.try" = "Toca Últimos 90 días.";
 "tour.academy.visit.title" = "Registro de una visita";
 "tour.academy.visit.what" = "Cada visita muestra sus servicios, la etiqueta Pagado, cómo se pagó y cuánto duró.";
-"tour.academy.visit.why" = "Abre una para ver el ticket completo: cada servicio y precio, la propina, la referencia de pago, notas y fotos.";
+"tour.academy.visit.why" = "Abre una para ver el ticket completo: cada servicio y precio, la referencia de pago, notas y fotos.";
 "tour.academy.visit.try" = "Toca la visita resaltada para abrirla.";
 "tour.academy.nav_insights.title" = "Abre Estadísticas";
 "tour.academy.nav_insights.what" = "Estadísticas convierte los cobros terminados en gráficas.";

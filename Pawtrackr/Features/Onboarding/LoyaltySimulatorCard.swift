@@ -124,7 +124,7 @@ struct LoyaltySimulatorCard: View {
                 .font(.subheadline.weight(.semibold))
 
             HStack {
-                Text(AppLocalization.localized("loyalty.preview.ticket", value: "Checkout total, tip included"))
+                Text(AppLocalization.localized("loyalty.preview.ticket", value: "Checkout total"))
                     .font(.subheadline)
                 Spacer(minLength: 8)
                 Text(LoyaltyExplainer.money(ticket, symbol: symbol))
@@ -132,7 +132,7 @@ struct LoyaltySimulatorCard: View {
                     .fontWeight(.semibold)
             }
             Slider(value: ticketBinding, in: Self.ticketRange, step: Self.ticketStep)
-                .accessibilityLabel(AppLocalization.localized("loyalty.preview.ticket", value: "Checkout total, tip included"))
+                .accessibilityLabel(AppLocalization.localized("loyalty.preview.ticket", value: "Checkout total"))
                 .accessibilityValue(LoyaltyExplainer.money(ticket, symbol: symbol))
                 .accessibilityIdentifier("onboarding.loyaltySimulator.slider")
 
@@ -303,7 +303,7 @@ enum LoyaltyExplainer {
             return String(
                 format: AppLocalization.localized(
                     "loyalty.preview.earn_rate_fmt",
-                    value: "Each checkout earns %1$@ for every %2$@ the client pays, tip included. Points are rounded down to a whole number."
+                    value: "Each checkout earns %1$@ for every %2$@ the client pays. Points are rounded down to a whole number."
                 ),
                 rate(config.pointsPerDollar),
                 money(1, symbol: currencySymbol)
@@ -318,7 +318,7 @@ enum LoyaltyExplainer {
             return String(
                 format: AppLocalization.localized(
                     "loyalty.preview.earn_flat_fmt",
-                    value: "Each checkout earns %@, whatever the total. The tip doesn't change it."
+                    value: "Each checkout earns %@, whatever the total."
                 ),
                 LoyaltyCopy.points(config.pointsPerVisit)
             )

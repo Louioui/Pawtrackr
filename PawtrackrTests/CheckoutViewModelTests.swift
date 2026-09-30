@@ -144,27 +144,13 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.servicesTotalDecimal, Decimal(60))
     }
 
-    func testAmount_PercentageTipUsesDecimalMoneyMath() {
+    /// Checkout takes no tips: what the client pays is the services, or
+    /// the amount typed over them.
+    func testAmount_TotalIsTheServicesWithNoTip() {
         let vm = makeVM()
         vm.toggleService(bath)
-        vm.selectTip(percentage: 20)
-
-        XCTAssertEqual(vm.tipAmountString, "$6.00")
-        XCTAssertEqual(vm.selectedTipPercentage, 20)
-        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(36))
-        XCTAssertEqual(vm.finalTotalString, "$36.00")
-    }
-
-    func testAmount_ManualTipClearsPercentageAndAddsToTotal() {
-        let vm = makeVM()
-        vm.toggleService(bath)
-        vm.selectTip(percentage: 15)
-        vm.tipAmountString = "7.25"
-        vm.selectedTipPercentage = nil
-
-        XCTAssertNil(vm.selectedTipPercentage)
-        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(string: "37.25")!)
-        XCTAssertEqual(vm.finalTotalString, "$37.25")
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(30))
+        XCTAssertEqual(vm.finalTotalString, "$30.00")
     }
 
     func testAmount_EmptySelectionIsZero() {
@@ -414,7 +400,7 @@ final class CheckoutViewModelTests: XCTestCase {
         XCTAssertEqual(vm.currentStep, .payment)
         XCTAssertEqual(vm.sessionNotes, "Recovered notes")
         XCTAssertEqual(vm.amountString, "$40.00")
-        XCTAssertEqual(vm.tipAmountString, "$5.00")
+        XCTAssertEqual(vm.servicesTotalDecimal, Decimal(40), "A tip saved by an earlier version stays out of the total.")
         XCTAssertTrue(vm.isServiceSelected(bath))
         XCTAssertTrue(vm.isAddOnSelected(nailTrim))
         XCTAssertEqual(vm.tags, Set(["Friendly"]))

@@ -189,13 +189,13 @@ final class LoyaltyPreviewTests: XCTestCase {
         XCTAssertEqual(LoyaltySimulatorCard.displayTitle(for: edited.displayReward), "$5 Visit Credit", "A changed cost means the salon made it its own.")
     }
 
-    func testExplainerSaysTheTipEarnsPointsOnlyWhenItDoes() {
+    func testExplainerSaysHowACheckoutEarns() {
         defer { UserDefaults.standard.removeObject(forKey: AppSettingsKeys.appLanguageOverride) }
         UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
 
         let perDollar = LoyaltyExplainer.earning(config: .default, currencySymbol: "$")
         XCTAssertTrue(perDollar.contains("1 point"), perDollar)
-        XCTAssertTrue(perDollar.contains("tip included"), perDollar)
+        XCTAssertFalse(perDollar.contains("tip"), "Checkout takes no tips: \(perDollar)")
         XCTAssertTrue(perDollar.contains("rounded down"), perDollar)
 
         let twoPerEuro = LoyaltyConfigSnapshot(earnMode: .pointsPerDollar, pointsPerDollar: 2, pointsPerVisit: 20, redemptionThreshold: 100, isRewardsCatalogEnabled: true)
@@ -204,7 +204,7 @@ final class LoyaltyPreviewTests: XCTestCase {
 
         let flat = LoyaltyConfigSnapshot(earnMode: .flatPerVisit, pointsPerDollar: 1, pointsPerVisit: 20, redemptionThreshold: 100, isRewardsCatalogEnabled: true)
         let flatText = LoyaltyExplainer.earning(config: flat, currencySymbol: "$")
-        XCTAssertTrue(flatText.contains("20 points") && flatText.contains("tip doesn't change"), flatText)
+        XCTAssertTrue(flatText.contains("20 points") && flatText.contains("whatever the total"), flatText)
 
         let off = LoyaltyConfigSnapshot(earnMode: .pointsPerDollar, pointsPerDollar: 0, pointsPerVisit: 20, redemptionThreshold: 100, isRewardsCatalogEnabled: true)
         XCTAssertTrue(LoyaltyExplainer.earning(config: off, currencySymbol: "$").contains("no points"))
@@ -223,7 +223,7 @@ final class LoyaltyPreviewTests: XCTestCase {
 
         let perDollar = LoyaltyExplainer.earning(config: .default, currencySymbol: "$")
         XCTAssertTrue(perDollar.hasPrefix("Cada cobro suma 1 punto"), perDollar)
-        XCTAssertTrue(perDollar.contains("propina incluida"), perDollar)
+        XCTAssertFalse(perDollar.contains("propina"), perDollar)
         XCTAssertTrue(LoyaltyExplainer.rebook.contains("20 puntos"), LoyaltyExplainer.rebook)
         XCTAssertEqual(LoyaltyExplainer.tierChoice(.gold), "Oro 1.25×")
         let lines = LoyaltyExplainer.breakdown(LoyaltyEngine.preview(ticket: 85, config: .default, tier: .silver, rebook: true), config: .default)

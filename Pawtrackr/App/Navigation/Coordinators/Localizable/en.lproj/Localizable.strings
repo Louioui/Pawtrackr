@@ -204,7 +204,6 @@
 "checkout.behavior_tags" = "Behavior Tags";
 "checkout.before_after_photos" = "Before & After Photos";
 "checkout.service_charge" = "Service Charge";
-"checkout.tip_amount" = "Tip Amount";
 "checkout.total" = "Total";
 "checkout.payment_method" = "Payment Method";
 "checkout.payment_summary" = "Payment Summary";
@@ -292,7 +291,6 @@
 
 "common.no" = "No";
 "common.yes" = "Yes";
-"checkout.custom_tip" = "Custom Tip Amount";
 "checkout.reference" = "Reference ID";
 "checkout.transaction_reference" = "Transaction Reference";
 
@@ -1348,7 +1346,7 @@
 "tour.cd.checkin.purpose" = "Check In creates an active visit, starts the timer, changes the pet status to in session, and makes checkout available when the groom is finished.";
 "tour.cd.checkin.tip" = "Use it when the pet is physically in your care so duration and dashboard counts stay accurate.";
 "tour.cd.checkout.title" = "Check Out";
-"tour.cd.checkout.purpose" = "Check Out opens after a pet is checked in. That checkout process records services, notes, photos, payment method, tips, receipt details, and a final review before saving.";
+"tour.cd.checkout.purpose" = "Check Out opens after a pet is checked in. That checkout process records services, notes, photos, payment method, receipt details, and a final review before saving.";
 "tour.cd.checkout.tip" = "If this button is dimmed, the pet has not been checked in yet.";
 "tour.co.services.title" = "Checkout: Services";
 "tour.co.services.directive" = "Build the ticket from the real service menu.";
@@ -1356,8 +1354,8 @@
 "tour.co.services.tip" = "Main services and add-ons come from Settings, so your checkout stays consistent with your shop menu.";
 "tour.co.payment.title" = "Checkout: Payment";
 "tour.co.payment.directive" = "Confirm the amount and how the client paid.";
-"tour.co.payment.purpose" = "Payment captures the final amount, payment method, tip, and any required card or transfer reference so receipts and bookkeeping match the real transaction.";
-"tour.co.payment.tip" = "The tip is added to the total you collect, so revenue reports include it.";
+"tour.co.payment.purpose" = "Payment captures the final amount, payment method, and any required card or transfer reference so receipts and bookkeeping match the real transaction.";
+"tour.co.payment.tip" = "The total fills in from the services. Type over it for a discount or an extra charge.";
 "tour.co.confirm.title" = "Confirm & Save";
 "tour.co.confirm.directive" = "This is the real checkout finish line.";
 "tour.co.confirm.tip" = "After payment, loyalty points post to the client profile automatically.";
@@ -1586,7 +1584,7 @@
 /* Loyalty preview card and the Getting Started / loyalty tour stops */
 "loyalty.preview.how_title" = "How points work";
 "loyalty.preview.try_title" = "Try it";
-"loyalty.preview.ticket" = "Checkout total, tip included";
+"loyalty.preview.ticket" = "Checkout total";
 "loyalty.preview.tier" = "Client tier";
 "loyalty.preview.tier_choice_fmt" = "%1$@ %2$@";
 "loyalty.preview.rebook_toggle_fmt" = "Back within %d days";
@@ -1595,9 +1593,9 @@
 "loyalty.preview.tier_line_fmt" = "%1$@: %2$@";
 "loyalty.preview.rebook_line_fmt" = "Rebook bonus: +%@";
 "loyalty.preview.points_decimal_fmt" = "%@ points";
-"loyalty.preview.earn_rate_fmt" = "Each checkout earns %1$@ for every %2$@ the client pays, tip included. Points are rounded down to a whole number.";
+"loyalty.preview.earn_rate_fmt" = "Each checkout earns %1$@ for every %2$@ the client pays. Points are rounded down to a whole number.";
 "loyalty.preview.earn_rate_off_fmt" = "Checkouts earn no points right now: the rule is 0 points per %@.";
-"loyalty.preview.earn_flat_fmt" = "Each checkout earns %@, whatever the total. The tip doesn't change it.";
+"loyalty.preview.earn_flat_fmt" = "Each checkout earns %@, whatever the total.";
 "loyalty.preview.earn_flat_off" = "Checkouts earn no points right now: the rule is 0 points per visit.";
 "loyalty.preview.tiers_fmt" = "Points earned at checkout move a client up: Silver at %1$@, Gold at %2$@ and Platinum at %3$@. Each tier multiplies the points of every visit. Spending points never lowers a tier.";
 "loyalty.preview.rebook_fmt" = "A visit that earns points gets %1$@ more when the client's last visit ended %2$d days ago or less.";
@@ -1683,7 +1681,7 @@
 "tour.academy.cd_emergency.try" = "Tap + to add a backup contact, then save or close the form.";
 "tour.academy.cd_loyalty.title" = "Loyalty points";
 "tour.academy.cd_loyalty.what" = "Loyalty & Rewards shows this client’s points. The badge color shows their tier.";
-"tour.academy.cd_loyalty.why" = "Every checkout adds points on its own, by default from what the client pays, tip included. Points buy rewards like a visit credit, so regulars have a reason to come back.";
+"tour.academy.cd_loyalty.why" = "Every checkout adds points on its own, by default from what the client pays. Points buy rewards like a visit credit, so regulars have a reason to come back.";
 "tour.academy.cd_addpet.title" = "Pets & Add Pet";
 "tour.academy.cd_addpet.what" = "Each pet card shows breed, color and a gender dot. Add Pet adds another.";
 "tour.academy.cd_addpet.why" = "Every pet keeps its own photo, health notes, behavior tags and visit history, so multi-pet families stay organized.";
@@ -1698,7 +1696,7 @@
 "tour.academy.cd_history.try" = "Tap Last 90 Days.";
 "tour.academy.visit.title" = "A visit record";
 "tour.academy.visit.what" = "Each visit shows its services, the Paid badge, how it was paid and how long it took.";
-"tour.academy.visit.why" = "Open one to see the whole ticket: every service and price, the tip, payment reference, notes and photos.";
+"tour.academy.visit.why" = "Open one to see the whole ticket: every service and price, the payment reference, notes and photos.";
 "tour.academy.visit.try" = "Tap the highlighted visit to open it.";
 "tour.academy.nav_insights.title" = "Open Insights";
 "tour.academy.nav_insights.what" = "Insights turns finished checkouts into charts.";

@@ -770,10 +770,13 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertTrue(quick.contains("New Client") && quick.contains("Check Out"), quick)
         XCTAssertFalse(quick.contains("Reports") || quick.contains("check a pet in"), quick)
 
-        // The tip is part of the total, not kept apart.
-        let paymentTip = try XCTUnwrap(steps["co.payment"]?.coachTip)
-        XCTAssertFalse(paymentTip.contains("separate"), paymentTip)
+        // Checkout takes no tips: the Payment stop explains the total instead.
+        let payment = try XCTUnwrap(steps["co.payment"])
+        let paymentTip = try XCTUnwrap(payment.coachTip)
         XCTAssertTrue(paymentTip.contains("total"), paymentTip)
+        for text in [payment.purpose, paymentTip, try XCTUnwrap(steps[WalkthroughStepID.checkOut]).purpose] {
+            XCTAssertFalse(text.localizedCaseInsensitiveContains("tip"), text)
+        }
 
         // The emergency card's actions.
         let emergency = try XCTUnwrap(steps[WalkthroughStepID.emergency]).purpose

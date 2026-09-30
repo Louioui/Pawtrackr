@@ -101,8 +101,8 @@ struct LoyaltyEngine {
     /// tries out is what a client gets.
     ///
     /// - Parameters:
-    ///   - ticket: what the client pays at checkout, tip included (checkout
-    ///     passes services plus tip).
+    ///   - ticket: what the client pays at checkout: the services, or the
+    ///     amount typed over them.
     ///   - tier: the client's tier before this visit.
     ///   - rebook: the client's previous completed visit ended within
     ///     `rebookWindowDays` (`isRebook`).
