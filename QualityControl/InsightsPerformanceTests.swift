@@ -6,7 +6,7 @@ final class InsightsPerformanceTests: XCTestCase {
 
     @MainActor
     func testAnalyticsAggregationSpeed() async throws {
-        let duration = try await PerformanceBudget.fastestMilliseconds(runs: 3) { () throws -> DataStoreService in
+        let duration = try await PerformanceBudget.fastestCPUMilliseconds(runs: 3) { () throws -> DataStoreService in
             let dataStore = DataStoreService(inMemory: true)
 
             // 1. Seed 1000 summary records
@@ -27,8 +27,8 @@ final class InsightsPerformanceTests: XCTestCase {
             await vm.refresh()
         }
 
-        print("Insights Aggregation Time: \(duration)ms")
-        XCTAssertTrue(duration < 250, "Heavy analytics aggregation took \(duration)ms, exceeding 250ms threshold")
+        print("Insights Aggregation CPU Time: \(duration)ms")
+        XCTAssertTrue(duration < 250, "Heavy analytics aggregation used \(duration)ms of CPU, exceeding 250ms threshold")
     }
     
     @MainActor

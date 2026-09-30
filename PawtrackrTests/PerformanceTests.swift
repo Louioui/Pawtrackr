@@ -9,7 +9,7 @@ final class PerformanceTests: XCTestCase {
     func testInsightsLoadPerformance() async throws {
         // Use the in-memory test container to avoid touching the user's real
         // CloudKit-backed store from a unit test.
-        let milliseconds = try await PerformanceBudget.fastestMilliseconds { () -> DashboardRepository in
+        let milliseconds = try await PerformanceBudget.fastestCPUMilliseconds { () -> DashboardRepository in
             let store = DataStoreService(inMemory: true)
             return DashboardRepository(modelContext: store.container.mainContext)
         } _: { repo in
@@ -17,6 +17,6 @@ final class PerformanceTests: XCTestCase {
         }
 
         let duration = milliseconds / 1_000
-        XCTAssertLessThan(duration, 0.5, "Dashboard KPIs took too long: \(duration)s")
+        XCTAssertLessThan(duration, 0.5, "Dashboard KPIs used too much CPU: \(duration)s")
     }
 }

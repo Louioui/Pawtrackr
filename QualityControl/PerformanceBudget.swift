@@ -1,36 +1,35 @@
-import Foundation
+import Darwin
 
-/// Times an operation for a wall-clock performance budget.
+/// Measures an operation for a performance budget in CPU time, not wall time.
 ///
-/// A single timed run fails whenever the simulator stalls, and the CI runner
-/// stalls often: it runs several simulator clones at once, and the dashboard
-/// refresh that normally takes a few milliseconds once took over two seconds
-/// there. Each run gets a fresh fixture from `setUp` (not timed), and the
-/// fastest run is compared to the budget. A real regression slows every run;
-/// a stall on a loaded runner slows only some of them.
-@MainActor
+/// On CI the simulator clones run as separate processes on a few cores, so
+/// wall time mostly measures how busy the other clones are: a dashboard
+/// refresh that takes about 100 ms took 300 ms per run for several seconds
+/// in a row there. The CPU time this process spends is what a regression in
+/// our code changes, and other processes don't add to it.
+///
+/// Each run gets a fresh fixture from `setUp` (not measured), and the
+/// fastest run is returned, so leftover background work from an earlier test
+/// in the same process can only inflate some of the runs.
 enum PerformanceBudget {
     static let defaultRuns = 5
 
-    /// Returns the fastest of `runs` timed calls of `operation`, in milliseconds.
-    static func fastestMilliseconds<Fixture>(
+    /// Returns the smallest process CPU time, in milliseconds, of `runs`
+    /// calls of `operation`.
+    @MainActor
+    static func fastestCPUMilliseconds<Fixture>(
         runs: Int = defaultRuns,
         setUp: () throws -> Fixture,
         _ operation: (Fixture) async throws -> Void
     ) async rethrows -> Double {
         precondition(runs > 0)
-        let clock = ContinuousClock()
-        var fastest = Duration.zero
-        for run in 0..<runs {
+        var fastest = UInt64.max
+        for _ in 0..<runs {
             let fixture = try setUp()
-            let start = clock.now
+            let start = clock_gettime_nsec_np(CLOCK_PROCESS_CPUTIME_ID)
             try await operation(fixture)
-            let elapsed = clock.now - start
-            if run == 0 || elapsed < fastest {
-                fastest = elapsed
-            }
+            fastest = min(fastest, clock_gettime_nsec_np(CLOCK_PROCESS_CPUTIME_ID) - start)
         }
-        let parts = fastest.components
-        return Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1e15
+        return Double(fastest) / 1_000_000
     }
 }
