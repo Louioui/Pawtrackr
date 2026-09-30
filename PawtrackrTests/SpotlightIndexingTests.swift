@@ -508,12 +508,34 @@ final class SpotlightIndexingTests: XCTestCase {
         container.mainContext.insert(client)
 
         let index = RecordingSpotlightIndex()
+        let cleared = expectation(description: "index cleared")
+        let probed = expectation(description: "probe reached the index")
+        index.onCall = { call in
+            switch call {
+            case .deleteAll: cleared.fulfill()
+            case .delete: probed.fulfill()
+            case .index: break
+            }
+        }
         let indexer = makeIndexer(index, debounce: .milliseconds(150))
         indexer.applyPrivacyPolicy(allowsIndexing: true)
         indexer.scheduleIndex(client: client)
         indexer.removeAllItems()
-        try await Task.sleep(for: .milliseconds(400))
+        await fulfillment(of: [cleared], timeout: Self.indexTimeout)
 
-        XCTAssertEqual(index.calls, [.deleteAll], "A debounced edit must not re-add a wiped client.")
+        // A fixed sleep alone wasn't proof: on a starved CI queue the wipe
+        // itself hadn't run yet. Once the debounce has passed, the edit's
+        // flush is already queued, so a removal queued now runs after it and
+        // everything the flush would send is recorded before the probe.
+        try await Task.sleep(for: .milliseconds(300))
+        let probeID = UUID()
+        indexer.removePetFromIndex(petID: probeID)
+        await fulfillment(of: [probed], timeout: Self.indexTimeout)
+
+        XCTAssertEqual(
+            index.calls,
+            [.deleteAll, .delete([SpotlightIdentifier.pet(probeID).rawValue])],
+            "A debounced edit must not re-add a wiped client."
+        )
     }
 }
