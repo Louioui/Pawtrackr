@@ -13,7 +13,6 @@ final class DaySummary {
     #Index<DaySummary>([\.day])
 
     // Start-of-day (00:00) in the current calendar/timezone when computed
-    // Defaults for CloudKit compatibility.
     var day: Date = Date()
     var revenue: Decimal = Decimal.zero
     var visitCount: Int = 0

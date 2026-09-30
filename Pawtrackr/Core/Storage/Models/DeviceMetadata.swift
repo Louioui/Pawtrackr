@@ -2,8 +2,7 @@
 //  DeviceMetadata.swift
 //  Pawtrackr
 //
-//  Tracks device-specific info synced across the iCloud account.
-//  Allows owners to see which devices (Reception iPad, Groomer iPhone) are active.
+//  Legacy metadata retained so existing stores remain compatible.
 //
 
 import Foundation
@@ -11,9 +10,6 @@ import SwiftData
 
 @Model
 final class DeviceMetadata {
-    // Non-optional properties have defaults — required by CloudKit-backed
-    // SwiftData. Uniqueness is NOT enforced across CloudKit replicas, so the
-    // upsert path in CloudKitMonitor dedupes by deviceID instead.
 
     /// Matches DeviceIdentity.currentID
     var deviceID: UUID = UUID()
@@ -26,8 +22,6 @@ final class DeviceMetadata {
 
     /// OS version
     var osVersion: String = ""
-
-    /// Last time this specific device pushed an update to iCloud
     var lastSyncAt: Date = Date()
 
     init(deviceID: UUID, name: String, model: String, osVersion: String) {

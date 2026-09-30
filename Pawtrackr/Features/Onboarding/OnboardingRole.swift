@@ -25,7 +25,7 @@ enum OnboardingRole: String, CaseIterable, Identifiable, Codable, Sendable {
         case .ownerManager:
             return AppLocalization.localized(
                 "onboarding.role.owner.subtitle",
-                value: "Setup, pricing, reports, backups, and iCloud protection."
+                value: "Setup, pricing, reports, and local data exports."
             )
         case .frontDeskGroomer:
             return AppLocalization.localized(

@@ -2,6 +2,17 @@ import XCTest
 @testable import Pawtrackr
 
 final class SettingsAdaptiveLayoutTests: XCTestCase {
+    func testLegacyCloudSettingsRequestsDoNotOpenRemovedSections() {
+        for removedSection in ["icloud", "devices"] {
+            let request = Notification(name: .selectNavigationItem, object: nil, userInfo: [
+                NavigationSelectionKey.item.rawValue: NavigationItem.settings.rawValue,
+                NavigationSelectionKey.settingsSection.rawValue: removedSection
+            ])
+            XCTAssertEqual(request.requestedNavigationItem, .settings)
+            XCTAssertNil(request.requestedSettingsSection)
+        }
+    }
+
     func testCompactSettingsDetailUsesTighterPaddingAndFitsAvailableWidth() {
         let width: CGFloat = 460
 

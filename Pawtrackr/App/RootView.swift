@@ -16,11 +16,9 @@ struct RootView: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(EntitlementStore.self) private var entitlements
     @Query private var businessConfigs: [BusinessConfig]
-    @State private var cloudKitMonitor = CloudKitMonitor.shared
     @State private var showOnboarding = false
     @State private var didEvaluateOnboarding = false
     @State private var didRunStartupMaintenance = false
-    @State private var showFirstSyncGate = false
     @State private var bypassLockForCurrentSession = false
     @State private var showPrivacyScreen = false
     @State private var showWhatIsNew = false
@@ -96,15 +94,10 @@ struct RootView: View {
             .interactiveDismissDisabled(true)
         }
         .task {
-            UbiquitousSettingsStore.shared.start(appSettings: appSettings)
             consumeRestoreResult()
             if restoreResultMessage == nil {
                 evaluateWhatIsNew()
             }
-            // Show the first-sync gate exactly once: when iCloud is signed in
-            // and the user has never seen a successful import yet. It auto-times
-            // out after 30s so a stuck account never blocks the user.
-            updateFirstSyncGate(for: cloudKitMonitor.accountState)
             evaluateOnboardingIfReady()
             runStartupMaintenanceIfReady()
         }
@@ -130,29 +123,13 @@ struct RootView: View {
                 break
             }
         }
-        .onChange(of: cloudKitMonitor.accountState) { _, state in
-            updateFirstSyncGate(for: state)
-            evaluateOnboardingIfReady()
-            runStartupMaintenanceIfReady()
-        }
-        .onChange(of: cloudKitMonitor.firstSyncCompleted) { _, completed in
-            if completed {
-                showFirstSyncGate = false
-            }
-            evaluateOnboardingIfReady()
-            runStartupMaintenanceIfReady()
-        }
         .onChange(of: shouldShowLaunchSubscriptionPaywall) { _, locked in
             if locked {
                 showWhatIsNew = false
-                showFirstSyncGate = false
             }
         }
         .onChange(of: onboardingIncomplete) { _, incomplete in
-            // A returning user's setup-complete BusinessConfig imported from iCloud
-            // while they were on the Welcome screen. Adopt it: dismiss onboarding so
-            // they don't re-onboard or create a duplicate config, and let the normal
-            // lock gate take over.
+            // Adopt a completed local setup if it changes while Welcome is open.
             if !incomplete, showOnboarding {
                 showOnboarding = false
             }
@@ -161,33 +138,10 @@ struct RootView: View {
     }
 
     private var mainShell: some View {
-        ZStack(alignment: .top) {
-            VStack(spacing: 0) {
-                CloudKitAccountBanner()
-                    .animation(.easeInOut(duration: 0.25), value: cloudKitMonitor.accountState)
-                DataSafetyBannerHost(onReviewRestore: presentStoreRestore)
-                ContentView()
-            }
-            if showFirstSyncGate {
-                FirstSyncGateView(isPresented: $showFirstSyncGate)
-                    .transition(.opacity)
-            }
+        VStack(spacing: 0) {
+            DataSafetyBannerHost(onReviewRestore: presentStoreRestore)
+            ContentView()
         }
-        .animation(.easeInOut(duration: 0.25), value: showFirstSyncGate)
-    }
-
-    private func updateFirstSyncGate(for accountState: CloudKitMonitor.AccountState) {
-        guard !AppRuntime.isUITesting else { return }
-        // Never show the "restoring from iCloud" splash while onboarding is up or
-        // pending — a new/reinstalling user sees the Welcome flow immediately and
-        // the gate would only flash behind it.
-        guard !onboardingIncomplete, !showOnboarding else { return }
-        // A local restore cleared first sync, but the clients on screen came
-        // from this device; "Restoring your data from iCloud…" would say
-        // otherwise. The first-sync wait itself still runs underneath.
-        guard !cloudKitMonitor.restoredLocalBackupThisLaunch else { return }
-        guard accountState.isAvailable, !cloudKitMonitor.firstSyncCompleted else { return }
-        showFirstSyncGate = true
     }
 
     private func evaluateWhatIsNew() {
@@ -208,25 +162,7 @@ struct RootView: View {
         UserDefaults.standard.set(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, forKey: "lastSeenVersion")
     }
 
-    private var canProceedPastFirstSync: Bool {
-        if cloudKitMonitor.firstSyncCompleted { return true }
-        switch cloudKitMonitor.accountState {
-        case .unknown:
-            return false
-        case .available:
-            return false
-        case .noAccount, .restricted, .temporarilyUnavailable, .couldNotDetermine:
-            return true
-        }
-    }
-
     private func evaluateOnboardingIfReady() {
-        // Onboarding display is intentionally NOT gated on CloudKit first-sync:
-        // a brand-new user must see the Welcome screen immediately rather than
-        // waiting up to 30s for an empty iCloud zone to settle. The first-sync
-        // data-safety invariant is enforced at the onboarding COMMIT instead
-        // (OnboardingViewModel.finish awaits CloudKitMonitor.awaitFirstSyncSettled),
-        // and a returning user's synced config auto-dismisses onboarding below.
         guard !didEvaluateOnboarding else { return }
         didEvaluateOnboarding = true
         if !businessConfigs.contains(where: \.isSetupComplete) {
@@ -235,7 +171,7 @@ struct RootView: View {
     }
 
     private func runStartupMaintenanceIfReady() {
-        guard canProceedPastFirstSync, !didRunStartupMaintenance else { return }
+        guard !didRunStartupMaintenance else { return }
         didRunStartupMaintenance = true
         guard !AppRuntime.isUITesting else { return }
 
@@ -250,9 +186,7 @@ struct RootView: View {
             DataMigrations.backfillLoyaltyLedger(in: backgroundContext)
             SummaryUpdater.rebuildAllSummaries(in: backgroundContext)
             DataSafetyMonitor.evaluateClientStoreState(in: backgroundContext)
-            // After the first iCloud import, so a new device indexes the
-            // downloaded book. Clears the index if App Lock forbids it, and
-            // rebuilds it once when the item format changes.
+            // Reconcile the local index and respect App Lock before indexing.
             await SpotlightIndexer.shared.reconcileAtLaunch(container: container)
         }
     }
@@ -301,7 +235,6 @@ struct RootView: View {
     private func dismissLaunchSubscriptionPaywall() {
         didDismissLaunchSubscriptionPaywall = true
         evaluateWhatIsNew()
-        updateFirstSyncGate(for: cloudKitMonitor.accountState)
     }
 
     private var onboardingIncomplete: Bool {
@@ -329,9 +262,8 @@ private struct StoreRestoreRequest: Identifiable {
 
 /// Owns the data-safety @AppStorage reads so a UserDefaults write re-renders
 /// only this banner. When RootView held them, every write rebuilt the whole
-/// shell and the onboarding cover — including CloudKitMonitor's writes on each
-/// sync event — and a view model that wrote its draft while being built looped
-/// forever on a blank screen.
+/// shell and the onboarding cover. A view model that wrote its draft while
+/// being built could otherwise loop forever on a blank screen.
 private struct DataSafetyBannerHost: View {
     let onReviewRestore: () -> Void
 

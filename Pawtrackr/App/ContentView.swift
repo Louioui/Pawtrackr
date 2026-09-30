@@ -323,8 +323,7 @@ struct ContentView: View {
     private func currentWalkthroughContext() -> WalkthroughTourContext {
         WalkthroughTourContext.resolve(
             in: modelContext,
-            isPINSet: appSettings.isPINSet,
-            backupStatus: CloudKitMonitor.shared.backupStatus
+            isPINSet: appSettings.isPINSet
         )
     }
 
@@ -344,16 +343,6 @@ struct ContentView: View {
         guard walkthrough.isActive, let step else {
             closeWalkthroughPresentationIfNeeded()
             return
-        }
-
-        // The tour's context was read when it started. By the iCloud stop
-        // the backup status may have changed, so its line is read again:
-        // "Backed up as of…" only while iCloud has confirmed an upload.
-        if step.id == WalkthroughStepID.iCloud {
-            walkthrough.updateCoachTip(
-                WalkthroughController.iCloudTip(for: CloudKitMonitor.shared.backupStatus),
-                forStepID: step.id
-            )
         }
 
         if let surface = step.surface {
@@ -516,7 +505,7 @@ struct ContentView: View {
         }
 
         // Resolve the UUID off the main thread. These fetches fire on cold launch alongside
-        // CloudKit warmup, and the original sync path could perceptibly stall the first
+        // Store warmup, and the original fetch path could perceptibly stall the first
         // frame. Background context + PersistentIdentifier hand-off matches the pattern
         // used in ClientDetailViewModel.fetchVisitsAsync and DashboardViewModel.fetchChecklistStatus.
         let container = modelContext.container
@@ -645,39 +634,15 @@ struct ContentView: View {
         Group {
             #if os(macOS)
             splitView
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ecosystemStatusInset
-                }
             #else
             if usesCompactTabNavigation {
-                // On iPhone the TabView already owns the bottom safe area for
-                // its tab bar; a bottom safe-area-inset here overlaps with the
-                // tab bar and swallows taps on the middle tabs (and on
-                // anything near the bottom of the scrollable content, like
-                // the active-session row's checkout button). Sync state is
-                // already surfaced in the dashboard toolbar's CloudKitStatusView
-                // and the top-of-screen CloudKitAccountBanner, so the bottom
-                // strip is dropped on compact.
                 tabView
             } else {
                 splitView
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        ecosystemStatusInset
-                    }
             }
             #endif
         }
         .preferredColorScheme(appSettings.preferredColorScheme.swiftUIScheme)
-    }
-
-    private var ecosystemStatusInset: some View {
-        HStack {
-            Spacer(minLength: 0)
-            EcosystemStatusBar()
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
     }
 
     private var tabView: some View {
@@ -896,7 +861,7 @@ struct ContentView: View {
             systemImage: "exclamationmark.triangle.fill",
             description: Text(NSLocalizedString(
                 "content.missing_record_message",
-                value: "This record may have been deleted or is still syncing. Return to the list and try again.",
+                value: "This record may have been deleted. Return to the list and try again.",
                 comment: ""
             ))
         )

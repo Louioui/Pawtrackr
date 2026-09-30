@@ -17,7 +17,6 @@ final class Pet {
     #Index<Pet>([\.createdAt], [\.name])
 
     // MARK: - Identity & Timestamps
-    // NOTE: All non-optional properties have defaults so CloudKit can rehydrate
     // partial records. Defaults must be fully qualified (the @Model macro
     // can't resolve `.now` / `.dog` / etc.). App init paths always overwrite.
     var uuid: UUID = UUID()
@@ -32,7 +31,6 @@ final class Pet {
     // themselves. A `Codable` enum stored directly becomes a SwiftData "composite
     // attribute" that fatally and uncatchably aborts every `[Pet]` fetch (which
     // back `@Query`-driven UI) if any record holds an undecodable value — e.g. a
-    // CloudKit sync from a build with a different case set. Raw String + a
     // `@Transient` view is decode-crash-proof (same pattern as `behaviorTags`).
     var speciesRaw: String = Species.dog.rawValue
     var genderRaw: String = PetGender.male.rawValue
@@ -443,7 +441,7 @@ final class Pet {
 
     func setPhotoData(_ data: Data?) {
         if let data = data {
-            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.pet_photo", value: "pet profile photo"))
+            photoData = LocalMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("media.pet_photo", value: "pet profile photo"))
             updateThumbnail()
         } else {
             photoData = nil
@@ -469,7 +467,7 @@ final class Pet {
         }
         // Downsample to a small thumbnail for high-performance list rendering.
         #if canImport(UIKit) || canImport(AppKit)
-        thumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
+        thumbnailData = LocalMediaPolicy.optimizedThumbnailData(data)
         #endif
     }
 

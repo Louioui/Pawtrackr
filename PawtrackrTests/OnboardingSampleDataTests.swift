@@ -62,7 +62,7 @@ final class OnboardingSampleDataTests: XCTestCase {
     }
 
     func testSamplesAreNotAddedWhenABusinessProfileAlreadyExists() async throws {
-        // A profile iCloud delivered for an existing salon, not yet marked set up.
+        // An existing local salon profile that is not yet marked set up.
         context.insert(BusinessConfig(name: "Harbor Grooming"))
         try context.save()
 
@@ -76,10 +76,6 @@ final class OnboardingSampleDataTests: XCTestCase {
         try await assertFinishAddsNoSamples(expecting: .skip(.salonHasData), expectedClients: 1)
     }
 
-    func testSamplesAreNotAddedWhileICloudIsStillChecking() async throws {
-        try await assertFinishAddsNoSamples(expecting: .skip(.iCloudStillChecking), iCloud: .stillChecking)
-    }
-
     func testSamplesAreNotAddedWhenABackupHoldsTheUsersClients() async throws {
         try await assertFinishAddsNoSamples(expecting: .skip(.backupFound), restorableClients: 4)
     }
@@ -88,10 +84,6 @@ final class OnboardingSampleDataTests: XCTestCase {
         let viewModel = makeViewModel(settings: AppSettings())
         XCTAssertEqual(viewModel.sampleDataAvailability, .seed)
 
-        viewModel.iCloudStateProvider = { .stillChecking }
-        XCTAssertEqual(viewModel.sampleDataAvailability, .skip(.iCloudStillChecking))
-
-        viewModel.iCloudStateProvider = { .off }
         viewModel.restorableClientCount = 2
         XCTAssertEqual(viewModel.sampleDataAvailability, .skip(.backupFound))
     }
@@ -135,7 +127,6 @@ final class OnboardingSampleDataTests: XCTestCase {
 
     private func assertFinishAddsNoSamples(
         expecting decision: SampleDataSeedPolicy.Decision,
-        iCloud: SampleDataSeedPolicy.ICloudState = .off,
         restorableClients: Int = 0,
         expectedClients: Int = 0,
         file: StaticString = #filePath,
@@ -143,7 +134,6 @@ final class OnboardingSampleDataTests: XCTestCase {
     ) async throws {
         let settings = AppSettings()
         let viewModel = makeViewModel(settings: settings)
-        viewModel.iCloudStateProvider = { iCloud }
         viewModel.restorableClientCount = restorableClients
 
         let task = await viewModel.finish(seedSampleData: true) { }
@@ -164,7 +154,6 @@ final class OnboardingSampleDataTests: XCTestCase {
 
     private func makeViewModel(settings: AppSettings) -> OnboardingViewModel {
         let viewModel = OnboardingViewModel(modelContext: context, appSettings: settings)
-        viewModel.iCloudStateProvider = { .off }
         viewModel.name = "Harbor Grooming"
         viewModel.pinSkipped = true
         return viewModel

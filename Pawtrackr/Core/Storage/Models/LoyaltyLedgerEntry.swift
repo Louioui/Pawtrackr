@@ -7,7 +7,6 @@
 //
 //  Like CheckoutTransaction, entries link to their client/visit by UUID —
 //  no SwiftData relationship — so the audit history survives cascade
-//  deletes and never participates in CloudKit relationship repair.
 //
 
 import Foundation
@@ -18,8 +17,7 @@ final class LoyaltyLedgerEntry {
     #Index<LoyaltyLedgerEntry>([\.clientUUID, \.createdAt])
 
     // MARK: - Identity & Timestamps
-    // NOTE: Non-optional properties have defaults so CloudKit can rehydrate
-    // partial records. App init paths always overwrite these.
+    // Initializers overwrite these persisted defaults when creating records.
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -39,8 +37,6 @@ final class LoyaltyLedgerEntry {
     var balanceAfter: Int?
     /// Human context: reward title, adjustment note, or the pet's name for earns.
     var reason: String?
-
-    // MARK: - Kind (raw string storage; Codable enums crash @Query on bad CloudKit values)
     var kindRaw: String = Kind.earned.rawValue
 
     enum Kind: String, CaseIterable, Sendable {

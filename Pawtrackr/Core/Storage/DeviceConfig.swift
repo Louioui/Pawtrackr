@@ -50,10 +50,10 @@ struct DeviceConfig {
     }
 
     static var imageMaxDimension: CGFloat? {
-        CloudMediaPolicy.fullImageMaxDimension
+        LocalMediaPolicy.fullImageMaxDimension
     }
 
     static var jpegQuality: CGFloat {
-        CloudMediaPolicy.jpegQuality
+        LocalMediaPolicy.jpegQuality
     }
 }

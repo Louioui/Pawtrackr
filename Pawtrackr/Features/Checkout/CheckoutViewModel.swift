@@ -737,7 +737,7 @@ final class CheckoutViewModel {
             #endif
         } catch {
             Logger.checkout.error("CheckoutViewModel: Persistence failed - \(error.localizedDescription)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_checkout", value: "saving the checkout"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
             let appErr = AppError.database(String(format: AppLocalization.localized("checkout.error.save_failed_fmt", value: "Persistence failed: %@"), error.localizedDescription))
             state = .failed(appErr)
             appError = appErr

@@ -19,11 +19,6 @@ import AppKit
 @main
 struct PawtrackrApp: App {
     static let lastInitErrorKey = AppStoreBootstrap.lastInitErrorKey
-    /// True while launches keep falling back to local-only because CloudKit
-    /// mirroring wouldn't start. CloudKitMonitor shows the red local-only
-    /// banner from the launch's mode; this key feeds the support reports.
-    static let cloudKitFallbackActiveKey = AppStoreBootstrap.cloudKitFallbackActiveKey
-
     let container: ModelContainer?
     private var scheduledTasks: ScheduledTasks?
     let dataStore: DataStoreService?
@@ -36,7 +31,7 @@ struct PawtrackrApp: App {
     @State private var entitlements = EntitlementStore()
     @AppStorage(AppSettingsKeys.appLanguageOverride) private var appLanguageOverrideRaw = AppLanguageOverride.system.rawValue
 
-    // Platform AppDelegate for silent CloudKit pushes.
+    // Platform lifecycle hooks for maintenance and Dock re-opening.
     #if canImport(UIKit) && !targetEnvironment(macCatalyst)
     @UIApplicationDelegateAdaptor(PawtrackrAppDelegate.self) private var appDelegate
     #elseif canImport(AppKit)
@@ -67,15 +62,10 @@ struct PawtrackrApp: App {
             return
         }
 
-        // Store-file work, the DEBUG schema initializer and the one container
+        // Store-file work and the one local container
         // this process opens. App Intents share the same outcome.
         let bootstrap = AppStoreBootstrap.shared()
         let inMemory = bootstrap.isInMemory
-        let syncMode = bootstrap.syncMode
-        // Before any view mounts, so the first frame already says whether
-        // iCloud backup is running.
-        CloudKitMonitor.shared.configure(mode: syncMode, restoredLocalBackup: bootstrap.restoredLocalBackup)
-
         if let localContainer = bootstrap.container {
             if isUITesting {
                 try? UITestDataSeeder.seedIfNeeded(in: localContainer.mainContext)
@@ -110,42 +100,9 @@ struct PawtrackrApp: App {
         }
 
         // 3. Start side effects AFTER full initialization
-        if let localContainer = initialContainer {
-            if inMemory {
-                Task { @MainActor in
-                    CloudKitMonitor.shared.markFirstSyncCompleted()
-                }
-            } else {
+        if initialContainer != nil {
+            if !inMemory {
                 initialTasks?.start()
-
-                switch syncMode {
-                case .mirroring:
-                    // Start the CloudKit monitor on launch so the UI gets the
-                    // earliest possible signal about account/sync state.
-                    let busForStart = eventBus
-                    Task { @MainActor in
-                        CloudKitMonitor.shared.start(modelContainer: localContainer, eventBus: busForStart)
-                    }
-
-                    // Register for silent CloudKit pushes.
-                    #if canImport(UIKit) && !targetEnvironment(macCatalyst)
-                    DispatchQueue.main.async {
-                        UIApplication.shared.registerForRemoteNotifications()
-                    }
-                    #elseif canImport(AppKit)
-                    DispatchQueue.main.async {
-                        NSApplication.shared.registerForRemoteNotifications()
-                    }
-                    #endif
-                case .localOnlyFallback, .disabled:
-                    // No mirroring delegate to watch, but the account and
-                    // network rows must still be real, and there is no
-                    // first iCloud import to wait for.
-                    Task { @MainActor in
-                        CloudKitMonitor.shared.startStatusObserversOnly()
-                        CloudKitMonitor.shared.markFirstSyncCompleted()
-                    }
-                }
 
                 // Fetch remote configuration
                 Task {
@@ -164,18 +121,8 @@ struct PawtrackrApp: App {
             // Access UserDefaults directly to avoid using StateObject before it is installed on a view
             let symbol = UserDefaults.standard.string(forKey: "currencySymbol") ?? "$"
 
-            if inMemory {
-                Task { @MainActor in
-                    Formatters.updateCurrencySymbol(symbol)
-                }
-            } else {
-                Task.detached(priority: .userInitiated) {
-                    let ctx = ModelContext(localContainer)
-                    await MainActor.run {
-                        Formatters.updateCurrencySymbol(symbol)
-                    }
-                    SummaryUpdater.rebuildAllSummaries(in: ctx)
-                }
+            Task { @MainActor in
+                Formatters.updateCurrencySymbol(symbol)
             }
         }
     }

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
@@ -82,7 +83,7 @@ struct RecentHistoryView: View {
                 viewModel?.fetchVisits()
             } catch {
                 HapticManager.notify(.error)
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_visit_history", value: "deleting the visit history"))
+                Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "RecentHistory").error("Deleting visit history failed: \(error.localizedDescription, privacy: .public)")
                 viewModel?.appError = .database(error.localizedDescription)
             }
         }

@@ -439,7 +439,7 @@ enum SpotlightIndexPlan {
         }
         // Lock turned off (or the PIN went away) while running: rebuild now.
         // The first publish of a launch leaves rebuilding to the launch check,
-        // which runs once the store and the first iCloud import are ready.
+        // which runs once the local store is ready.
         return previous == false ? .rebuild : .none
     }
 

@@ -14,9 +14,7 @@ import SwiftData
 @Model
 final class VisitItem {
     // MARK: - Properties
-    // NOTE: Do not use @Attribute(.unique) — CloudKit-backed SwiftData stores reject
     // unique constraints. Identity is enforced by the SwiftData persistentModelID.
-    // Non-optional properties have defaults for CloudKit compatibility.
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()

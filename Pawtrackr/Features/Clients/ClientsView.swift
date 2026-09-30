@@ -101,10 +101,6 @@ struct ClientsView: View {
                 }
                 #endif
 
-                ToolbarItem(placement: .primaryAction) {
-                    CloudKitStatusView()
-                }
-
                 #if os(macOS)
                 ToolbarItem(placement: .automatic) {
                     MacToolbarSearchField(
@@ -126,7 +122,6 @@ struct ClientsView: View {
             }
             .refreshable {
                 await MainActor.run { viewModel?.fetchClients() }
-                await CloudKitMonitor.shared.forceSync()
             }
             .navigationTitle(NSLocalizedString("clients.title", value: "Client Center", comment: ""))
             #if os(iOS)

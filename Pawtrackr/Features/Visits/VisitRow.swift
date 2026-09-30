@@ -97,9 +97,6 @@ struct VisitRow: View {
                 Label(NSLocalizedString("visit.photos", comment: ""), systemImage: "photo.on.rectangle")
             }
             Spacer()
-
-            // No per-visit iCloud badge: SwiftData doesn't expose whether a
-            // record was exported, and the old badge turned green on any
             // import, telling groomers visits were backed up when they weren't.
             // Backup status lives in the toolbar icon and Settings.
 

@@ -19,6 +19,9 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
         ], timeout: 6)
 
         XCTAssertTrue(sectionsVisible, "Security and export controls should be present on direct Settings launch.")
+        XCTAssertFalse(app.buttons["settings.section.icloud"].exists)
+        XCTAssertFalse(app.buttons["settings.section.devices"].exists)
+        XCTAssertFalse(app.staticTexts["iCloud"].exists)
     }
 
     func testDisableAppLockConfirmationCanCancel() throws {
@@ -59,6 +62,7 @@ final class SettingsQualityControlUITests: QualityControlUITestCase {
 
         XCTAssertTrue(waitUntilHittable(app.buttons["settings.exportClients"], timeout: 6))
         XCTAssertTrue(waitUntilHittable(app.buttons["settings.exportVisits"], timeout: 6))
+        XCTAssertTrue(waitUntilHittable(app.buttons["settings.restoreBackup"], timeout: 6))
     }
 
     private func openSettingsSection(identifier: String, title: String) {

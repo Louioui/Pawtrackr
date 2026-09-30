@@ -93,10 +93,10 @@ final class StoreUpgradeRegressionTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Same shape as the app's container, minus CloudKit (tests have no account).
+    /// Uses the same local configuration as the app at an isolated fixture URL.
     private func makeContainer(at storeURL: URL) throws -> ModelContainer {
         let schema = Schema(PawtrackrSchema.models)
-        let configuration = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        let configuration = LocalStoreConfiguration.make(schema: schema, url: storeURL)
         return try ModelContainer(for: schema, configurations: [configuration])
     }
 

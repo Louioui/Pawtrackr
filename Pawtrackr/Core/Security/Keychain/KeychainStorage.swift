@@ -4,7 +4,7 @@
 //
 //  Minimal Keychain wrapper for short secrets (e.g. the app PIN).
 //  Stored with kSecAttrAccessibleWhenUnlockedThisDeviceOnly so the value
-//  doesn't sync via iCloud Keychain and isn't accessible until first unlock.
+//  stays on this device and isn't accessible until first unlock.
 //
 
 import Foundation

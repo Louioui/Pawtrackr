@@ -82,7 +82,7 @@ enum AppRuntime {
     }
 
     /// True when the process was launched by XCTest (unit or UI test). Used by
-    /// PawtrackrApp to avoid opening the production CloudKit-backed disk store
+    /// PawtrackrApp to avoid opening the production disk store
     /// during tests, which otherwise registers a second SwiftData store and can
     /// invalidate model instances created in a test's in-memory container.
     static var isRunningTests: Bool {
@@ -93,20 +93,11 @@ enum AppRuntime {
     }
 
     /// True when the host app should keep persistence in-memory instead of
-    /// opening the production CloudKit-backed disk store.
+    /// opening the production disk store.
     static var prefersInMemoryStore: Bool {
         let env = ProcessInfo.processInfo.environment
         return isUITesting
             || env[inMemoryStoreEnvironmentKey] == "1"
-    }
-
-    /// True when this launch should talk to iCloud-backed sync services.
-    ///
-    /// Real app launches keep iCloud sync enabled. Tests and in-memory runs stay
-    /// local-only so they do not open a CloudKit-backed store in the test host.
-    static var allowsICloudSync: Bool {
-        guard !isRunningTests, !prefersInMemoryStore else { return false }
-        return true
     }
 
     /// Current UI-test launch scenario (e.g. "empty", "loaded", "error").
@@ -119,6 +110,5 @@ enum AppRuntime {
         case `default` = ""
         case empty
         case heavyLoad = "heavy_load"
-        case syncError = "sync_error"
     }
 }

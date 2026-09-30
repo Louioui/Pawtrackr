@@ -494,14 +494,9 @@ struct OnboardingView: View {
                     restoreFoundCard(restoreOffer)
                 }
 
-                // Claims only what the app does: it reports backup status rather
-                // than promising safety, and nothing here is end-to-end
-                // encrypted (no encrypted CloudKit fields, and private-database
-                // fields aren't without Advanced Data Protection).
                 VStack(alignment: .leading, spacing: DS.Spacing.lg) {
-                    featureRow(index: 0, icon: "cloud.fill", title: NSLocalizedString("onboarding.feature.icloud.title", value: "iCloud Sync", comment: ""), subtitle: NSLocalizedString("onboarding.feature.icloud.subtitle_status", value: "When iCloud is on, Pawtrackr syncs to your other devices and shows you when your data is backed up.", comment: ""))
-                    featureRow(index: 1, icon: "lock.fill", title: NSLocalizedString("onboarding.feature.privacy.title", value: "Privacy First", comment: ""), subtitle: NSLocalizedString("onboarding.feature.privacy.subtitle_device", value: "Your clients are saved on your device and sync only through your own iCloud account. You can lock the app with a PIN and Face ID or Touch ID.", comment: ""))
-                    featureRow(index: 2, icon: "chart.bar.fill", title: NSLocalizedString("onboarding.feature.insights.title", value: "Business Insights", comment: ""), subtitle: NSLocalizedString("onboarding.feature.insights.subtitle", value: "Track revenue, service trends, and client loyalty effortlessly.", comment: ""))
+                    featureRow(index: 0, icon: "lock.fill", title: NSLocalizedString("onboarding.feature.privacy.title", value: "Privacy First", comment: ""), subtitle: NSLocalizedString("onboarding.feature.privacy.subtitle_device", value: "Your clients are saved on your device. You can lock the app with a PIN and Face ID or Touch ID.", comment: ""))
+                    featureRow(index: 1, icon: "chart.bar.fill", title: NSLocalizedString("onboarding.feature.insights.title", value: "Business Insights", comment: ""), subtitle: NSLocalizedString("onboarding.feature.insights.subtitle", value: "Track revenue, service trends, and client loyalty effortlessly.", comment: ""))
                 }
                 .padding(.top, DS.Spacing.md)
             }
@@ -914,7 +909,7 @@ struct OnboardingView: View {
             .hairlineBorder(DS.ColorToken.border, cornerRadius: 14)
             .padding(.horizontal, DS.Spacing.xxl)
 
-            // Sample clients go into the real, iCloud-synced store, so they're
+            // Sample clients go into the local store, so they're
             // a choice the user makes, never a default. The rules for when
             // they may be added live in SampleDataSeedPolicy.
             VStack(spacing: DS.Spacing.md) {
@@ -974,8 +969,6 @@ struct OnboardingView: View {
             return NSLocalizedString("onboarding.finish.sample.unavailable_salon", value: "Your salon already has data, so sample clients won't be added.", comment: "")
         case .skip(.backupFound):
             return NSLocalizedString("onboarding.finish.sample.unavailable_backup", value: "This device has a backup of your clients. Restore it instead of adding sample clients.", comment: "")
-        case .skip(.iCloudStillChecking):
-            return NSLocalizedString("onboarding.finish.sample.unavailable_icloud", value: "Checking iCloud for your salon's records. Sample clients become available when the check finishes.", comment: "")
         }
     }
 

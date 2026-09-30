@@ -21,7 +21,6 @@ struct VisitDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Query private var devices: [DeviceMetadata]
     
     let visit: Visit
     private let heroNamespace: Namespace.ID?
@@ -107,7 +106,7 @@ struct VisitDetailView: View {
                     compactDetailLayout
                 }
                 
-                syncMetadataFooter
+                metadataFooter
             }
             .frame(maxWidth: contentMaxWidth ?? .infinity)
             .frame(maxWidth: .infinity)
@@ -128,14 +127,11 @@ struct VisitDetailView: View {
         #endif
     }
 
-    private var syncMetadataFooter: some View {
+    private var metadataFooter: some View {
         HStack {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                let name = devices.first { $0.deviceID == visit.lastModifiedBy }?.name
-                    ?? AppLocalization.localized("common.unknown_device", value: "Unknown Device")
-                Text(String(format: NSLocalizedString("visit.metadata.last_modified_by_fmt", value: "Last modified by %@", comment: ""), name))
-                Text(String(format: NSLocalizedString("visit.metadata.at_fmt", value: "at %@", comment: ""), visit.lastModifiedAt.formatted(date: .abbreviated, time: .shortened)))
+                Text(String(format: NSLocalizedString("common.updated_fmt", value: "Updated %@", comment: ""), visit.lastModifiedAt.formatted(date: .abbreviated, time: .shortened)))
             }
             .font(.caption2)
             .foregroundStyle(.tertiary)

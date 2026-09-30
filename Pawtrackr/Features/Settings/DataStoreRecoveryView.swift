@@ -4,20 +4,9 @@
 //
 //  Shown when the SwiftData container fails to initialize at launch.
 //
-//  The store on disk is almost always intact when this appears: in the 1.0.2
-//  incident it was a migration failure (NSCocoaErrorDomain 134504) that a code
-//  fix resolved. This screen therefore steers users away from anything
-//  destructive. Its old copy promised "Your iCloud data is safe and will
-//  re-download once we reset the local copy" next to a prominent Reset button;
-//  users who tapped it saw every client disappear, because nothing had ever
-//  reached iCloud. Reset now sits under Advanced, behind a confirmation that
-//  says how many clients it moves aside, and it still only archives files.
-//
-//  The screen also shows the one iCloud fact that survives without a
-//  container: when this device last had an upload confirmed. With none, a
-//  failing streak or only an old one, it warns that a reset leaves the app
-//  empty. It warns and doesn't block; export needs the store this screen
-//  can't open.
+//  The store on disk may still be intact after an initialization failure.
+//  Recovery keeps support sharing primary. Advanced reset preserves store
+//  files in an on-device archive before starting an empty database.
 //
 
 import SwiftUI
@@ -25,11 +14,6 @@ import OSLog
 
 struct DataStoreRecoveryView: View {
     @State private var clientsOnDevice: Int?
-    /// This device's upload record and the report lines built from it. Read
-    /// from UserDefaults once: no container exists here, and decoding it on
-    /// every render is waste.
-    @State private var uploadRecord: SyncHealthReducer.State?
-    @State private var evidenceLines: [String] = []
     @State private var showResetConfirmation = false
     @State private var hasReset = false
     @State private var resetDetail: String?
@@ -70,11 +54,6 @@ struct DataStoreRecoveryView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.green)
                     .accessibilityIdentifier("recovery.clientsOnDevice")
-                }
-
-                // Gone after a reset: its warning is about the step just taken.
-                if let uploadRecord, !hasReset {
-                    uploadEvidence(for: uploadRecord)
                 }
 
                 if let detail = lastErrorDetail {
@@ -175,73 +154,23 @@ struct DataStoreRecoveryView: View {
             Text(resetConfirmationMessage)
         }
         .task {
-            uploadRecord = CloudKitMonitor.persistedOrMigratedSyncHealth()
-            evidenceLines = CloudKitMonitor.persistedUploadEvidenceLines() + CloudKitMonitor.recentSyncEventLines()
             clientsOnDevice = await Task.detached(priority: .userInitiated) {
                 Self.clientRowCountInLiveStore()
             }.value
         }
     }
 
-    /// Set by AppStoreBootstrap when the last launch couldn't start iCloud.
-    private static var wasLocalOnly: Bool {
-        UserDefaults.standard.bool(forKey: AppStoreBootstrap.cloudKitFallbackActiveKey)
-    }
-
     private var lastErrorDetail: String? {
         UserDefaults.standard.string(forKey: PawtrackrApp.lastInitErrorKey)
     }
 
-    private func uploadEvidence(for record: SyncHealthReducer.State) -> some View {
-        VStack(spacing: 6) {
-            Label(Self.lastUploadText(for: record), systemImage: "icloud")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if SyncStatusPolicy.lacksRecentUpload(record, isLocalOnlyFallback: Self.wasLocalOnly, now: Date()) {
-                Text(Self.noRecentCopyWarning)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 24)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("recovery.lastUpload")
-    }
-
-    /// "From this device" on purpose: an upload only proves some export
-    /// succeeded here, not that every client reached iCloud.
-    private static func lastUploadText(for record: SyncHealthReducer.State) -> String {
-        guard let uploadedAt = record.lastSuccessfulExportEndedAt else {
-            return AppLocalization.localized(
-                "recovery.last_upload_never",
-                value: "Last confirmed iCloud upload from this device: Never"
-            )
-        }
-        return String(
-            format: AppLocalization.localized(
-                "recovery.last_upload_fmt",
-                value: "Last confirmed iCloud upload from this device: %@"
-            ),
-            uploadedAt.formatted(date: .abbreviated, time: .shortened)
-        )
-    }
-
-    private static var noRecentCopyWarning: String {
-        AppLocalization.localized(
-            "recovery.no_recent_icloud_copy",
-            value: "iCloud does not have a recent copy from this device. Resetting will leave Pawtrackr empty here."
-        )
-    }
-
     private var resetConfirmationMessage: String {
-        var message: String
+        let message: String
         if let clientsOnDevice, clientsOnDevice > 0 {
             message = String(
                 format: AppLocalization.localized(
                     "recovery.reset_confirm.message_fmt",
-                    value: "The %d clients saved on this device will be moved into a backup folder and Pawtrackr will start empty. They only come back on their own if iCloud sync had already uploaded them."
+                    value: "The %d clients saved on this device will be moved into a backup folder and Pawtrackr will start empty. Use Restore from On-Device Backup to bring them back once a fixed version can open them."
                 ),
                 clientsOnDevice
             )
@@ -250,14 +179,6 @@ struct DataStoreRecoveryView: View {
                 "recovery.reset_confirm.message",
                 value: "Your data will be moved into a backup folder on this device and Pawtrackr will start empty."
             )
-        }
-        // The evidence goes where the decision is made, not only on the screen
-        // behind the dialog.
-        if let uploadRecord {
-            message += "\n\n" + Self.lastUploadText(for: uploadRecord)
-            if SyncStatusPolicy.lacksRecentUpload(uploadRecord, isLocalOnlyFallback: Self.wasLocalOnly, now: Date()) {
-                message += "\n\n" + Self.noRecentCopyWarning
-            }
         }
         return message
     }
@@ -270,10 +191,7 @@ struct DataStoreRecoveryView: View {
             "Clients on device: \(clientsOnDevice.map(String.init) ?? "unknown")",
             "Error: \(lastErrorDetail ?? "none recorded")"
         ]
-        // Read from UserDefaults, which works without a container: whether
-        // anything from this device ever reached iCloud decides what a reset
-        // would cost.
-        return (summary + evidenceLines).joined(separator: "\n")
+        return summary.joined(separator: "\n")
     }
 
     private func resetStore() {
@@ -288,8 +206,6 @@ struct DataStoreRecoveryView: View {
                     archive.movedFiles.count
                 ) + "\n" + archive.backupDirectory.lastPathComponent
             UserDefaults.standard.removeObject(forKey: PawtrackrApp.lastInitErrorKey)
-            CloudKitMonitor.resetPersistedSyncStateForLocalStoreReset()
-            CloudKitMonitor.recordLocalStoreResetArchivedFiles(archive.movedFiles.count)
             log.info("Store reset complete; archived \(archive.movedFiles.count) files.")
         } catch {
             resetError = String(format: AppLocalization.localized("recovery.reset_failed", value: "Couldn't reset: %@"), error.localizedDescription)
@@ -348,18 +264,13 @@ struct DataStoreRecoveryView: View {
             moved.append(dest)
         }
 
-        // Written before resetStore clears the sync keys, so it still has the
-        // evidence. A later reset or restore overwrites the preReset copy in
-        // UserDefaults; this file keeps the one for this archive.
-        let manifest = ([
+        let manifest = [
             "Pawtrackr local store recovery archive",
             "Created: \(Date().formatted(date: .complete, time: .standard))",
             "Last init error: \(UserDefaults.standard.string(forKey: PawtrackrApp.lastInitErrorKey) ?? "none")",
             "Archived files:",
-            moved.isEmpty ? "- none" : moved.map { "- \($0.lastPathComponent)" }.joined(separator: "\n"),
-            "",
-            "iCloud evidence for this store at the time of the reset:"
-        ] + CloudKitMonitor.persistedUploadEvidenceLines() + CloudKitMonitor.recentSyncEventLines()).joined(separator: "\n")
+            moved.isEmpty ? "- none" : moved.map { "- \($0.lastPathComponent)" }.joined(separator: "\n")
+        ].joined(separator: "\n")
         try manifest.write(
             to: backupDir.appendingPathComponent("README.txt"),
             atomically: true,

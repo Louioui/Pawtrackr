@@ -24,7 +24,7 @@ enum SampleDataCopy {
         var message = String(
             format: AppLocalization.localized(
                 "sample_data.remove.message_fmt",
-                value: "This deletes the sample clients %@ with their pets, visits and payments, on this device and on your other devices through iCloud. Your own clients aren't touched."
+                value: "This deletes the sample clients %@ with their pets, visits and payments on this device. Your own clients aren't touched."
             ),
             names
         )
@@ -56,10 +56,6 @@ enum SampleDataCopy {
 
     static var loadCaption: String {
         AppLocalization.localized("settings.sample.load_caption", value: "Adds 2 practice clients with pets and visits, and example prices for services that have none, so you can try check-in and checkout. Available while your client list is empty.")
-    }
-
-    static var loadWaitingForICloud: String {
-        AppLocalization.localized("settings.sample.load_icloud", value: "Checking iCloud for your salon's records first. Try again when the check finishes.")
     }
 
     /// A backup on this device holds the user's own clients.

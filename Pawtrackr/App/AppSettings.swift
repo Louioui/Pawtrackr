@@ -31,7 +31,7 @@ enum AppSettingsKeys {
     static let brandColorHex = "brandColorHex"
     static let defaultLaunchTab = "defaultLaunchTab"
     static let appLanguageOverride = "appLanguageOverride"
-    static let optimizeMediaForICloud = CloudMediaPolicy.optimizedMediaDefaultsKey
+    static let optimizeMediaForStorage = LocalMediaPolicy.optimizedMediaDefaultsKey
     static let deviceName = "deviceName"
     static let idleLockMinutes = "idleLockMinutes"
     static let onboardingRole = "onboardingRole"
@@ -169,7 +169,7 @@ final class AppSettings {
         static let brandColorHex = "#6366F1"
         static let defaultLaunchTab = "dashboard"
         static let appLanguageOverride = AppLanguageOverride.system.rawValue
-        static let optimizeMediaForICloud = true
+        static let optimizeMediaForStorage = true
         static let onboardingRole = OnboardingRole.ownerManager.rawValue
     }
 
@@ -195,7 +195,6 @@ final class AppSettings {
                 businessName = limited
             }
             UserDefaults.standard.set(businessName, forKey: AppSettingsKeys.businessName)
-            UbiquitousSettingsStore.shared.push(businessName, forKey: AppSettingsKeys.businessName)
         }
     }
 
@@ -211,7 +210,6 @@ final class AppSettings {
                 currencySymbol = normalized
             }
             UserDefaults.standard.set(currencySymbol, forKey: AppSettingsKeys.currencySymbol)
-            UbiquitousSettingsStore.shared.push(currencySymbol, forKey: AppSettingsKeys.currencySymbol)
         }
     }
 
@@ -284,7 +282,6 @@ final class AppSettings {
         didSet {
             UserDefaults.standard.set(brandColorHex, forKey: AppSettingsKeys.brandColorHex)
             ThemeManager.shared.updateBrandColor(hex: brandColorHex)
-            UbiquitousSettingsStore.shared.push(brandColorHex, forKey: AppSettingsKeys.brandColorHex)
         }
     }
 
@@ -303,9 +300,9 @@ final class AppSettings {
         }
     }
 
-    var optimizeMediaForICloud: Bool {
+    var optimizeMediaForStorage: Bool {
         didSet {
-            UserDefaults.standard.set(optimizeMediaForICloud, forKey: AppSettingsKeys.optimizeMediaForICloud)
+            UserDefaults.standard.set(optimizeMediaForStorage, forKey: AppSettingsKeys.optimizeMediaForStorage)
         }
     }
 
@@ -316,8 +313,6 @@ final class AppSettings {
                 deviceName = limited
             }
             UserDefaults.standard.set(deviceName, forKey: AppSettingsKeys.deviceName)
-            // Notify CloudKitMonitor to push the new name immediately
-            NotificationCenter.default.post(name: .deviceNameDidChange, object: nil)
         }
     }
 
@@ -381,7 +376,7 @@ final class AppSettings {
             AppSettingsKeys.brandColorHex: Defaults.brandColorHex,
             AppSettingsKeys.defaultLaunchTab: Defaults.defaultLaunchTab,
             AppSettingsKeys.appLanguageOverride: Defaults.appLanguageOverride,
-            AppSettingsKeys.optimizeMediaForICloud: Defaults.optimizeMediaForICloud,
+            AppSettingsKeys.optimizeMediaForStorage: Defaults.optimizeMediaForStorage,
             AppSettingsKeys.idleLockMinutes: Defaults.idleLockMinutes,
             AppSettingsKeys.onboardingRole: Defaults.onboardingRole
         ])
@@ -413,7 +408,7 @@ final class AppSettings {
         self.defaultLaunchTab = UserDefaults.standard.string(forKey: AppSettingsKeys.defaultLaunchTab) ?? Defaults.defaultLaunchTab
         let storedLanguageRaw = UserDefaults.standard.string(forKey: AppSettingsKeys.appLanguageOverride) ?? Defaults.appLanguageOverride
         self.appLanguageOverride = AppLanguageOverride(rawValue: storedLanguageRaw) ?? .system
-        self.optimizeMediaForICloud = UserDefaults.standard.bool(forKey: AppSettingsKeys.optimizeMediaForICloud)
+        self.optimizeMediaForStorage = UserDefaults.standard.bool(forKey: AppSettingsKeys.optimizeMediaForStorage)
         let storedOnboardingRole = UserDefaults.standard.string(forKey: AppSettingsKeys.onboardingRole) ?? Defaults.onboardingRole
         self.onboardingRole = OnboardingRole(rawValue: storedOnboardingRole) ?? .ownerManager
         self.tourProgress = Self.loadTourProgress()

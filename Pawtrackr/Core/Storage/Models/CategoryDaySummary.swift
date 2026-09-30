@@ -10,7 +10,6 @@ import SwiftData
 
 @Model
 final class CategoryDaySummary {
-    // Defaults for CloudKit compatibility.
     var day: Date = Date()
     var categoryRaw: String = ""
     var count: Int = 0

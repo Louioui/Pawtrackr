@@ -93,7 +93,7 @@ final actor CheckoutTransactionActor {
             visit.markCheckedOut(total: request.amount, now: endedAt)
             pet.reconcileBehaviorTagsFromCompletedVisits()
             let loyaltyConfig = LoyaltyConfigResolver.snapshot(in: modelContext)
-            let loyaltyClientUUID = LoyaltyCheckoutProcessor.applyEarnings(
+            _ = LoyaltyCheckoutProcessor.applyEarnings(
                 visit: visit,
                 pet: pet,
                 total: request.amount,
@@ -104,38 +104,7 @@ final actor CheckoutTransactionActor {
             
             // 8. Commit
             transaction.markSucceeded(completedAt: endedAt)
-            let changedAt = Date()
             try context.save()
-            let transactionUUID = transaction.uuid
-            await MainActor.run {
-                CloudKitMonitor.shared.recordLocalChange(
-                    AppLocalization.localized("cloudkit.change.completed_checkout", value: "Completed checkout"),
-                    occurredAt: changedAt,
-                    entityName: "CheckoutTransaction",
-                    recordUUID: transactionUUID,
-                    changedKeys: [
-                        "idempotencyKey",
-                        "visitUUID",
-                        "petUUID",
-                        "amount",
-                        "methodRaw",
-                        "statusRaw",
-                        "completedAt",
-                        "updatedAt"
-                    ]
-                )
-            }
-            if let loyaltyClientUUID {
-                await MainActor.run {
-                    CloudKitMonitor.shared.recordLocalChange(
-                        AppLocalization.localized("cloudkit.change.checkout_loyalty_points", value: "Applied checkout loyalty points"),
-                        occurredAt: changedAt,
-                        entityName: "Client",
-                        recordUUID: loyaltyClientUUID,
-                        changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
-                    )
-                }
-            }
             
             // 9. Rebuild Summaries (Off-actor utility)
             SummaryUpdater.rebuildDay(for: endedAt, in: context)
@@ -216,10 +185,10 @@ final actor CheckoutTransactionActor {
     
     private func processImages(before: Data?, after: Data?) async -> (Data?, Data?, Data?, Data?) {
         await Task.detached(priority: .userInitiated) {
-            let b = before.flatMap { CloudMediaPolicy.optimizedFullImageData($0, context: AppLocalization.localized("cloudkit.media.visit_before_photo", value: "visit before photo")) }
-            let bt = before.flatMap { CloudMediaPolicy.optimizedThumbnailData($0) }
-            let a = after.flatMap  { CloudMediaPolicy.optimizedFullImageData($0, context: AppLocalization.localized("cloudkit.media.visit_after_photo", value: "visit after photo")) }
-            let at = after.flatMap  { CloudMediaPolicy.optimizedThumbnailData($0) }
+            let b = before.flatMap { LocalMediaPolicy.optimizedFullImageData($0, context: AppLocalization.localized("media.visit_before_photo", value: "visit before photo")) }
+            let bt = before.flatMap { LocalMediaPolicy.optimizedThumbnailData($0) }
+            let a = after.flatMap  { LocalMediaPolicy.optimizedFullImageData($0, context: AppLocalization.localized("media.visit_after_photo", value: "visit after photo")) }
+            let at = after.flatMap  { LocalMediaPolicy.optimizedThumbnailData($0) }
             return (b, bt, a, at)
         }.value
     }

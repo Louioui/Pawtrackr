@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 // Design tokens for colors/spacing/typography
 import Observation
 
@@ -291,7 +292,6 @@ struct AddPetSheet: View {
 
         do {
             try modelContext.save()
-            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.added_pet", value: "Added pet"))
             // setPhotoData indexed the pet before it had an owner, and
             // assigning client.pets doesn't go through a setter: re-index the
             // saved client and pets so the pet is found by the owner's phone.
@@ -308,7 +308,7 @@ struct AddPetSheet: View {
             client.pets = (client.pets ?? []).filter { $0.persistentModelID != newPet.persistentModelID }
             SpotlightIndexer.shared.removePetFromIndex(petID: newPet.uuid)
             modelContext.delete(newPet)
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.add_pet", value: "adding the pet"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
             appError = .database(NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)")
         }
     }

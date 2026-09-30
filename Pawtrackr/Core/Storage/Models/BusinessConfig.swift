@@ -10,7 +10,6 @@ import SwiftData
 
 @Model
 final class BusinessConfig {
-    // Default required for CloudKit-backed SwiftData stores.
     var name: String = ""
     var email: String?
     var phone: String?

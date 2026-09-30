@@ -19,13 +19,13 @@ import OSLog
 /// - The key is random and stored `ThisDeviceOnly`, so a package can't be
 ///   opened on another device or after a device restore, and a missing key
 ///   silently produces a new one that orphans every older package.
-/// - The store is copied file by file while SwiftData and CloudKit keep
+/// - The store is copied file by file while SwiftData keeps
 ///   writing to it. The lock here is not one SQLite honours, so a checkpoint
 ///   between the main-file and WAL reads can tear the copy.
 /// - Every file and photo is held in memory several times over, and old
 ///   packages are never pruned.
-/// - The package carries CloudKit mirroring metadata, so the only restore it
-///   admits is a store-file swap, which ADR-0004 rules out.
+/// - The raw package requires a store-file swap and cannot merge records
+///   into the open local database.
 ///
 /// A real backup needs a logical export (records by UUID) with a
 /// passphrase-derived key and an insert-only merge; see the client-tools plan,

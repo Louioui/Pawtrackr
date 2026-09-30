@@ -256,8 +256,7 @@ final class SampleDataTests: XCTestCase {
         XCTAssertEqual(defaults.integer(forKey: DataSafetyMonitor.lastKnownClientCountKey), 0,
                        "Only real clients count.")
 
-        // The samples disappear the way another device's removal arrives
-        // through iCloud: plain deletes, no removeSampleData bookkeeping here.
+        // Delete sample rows without removeSampleData bookkeeping.
         for client in try SampleData.sampleClients(in: context) {
             context.delete(client)
         }
@@ -307,15 +306,11 @@ final class SampleDataTests: XCTestCase {
     func testSeedPolicyOnlySeedsAProvablyEmptySalon() {
         let empty = SampleDataSeedPolicy.Inputs(
             userChoseSampleData: true, businessConfigExisted: false,
-            existingClientCount: 0, existingPetCount: 0, iCloud: .settled, restorableClientCount: 0
+            existingClientCount: 0, existingPetCount: 0, restorableClientCount: 0
         )
         XCTAssertEqual(SampleDataSeedPolicy.decide(empty), .seed)
 
         var inputs = empty
-        inputs.iCloud = .off
-        XCTAssertEqual(SampleDataSeedPolicy.decide(inputs), .seed)
-
-        inputs = empty
         inputs.userChoseSampleData = false
         XCTAssertEqual(SampleDataSeedPolicy.decide(inputs), .skip(.notChosen))
 
@@ -335,9 +330,6 @@ final class SampleDataTests: XCTestCase {
         inputs.restorableClientCount = 3
         XCTAssertEqual(SampleDataSeedPolicy.decide(inputs), .skip(.backupFound))
 
-        inputs = empty
-        inputs.iCloud = .stillChecking
-        XCTAssertEqual(SampleDataSeedPolicy.decide(inputs), .skip(.iCloudStillChecking))
     }
 
     // MARK: - Helpers

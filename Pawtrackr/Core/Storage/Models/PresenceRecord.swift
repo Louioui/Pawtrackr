@@ -2,7 +2,8 @@
 //  PresenceRecord.swift
 //  Pawtrackr
 //
-//  Tracks which device is viewing which record in real-time.
+//  Legacy metadata retained for compatibility with existing stores.
+//  The local app does not publish or read device presence.
 //
 
 import Foundation
@@ -10,9 +11,6 @@ import SwiftData
 
 @Model
 final class PresenceRecord {
-    // Non-optional properties have defaults — required by CloudKit-backed
-    // SwiftData. Uniqueness is NOT enforced across CloudKit replicas, so the
-    // upsert path in CloudKitMonitor dedupes by deviceID instead.
 
     /// Matches DeviceIdentity.currentID
     var deviceID: UUID = UUID()

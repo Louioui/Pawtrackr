@@ -12,7 +12,6 @@ import SwiftData
 @Model
 final class Payment {
     // MARK: - Properties
-    // Non-optional properties have defaults for CloudKit compatibility.
 
     /// The payment amount (always non-negative and rounded to 2 decimal places).
     var amount: Decimal = Decimal.zero

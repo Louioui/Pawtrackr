@@ -10,7 +10,6 @@ import SwiftData
 
 @Model
 final class LoyaltyRewardTemplate {
-    // Non-optional defaults keep CloudKit partial records decodable.
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()

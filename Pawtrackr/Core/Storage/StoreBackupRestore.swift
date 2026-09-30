@@ -189,8 +189,8 @@ enum StoreBackupRestore {
     /// reachable from Settings › Data Export.
     ///
     /// Offers are about clients the user no longer has, so a backup only counts
-    /// for the clients the live store is missing — if iCloud already brought
-    /// them back, there's nothing to offer.
+    /// for the clients the live store is missing; records already present
+    /// do not need a restore offer.
     /// - A reset backup is offered whenever it has missing clients: the reset
     ///   is how 1.0.2 users lost theirs, and they often re-onboarded since.
     ///   Not when the current build made it, though: the recovery screen only
@@ -410,13 +410,10 @@ enum StoreBackupRestore {
                 try? fileManager.removeItem(at: archiveURL)
                 throw error
             }
-            // The launch keeps this store's upload record only until the restore
-            // resets it; this README is the copy a later reset can't overwrite.
+            // Keep a record of the files archived before replacing the store.
             try? readme(
                 reason: "Pawtrackr moved this store aside while restoring \(directoryName).",
-                files: moved.map(\.to.lastPathComponent),
-                evidence: CloudKitMonitor.persistedUploadEvidenceLines(defaults: userDefaults)
-                    + CloudKitMonitor.recentSyncEventLines(defaults: userDefaults)
+                files: moved.map(\.to.lastPathComponent)
             ).write(to: archiveURL.appendingPathComponent("README.txt"), atomically: true, encoding: .utf8)
             archive = (archiveName, archiveURL, moved)
         }
@@ -531,15 +528,13 @@ enum StoreBackupRestore {
         ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
     }
 
-    private static func readme(reason: String, files: [String], evidence: [String]) -> String {
-        ([
+    private static func readme(reason: String, files: [String]) -> String {
+        [
             "Pawtrackr store backup",
             "Created: \(Date().formatted(date: .complete, time: .standard))",
             "Reason: \(reason)",
             "Files:",
-            files.isEmpty ? "- none" : files.map { "- \($0)" }.joined(separator: "\n"),
-            "",
-            "iCloud evidence for this store when it was moved aside:"
-        ] + evidence).joined(separator: "\n")
+            files.isEmpty ? "- none" : files.map { "- \($0)" }.joined(separator: "\n")
+        ].joined(separator: "\n")
     }
 }

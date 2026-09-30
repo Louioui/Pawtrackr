@@ -99,18 +99,11 @@ final class OnboardingViewModel {
     /// Welcome screen's restore offer). Sample clients are never added then:
     /// the user should restore their own clients instead.
     var restorableClientCount: Int = 0
-    /// A business profile was already in the store when onboarding bound,
-    /// for example one iCloud delivered for an existing salon.
+    /// A business profile was already in the local store when onboarding bound.
     private(set) var foundExistingBusinessConfig = false
     private(set) var existingClientCountAtBind = 0
     /// The sample-data decision the last finish() made. Read by tests.
     private(set) var lastSampleDataDecision: SampleDataSeedPolicy.Decision?
-    /// Live iCloud state for the sample-data rules. Tests replace it so the
-    /// host's iCloud account can't decide their outcome.
-    @ObservationIgnored var iCloudStateProvider: @MainActor () -> SampleDataSeedPolicy.ICloudState = {
-        SampleDataSeedPolicy.currentICloudState()
-    }
-
     var currencySymbol: String {
         get { currentCurrency }
         set { currentCurrency = newValue }
@@ -191,14 +184,13 @@ final class OnboardingViewModel {
     }
 
     /// What the finish step can offer about sample clients right now. finish()
-    /// decides again with fresh counts after waiting for iCloud.
+    /// decides again with fresh local counts before saving.
     var sampleDataAvailability: SampleDataSeedPolicy.Decision {
         SampleDataSeedPolicy.decide(.init(
             userChoseSampleData: true,
             businessConfigExisted: foundExistingBusinessConfig,
             existingClientCount: existingClientCountAtBind,
             existingPetCount: 0,
-            iCloud: iCloudStateProvider(),
             restorableClientCount: restorableClientCount
         ))
     }
@@ -468,31 +460,17 @@ final class OnboardingViewModel {
             return nil
         }
 
-        // Before writing BusinessConfig, let any pre-existing config syncing down
-        // from iCloud land first. The fetch-first below then UPDATES that imported
-        // config instead of inserting a duplicate (protects a returning user who
-        // reinstalled and tapped through onboarding). For a genuine new user this
-        // returns almost immediately — the launch first-sync watchdog has long
-        // since settled while they filled in the form.
-        if CloudKitMonitor.shared.accountState.isAvailable {
-            await CloudKitMonitor.shared.awaitFirstSyncSettled(timeout: .seconds(5))
-        }
-
         do {
             var descriptor = FetchDescriptor<BusinessConfig>()
             descriptor.fetchLimit = 1
             let existingConfig = try context.fetch(descriptor).first
 
-            // Decide about sample clients BEFORE writing the config, so a
-            // profile iCloud delivered for an existing salon still counts as
-            // "this salon has data". Sample rows upload to every device, so
-            // any doubt means no samples; Settings can add them later.
+            // Check existing records before writing the setup profile.
             let decision = SampleDataSeedPolicy.decide(.init(
                 userChoseSampleData: seedSampleData,
                 businessConfigExisted: existingConfig != nil || foundExistingBusinessConfig,
                 existingClientCount: try context.fetchCount(FetchDescriptor<Client>()),
                 existingPetCount: try context.fetchCount(FetchDescriptor<Pet>()),
-                iCloud: iCloudStateProvider(),
                 restorableClientCount: restorableClientCount
             ))
             lastSampleDataDecision = decision

@@ -1,16 +1,15 @@
 //
-//  CloudMediaPolicy.swift
+//  LocalMediaPolicy.swift
 //  Pawtrackr
 //
-//  Central media sizing policy for CloudKit-backed SwiftData payloads.
+//  Central media sizing policy for local SwiftData photo storage.
 //
 
 import Foundation
 import CoreGraphics
 
-enum CloudMediaPolicy {
-    static let optimizedMediaDefaultsKey = "icloud.optimizeMediaForSync"
-    static let largeAssetWarningBytes = 3 * 1024 * 1024
+enum LocalMediaPolicy {
+    static let optimizedMediaDefaultsKey = "media.optimizeStorage"
 
     static var isOptimizationEnabled: Bool {
         if UserDefaults.standard.object(forKey: optimizedMediaDefaultsKey) == nil {
@@ -34,19 +33,17 @@ enum CloudMediaPolicy {
         return min(DeviceConfig.rawJPEGQuality, 0.82)
     }
 
+    /// Downsamples a photo for bounded local storage and decoding costs.
     static func optimizedFullImageData(_ data: Data, context: String) -> Data? {
         let output = ImageCache.shared.downsampleToData(
             data: data,
             maxDimension: fullImageMaxDimension ?? 1600,
             compressionQuality: jpegQuality
         )
-        let byteCount = output?.count ?? data.count
-        Task { @MainActor in
-            CloudKitMonitor.shared.recordMediaSyncWarningIfNeeded(byteCount: byteCount, context: context)
-        }
         return output
     }
 
+    /// Creates a small preview that can be decoded efficiently in lists.
     static func optimizedThumbnailData(_ data: Data) -> Data? {
         ImageCache.shared.downsampleToData(
             data: data,

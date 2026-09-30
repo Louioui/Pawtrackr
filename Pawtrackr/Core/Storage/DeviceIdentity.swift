@@ -2,7 +2,7 @@
 //  DeviceIdentity.swift
 //  Pawtrackr
 //
-//  Stable per-install identifier used for conflict diagnostics.
+//  Stable per-install identifier used for local record diagnostics.
 //
 
 import Foundation

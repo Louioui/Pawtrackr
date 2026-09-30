@@ -4,7 +4,6 @@ import SwiftData
 
 @Model
 final class User {
-    // Defaults for CloudKit compatibility.
     var uuid: UUID = UUID()
     var name: String = ""
     var email: String = ""

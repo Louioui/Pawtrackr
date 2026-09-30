@@ -207,12 +207,11 @@ final class ClientDetailViewModel {
 
         do {
             try modelContext.save()
-            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.saved_emergency_contact", value: "Saved emergency contact"))
             refreshEmergencyContacts()
             return .saved
         } catch {
             Logger.clientDetail.error("Failed to save emergency contact: \(error.localizedDescription, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_emergency_contact", value: "saving the emergency contact"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
             return .failed(message: String(
                 format: AppLocalization.localized("common.save_failed", value: "Save failed. Please try again.\n\n%@"),
                 error.localizedDescription
@@ -361,20 +360,12 @@ final class ClientDetailViewModel {
             try modelContext.save()
             refreshPets()
 
-            CloudKitMonitor.shared.recordLocalChange(
-                method == "call"
-                    ? AppLocalization.localized("cloudkit.change.outreach_call", value: "Recorded a follow-up call")
-                    : AppLocalization.localized("cloudkit.change.outreach_message", value: "Recorded a follow-up message"),
-                entityName: "Pet",
-                recordUUID: petsToClear.first?.uuid,
-                changedKeys: ["lastAttentionOutreachAt"]
-            )
             NotificationCenter.default.post(name: .serviceDidUpdate, object: nil)
             eventBus.publish(.refreshRequired)
             Logger.clientDetail.info("Cleared needs-attention flag for \(petsToClear.count, privacy: .public) pet(s) after \(method, privacy: .public)")
         } catch {
             appError = .database(error.localizedDescription)
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.record_outreach", value: "recording the follow-up"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
             Logger.clientDetail.error("Failed to record attention outreach: \(String(describing: error))")
         }
     }
@@ -392,7 +383,7 @@ final class ClientDetailViewModel {
                 self.refreshRecentVisits()
             } catch {
                 self.appError = .database(error.localizedDescription)
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.check_in", value: "checking in the pet"))
+                Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
                 Logger.clientDetail.error("Failed to check in: \(String(describing: error))")
             }
         }
@@ -406,7 +397,7 @@ final class ClientDetailViewModel {
                 try await self.visitRepository.saveVisit(visit)
             } catch {
                 self.appError = .database(error.localizedDescription)
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_visit_service", value: "saving the visit service"))
+                Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
                 Logger.clientDetail.error("Failed to add service: \(String(describing: error))")
             }
             self.refreshRecentVisits()
@@ -423,7 +414,7 @@ final class ClientDetailViewModel {
                 self.refreshRecentVisits()
             } catch {
                 self.appError = .database(error.localizedDescription)
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.check_out", value: "checking out the pet"))
+                Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
                 Logger.clientDetail.error("Failed to check out: \(String(describing: error))")
             }
         }

@@ -18,11 +18,11 @@ enum DataPruner {
     static func pruneOldPhotos(
         olderThan days: Int,
         downsampleOnly: Bool = true,
-        pruneSyncedAssets: Bool = false,
+        pruneStoredPhotos: Bool = false,
         in context: ModelContext
     ) {
-        guard pruneSyncedAssets else {
-            Logger.maintenance.info("Skipping photo pruning: visit photos are CloudKit-synced user data, not a local cache.")
+        guard pruneStoredPhotos else {
+            Logger.maintenance.info("Skipping photo pruning: visit photos are stored user data, not a disposable cache.")
             return
         }
 

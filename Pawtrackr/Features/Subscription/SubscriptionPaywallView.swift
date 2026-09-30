@@ -97,7 +97,7 @@ struct SubscriptionPaywallView: View {
                 .fontWeight(.black)
                 .multilineTextAlignment(.center)
 
-            Text(AppLocalization.localized("subscription.paywall.subheadline", value: "Unlock the loyalty engine, multi-device sync, and advanced insights."))
+            Text(AppLocalization.localized("subscription.paywall.subheadline", value: "Unlock the loyalty engine and advanced insights."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -112,11 +112,6 @@ struct SubscriptionPaywallView: View {
                 icon: "heart.text.square.fill", tint: .pink,
                 title: AppLocalization.localized("subscription.paywall.feature.loyalty_title", value: "Automated Loyalty & Rewards"),
                 detail: AppLocalization.localized("subscription.paywall.feature.loyalty_detail", value: "Configurable point rules and a redeemable rewards catalog.")
-            )
-            PaywallFeatureRow(
-                icon: "cloud.fill", tint: .blue,
-                title: AppLocalization.localized("subscription.paywall.feature.sync_title", value: "Multi-Device iCloud Sync"),
-                detail: AppLocalization.localized("subscription.paywall.feature.sync_detail", value: "Your salon data stays unified across all your devices.")
             )
             PaywallFeatureRow(
                 icon: "chart.pie.fill", tint: .green,

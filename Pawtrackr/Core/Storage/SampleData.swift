@@ -14,8 +14,8 @@ import SwiftData
 /// no model has an "is sample" field, and nothing is ever matched by name,
 /// because a real client can share a sample's name.
 ///
-/// Two devices that both loaded samples before syncing hold records with the
-/// same UUIDs, so every lookup here returns all matches, never just the first.
+/// Older stores may hold duplicate sample UUIDs, so every lookup here returns
+/// all matches, never just the first.
 enum SampleData {
     static let avaClientID = UUID(uuidString: "5A3D1E00-0000-4000-8000-00000000C001")!
     static let jordanClientID = UUID(uuidString: "5A3D1E00-0000-4000-8000-00000000C002")!
@@ -111,29 +111,15 @@ enum SampleData {
     }
 }
 
-/// When sample clients may be added. They go into the real, iCloud-mirrored
-/// store and upload to every device of the salon, so they may only go into a
-/// salon that is provably empty. When in doubt the answer is "skip": the user
-/// can still load them later from Settings.
+/// Sample clients may only be added to an empty local salon. Existing records
+/// and recovery backups take precedence; Settings can add samples later.
 enum SampleDataSeedPolicy {
-    enum ICloudState: Equatable, Sendable {
-        /// Nothing can download into this store right now: mirroring is off,
-        /// or there is no usable iCloud account.
-        case off
-        /// Mirroring is on and the first iCloud download check has finished.
-        case settled
-        /// Mirroring is on and iCloud may still be delivering the salon's
-        /// records (the account is unknown or the first check hasn't finished).
-        case stillChecking
-    }
-
     enum SkipReason: Equatable, Sendable {
         case notChosen
         /// A business profile existed before setup, or clients or pets exist.
         case salonHasData
         /// A backup on this device holds clients the store is missing.
         case backupFound
-        case iCloudStillChecking
     }
 
     enum Decision: Equatable, Sendable {
@@ -146,7 +132,6 @@ enum SampleDataSeedPolicy {
         var businessConfigExisted: Bool
         var existingClientCount: Int
         var existingPetCount: Int
-        var iCloud: ICloudState
         var restorableClientCount: Int
     }
 
@@ -156,26 +141,6 @@ enum SampleDataSeedPolicy {
             return .skip(.salonHasData)
         }
         if inputs.restorableClientCount > 0 { return .skip(.backupFound) }
-        if inputs.iCloud == .stillChecking { return .skip(.iCloudStillChecking) }
         return .seed
-    }
-
-    /// Reads the live iCloud state from the monitor.
-    @MainActor
-    static func currentICloudState() -> ICloudState {
-        currentICloudState(monitor: CloudKitMonitor.shared)
-    }
-
-    @MainActor
-    static func currentICloudState(monitor: CloudKitMonitor) -> ICloudState {
-        guard monitor.mode.isMirroring else { return .off }
-        switch monitor.accountState {
-        case .available:
-            return monitor.firstSyncCompleted ? .settled : .stillChecking
-        case .unknown:
-            return .stillChecking
-        case .noAccount, .restricted, .temporarilyUnavailable, .couldNotDetermine:
-            return .off
-        }
     }
 }

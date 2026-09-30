@@ -65,8 +65,6 @@ enum WalkthroughAnchorID: String, CaseIterable, Hashable {
     case setLoyalty
     case setSecurity
     case setData
-    case setICloud
-    case setDevices
     case setAbout
     case setStartFresh
     // Client list
@@ -153,7 +151,7 @@ extension OnboardingRole {
         case .ownerManager:
             return [.appMap, .businessInsights, .settingsAndSafety, .dataOwnership, .dailyWorkflow, .clientRecords, .checkoutAndMoney]
         case .frontDeskGroomer:
-            return [.dailyWorkflow, .clientRecords, .checkoutAndMoney, .appMap, .dataOwnership]
+            return [.dailyWorkflow, .clientRecords, .checkoutAndMoney, .appMap]
         }
     }
 }
@@ -280,13 +278,11 @@ enum WalkthroughStepID {
     static let emergencyAdd = "cd.emergency_badges"
     static let checkIn = "cd.checkin"
     static let checkOut = "cd.checkout"
-    static let iCloud = "set.icloud"
     static let security = "set.security"
     static let business = "set.business"
     static let setupChecklist = "dash.checklist"
     static let loyalty = "set.loyalty"
     static let loyaltyLadder = "set.loyalty_ladder"
-    static let devices = "set.devices"
     static let clientLoyalty = "cd.loyalty"
 }
 
@@ -307,8 +303,6 @@ struct WalkthroughTourContext: Equatable, Sendable {
     var isPINSet: Bool = false
     /// The business has a name and a phone or email.
     var isBusinessProfileFilled: Bool = false
-    /// This device's iCloud backup, as the rest of the app reports it.
-    var backupStatus: BackupStatus = .unknown
 
     /// A salon holding only the sample clients, with Milo checked in: the
     /// full hands-on tour.
@@ -318,13 +312,11 @@ struct WalkthroughTourContext: Equatable, Sendable {
     /// pet in, saves a client, or saves a checkout.
     var isExplainOnly: Bool { hasRealClients }
 
-    /// Reads the store. PIN and backup status come from the caller
-    /// (`AppSettings.isPINSet`, `CloudKitMonitor.backupStatus`).
+    /// Reads the local store. PIN status comes from AppSettings.
     @MainActor
     static func resolve(
         in context: ModelContext,
-        isPINSet: Bool = false,
-        backupStatus: BackupStatus = .unknown
+        isPINSet: Bool = false
     ) -> WalkthroughTourContext {
         do {
             let tourClient = SampleData.tourClient(in: context)
@@ -335,16 +327,14 @@ struct WalkthroughTourContext: Equatable, Sendable {
                 sampleClientHasPet: !tourPets.isEmpty,
                 hasActiveSampleVisit: tourPets.contains { pet in (pet.visits ?? []).contains { $0.endedAt == nil } },
                 isPINSet: isPINSet,
-                isBusinessProfileFilled: try businessProfileIsFilled(in: context),
-                backupStatus: backupStatus
+                isBusinessProfileFilled: try businessProfileIsFilled(in: context)
             )
         } catch {
             // Unknown store contents: explain only, and open no client.
             return WalkthroughTourContext(
                 hasSampleClient: false,
                 hasRealClients: true,
-                isPINSet: isPINSet,
-                backupStatus: backupStatus
+                isPINSet: isPINSet
             )
         }
     }
@@ -642,10 +632,8 @@ final class WalkthroughController {
         return true
     }
 
-    /// Replaces one stop's coach tip in the running tour, e.g. the iCloud
-    /// stop's backup line, which is read again when the stop comes up so it
-    /// never reports a status that has since changed. Writes only when the
-    /// text differs.
+    /// Replaces one stop's coach tip when its context changes. Writes only
+    /// when the text differs.
     func updateCoachTip(_ tip: String?, forStepID stepID: String) {
         guard let index = steps.firstIndex(where: { $0.id == stepID }), steps[index].coachTip != tip else { return }
         steps[index].coachTip = tip
@@ -794,7 +782,7 @@ extension WalkthroughController {
 
     /// The whole tour for a role: its lessons in the role's order, each made
     /// safe for what the store holds (`context`). The tour runs on the real,
-    /// iCloud-synced store, so:
+    /// local store, so:
     /// - Client-detail and checkout steps only exist when a sample client is
     ///   there to open (`SampleData.tourClient`). The tour never opens a real
     ///   client.
@@ -869,7 +857,7 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.dash.checklist.directive", value: "Finish setting up your salon from this list."),
                 purpose: AppLocalization.localized("tour.dash.checklist.purpose", value: "Each row opens the screen where you finish it. Rows tick themselves from your data, and sample clients don’t count as yours."),
                 lesson: .appMap,
-                coachTip: AppLocalization.localized("tour.dash.checklist.tip", value: "The backup row ticks only when iCloud confirms an upload. The list goes away once every row is done."),
+                coachTip: AppLocalization.localized("tour.dash.checklist.tip", value: "The list tracks your business branding, first client, and first visit. It goes away once every row is done."),
                 icon: "checklist",
                 isOwnerOnly: true,
                 // Hidden once every row is done or the owner closed it.
@@ -1244,7 +1232,7 @@ extension WalkthroughController {
                 id: "nav.settings", anchor: .settings, surface: .settings,
                 title: AppLocalization.localized("tour.nav.settings.title", value: "Settings & Start Fresh"),
                 directive: AppLocalization.localized("tour.nav.settings.directive", value: "Make Pawtrackr match your shop."),
-                purpose: AppLocalization.localized("tour.nav.settings.purpose", value: "Tune business details, preferences, security, exports, service setup, iCloud sync, help tools, and the Start Fresh reset from Settings."),
+                purpose: AppLocalization.localized("tour.nav.settings.purpose", value: "Tune business details, preferences, security, exports, service setup, help tools, and the Start Fresh reset from Settings."),
                 lesson: .settingsAndSafety,
                 coachTip: AppLocalization.localized("tour.nav.settings.tip", value: "Settings is also where you continue this tour or replay one lesson for someone new."),
                 icon: "gearshape.fill", fallback: .tabBarItem(index: 3, count: 4),
@@ -1308,24 +1296,6 @@ extension WalkthroughController {
                 isOwnerOnly: true
             ),
             WalkthroughStep(
-                id: WalkthroughStepID.iCloud, anchor: .setICloud, surface: .settings,
-                title: AppLocalization.localized("tour.set.icloud.title", value: "iCloud sync"),
-                directive: AppLocalization.localized("tour.set.icloud.directive", value: "“Backed up” means iCloud confirmed the upload."),
-                purpose: AppLocalization.localized("tour.set.icloud.purpose", value: "With iCloud on, clients, pets, visits, photos, and checkout history sync to your iPhone, iPad, and Mac, with business name, currency, and brand color. Other settings stay per device."),
-                lesson: .dataOwnership,
-                coachTip: iCloudTip(for: context.backupStatus),
-                icon: "icloud.fill"
-            ),
-            WalkthroughStep(
-                id: WalkthroughStepID.devices, anchor: .setDevices, surface: .settings,
-                title: AppLocalization.localized("tour.set.devices.title", value: "Synced devices"),
-                directive: AppLocalization.localized("tour.set.devices.directive", value: "See which phones, iPads, and Macs share your data and when each was last seen."),
-                purpose: AppLocalization.localized("tour.set.devices.purpose", value: "Device health shows recently seen workstations, iCloud context, and stale devices so managers can spot sync gaps before staff rely on old records."),
-                lesson: .dataOwnership,
-                coachTip: AppLocalization.localized("tour.set.devices.tip", value: "If a device needs a check, use iCloud diagnostics before resetting anything."),
-                icon: "iphone.gen3.radiowaves.left.and.right"
-            ),
-            WalkthroughStep(
                 id: "set.about", anchor: .setAbout, surface: .settings,
                 title: AppLocalization.localized("tour.set.about.title", value: "Replay & Start Fresh"),
                 directive: AppLocalization.localized("tour.set.about.directive", value: "Continue the tour or replay one lesson for someone new."),
@@ -1338,7 +1308,7 @@ extension WalkthroughController {
                 id: "set.start_fresh", anchor: .setStartFresh, surface: .settings,
                 title: AppLocalization.localized("tour.set.start_fresh.title", value: "Wipe & Start Fresh"),
                 directive: AppLocalization.localized("tour.set.start_fresh.directive", value: "Only for erasing the whole salon, real clients included."),
-                purpose: AppLocalization.localized("tour.set.start_fresh.purpose", value: "Wipe & Start Fresh erases every client, pet, visit, payment and report, real or sample, on all your devices through iCloud. Use it to begin with an empty workspace for real business."),
+                purpose: AppLocalization.localized("tour.set.start_fresh.purpose", value: "Wipe & Start Fresh erases every client, pet, visit, payment and report, real or sample, on this device. Use it to begin with an empty workspace for real business."),
                 lesson: .dataOwnership,
                 coachTip: AppLocalization.localized("tour.set.start_fresh.tip", value: "To drop only the sample clients, use Remove Sample Clients. Your own clients stay."),
                 icon: "trash.fill",
@@ -1347,51 +1317,4 @@ extension WalkthroughController {
         ]
     }
 
-    /// One line about this device's backup, true to `BackupStatus`: "Backed
-    /// up as of…" only when iCloud confirmed an upload.
-    static func iCloudTip(for status: BackupStatus) -> String {
-        switch status {
-        case .backedUp(let asOf):
-            let when = asOf.formatted(
-                Date.FormatStyle(date: .abbreviated, time: .shortened).locale(AppLocalization.currentLocale)
-            )
-            return String(
-                format: AppLocalization.localized(
-                    "tour.set.icloud.tip_backed_up_fmt",
-                    value: "Backed up as of %@. iCloud confirmed every change this device made before then."
-                ),
-                when
-            )
-        case .uploading:
-            return AppLocalization.localized(
-                "tour.set.icloud.tip_uploading",
-                value: "Uploading now. Changes count as backed up only after iCloud confirms them."
-            )
-        case .notBackedUp:
-            return AppLocalization.localized(
-                "tour.set.icloud.tip_not_backed_up",
-                value: "Not backed up yet. Some changes on this device are still waiting for iCloud to confirm them."
-            )
-        case .failing:
-            return AppLocalization.localized(
-                "tour.set.icloud.tip_failing",
-                value: "Uploads to iCloud are failing right now. This section shows what went wrong."
-            )
-        case .signedOut:
-            return AppLocalization.localized(
-                "tour.set.icloud.tip_signed_out",
-                value: "No iCloud account is signed in, so nothing uploads from this device."
-            )
-        case .localOnly:
-            return AppLocalization.localized(
-                "tour.set.icloud.tip_local_only",
-                value: "iCloud backup is off on this device, so nothing uploads from here."
-            )
-        case .unknown:
-            return AppLocalization.localized(
-                "tour.set.icloud.tip_checking",
-                value: "Still checking the iCloud account. “Backed up” shows only after iCloud confirms an upload."
-            )
-        }
-    }
 }

@@ -26,8 +26,8 @@ final class DataPrunerTests: XCTestCase {
         try context.save()
         
         // Prune with downsampleOnly = true
-        // Note: DataPruner skips if pruneSyncedAssets is false. We'll set it to true for the test.
-        DataPruner.pruneOldPhotos(olderThan: 30, downsampleOnly: true, pruneSyncedAssets: true, in: context)
+        // Note: DataPruner skips if pruneStoredPhotos is false. We'll set it to true for the test.
+        DataPruner.pruneOldPhotos(olderThan: 30, downsampleOnly: true, pruneStoredPhotos: true, in: context)
         
         XCTAssertNil(visit.beforePhotoData)
         // Thumbnail should be present (though downsampleToData might return nil for dummy data, 

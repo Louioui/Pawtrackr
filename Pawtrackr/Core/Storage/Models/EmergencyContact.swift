@@ -8,7 +8,6 @@ import SwiftData
 
 @Model
 final class EmergencyContact {
-    // Defaults for CloudKit compatibility.
     var uuid: UUID = UUID()
     var name: String = ""
     var relation: String?

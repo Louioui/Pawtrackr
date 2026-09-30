@@ -11,6 +11,8 @@
 
 ## Data Store Pilot Decisions
 
+- Pawtrackr stores data locally. `LocalStoreConfiguration` explicitly disables cloud persistence (`cloudKitDatabase: .none`) while preserving the shipped named store URL and model schema. Legacy device/presence models remain solely for store compatibility; do not restore cloud UI, permissions, sync engines, or ubiquitous settings.
+
 - `DataStoreService` is the central SwiftData access facade. The production initializer accepts an existing `ModelContainer`; test and QualityControl code can use the `inMemory` initializer.
 - Background fetches must create a detached `ModelContext` from the shared `ModelContainer`; UI-bound fetches remain on the main actor.
 - The store opens WITHOUT a SwiftData `SchemaMigrationPlan` (ADR-0004). 1.0.2 shipped a staged plan built from live model classes, every 1.0.1 store failed with 134504, and users reset their clients away. Keep model changes additive (new models, optional/defaulted properties, `@Attribute(originalName:)` renames); CI fails if `migrationPlan:` reappears.

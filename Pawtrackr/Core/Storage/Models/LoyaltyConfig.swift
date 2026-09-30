@@ -2,7 +2,6 @@
 //  LoyaltyConfig.swift
 //  Pawtrackr
 //
-//  CloudKit-safe configuration for client-owned loyalty earning and redemption.
 //
 
 import Foundation
@@ -79,7 +78,6 @@ enum LoyaltyConfigResolver {
 
 @Model
 final class LoyaltyConfig {
-    // Non-optional defaults keep CloudKit partial records decodable.
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()

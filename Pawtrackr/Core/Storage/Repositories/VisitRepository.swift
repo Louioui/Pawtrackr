@@ -46,35 +46,14 @@ final class VisitRepository: VisitRepositoryProtocol {
             modelContext.insert(visit)
         }
         visit.ensureSessionToken()
-        let changedAt = Date()
         try modelContext.save()
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                AppLocalization.localized("cloudkit.change.saved_visit", value: "Saved visit"),
-                occurredAt: changedAt,
-                entityName: "Visit",
-                recordUUID: visit.uuid,
-                changedKeys: ["note", "behaviorTagsRaw", "items", "updatedAt", "lastModifiedAt", "lastModifiedBy"]
-            )
-        }
     }
     
     func deleteVisit(_ visit: Visit) async throws {
-        let visitUUID = visit.uuid
         let started = visit.startedAt
         let ended = visit.endedAt
         modelContext.delete(visit)
-        let changedAt = Date()
         try modelContext.save()
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                AppLocalization.localized("cloudkit.change.deleted_visit", value: "Deleted visit"),
-                occurredAt: changedAt,
-                entityName: "Visit",
-                recordUUID: visitUUID,
-                changedKeys: ["deleted"]
-            )
-        }
         
         let cal = Calendar.current
         SummaryUpdater.rebuildDay(for: started, in: modelContext)
@@ -105,7 +84,6 @@ final class VisitRepository: VisitRepositoryProtocol {
         modelContext.insert(visit)
         Logger.visits.info("VisitRepository: Visit object created and inserted into context")
         
-        let changedAt = Date()
         do {
             try modelContext.save()
             Logger.visits.info("VisitRepository: Context save successful for new visit. visitID=\(visit.uuid)")
@@ -114,17 +92,6 @@ final class VisitRepository: VisitRepositoryProtocol {
             throw error
         }
         
-        Logger.visits.info("VisitRepository: Attempting CloudKit recording...")
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                AppLocalization.localized("cloudkit.change.checked_in_pet", value: "Checked in pet"),
-                occurredAt: changedAt,
-                entityName: "Visit",
-                recordUUID: visit.uuid,
-                changedKeys: ["uuid", "sessionToken", "pet", "startedAt", "createdAt", "updatedAt", "lastModifiedBy"]
-            )
-        }
-        Logger.visits.info("VisitRepository: CloudKit record change recorded")
         
         Logger.visits.info("VisitRepository: Attempting EventBus publish...")
         eventBus.publish(.refreshRequired)
@@ -142,21 +109,11 @@ final class VisitRepository: VisitRepositoryProtocol {
         visit.markCheckedOut(total: total ?? visit.effectiveTotal, now: now)
         
         // Save the visit and its payment
-        let changedAt = Date()
         try modelContext.save()
         
         // Apply loyalty points
         try await loyaltyService.applyPoints(for: visit)
         
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                AppLocalization.localized("cloudkit.change.checked_out_visit", value: "Checked out visit"),
-                occurredAt: changedAt,
-                entityName: "Visit",
-                recordUUID: visit.uuid,
-                changedKeys: ["endedAt", "total", "payment", "updatedAt", "lastModifiedAt", "lastModifiedBy", "loyaltyPointsChange"]
-            )
-        }
 
         SummaryUpdater.rebuildDay(for: now, in: modelContext)
         let completion = CheckoutCompletionContext(

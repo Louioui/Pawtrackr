@@ -41,11 +41,7 @@ final class ServiceRepository: ServiceRepositoryProtocol {
         if service.modelContext == nil {
             modelContext.insert(service)
         }
-        let changedAt = Date()
         try modelContext.save()
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.saved_service", value: "Saved service"), occurredAt: changedAt)
-        }
         // Don't ship the SwiftData model itself across NotificationCenter — it's
         // not Sendable and listeners on other actors can crash or see invalidated
         // instances. Pass the persistentModelID via userInfo instead.
@@ -59,11 +55,7 @@ final class ServiceRepository: ServiceRepositoryProtocol {
     func deleteService(_ service: Service) async throws {
         let id = service.persistentModelID
         modelContext.delete(service)
-        let changedAt = Date()
         try modelContext.save()
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.deleted_service", value: "Deleted service"), occurredAt: changedAt)
-        }
         // Use the same notification for save+delete so existing listeners just
         // refetch on either signal. The serviceID + a `deleted` marker let
         // future-aware listeners distinguish without breaking current ones.

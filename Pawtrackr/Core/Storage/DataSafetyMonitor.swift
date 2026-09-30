@@ -31,7 +31,7 @@ enum DataSafetyMonitor {
         do {
             // Sample clients (fixed UUIDs, `SampleData`) are practice rows, so
             // they never count. Otherwise loading them would raise the baseline
-            // and removing them, on this device or through iCloud on another,
+            // and removing them later
             // would read as "had 2 clients, now none" and lock Start Fresh. A
             // store holding only samples is empty of real clients.
             var uuidDescriptor = FetchDescriptor<Client>()
@@ -43,7 +43,7 @@ enum DataSafetyMonitor {
             // Offer on-device backups on their own evidence: 1.0.1 and 1.0.2
             // never wrote lastKnownClientCount, so users who lost clients to the
             // 1.0.2 recovery screen read 0 here. Only clients missing from this
-            // store count, so data iCloud already brought back isn't offered.
+            // store count, so data already restored isn't offered.
             let liveClientUUIDs = Set(realClientUUIDs)
             StoreBackupRestore.publishOffer(
                 liveClientUUIDs: liveClientUUIDs,
@@ -53,7 +53,7 @@ enum DataSafetyMonitor {
             )
 
             // Only an empty store is evidence of loss. Counts also drop for
-            // ordinary reasons (a deleted client, a sync still importing), and
+            // ordinary reasons (such as a deleted client), and
             // flagging those locked Start Fresh behind a banner that never cleared.
             guard currentCount == 0, lastKnownCount > 0 else {
                 recordHealthyClientCount(currentCount, userDefaults: userDefaults)

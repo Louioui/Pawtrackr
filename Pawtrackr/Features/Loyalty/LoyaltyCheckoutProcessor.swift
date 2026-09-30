@@ -22,7 +22,7 @@ enum LoyaltyCheckoutProcessor {
     /// ledger entry.
     ///
     /// Returns the client UUID when the client balance changed (the caller
-    /// records the CloudKit change), or nil when nothing changed.
+    /// commits the local transaction), or nil when nothing changed.
     @discardableResult
     static func applyEarnings(
         visit: Visit,

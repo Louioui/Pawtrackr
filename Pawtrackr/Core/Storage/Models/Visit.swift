@@ -14,7 +14,6 @@ final class Visit {
     #Index<Visit>([\.startedAt], [\.endedAt], [\.createdAt])
 
     // MARK: - Identity & Timestamps
-    // NOTE: Non-optional properties have defaults for CloudKit compatibility.
     var uuid: UUID = UUID()
     var sessionToken: String = ""
     var createdAt: Date = Date()
@@ -154,8 +153,8 @@ final class Visit {
 
     func setBeforePhoto(_ data: Data?) {
         if let data = data {
-            beforePhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.visit_before_photo", value: "visit before photo"))
-            beforeThumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
+            beforePhotoData = LocalMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("media.visit_before_photo", value: "visit before photo"))
+            beforeThumbnailData = LocalMediaPolicy.optimizedThumbnailData(data)
         } else {
             beforePhotoData = nil
             beforeThumbnailData = nil
@@ -165,8 +164,8 @@ final class Visit {
 
     func setAfterPhoto(_ data: Data?) {
         if let data = data {
-            afterPhotoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.visit_after_photo", value: "visit after photo"))
-            afterThumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
+            afterPhotoData = LocalMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("media.visit_after_photo", value: "visit after photo"))
+            afterThumbnailData = LocalMediaPolicy.optimizedThumbnailData(data)
         } else {
             afterPhotoData = nil
             afterThumbnailData = nil
@@ -202,7 +201,7 @@ final class Visit {
     func recalcTotal() { recalculateTotal() }
 
     /// Assigns pre-optimized photo blobs directly. Callers must already have
-    /// run the data through `CloudMediaPolicy` (the checkout pipeline does).
+    /// run the data through `LocalMediaPolicy` (the checkout pipeline does).
     func applyPhotos(before: Data?, beforeThumb: Data?, after: Data?, afterThumb: Data?) {
         beforePhotoData = before
         beforeThumbnailData = beforeThumb

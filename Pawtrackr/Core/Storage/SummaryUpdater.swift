@@ -176,7 +176,7 @@ enum SummaryUpdater {
         }
     }
 
-    /// Deletes duplicate CloudKit-imported cache rows. The summaries are
+    /// Deletes duplicate cache rows. The summaries are
     /// derived data, so for duplicate keys we keep the highest-count/highest-
     /// revenue row until the next rebuild can recompute from visits.
     static func dedupeSummaryCaches(in context: ModelContext) {
@@ -251,15 +251,9 @@ enum SummaryUpdater {
 
     /// Rebuild all derived summary rows from canonical Visit data.
     ///
-    /// These rows are cache data. In a CloudKit-backed store they can arrive out of
-    /// order, duplicate across devices, or be absent on a fresh restore while visits
-    /// are still importing. A full deterministic rebuild avoids the silent failure
-    /// mode where an early "no changes" watermark makes restored visits invisible in
-    /// Dashboard/Insights.
-    ///
-    /// A rebuild that finds nothing to change must not save: the summary rows
-    /// are mirrored, so every saved row is uploaded and imported on every
-    /// other device, whose own rebuild then runs again. Returns whether it saved.
+    /// These rows are derived cache data and may be stale or absent after a
+    /// local restore. A deterministic rebuild keeps Dashboard/Insights accurate.
+    /// A rebuild that finds nothing to change must not save. Returns whether it saved.
     @discardableResult
     static func rebuildAllSummaries(in context: ModelContext) -> Bool {
         let now = Date()
@@ -272,7 +266,6 @@ enum SummaryUpdater {
             )
             let completedVisits = try context.fetch(descriptor)
             let cal = Calendar.current
-            logRecentRemoteModifications(in: completedVisits, now: now)
 
             var dayStats: [Date: (revenue: Decimal, count: Int)] = [:]
             var serviceStats: [SummaryNameKey: Int] = [:]
@@ -355,24 +348,13 @@ enum SummaryUpdater {
         }
     }
 
-    private static func logRecentRemoteModifications(in visits: [Visit], now: Date) {
-        let localDeviceID = DeviceIdentity.currentID
-        let syncWindow: TimeInterval = 10 * 60
-        for visit in visits where visit.lastModifiedBy != localDeviceID && now.timeIntervalSince(visit.lastModifiedAt) <= syncWindow {
-            Logger.summaries.warning("Recent remote visit modification detected during summary rebuild. visit=\(visit.uuid.uuidString, privacy: .public) writer=\(visit.lastModifiedBy.uuidString, privacy: .public) at=\(visit.lastModifiedAt, privacy: .public)")
-        }
-    }
-
     static func resetSummaryRebuildState() {
         UserDefaults.standard.removeObject(forKey: "lastSummarySyncDate")
         UserDefaults.standard.removeObject(forKey: "lastSummaryRebuildDate")
     }
 
-    // Duplicate rows for one key (each device inserted its own before
-    // importing the other's) are all brought up to date rather than thinned
-    // out. Nothing tells the copies apart the same way on every device, so
-    // each would keep its own and delete the other's, and the deletes would
-    // sync both away. Readers already collapse duplicates.
+    // Bring all legacy duplicate cache rows up to date. Readers collapse them
+    // by key, and an explicit cache deduplication pass can remove extras.
     private static func replaceDaySummaries(with stats: [Date: (revenue: Decimal, count: Int)], in context: ModelContext) throws {
         let rows = try context.fetch(FetchDescriptor<DaySummary>())
         var seen = Set<Date>()

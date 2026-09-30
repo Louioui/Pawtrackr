@@ -16,7 +16,6 @@ import SwiftData
 @Model
 final class Service {
     // MARK: - Properties
-    // Non-optional properties have defaults for CloudKit compatibility.
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -28,7 +27,6 @@ final class Service {
     /// Persisted category, stored as the enum's String rawValue. Storing a
     /// `Codable` enum directly makes SwiftData persist it as a "composite
     /// attribute" that fatally and uncatchably aborts the ENTIRE `[Service]`
-    /// fetch if any record holds an undecodable value (e.g. a CloudKit sync from
     /// a build with a different case set). The raw-String + `@Transient` pattern
     /// (see `MessageTemplate.typeRaw`) is decode-crash-proof.
     var categoryRaw: String?

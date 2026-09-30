@@ -3,7 +3,7 @@ import SwiftData
 @testable import Pawtrackr
 
 /// Replaying the guided tour on a salon with real clients must never create
-/// or change real data. The tour runs on the real, iCloud-synced store, so
+/// or change real data. The tour runs on the real local store, so
 /// these tests drive the same functions the app uses: the tour context and
 /// steps ContentView builds, the client its route opens, and the checkout
 /// calls CheckoutView makes for each tour stop.
@@ -95,14 +95,15 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
         }
     }
 
-    func testStartFreshCopySaysItErasesEverythingAndSyncs() {
+    func testStartFreshCopySaysItErasesEverythingOnThisDevice() {
         defer { UserDefaults.standard.removeObject(forKey: AppSettingsKeys.appLanguageOverride) }
         UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
         let startFresh = WalkthroughController.fullTour().first { $0.anchor == .setStartFresh }
         let purpose = startFresh?.purpose ?? ""
         XCTAssertTrue(purpose.contains("every client"), purpose)
         XCTAssertTrue(purpose.contains("real or sample"), purpose)
-        XCTAssertTrue(purpose.contains("iCloud"), purpose)
+        XCTAssertTrue(purpose.contains("on this device"), purpose)
+        XCTAssertFalse(purpose.contains("iCloud"), purpose)
         XCTAssertFalse((startFresh?.coachTip ?? "").contains("Only practice records"), "The old tip promised a partial wipe.")
     }
 

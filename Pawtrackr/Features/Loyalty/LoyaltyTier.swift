@@ -6,7 +6,7 @@
 //
 //  Tiers are COMPUTED, never persisted: the source of truth is the sum of
 //  positive `Visit.loyaltyPointsChange` values, so tier state can't drift
-//  from CloudKit merges and requires no schema change. Redemptions and
+//  from legacy duplicate records and requires no schema change. Redemptions and
 //  manual adjustments intentionally do NOT affect tier — spending points
 //  must never demote a client.
 //

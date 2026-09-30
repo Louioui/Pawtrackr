@@ -34,21 +34,5 @@
 			<string>Archived %d files</string>
 		</dict>
 	</dict>
-	<key>cloudkit.pending.count</key>
-	<dict>
-		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@changes@</string>
-		<key>changes</key>
-		<dict>
-			<key>NSStringFormatSpecTypeKey</key>
-			<string>NSStringPluralRuleType</string>
-			<key>NSStringFormatValueTypeKey</key>
-			<string>d</string>
-			<key>one</key>
-			<string>%d local change waiting for iCloud</string>
-			<key>other</key>
-			<string>%d local changes waiting for iCloud</string>
-		</dict>
-	</dict>
 </dict>
 </plist>

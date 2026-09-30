@@ -83,7 +83,7 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(spain.symmetricDifference(latinAmerica).sorted(), [])
     }
 
-    func testLoyaltyRoleAndSyncWordingFollowTheAppLanguage() {
+    func testLoyaltyAndRoleWordingFollowTheAppLanguage() {
         let defaults = UserDefaults.standard
         let previous = defaults.string(forKey: AppSettingsKeys.appLanguageOverride)
         defer {
@@ -105,7 +105,6 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(LoyaltyCopy.points(25), "25 puntos")
         XCTAssertEqual(LoyaltyTier.gold.displayName, "Oro")
         XCTAssertEqual(OnboardingRole.frontDeskGroomer.title, "Recepción o groomer")
-        XCTAssertEqual(CloudKitMonitor.SyncEventKind.exportToCloud.displayLabel, "Exportación")
     }
 
     /// The onboarding simulator shows the catalog a new salon is seeded with,

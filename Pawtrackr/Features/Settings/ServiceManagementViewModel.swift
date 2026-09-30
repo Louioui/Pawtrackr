@@ -32,8 +32,7 @@ final class ServiceManagementViewModel {
         // Repository posts .serviceDidUpdate after every save and delete.
         // Subscribing here keeps the list fresh regardless of where the
         // mutation originates: edit pushed via NavigationLink, add via
-        // sheet, deletion, or eventually a CloudKit-driven sync from
-        // another device that the repository routes through the same path.
+        // sheet or deletion that the repository routes through the same path.
         let token = NotificationCenter.default.addObserver(
             forName: .serviceDidUpdate, object: nil, queue: .main
         ) { [weak self] _ in
@@ -69,7 +68,7 @@ final class ServiceManagementViewModel {
                 // fetchServices() call needed here.
             } catch {
                 appError = .database(error.localizedDescription)
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_service", value: "deleting the service"))
+                Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
                 Logger.serviceManagement.error("Failed to delete service: \(String(describing: error))")
             }
         }

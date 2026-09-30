@@ -21,7 +21,6 @@ struct DashboardView: View {
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @State private var vm: DashboardViewModel?
     @State private var showNewClient = false
-    @State private var showActivityFeed = false
     @State private var showQuickCheckOut = false
     @State private var selectedRevenueDate: Date?
     /// Set while the "Remove Sample Clients?" confirmation is up; it lists
@@ -34,9 +33,6 @@ struct DashboardView: View {
             .navigationTitle(NSLocalizedString("dashboard.title", comment: ""))
             .sheet(isPresented: $showNewClient) {
                 NewClientSheet(modelContext: modelContext)
-            }
-            .sheet(isPresented: $showActivityFeed) {
-                ActivityFeedView()
             }
             .sheet(isPresented: $showQuickCheckOut) {
                 QuickCheckOutSheet(activeVisits: vm?.activeVisits ?? []) { visit in
@@ -104,23 +100,11 @@ struct DashboardView: View {
     private var insightsToolbarItem: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Button {
-                showActivityFeed = true
-            } label: {
-                Label(AppLocalization.localized("dashboard.activity.title", value: "Salon Activity"), systemImage: "clock.arrow.2.circlepath")
-            }
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            Button {
                 showNewClient = true
             } label: {
                 Label(NSLocalizedString("dashboard.new_client", comment: ""), systemImage: "person.badge.plus")
             }
             .keyboardShortcut("n", modifiers: .command)
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            CloudKitStatusView()
         }
 
         #if os(macOS)
@@ -186,18 +170,15 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity)
             }
             .accessibilityIdentifier("dashboard.scroll")
-            // Once every row has been done, the card is retired like a tap
-            // on its X. Otherwise the next edit would bring it back until
-            // iCloud confirms that change. Replay and Start Fresh re-arm it.
+            // Once every local setup row is done, retire the card.
+            // Replay and Start Fresh re-arm it.
             .onChange(of: vm.isChecklistComplete, initial: true) { _, isComplete in
                 if isComplete && !appSettings.isChecklistDismissed {
                     appSettings.isChecklistDismissed = true
                 }
             }
             .refreshable {
-                async let local: Void = vm.refresh()
-                async let cloud: Void = CloudKitMonitor.shared.forceSync()
-                _ = await (local, cloud)
+                await vm.refresh()
             }
             // Scroll the current deep-dive target into view as the tour advances.
             .onAppear {
@@ -476,7 +457,7 @@ struct DashboardView: View {
     private func handleChecklistTap(_ action: DashboardViewModel.ChecklistAction) {
         HapticManager.impact(.light)
         if let section = action.settingsSection {
-            // The section itself (Business, iCloud), not the Settings list.
+            // Open the Business section directly.
             openSettings(section)
             return
         }
@@ -486,7 +467,7 @@ struct DashboardView: View {
         case .firstVisit:
             // Starting a visit happens from a client/pet in the Clients tab.
             selectSurface(.clients, resetPath: true)
-        case .branding, .iCloudBackup:
+        case .branding:
             break
         }
     }

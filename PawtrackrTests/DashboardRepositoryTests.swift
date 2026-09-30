@@ -64,7 +64,7 @@ final class DashboardRepositoryTests: XCTestCase {
         XCTAssertEqual(kpis.inProgressCount, 0)
     }
 
-    func testSummaryFetches_CollapseDuplicateCloudKitCacheRows() async throws {
+    func testSummaryFetches_CollapseDuplicateCacheRows() async throws {
         let cal = Calendar.current
         let today = cal.startOfDay(for: .now)
 

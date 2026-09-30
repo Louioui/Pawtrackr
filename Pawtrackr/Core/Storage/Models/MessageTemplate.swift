@@ -10,15 +10,12 @@ import SwiftData
 
 @Model
 final class MessageTemplate {
-    // Defaults for CloudKit compatibility.
     var title: String = ""
     var content: String = ""
 
     // Persist the enum's String rawValue, NOT the enum itself. Storing a Codable
     // enum directly makes SwiftData create a "composite attribute" that FATALLY
-    // crashes the *entire* fetch when a CloudKit-synced record can't be decoded
     // (e.g. after the case set changed — an older "Reminder" value broke macOS).
-    // A plain String is migration- and CloudKit-safe, and any unknown/missing
     // value falls back to `.custom` instead of crashing.
     var typeRaw: String = MessageTemplate.TemplateType.custom.rawValue
 

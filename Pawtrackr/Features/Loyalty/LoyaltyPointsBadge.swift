@@ -200,7 +200,7 @@ struct LoyaltyPointsBadge: View {
                 .stroke(.white.opacity(0.18), lineWidth: 1)
         }
         // The odometer roll must run even when the mutation arrives without an
-        // animation transaction (CheckoutTransactionActor save, CloudKit import).
+        // animation transaction (CheckoutTransactionActor save, context refresh).
         .animation(MotionSystem.resolved(MotionSystem.snappy, reduceMotion: reduceMotion), value: client.loyaltyPoints)
     }
 

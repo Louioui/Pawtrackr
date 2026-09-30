@@ -154,8 +154,8 @@ final class SpotlightIndexer: @unchecked Sendable {
         return action
     }
 
-    /// Runs once per launch after the store is open and the first iCloud
-    /// import has settled: clears the index if the lock forbids it, rebuilds
+    /// Runs once per launch after the local store is open and startup
+    /// maintenance has completed: clears the index if the lock forbids it, rebuilds
     /// it if it predates the current item format.
     @discardableResult
     func reconcileAtLaunch(container: ModelContainer) async -> SpotlightIndexAction {

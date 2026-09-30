@@ -12,17 +12,15 @@ import SwiftData
 import OSLog
 
 /// Erases operational records ("Start Fresh") while preserving setup. The Service
-/// catalog, `BusinessConfig`, message templates, and device/sync identity all
+/// catalog, `BusinessConfig`, message templates, and local device identity all
 /// survive — only the data a user accumulates (clients, pets, visits, payments,
 /// inventory, checkout ledger, analytics rollups) is removed.
 ///
 /// This is a *full* operational wipe: every client, real or sample, goes. To
 /// remove only the sample clients, use `removeSampleData(in:)`, which finds
-/// them by their fixed UUIDs (`SampleData`). Deletions are logical (`context.delete`), which
-/// `NSPersistentCloudKitContainer` exports as tombstones — so the wipe
-/// propagates to iCloud and every signed-in device. That is intentional, but it
-/// is why the calling UI must gate it behind an explicit, destructive
-/// confirmation.
+/// them by their fixed UUIDs (`SampleData`). Deletions are logical
+/// (`context.delete`) in this device's local store, so the calling UI gates
+/// the wipe behind an explicit destructive confirmation.
 @MainActor
 enum DataReset {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Pawtrackr", category: "DataReset")
@@ -108,8 +106,7 @@ extension DataReset {
 
     /// Deletes the sample salon and nothing else. Rows are found only by the
     /// fixed UUIDs in `SampleData`, never by name, so a real client called
-    /// "Ava Martinez" is untouched. Every copy of a sample UUID goes (two
-    /// devices that both loaded samples each uploaded one), together with the
+    /// "Ava Martinez" is untouched. Every copy of a sample UUID goes, together with the
     /// rows that belong to them:
     /// - pets, visits, line items, payments and emergency contacts (by
     ///   relationship; anything added under a sample client or pet goes too,
@@ -119,7 +116,7 @@ extension DataReset {
     /// - the example prices loading the samples put on this device's catalog,
     ///   only where the service is untouched since (`SamplePriceRecord`).
     /// Day summaries for the affected days are rebuilt from what remains.
-    /// The deletions sync to iCloud like any other delete.
+    /// The deletions affect the local store on this device.
     @discardableResult
     static func removeSampleData(in context: ModelContext, userDefaults: UserDefaults = .standard) throws -> SampleRemovalResult {
         var result = SampleRemovalResult()
@@ -243,8 +240,7 @@ extension DataReset {
         }
 
         // No data-safety bookkeeping is needed: DataSafetyMonitor never counts
-        // sample clients, so their removal (here, or synced from another
-        // device) can't look like data loss.
+        // sample clients, so their removal cannot look like data loss.
 
         log.info("Removed sample data: clients=\(result.clients), pets=\(result.pets), visits=\(result.visits), ledger=\(result.ledgerEntries), transactions=\(result.checkoutTransactions), examplePrices=\(result.examplePricesCleared)")
         return result

@@ -137,7 +137,7 @@ class InsightsViewModel {
                     // Checkout completion: refresh immediately so the user sees updated totals.
                     await self.refresh()
                 case .refreshRequired:
-                    // CloudKit syncs can fire dozens of these in rapid succession.
+                    // Local edits can fire several of these in rapid succession.
                     // Coalesce them into one refresh once the burst settles.
                     self.refreshDebounceTask?.cancel()
                     self.refreshDebounceTask = Task { [weak self] in

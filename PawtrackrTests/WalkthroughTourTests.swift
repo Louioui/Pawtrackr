@@ -26,19 +26,6 @@ final class WalkthroughTourTests: XCTestCase {
 
     // MARK: - Contexts
 
-    private static let fixedDate = Date(timeIntervalSince1970: 1_790_000_000)
-
-    private static let allBackupStatuses: [BackupStatus] = [
-        .backedUp(asOf: fixedDate),
-        .uploading,
-        .notBackedUp(localChangesSince: fixedDate),
-        .notBackedUp(localChangesSince: nil),
-        .failing(since: fixedDate, disposition: .transient),
-        .signedOut,
-        .localOnly,
-        .unknown
-    ]
-
     /// Every combination the tour builder can be handed.
     private static var contextMatrix: [WalkthroughTourContext] {
         var contexts: [WalkthroughTourContext] = []
@@ -53,8 +40,7 @@ final class WalkthroughTourTests: XCTestCase {
                                 sampleClientHasPet: hasPet,
                                 hasActiveSampleVisit: hasVisit,
                                 isPINSet: isPINSet,
-                                isBusinessProfileFilled: filled,
-                                backupStatus: .backedUp(asOf: fixedDate)
+                                isBusinessProfileFilled: filled
                             ))
                         }
                     }
@@ -89,7 +75,7 @@ final class WalkthroughTourTests: XCTestCase {
             XCTAssertFalse(id.contains(" "), id)
         }
         // Saved progress refers to these. Renaming one loses users' place.
-        for id in ["nav.dashboard", "dash.kpis", "clients.sort", "nc.save", "cd.checkin", "cd.checkout", "co.confirm", "set.icloud", "set.start_fresh"] {
+        for id in ["nav.dashboard", "dash.kpis", "clients.sort", "nc.save", "cd.checkin", "cd.checkout", "co.confirm", "set.start_fresh"] {
             XCTAssertTrue(ids.contains(id), id)
         }
     }
@@ -101,7 +87,7 @@ final class WalkthroughTourTests: XCTestCase {
         let english = WalkthroughController.tour(for: .ownerManager, context: .practice).map(\.id)
         XCTAssertEqual(spanish, english)
 
-        let explainOnly = WalkthroughTourContext(hasSampleClient: true, hasRealClients: true, isPINSet: true, isBusinessProfileFilled: true, backupStatus: .uploading)
+        let explainOnly = WalkthroughTourContext(hasSampleClient: true, hasRealClients: true, isPINSet: true, isBusinessProfileFilled: true)
         XCTAssertEqual(WalkthroughController.tour(for: .ownerManager, context: explainOnly).map(\.id), english)
     }
 
@@ -116,21 +102,20 @@ final class WalkthroughTourTests: XCTestCase {
         let frontDesk = WalkthroughController.tour(for: .frontDeskGroomer, context: .practice)
 
         XCTAssertEqual(lessonSequence(owner), [.appMap, .businessInsights, .settingsAndSafety, .dataOwnership, .dailyWorkflow, .clientRecords, .checkoutAndMoney])
-        XCTAssertEqual(lessonSequence(frontDesk), [.dailyWorkflow, .clientRecords, .checkoutAndMoney, .appMap, .dataOwnership])
+        XCTAssertEqual(lessonSequence(frontDesk), [.dailyWorkflow, .clientRecords, .checkoutAndMoney, .appMap])
         XCTAssertEqual(OnboardingRole.ownerManager.tourLessonOrder, lessonSequence(owner))
         XCTAssertEqual(OnboardingRole.frontDeskGroomer.tourLessonOrder, lessonSequence(frontDesk))
 
-        // Front desk: the counter work first, no Insights, and Settings only
-        // for the iCloud and synced-device stops.
+        // Front desk focuses on counter work; setup remains in the owner tour.
         XCTAssertFalse(frontDesk.contains { $0.surface == .insights })
-        XCTAssertEqual(frontDesk.filter { $0.surface == .settings }.map(\.id), ["set.icloud", "set.devices"])
+        XCTAssertTrue(frontDesk.filter { $0.surface == .settings }.isEmpty)
 
         // Owner: numbers, setup and data safety before the daily work.
         let ownerIDs = owner.map(\.id)
         let index = { (id: String) in ownerIDs.firstIndex(of: id) ?? .max }
         XCTAssertLessThan(index("nav.insights"), index("dash.kpis"))
         XCTAssertLessThan(index("set.security"), index("dash.kpis"))
-        XCTAssertLessThan(index("set.icloud"), index("cd.checkin"))
+        XCTAssertLessThan(index("set.data"), index("cd.checkin"))
         XCTAssertEqual(owner.first?.anchor, .dashboard)
     }
 
@@ -162,17 +147,6 @@ final class WalkthroughTourTests: XCTestCase {
             XCTAssertNotNil(ownerTip, id)
             XCTAssertNotNil(frontDeskTip, id)
             XCTAssertNotEqual(ownerTip, frontDeskTip, id)
-        }
-    }
-
-    func testFrontDeskKeepsTheHonestICloudStop() throws {
-        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
-        for status in Self.allBackupStatuses {
-            let context = WalkthroughTourContext(hasSampleClient: true, hasRealClients: false, backupStatus: status)
-            let steps = WalkthroughController.tour(for: .frontDeskGroomer, context: context)
-            let iCloud = try XCTUnwrap(steps.first { $0.id == "set.icloud" })
-            XCTAssertTrue(iCloud.directive.contains("confirmed"), iCloud.directive)
-            XCTAssertEqual(iCloud.coachTip, WalkthroughController.iCloudTip(for: status))
         }
     }
 
@@ -224,48 +198,9 @@ final class WalkthroughTourTests: XCTestCase {
         let config = try XCTUnwrap(try context.fetch(FetchDescriptor<BusinessConfig>()).first)
         config.phone = "3125550100"
         try context.save()
-        let resolved = WalkthroughTourContext.resolve(in: context, isPINSet: true, backupStatus: .uploading)
+        let resolved = WalkthroughTourContext.resolve(in: context, isPINSet: true)
         XCTAssertTrue(resolved.isBusinessProfileFilled)
         XCTAssertTrue(resolved.isPINSet)
-        XCTAssertEqual(resolved.backupStatus, .uploading)
-    }
-
-    func testBackedUpIsClaimedOnlyForAConfirmedUpload() {
-        for language in [AppLanguageOverride.en, .es] {
-            UserDefaults.standard.set(language.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
-            let claim = language == .en ? "Backed up as of" : "Copia confirmada hasta"
-            var tips: Set<String> = []
-            for status in Self.allBackupStatuses {
-                let tip = WalkthroughController.iCloudTip(for: status)
-                tips.insert(tip)
-                XCTAssertFalse(tip.isEmpty)
-                XCTAssertEqual(tip.contains(claim), status.isBackedUp, "\(language) \(status): \(tip)")
-                XCTAssertFalse(tip.contains("%@"), tip)
-            }
-            // Uploading, not backed up (x2 share a line), failing, signed out,
-            // local only, unknown and backed up each read differently.
-            XCTAssertEqual(tips.count, Self.allBackupStatuses.count - 1, "\(language): \(tips)")
-        }
-    }
-
-    func testTheICloudLineIsReadAgainWhenItsStopComesUp() throws {
-        UserDefaults.standard.set(AppLanguageOverride.en.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
-        // The tour started while backed up. By the iCloud stop uploads fail.
-        var started = WalkthroughTourContext.practice
-        started.backupStatus = .backedUp(asOf: Self.fixedDate)
-        let controller = makeController()
-        controller.start(WalkthroughController.tour(for: .frontDeskGroomer, context: started), at: "set.icloud")
-        XCTAssertTrue(controller.currentStep?.coachTip?.contains("Backed up as of") ?? false)
-
-        let failing = BackupStatus.failing(since: Self.fixedDate, disposition: .transient)
-        controller.updateCoachTip(WalkthroughController.iCloudTip(for: failing), forStepID: "set.icloud")
-
-        let tip = try XCTUnwrap(controller.currentStep?.coachTip)
-        XCTAssertFalse(tip.contains("Backed up as of"), tip)
-        XCTAssertEqual(tip, WalkthroughController.iCloudTip(for: failing))
-        XCTAssertEqual(controller.currentStep?.id, "set.icloud", "Only the line changes.")
-        controller.updateCoachTip("ignored", forStepID: "retired.step")
-        XCTAssertEqual(controller.currentStep?.coachTip, tip)
     }
 
     func testWithoutAPetTheTourSkipsPetStops() {
@@ -450,7 +385,7 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertTrue(progress.isComplete(.dailyWorkflow))
         XCTAssertEqual(progress.lastCompletedStepID, steps[firstLessonCount - 1].id)
         XCTAssertEqual(progress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.lesson, 2)
-        XCTAssertEqual(progress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.of, 5)
+        XCTAssertEqual(progress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.of, 4)
 
         controller.skip()
         XCTAssertTrue(progress.isComplete(.dailyWorkflow), "Skipping keeps what was finished.")
@@ -501,7 +436,7 @@ final class WalkthroughTourTests: XCTestCase {
 
         // A lesson replayed out of order doesn't pull Continue forward.
         var outOfOrder = WalkthroughProgress()
-        outOfOrder = outOfOrder.recording(WalkthroughProgressEvent(stepID: "set.icloud", lesson: .dataOwnership, completesLesson: true))
+        outOfOrder = outOfOrder.recording(WalkthroughProgressEvent(stepID: "set.data", lesson: .dataOwnership, completesLesson: true))
         XCTAssertEqual(outOfOrder.resumeStepID(in: steps), steps.first?.id)
         XCTAssertEqual(outOfOrder.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.lesson, 1)
 
@@ -513,8 +448,8 @@ final class WalkthroughTourTests: XCTestCase {
     func testStartAtAStepIDUsesItOrFallsBackToTheStart() {
         let steps = WalkthroughController.tour(for: .ownerManager, context: .practice)
         let controller = makeController()
-        controller.start(steps, at: "set.icloud")
-        XCTAssertEqual(controller.currentStep?.id, "set.icloud")
+        controller.start(steps, at: "set.data")
+        XCTAssertEqual(controller.currentStep?.id, "set.data")
         controller.restart(steps, at: "retired.step")
         XCTAssertEqual(controller.currentIndex, 0)
         controller.restart(WalkthroughController.steps(for: .businessInsights, role: .ownerManager, context: .practice))
@@ -591,8 +526,6 @@ final class WalkthroughTourTests: XCTestCase {
         .setLoyalty: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setSecurity: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setData: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
-        .setICloud: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
-        .setDevices: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setAbout: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .setStartFresh: (.detail, "Pawtrackr/Features/Settings/SettingsView.swift"),
         .loyaltySimulator: (.detail, "Pawtrackr/Features/Loyalty/LoyaltyManagementView.swift")
@@ -670,10 +603,7 @@ final class WalkthroughTourTests: XCTestCase {
             UserDefaults.standard.set(language.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
             var checked = Set<String>()
             for role in OnboardingRole.allCases {
-                var contexts = Self.contextMatrix
-                for status in Self.allBackupStatuses {
-                    contexts.append(WalkthroughTourContext(hasSampleClient: true, hasRealClients: false, backupStatus: status))
-                }
+                let contexts = Self.contextMatrix
                 for context in contexts {
                     for step in WalkthroughController.tour(for: role, context: context) {
                         let key = [step.id, step.directive, step.purpose, step.coachTip ?? ""].joined(separator: "|")
@@ -732,7 +662,8 @@ final class WalkthroughTourTests: XCTestCase {
         let sortTip = try XCTUnwrap(steps["clients.sort"]?.coachTip)
         XCTAssertTrue(sortTip.contains("Doe Jane"), sortTip)
 
-        // "Backed up" means a confirmed upload.
-        XCTAssertTrue(try XCTUnwrap(steps["set.icloud"]).directive.contains("confirmed"))
+        // The catalog cannot direct users to removed cloud screens.
+        XCTAssertNil(steps["set.icloud"])
+        XCTAssertNil(steps["set.devices"])
     }
 }

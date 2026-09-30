@@ -245,7 +245,7 @@ enum SamplePriceRecord {
         let price: Decimal
         let stampedAt: Date
 
-        /// CloudKit keeps dates to the millisecond, so a stamp that made a
+        /// Persisted dates keep millisecond precision, so a stamp that made a
         /// round trip may differ by less than that. A person's edit can't.
         func matches(_ service: Service) -> Bool {
             service.uuid == serviceUUID

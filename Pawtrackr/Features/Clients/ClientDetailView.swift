@@ -118,7 +118,6 @@ struct ClientDetailView: View {
     @State private var inlineEditBaseline: ClientEditBaseline? = nil
 
     @Environment(NavigationRouter.self) private var router
-    @Query private var devices: [DeviceMetadata]
     private var namespace: Namespace.ID
     /// Every tour stop on this screen, so each one is scrolled into view.
     static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
@@ -240,7 +239,6 @@ struct ClientDetailView: View {
                 vm.refreshEmergencyContacts()
                 vm.refreshRecentVisits()
             }
-            .tracksPresence(recordID: vm.client.uuid, recordType: "client")
     }
 
     #if os(macOS)
@@ -461,7 +459,6 @@ struct ClientDetailView: View {
                 VStack(spacing: 16) {
                     ownerHeader(client: vm.client, primaryEmergencyContact: vm.primaryEmergencyContact)
                         .walkthroughTarget(.cdOwner)
-                        .showsRecentlyOpenElsewhere(recordID: vm.client.uuid)
                     clientSafetyBanner(client: vm.client)
                     // The card's "+" button carries `.emergencyContactBadges`.
                     emergencyContactsCard(contacts: vm.emergencyContacts)
@@ -472,7 +469,7 @@ struct ClientDetailView: View {
                     petsSection(vm: vm)
                         .walkthroughTarget(.cdPets)
                     recentHistorySection(vm: vm)
-                    syncMetadataFooter(client: vm.client)
+                    metadataFooter(client: vm.client)
                 }
                 .padding(.vertical, 8)
                 .frame(maxWidth: clientDetailContentMaxWidth)
@@ -609,14 +606,11 @@ struct ClientDetailView: View {
         }
     }
 
-    private func syncMetadataFooter(client: Client) -> some View {
+    private func metadataFooter(client: Client) -> some View {
         HStack {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                let name = devices.first { $0.deviceID == client.lastModifiedBy }?.name
-                    ?? AppLocalization.localized("common.unknown_device", value: "Unknown Device")
-                Text(String(format: NSLocalizedString("client.metadata.last_modified_by_fmt", value: "Last modified by %@", comment: ""), name))
-                Text(String(format: NSLocalizedString("client.metadata.at_fmt", value: "at %@", comment: ""), client.updatedAt.formatted(date: .abbreviated, time: .shortened)))
+                Text(String(format: NSLocalizedString("common.updated_fmt", value: "Updated %@", comment: ""), client.updatedAt.formatted(date: .abbreviated, time: .shortened)))
             }
             .font(.caption2)
             .foregroundStyle(.tertiary)
@@ -824,10 +818,9 @@ struct ClientDetailView: View {
         modelContext.delete(contact)
         do {
             try modelContext.save()
-            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.deleted_emergency_contact", value: "Deleted emergency contact"))
         } catch {
             Logger.clientDetailView.error("Failed to delete contact: \(error.localizedDescription, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_emergency_contact", value: "deleting the emergency contact"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
         }
         viewModel?.refreshEmergencyContacts()
     }
@@ -1150,7 +1143,6 @@ struct ClientDetailView: View {
         do {
             try modelContext.save()
             SpotlightIndexer.shared.removeClientAndPetsFromIndex(clientID: clientUUID, petIDs: petUUIDs)
-            CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.deleted_client", value: "Deleted client"))
 
             // Rebuild summaries for affected days
             let cal = Calendar.current
@@ -1169,7 +1161,7 @@ struct ClientDetailView: View {
             isDeleting = false
             let message = String(describing: error)
             Logger.clientDetailView.error("Failed to delete client: \(message, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.delete_client", value: "deleting the client"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
             alertDestination = .deleteError(message)
         }
     }

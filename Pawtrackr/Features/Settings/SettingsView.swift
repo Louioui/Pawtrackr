@@ -20,7 +20,7 @@ private func settingsLocalized(_ key: String, value: String) -> String {
 }
 
 enum SettingSection: String, CaseIterable, Identifiable {
-    case business, preferences, loyalty, security, dataExport, icloud, help, devices, about
+    case business, preferences, loyalty, security, dataExport, help, about
     var id: String { rawValue }
     var localizationKey: String {
         switch self {
@@ -29,9 +29,7 @@ enum SettingSection: String, CaseIterable, Identifiable {
         case .loyalty: return "settings.section.loyalty"
         case .security: return "settings.section.security"
         case .dataExport: return "settings.section.export"
-        case .icloud: return "settings.section.icloud"
         case .help: return "settings.section.help"
-        case .devices: return "settings.section.devices"
         case .about: return "settings.section.about"
         }
     }
@@ -45,19 +43,15 @@ enum SettingSection: String, CaseIterable, Identifiable {
         case .business:
             return settingsLocalized("settings.section.business.subtitle", value: "Branding and receipt defaults used across checkout, exports, and customer-facing paperwork.")
         case .preferences:
-            return settingsLocalized("settings.section.preferences.subtitle", value: "Tune the app for this workstation, from launch behavior to synced media handling.")
+            return settingsLocalized("settings.section.preferences.subtitle", value: "Tune the app for this workstation, from launch behavior to appearance and feedback.")
         case .loyalty:
             return settingsLocalized("settings.section.loyalty.subtitle", value: "Configure how visits earn points and which rewards your salon wants to offer.")
         case .security:
             return settingsLocalized("settings.section.security.subtitle", value: "Protect client records with PIN, biometric unlock, and automatic locking rules.")
         case .dataExport:
             return settingsLocalized("settings.section.export.subtitle", value: "Export operational data for reporting, backup review, or handoff outside Pawtrackr.")
-        case .icloud:
-            return settingsLocalized("settings.section.icloud.subtitle", value: "Check sync health, pending uploads, and diagnostics for this iCloud account.")
         case .help:
             return settingsLocalized("settings.section.help.subtitle", value: "Support tools and quick recovery guidance for day-to-day salon operation.")
-        case .devices:
-            return settingsLocalized("settings.section.devices.subtitle", value: "See which iPhones, iPads, and Macs share this iCloud data and when each was last seen.")
         case .about:
             return settingsLocalized("settings.section.about.subtitle", value: "Version details, guided setup, and the protected fresh-start control.")
         }
@@ -70,9 +64,7 @@ enum SettingSection: String, CaseIterable, Identifiable {
         case .loyalty: return "star.circle.fill"
         case .security: return "lock.shield.fill"
         case .dataExport: return "square.and.arrow.up"
-        case .icloud: return "icloud.fill"
         case .help: return "questionmark.circle.fill"
-        case .devices: return "iphone.gen3.radiowaves.left.and.right"
         case .about: return "info.circle.fill"
         }
     }
@@ -87,10 +79,6 @@ enum SettingSection: String, CaseIterable, Identifiable {
             return .setSecurity
         case .dataExport:
             return .setData
-        case .icloud:
-            return .setICloud
-        case .devices:
-            return .setDevices
         case .about:
             return .setAbout
         case .preferences, .help:
@@ -151,7 +139,6 @@ struct SettingsView: View {
     @State private var pinChangeError: String? = nil
     @State private var showResetFirstRunConfirm = false
     @State private var showWipeConfirm = false
-    @State private var showDiagnostics = false
 
     var body: some View {
         #if os(macOS)
@@ -193,8 +180,7 @@ struct SettingsView: View {
             let detail = SettingsDetailView(section: section,
                                             showChangePIN: $showChangePIN,
                                             showResetFirstRunConfirm: $showResetFirstRunConfirm,
-                                            showWipeConfirm: $showWipeConfirm,
-                                            showDiagnostics: $showDiagnostics)
+                                            showWipeConfirm: $showWipeConfirm)
             // Re-host the guided-tour overlay ON the pushed Settings detail so the
             // `set*` spotlights (which live in SettingsDetailView) resolve on iPad:
             // the split-view detail-column overlay sits OUTSIDE this NavigationStack
@@ -294,8 +280,7 @@ struct SettingsView: View {
             let detail = SettingsDetailView(section: selection,
                                             showChangePIN: $showChangePIN,
                                             showResetFirstRunConfirm: $showResetFirstRunConfirm,
-                                            showWipeConfirm: $showWipeConfirm,
-                                            showDiagnostics: $showDiagnostics)
+                                            showWipeConfirm: $showWipeConfirm)
             if let walkthrough {
                 detail.walkthroughOverlay(walkthrough, scope: .detailContent)
             } else {
@@ -316,7 +301,6 @@ private struct SettingsDetailView: View {
     @Binding var showChangePIN: Bool
     @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
-    @Binding var showDiagnostics: Bool
     @State private var showWipeBlockedAlert = false
     @State private var storeRestoreClientCount: Int?
     @AppStorage(DataSafetyMonitor.suspectedDataLossKey) private var dataLossSuspected = false
@@ -331,8 +315,6 @@ private struct SettingsDetailView: View {
         .setLoyalty,
         .setSecurity,
         .setData,
-        .setICloud,
-        .setDevices,
         .setAbout,
         .setStartFresh,
         .loyaltySimulator
@@ -380,22 +362,6 @@ private struct SettingsDetailView: View {
         )) {
             StoreRestoreView(currentClientCount: storeRestoreClientCount ?? 0)
         }
-        .sheet(isPresented: $showDiagnostics) {
-            NavigationStack {
-                CloudKitDiagnosticsView()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button(settingsLocalized("common.close", value: "Close")) { showDiagnostics = false }
-                                .keyboardShortcut(.cancelAction)
-                        }
-                    }
-            }
-            #if os(macOS)
-            // iOS sizes sheets itself; a minimum wider than an iPhone clipped
-            // the Close button and the diagnostics text.
-            .frame(minWidth: 560, idealWidth: 680, maxWidth: 760, minHeight: 520, idealHeight: 700, maxHeight: 820)
-            #endif
-        }
         .alert(
             settingsLocalized("settings.reset_guide.title", value: "Replay Getting Started?"),
             isPresented: $showResetFirstRunConfirm
@@ -421,7 +387,7 @@ private struct SettingsDetailView: View {
         } message: {
             Text(settingsLocalized(
                 "settings.wipe.message",
-                value: "This permanently erases every client, pet, visit, payment, inventory item, and report — including the demo data — and cannot be undone. The wipe also syncs to iCloud and your other devices. Your business profile and service menu are kept."
+                value: "This permanently erases every client, pet, visit, payment, inventory item, and report on this device — including the demo data — and cannot be undone. Your business profile and service menu are kept."
             ))
         }
         .alert(
@@ -461,7 +427,7 @@ private struct SettingsDetailView: View {
         } message: {
             Text(settingsLocalized(
                 "data_safety.wipe_blocked.message",
-                value: "Pawtrackr detected that client data may be missing after an update. Export or recover the data before using Start Fresh, because that wipe can sync deletions to iCloud."
+                value: "Pawtrackr detected that client data may be missing after an update. Export or recover the data before using Start Fresh, because that action erases the current records on this device."
             ))
         }
     }
@@ -556,7 +522,6 @@ private struct SettingsDetailView: View {
             businessConfigExisted: false,
             existingClientCount: sampleStatus.clientCount,
             existingPetCount: 0,
-            iCloud: SampleDataSeedPolicy.currentICloudState(),
             // The launch check's restore offer (the banner RootView shows): an
             // empty list may be clients this device can still bring back.
             restorableClientCount: UserDefaults.standard.integer(forKey: StoreBackupRestore.offerClientCountKey)
@@ -564,9 +529,6 @@ private struct SettingsDetailView: View {
         switch decision {
         case .seed:
             break
-        case .skip(.iCloudStillChecking):
-            sampleLoadMessage = SampleDataCopy.loadWaitingForICloud
-            return
         case .skip(.backupFound):
             sampleLoadMessage = SampleDataCopy.loadBackupFound
             return
@@ -605,9 +567,7 @@ private struct SettingsDetailView: View {
         case .dataExport: DataExportSectionView(modelContext: modelContext) {
             storeRestoreClientCount = (try? modelContext.fetchCount(FetchDescriptor<Client>())) ?? 0
         }
-        case .icloud: ICloudSectionView(showDiagnostics: $showDiagnostics)
         case .help: HelpSectionView(modelContext: modelContext)
-        case .devices: DevicesHealthView()
         case .about: AboutSectionView(
             showResetFirstRunConfirm: $showResetFirstRunConfirm,
             showWipeConfirm: $showWipeConfirm,
@@ -768,208 +728,6 @@ private struct DataExportSectionView: View {
     }
 }
 
-private struct ICloudSectionView: View {
-    @Binding var showDiagnostics: Bool
-    @State private var monitor = CloudKitMonitor.shared
-    @State private var isCheckingICloud = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            CardView {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: monitor.statusIconName)
-                        .font(.title2)
-                        .foregroundStyle(statusColor)
-                        .frame(width: 28)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(monitor.healthHeadline)
-                                .font(.headline)
-                                .layoutPriority(1)
-
-                            ICloudStatusPill(title: statusTitle, tint: statusColor)
-                        }
-
-                        Text(monitor.healthDetail)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer()
-                }
-
-                Divider()
-
-                VStack(spacing: 10) {
-                    SettingsInfoRow(title: settingsLocalized("settings.icloud.account", value: "Account"), value: monitor.accountState.displayLabel)
-                    SettingsInfoRow(title: settingsLocalized("settings.icloud.network", value: "Network"), value: monitor.networkState.displayLabel)
-                    // Only an upload iCloud accepted counts as a backup; downloads
-                    // get their own row so one can't pass for the other.
-                    SettingsInfoRow(title: settingsLocalized("settings.icloud.last_backup", value: "Last iCloud backup"), value: monitor.lastBackupValue)
-                    SettingsInfoRow(title: settingsLocalized("settings.icloud.last_download", value: "Last download"), value: monitor.lastDownloadValue)
-
-                    if let pending = monitor.pendingChangesSummary {
-                        SettingsInfoRow(title: settingsLocalized("settings.icloud.pending_changes", value: "Pending Changes"), value: pending)
-                    }
-                }
-
-                if !monitor.healthIssues.isEmpty {
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(monitor.healthIssues.prefix(3)) { issue in
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: issueIconName(for: issue.severity))
-                                    .foregroundStyle(issueTint(for: issue.severity))
-                                    .frame(width: 18)
-
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(issue.title)
-                                        .font(.caption.weight(.semibold))
-                                    Text(issue.detail)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Divider()
-
-                HStack(spacing: 10) {
-                    Button {
-                        Task { await runICloudCheck() }
-                    } label: {
-                        Label(manualCheckTitle, systemImage: manualCheckIcon)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isCheckingICloud || !monitor.canForceSync)
-
-                    Button {
-                        showDiagnostics = true
-                    } label: {
-                        Label(settingsLocalized("settings.icloud.open_diagnostics", value: "Open iCloud Diagnostics"), systemImage: "stethoscope")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if let lastError = monitor.lastErrorMessage {
-                CardView {
-                    Label(settingsLocalized("settings.icloud.sync_attention", value: "Sync Attention"), systemImage: "exclamationmark.triangle.fill")
-                        .font(.headline)
-                        .foregroundStyle(.orange)
-                    Text(lastError)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    private func runICloudCheck() async {
-        guard !isCheckingICloud else { return }
-        isCheckingICloud = true
-        defer { isCheckingICloud = false }
-
-        await monitor.forceSync()
-        monitor.updateDeviceMetadata()
-        monitor.cleanupStalePresence()
-    }
-
-    private var statusColor: Color {
-        switch monitor.statusTint {
-        case .success: return .green
-        case .neutral: return .blue
-        case .warning: return .orange
-        case .danger: return .red
-        }
-    }
-
-    /// From the backup status, never from the tint: a neutral tint covers
-    /// "not backed up yet", which isn't something being checked.
-    private var statusTitle: String {
-        monitor.statusLabel.title
-    }
-
-    private var manualCheckIcon: String {
-        if isCheckingICloud { return "hourglass" }
-        return monitor.canForceSync ? "arrow.clockwise.icloud" : "timer"
-    }
-
-    private var manualCheckTitle: String {
-        if isCheckingICloud {
-            return settingsLocalized("settings.icloud.checking", value: "Checking iCloud...")
-        }
-        let availability = monitor.manualCheckAvailability
-        guard !availability.isAvailable else {
-            return settingsLocalized("settings.icloud.check", value: "Check iCloud")
-        }
-        return availability.buttonTitle
-    }
-
-    private func formattedDate(_ date: Date?) -> String {
-        date?.formatted(date: .abbreviated, time: .shortened)
-            ?? settingsLocalized("common.never", value: "Never")
-    }
-
-    private func issueIconName(for severity: CloudKitMonitor.SyncHealthIssue.Severity) -> String {
-        switch severity {
-        case .info: return "info.circle"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .danger: return "xmark.octagon.fill"
-        }
-    }
-
-    private func issueTint(for severity: CloudKitMonitor.SyncHealthIssue.Severity) -> Color {
-        switch severity {
-        case .info: return .blue
-        case .warning: return .orange
-        case .danger: return .red
-        }
-    }
-}
-
-private struct ICloudStatusPill: View {
-    let title: String
-    let tint: Color
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(tint.opacity(0.12), in: Capsule())
-            .lineLimit(1)
-    }
-}
-
-private struct SettingsInfoRow: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 16)
-            Text(value)
-                .multilineTextAlignment(.trailing)
-                .lineLimit(3)
-                .minimumScaleFactor(0.75)
-        }
-        .font(.subheadline)
-    }
-}
-
 private struct HelpSectionView: View {
     let modelContext: ModelContext
     @State private var isPreparingReport = false
@@ -983,7 +741,7 @@ private struct HelpSectionView: View {
 
                 Text(settingsLocalized(
                     "settings.help.support_detail",
-                    value: "Collect a local support report before troubleshooting sync, exports, or device setup."
+                    value: "Collect a local support report before troubleshooting records, exports, or device setup."
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -1011,11 +769,11 @@ private struct HelpSectionView: View {
 
             CardView {
                 HelpTopicRow(
-                    icon: "icloud.fill",
-                    title: settingsLocalized("settings.help.icloud_title", value: "iCloud Sync"),
+                    icon: "internaldrive.fill",
+                    title: settingsLocalized("settings.help.local_storage_title", value: "Local Storage"),
                     detail: settingsLocalized(
-                        "settings.help.icloud_detail",
-                        value: "Use the iCloud section to check your last backup, account status and diagnostics. If sync stops, check that you're signed in to iCloud, that Pawtrackr is turned on under Apps Using iCloud, and that iCloud storage isn't full."
+                        "settings.help.local_storage_detail",
+                        value: "Client records, visits, payments, and photos stay on this device. Keep exports in a safe place, and use Data Export to review and restore available on-device backups."
                     )
                 )
                 HelpTopicRow(
@@ -1182,7 +940,7 @@ private struct PreferencesSectionView: View {
             CardView {
                 SettingsCardHeader(
                     title: settingsLocalized("settings.preferences.device_title", value: "This Workstation"),
-                    detail: settingsLocalized("settings.preferences.device_detail", value: "A clear device name makes iCloud diagnostics and synced-device lists easier to trust.")
+                    detail: settingsLocalized("settings.preferences.device_detail", value: "A clear device name helps identify this workstation in local support reports.")
                 )
 
                 SettingsLabeledField(
@@ -1194,8 +952,6 @@ private struct PreferencesSectionView: View {
                         .textLengthLimit($appSettings.deviceName, to: TextInputLimits.shortText)
                 }
 
-                // A name, not a sync state: checkmark.icloud and green are kept
-                // for a confirmed upload.
                 SettingsSmartStatusRow(
                     title: settingsLocalized("settings.preferences.device_status", value: "Device Label"),
                     value: deviceNameSummary,
@@ -1233,27 +989,6 @@ private struct PreferencesSectionView: View {
                     Label(settingsLocalized("settings.preferences.haptics", value: "Haptic Feedback"), systemImage: "hand.tap.fill")
                 }
             }
-
-            CardView {
-                SettingsCardHeader(
-                    title: settingsLocalized("settings.preferences.media_title", value: "iCloud Media"),
-                    detail: settingsLocalized("settings.preferences.media_detail", value: "Smart storage keeps the app lighter while still preserving synced originals when available.")
-                )
-
-                Toggle(isOn: $appSettings.optimizeMediaForICloud) {
-                    Label(settingsLocalized("settings.preferences.optimize_media", value: "Optimize Media for iCloud"), systemImage: "photo.on.rectangle.angled")
-                }
-
-                SettingsSmartStatusRow(
-                    title: settingsLocalized("settings.preferences.media_mode", value: "Media Mode"),
-                    value: appSettings.optimizeMediaForICloud
-                        ? settingsLocalized("settings.preferences.media_optimized", value: "Optimized for iCloud sync")
-                        : settingsLocalized("settings.preferences.media_originals", value: "Keep originals on this device"),
-                    // Describes the setting, not whether photos uploaded.
-                    systemImage: appSettings.optimizeMediaForICloud ? "photo.stack" : "externaldrive.fill",
-                    tint: DS.ColorToken.info
-                )
-            }
         }
     }
 
@@ -1278,11 +1013,11 @@ private struct PreferencesSectionView: View {
     private var deviceNameSummary: String {
         let trimmed = appSettings.deviceName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            return settingsLocalized("settings.preferences.device_name_missing", value: "Add a name so synced devices are easy to identify.")
+            return settingsLocalized("settings.preferences.device_name_missing", value: "Add a name to identify this workstation in support reports.")
         }
 
         return String(
-            format: settingsLocalized("settings.preferences.device_name_sync_fmt", value: "%@ will appear in iCloud diagnostics."),
+            format: settingsLocalized("settings.preferences.device_name_report_fmt", value: "%@ will appear in local support reports."),
             trimmed
         )
     }
@@ -1620,14 +1355,14 @@ private struct AboutSectionView: View {
             sampleClientsCard
 
             // Destructive "Start Fresh": erases EVERY client, pet, visit and
-            // payment, real ones included, and the deletions sync to iCloud.
+            // payment on this device, including real records.
             // To drop only the sample clients, use the card above.
             CardView {
                 Label(settingsLocalized("settings.wipe.section_title", value: "Start Fresh"), systemImage: "trash")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.red)
 
-                Text(settingsLocalized("settings.wipe.section_caption", value: "Erase every client, pet, visit, and payment, real or sample, on all your devices through iCloud, and begin with an empty workspace. Your business profile and service menu are kept."))
+                Text(settingsLocalized("settings.wipe.section_caption", value: "Erase every client, pet, visit, and payment, real or sample, on this device and begin with an empty workspace. Your business profile and service menu are kept."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1781,12 +1516,11 @@ private struct AboutSectionView: View {
                 .accessibilityIdentifier("settings.removeSampleData")
             }
         } else if sampleStatus.clientCount == 0 {
-            let iCloudChecking = SampleDataSeedPolicy.currentICloudState() == .stillChecking
             CardView {
                 Label(SampleDataCopy.settingsTitle, systemImage: "wand.and.stars")
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(iCloudChecking ? SampleDataCopy.loadWaitingForICloud : SampleDataCopy.loadCaption)
+                Text(SampleDataCopy.loadCaption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1803,7 +1537,7 @@ private struct AboutSectionView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.bordered)
-                .disabled(isLoadingSamples || iCloudChecking)
+                .disabled(isLoadingSamples)
                 .accessibilityIdentifier("settings.loadSampleData")
             }
         }

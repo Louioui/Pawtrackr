@@ -44,6 +44,9 @@ final class SettingsUITests: XCTestCase {
             { self.app.buttons["settings.section.dataExport"].exists }
         ], timeout: 12)
         XCTAssertTrue(landed, "Settings sections should be visible.")
+        XCTAssertFalse(app.buttons["settings.section.icloud"].exists)
+        XCTAssertFalse(app.buttons["settings.section.devices"].exists)
+        XCTAssertFalse(app.staticTexts["iCloud"].exists)
     }
 
     // MARK: - App Lock toggle confirmation
@@ -144,6 +147,7 @@ final class SettingsUITests: XCTestCase {
             scroll.exists ? scroll.swipeUp() : app.swipeUp()
         }
         XCTAssertTrue(exportBtn.waitForHittable(timeout: 8), "Export Visits button should be present.")
+        XCTAssertTrue(app.buttons["settings.restoreBackup"].waitForHittable(timeout: 5), "On-device backup restore should remain reachable.")
     }
 
     // MARK: - Helpers

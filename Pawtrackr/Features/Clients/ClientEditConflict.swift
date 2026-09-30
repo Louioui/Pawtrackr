@@ -12,7 +12,7 @@
 //    through the Client setters, which stamp updatedAt and lastModifiedBy
 //    (and, since they compare first, only when a value really changed).
 //  - updatedAt and lastModifiedBy are ordinary synced fields, so an edit
-//    imported from CloudKit carries the other device's values.
+//    loaded from another context carries its saved values.
 //  - The check re-reads the client through a fresh ModelContext, so a change
 //    the view's context hasn't merged yet still counts.
 //
@@ -181,8 +181,7 @@ enum ClientEditSaver {
     /// Saves the fields the groomer changed. With `overwrite` false, a change
     /// saved on another device since `baseline` stops the save instead.
     ///
-    /// The view's context doesn't merge another context's save (or a CloudKit
-    /// import) into an object it already holds, and saving that stale object
+    /// The view's context doesn't merge another context's save  into an object it already holds, and saving that stale object
     /// puts every one of its old values back, not just the edited ones:
     /// another device's new phone, points or notes would be lost. So the
     /// view's object is re-read first and written only when the re-read
@@ -240,13 +239,12 @@ enum ClientEditSaver {
             try targetContext.save()
         } catch {
             Logger.clientEdit.error("Failed to save client edit: \(error.localizedDescription, privacy: .public)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_client_changes", value: "saving the client changes"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
             return .failed(message: error.localizedDescription)
         }
         if targetContext !== liveContext {
             refresh(baseline.clientUUID, in: liveContext)
         }
-        CloudKitMonitor.shared.recordLocalChange(AppLocalization.localized("cloudkit.change.saved_client_changes", value: "Saved client changes"))
         return .saved
     }
 

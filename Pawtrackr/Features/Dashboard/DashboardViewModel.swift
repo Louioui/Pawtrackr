@@ -61,13 +61,11 @@ final class DashboardViewModel {
         case branding      // Settings > Business
         case addClient     // The New Client sheet
         case firstVisit    // The client list, where a check-in starts
-        case iCloudBackup  // Settings > iCloud
 
         /// The Settings section the row opens, when it opens one.
         var settingsSection: SettingSection? {
             switch self {
             case .branding: return .business
-            case .iCloudBackup: return .icloud
             case .addClient, .firstVisit: return nil
             }
         }
@@ -109,16 +107,12 @@ final class DashboardViewModel {
     var revenueSeries: [RevenuePoint] = []
     /// nil until the first checklist read finishes.
     var checklistFacts: ChecklistFacts?
-    /// The Getting Started rows. Empty until the store has been read. The
-    /// backup row follows `backupStatus` live, so it updates as iCloud
-    /// confirms uploads without waiting for a refresh.
+    /// The Getting Started rows, based on the local store. Empty until read.
     var checklist: [ChecklistItem] {
         guard let checklistFacts else { return [] }
-        return Self.checklistItems(facts: checklistFacts, backupStatus: backupStatus())
+        return Self.checklistItems(facts: checklistFacts)
     }
-    /// Every row is done. The dashboard then retires the card for good (see
-    /// `DashboardView`), because the backup row can go back to "not yet"
-    /// after any edit until iCloud confirms it.
+    /// Every local setup row is done. The dashboard then retires the card.
     var isChecklistComplete: Bool {
         Self.isComplete(checklist)
     }
@@ -138,9 +132,6 @@ final class DashboardViewModel {
 
     private var dataStore: DataStoreService
     private var eventBus: GlobalEventBus
-    /// This device's iCloud backup, as the rest of the app reports it.
-    /// Injected so tests don't depend on the host's iCloud state.
-    private let backupStatus: @MainActor () -> BackupStatus
     private var observers: [AnyCancellable] = []
     private var notificationObservers: [NSObjectProtocol] = []
     private var observationTask: Task<Void, Never>?
@@ -153,13 +144,11 @@ final class DashboardViewModel {
     init(
         dataStore: DataStoreService,
         eventBus: GlobalEventBus,
-        repository: DashboardRepositoryProtocol? = nil,
-        backupStatus: @escaping @MainActor () -> BackupStatus = { CloudKitMonitor.shared.backupStatus }
+        repository: DashboardRepositoryProtocol? = nil
     ) {
         dashboardLog.info("DashboardViewModel: Initialized")
         self.dataStore = dataStore
         self.eventBus = eventBus
-        self.backupStatus = backupStatus
         self.repository = repository ?? DashboardRepository(modelContext: dataStore.container.mainContext)
         self.predictiveActor = PredictiveSchedulingActor(modelContainer: dataStore.container)
 
@@ -268,9 +257,8 @@ final class DashboardViewModel {
         }
     }
 
-    /// The Getting Started rows for what the store holds and the backup
-    /// status.
-    static func checklistItems(facts: ChecklistFacts, backupStatus: BackupStatus) -> [ChecklistItem] {
+    /// The Getting Started rows for what the local store holds.
+    static func checklistItems(facts: ChecklistFacts) -> [ChecklistItem] {
         [
             ChecklistItem(
                 title: AppLocalization.localized("checklist.branding", value: "Add Business Branding"),
@@ -286,23 +274,8 @@ final class DashboardViewModel {
                 title: AppLocalization.localized("checklist.visit", value: "Start Your First Visit"),
                 isCompleted: facts.realVisitCount > 0,
                 action: .firstVisit
-            ),
-            ChecklistItem(
-                title: AppLocalization.localized("checklist.backup", value: "Confirm Backup Protection"),
-                isCompleted: hasBackupProtection(backupStatus),
-                action: .iCloudBackup
             )
         ]
-    }
-
-    /// "Confirm Backup Protection" is complete only while iCloud has
-    /// confirmed this device's changes (`BackupStatus.backedUp`), the same
-    /// "Backed up" the rest of the app shows. Uploading, failing, iCloud off
-    /// and not-yet-checked don't count, and neither does a local package
-    /// this device made (for example the disabled `SecureStoreSnapshotExporter`):
-    /// it can't be restored and is lost with the device.
-    nonisolated static func hasBackupProtection(_ status: BackupStatus) -> Bool {
-        status.isBackedUp
     }
 
     /// Whether the rows are loaded and all done.

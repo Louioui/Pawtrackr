@@ -16,8 +16,7 @@ final class Client {
     #Index<Client>([\.lastName, \.firstName], [\.lastVisitDate])
 
     // MARK: - Identity & Timestamps
-    // NOTE: Non-optional properties have defaults so CloudKit can rehydrate
-    // partial records. App init paths always overwrite these.
+    // Initializers overwrite these persisted defaults when creating records.
     var uuid: UUID = UUID()
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
@@ -66,7 +65,6 @@ final class Client {
 
     /// True when any of this client's pets is flagged aggressive. Single source of
     /// truth for the staff-safety warning shown on the client list and detail.
-    /// Computed (not stored) so it stays schema/CloudKit-safe and always reflects
     /// the current behavior tags.
     var hasAggressivePet: Bool {
         (pets ?? []).contains { $0.isAggressive }
@@ -95,7 +93,6 @@ final class Client {
     //
     // Each setter compares before assigning. SwiftData marks a row changed on
     // any assignment, even of the same value, and every changed row uploads to
-    // iCloud and imports on every other device. A no-op Save would also stamp
     // updatedAt/lastModifiedBy and look like a real edit from this device to
     // the edit-conflict check on the others.
     func setFirstName(_ value: String) {
@@ -166,7 +163,7 @@ final class Client {
 
     func setPhotoData(_ data: Data?) {
         if let data = data {
-            photoData = CloudMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("cloudkit.media.client_photo", value: "client profile photo"))
+            photoData = LocalMediaPolicy.optimizedFullImageData(data, context: AppLocalization.localized("media.client_photo", value: "client profile photo"))
             updateThumbnail()
         } else {
             photoData = nil
@@ -193,7 +190,7 @@ final class Client {
             return
         }
         #if canImport(UIKit) || canImport(AppKit)
-        thumbnailData = CloudMediaPolicy.optimizedThumbnailData(data)
+        thumbnailData = LocalMediaPolicy.optimizedThumbnailData(data)
         #endif
     }
 

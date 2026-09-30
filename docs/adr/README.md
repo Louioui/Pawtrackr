@@ -1,5 +1,9 @@
 # Pawtrackr iOS — Architecture Review & Decision Records
 
+Current persistence decision: [ADR-0005](0005-local-only-persistence.md), accepted
+2026-09-29. Earlier architecture reviews and incident records below describe
+their historical context.
+
 **Date:** 2026-07-03
 **Reviewer:** architecture pass over `/Users/mac/Desktop/Pawtrackr` (branch `Master`, marketing version 1.0.1)
 **Decider:** Luis (solo developer)
@@ -50,6 +54,8 @@ Three interlocking ADRs. Monetization is a **business decision the owner made**
 | [0001](0001-monetization-subscription-trial.md) | Auto-renewable **subscription + 7-day intro free trial** (StoreKit 2), entitlement-gated at `RootView`; the RTF's Keychain-timed non-consumable is rejected (App Review 3.1.1). | Accepted (owner chose) |
 | [0002](0002-loyalty-system-evolution.md) | Keep loyalty on **Client**; add `LoyaltyConfig` (+ optional `LoyaltyHistory`, rewards catalog) **additively**, as premium features. Reject the Pet-based rewrite and `@Attribute(.unique)`. | Proposed |
 | [0003](0003-swiftdata-migration-discipline.md) | Any new `@Model`/relationship/rename/type-change requires a **V2 `VersionedSchema` + `MigrationStage` + CloudKit production schema deploy**. Monetization needs no new model; loyalty additions land as V2. | Proposed |
+| [0004](0004-inferred-lightweight-migration.md) | Use inferred lightweight migration and verify upgrades against shipped-store fixtures. | Accepted; remote deployment portions superseded by ADR-0005 |
+| [0005](0005-local-only-persistence.md) | Preserve the existing device store and schema with local persistence and local recovery. | Accepted |
 
 ## The through-line
 

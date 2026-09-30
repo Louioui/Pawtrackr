@@ -157,7 +157,7 @@ final class NewClientViewModel {
             return .failed
         } catch {
             Logger.newClient.error("createClient: save/db error: \(String(describing: error), privacy: .private)")
-            CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.create_client", value: "creating the client"))
+            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
             self.appError = .database(error.localizedDescription)
             HapticManager.notify(.error)
             return .failed

@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftData
 
 enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
     case dashboard
@@ -44,7 +43,6 @@ enum NavigationItem: String, CaseIterable, Identifiable, Hashable {
 
 struct SidebarView: View {
     @Binding var selection: NavigationItem?
-    @Query(sort: \DeviceMetadata.lastSyncAt, order: .reverse) private var devices: [DeviceMetadata]
     var onSelect: (NavigationItem) -> Void = { _ in }
 
     var body: some View {
@@ -58,29 +56,6 @@ struct SidebarView: View {
                 SidebarRow(item: .insights, selection: $selection, onSelect: onSelect)
             }
 
-            #if os(macOS)
-            if !devices.isEmpty {
-                Section(AppLocalization.localized("sidebar.worker_devices", value: "Worker Devices")) {
-                    ForEach(devices.prefix(5)) { device in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(device.name)
-                                    .font(.caption.weight(.medium))
-                                Text(device.lastSyncAt.formatted(.relative(presentation: .numeric)))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            // Blue, not green: a recent heartbeat isn't a backup.
-                            Circle()
-                                .fill(isOnline(device) ? DS.ColorToken.info : .secondary)
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                }
-            }
-            #endif
-
             Section(NSLocalizedString("sidebar.section.system", value: "System", comment: "")) {
                 SidebarRow(item: .settings, selection: $selection, onSelect: onSelect)
             }
@@ -88,11 +63,6 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .glassmorphicSidebar()
         .navigationTitle("Pawtrackr")
-    }
-    
-    private func isOnline(_ device: DeviceMetadata) -> Bool {
-        // Consider a device "online" if it synced in the last 10 minutes
-        Date().timeIntervalSince(device.lastSyncAt) < 600
     }
 }
 

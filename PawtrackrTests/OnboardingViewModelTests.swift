@@ -223,8 +223,6 @@ final class OnboardingViewModelTests: XCTestCase {
         viewModel.currencySymbol = "$"
         viewModel.pin = "4826"
         viewModel.confirmPin = "4826"
-        // The host's iCloud account must not decide whether samples are added.
-        viewModel.iCloudStateProvider = { .off }
 
         let task = await viewModel.finish(seedSampleData: true) { }
         _ = await task?.result
@@ -371,7 +369,7 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("checkout") })
         XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("receipt") })
         XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("history") })
-        XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("iCloud") })
+        XCTAssertFalse(steps.contains { $0.purpose.localizedCaseInsensitiveContains("iCloud") })
         XCTAssertTrue(steps.contains { $0.purpose.localizedCaseInsensitiveContains("Start Fresh") })
         XCTAssertFalse(steps.contains { $0.title.trimmed.isEmpty || $0.directive.trimmed.isEmpty || $0.purpose.trimmed.isEmpty })
     }
@@ -410,7 +408,6 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(ownerAnchors.contains(.cdAddPet))
         XCTAssertTrue(ownerAnchors.contains(.setLoyalty))
         XCTAssertTrue(ownerAnchors.contains(.loyaltySimulator))
-        XCTAssertTrue(ownerAnchors.contains(.setDevices))
         XCTAssertTrue(ownerAnchors.contains(.insRevenue))
         XCTAssertTrue(ownerAnchors.contains(.setStartFresh))
 
@@ -418,8 +415,6 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(staffAnchors.contains(.emergencyContactBadges))
         XCTAssertTrue(staffAnchors.contains(.cdLoyalty))
         XCTAssertTrue(staffAnchors.contains(.petGenderDots))
-        XCTAssertTrue(staffAnchors.contains(.setICloud))
-        XCTAssertTrue(staffAnchors.contains(.setDevices))
         // Loyalty setup lives in the owner's Settings & Safety lesson, which
         // the front desk tour doesn't have.
         XCTAssertFalse(staffAnchors.contains(.setLoyalty))
@@ -838,7 +833,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
     func testWalkthroughMacFullscreenSettingsSectionKeepsGuideReadable() {
         // Steps 33–38 regression (macOS, fullscreen): wide Settings detail cards
-        // (Business, Security, iCloud, About) hit the same trailing-cap rejection
+        // (Business, Security, About) hit the same trailing-cap rejection
         // and rendered an empty bubble pinned against the window toolbar.
         let step = WalkthroughStep(
             id: "set.business",

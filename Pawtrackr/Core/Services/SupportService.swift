@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import CloudKit
 import OSLog
 
 /// Utility to gather system-wide diagnostics for technical support.
@@ -22,6 +21,8 @@ final class SupportService {
         var report = "PAWTRACKR SUPPORT DIAGNOSTIC REPORT\n"
         report += "Date: \(Date().formatted())\n"
         report += "App Version: \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "Unknown")\n"
+        let deviceName = UserDefaults.standard.string(forKey: AppSettingsKeys.deviceName) ?? ""
+        report += "Device Name: \(SupportReportSanitizer.redacted(deviceName))\n"
         report += "Device Token: \(SupportReportSanitizer.deviceToken(for: DeviceIdentity.currentID.uuidString))\n"
         report += "----------------------------------\n\n"
         
@@ -34,49 +35,11 @@ final class SupportService {
         report += "- Checkout Transactions: \(describeCount(try context.fetchCount(FetchDescriptor<CheckoutTransaction>())))\n"
         report += "- Day Summaries: \(describeCount(try context.fetchCount(FetchDescriptor<DaySummary>())))\n\n"
         
-        // 2. iCloud Status
-        report += "ICLOUD STATUS:\n"
-        let monitor = CloudKitMonitor.shared
-        report += "- Sync Mode: \(monitor.mode.diagnosticName)\n"
-        report += "- Backup Status: \(monitor.backupStatus.diagnosticDescription)\n"
-        report += "- Account: \(monitor.accountState.displayLabel)\n"
-        report += "- Network: \(monitor.networkState.displayLabel)\n"
-        report += "- Health: \(monitor.healthHeadline)\n"
-        report += "- Detail: \(SupportReportSanitizer.redacted(monitor.healthDetail))\n"
-        report += "- First Sync Completed: \(monitor.firstSyncCompleted)\n"
-        report += "- Pending Changes: \(SupportReportSanitizer.redacted(monitor.pendingChangesSummary ?? "none"))\n"
-        // Upload evidence rather than a "last sync" date: that date moved on
-        // imports too, which let groomers believe iCloud had clients it never
-        // received.
-        for line in CloudKitMonitor.persistedUploadEvidenceLines() {
-            report += line.hasPrefix("- ") ? "  \(line)\n" : "- \(line)\n"
-        }
-        report += "- Remote Change Notices This Launch: \(monitor.remoteChangeCount)\n"
-        report += "- Quota Exceeded: \(monitor.quotaExceeded)\n"
-        report += "- App Access Warning: \(monitor.iCloudAppAccessMayBeDisabled)\n"
-        report += "- Last Error: \(SupportReportSanitizer.redacted(monitor.lastErrorMessage ?? "none"))\n"
-        report += "- Health Issues:\n"
-        if monitor.healthIssues.isEmpty {
-            report += "  - none\n"
-        } else {
-            for issue in monitor.healthIssues {
-                let title = SupportReportSanitizer.redacted(issue.title)
-                let detail = SupportReportSanitizer.redacted(issue.detail)
-                report += "  - \(title): \(detail)\n"
-            }
-        }
-        report += "- Recent Sync Events:\n"
-        if monitor.syncEvents.isEmpty {
-            report += "  - none\n"
-        } else {
-            for event in monitor.syncEvents {
-                let code = event.errorCode.map { " [\($0)]" } ?? ""
-                let message = SupportReportSanitizer.redacted(event.message)
-                report += "  - \(event.startedAt.formatted()) \(event.kind.displayLabel) \(event.status.displayLabel): \(message)\(code)\n"
-            }
-        }
-        report += "\n"
-        
+        // 2. Local persistence
+        report += "STORAGE:\n"
+        report += "- Mode: Local device storage\n"
+        report += "- Recovery warning: \(UserDefaults.standard.bool(forKey: DataSafetyMonitor.suspectedDataLossKey))\n\n"
+
         // 3. System Environment
         report += "ENVIRONMENT:\n"
         report += "- Scenario: \(AppRuntime.currentScenario.rawValue)\n"

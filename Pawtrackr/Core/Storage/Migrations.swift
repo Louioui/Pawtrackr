@@ -21,14 +21,13 @@ import OSLog
 // listed the live model classes (and had edited the already-shipped V1), so no
 // 1.0.1 store matched. Every upgrading user hit NSCocoaErrorDomain 134504
 // ("Cannot use staged migration with an unknown model version") and landed on
-// the recovery screen. The store is CloudKit-mirrored, and CloudKit only accepts
-// additive changes anyway, so a staged plan bought nothing but that failure.
+// the recovery screen. Keep existing model types and fields compatible with
+// those stores, including legacy metadata, when opening them locally.
 //
 // When you change a model, keep the change additive:
 //   - New @Model types, new properties that are optional or have a default,
 //     new optional relationships. Rename with `@Attribute(originalName:)`.
 //     Never delete or retype a property that has shipped.
-//   - Deploy the CloudKit schema to Production before the App Store release.
 //   - `StoreUpgradeRegressionTests` opens real stores captured from shipped
 //     builds. When a release ships, add its store to PawtrackrTests/Fixtures.
 
@@ -249,8 +248,7 @@ enum DataMigrations {
     }
 
     /// Backfill `.earned` loyalty ledger entries for visits that awarded points
-    /// before the ledger existed, and collapse cross-device backfill duplicates
-    /// (two devices can each run this once; CloudKit then merges both sets).
+    /// before the ledger existed, and collapse legacy backfill duplicates.
     /// Idempotent: keyed by visit UUID, safe to run on every launch.
     static func backfillLoyaltyLedger(in context: ModelContext) {
         do {

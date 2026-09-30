@@ -50,17 +50,9 @@ final class DashboardViewModelTests: XCTestCase {
     }
 
     // MARK: - Checklist
-    //
-    // Every checklist test injects the backup status, so the host's iCloud
-    // account and UserDefaults never decide the outcome.
 
-    private final class StatusBox {
-        var status: BackupStatus
-        init(_ status: BackupStatus) { self.status = status }
-    }
-
-    private func makeViewModel(backupStatus: BackupStatus = .notBackedUp(localChangesSince: nil)) -> DashboardViewModel {
-        DashboardViewModel(dataStore: dataStore, eventBus: eventBus, backupStatus: { backupStatus })
+    private func makeViewModel() -> DashboardViewModel {
+        DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
     }
 
     private func row(_ action: DashboardViewModel.ChecklistAction, in vm: DashboardViewModel) -> DashboardViewModel.ChecklistItem? {
@@ -71,7 +63,7 @@ final class DashboardViewModelTests: XCTestCase {
         let vm = makeViewModel()
         await vm.refresh()
 
-        XCTAssertEqual(vm.checklist.map(\.action), [.branding, .addClient, .firstVisit, .iCloudBackup])
+        XCTAssertEqual(vm.checklist.map(\.action), [.branding, .addClient, .firstVisit])
         XCTAssertTrue(vm.checklist.allSatisfy { !$0.isCompleted },
                       "Empty store: every checklist step should be incomplete.")
         XCTAssertFalse(vm.isChecklistComplete)
@@ -79,58 +71,16 @@ final class DashboardViewModelTests: XCTestCase {
     }
 
     func testChecklistIsEmptyUntilTheStoreHasBeenRead() {
-        let vm = makeViewModel(backupStatus: .backedUp(asOf: Date()))
+        let vm = makeViewModel()
         XCTAssertTrue(vm.checklist.isEmpty)
         XCTAssertFalse(vm.isChecklistComplete, "Nothing loaded is not the same as everything done.")
     }
 
-    /// Only iCloud's confirmed upload ("Backed up") ticks the backup row.
-    func testBackupRow_OnlyConfirmedUploadCounts() async {
-        let statuses: [(BackupStatus, Bool)] = [
-            (.backedUp(asOf: Date()), true),
-            (.uploading, false),
-            (.notBackedUp(localChangesSince: nil), false),
-            (.notBackedUp(localChangesSince: Date()), false),
-            (.failing(since: Date(), disposition: .transient), false),
-            (.localOnly, false),
-            (.signedOut, false),
-            (.unknown, false)
-        ]
-        for (status, expected) in statuses {
-            XCTAssertEqual(DashboardViewModel.hasBackupProtection(status), expected, "\(status)")
-            let vm = makeViewModel(backupStatus: status)
-            await vm.refresh()
-            XCTAssertEqual(row(.iCloudBackup, in: vm)?.isCompleted, expected, "\(status)")
-        }
-        XCTAssertFalse(SecureStoreSnapshotExporter.isUserFacingExportEnabled,
-                       "The raw-store snapshot has no restore path; it must stay hidden.")
-    }
-
-    /// Regression: a same-device encrypted snapshot (which nothing can
-    /// restore, and whose key never leaves the device) used to tick
-    /// "Confirm Backup Protection".
-    func testRefresh_LocalSnapshotDoesNotCountAsBackupProtection() async {
-        let key = SecureStoreSnapshotExporter.lastSuccessfulSnapshotDateKey
-        let previous = UserDefaults.standard.object(forKey: key)
-        defer { UserDefaults.standard.set(previous, forKey: key) }
-        UserDefaults.standard.set(Date(), forKey: key)
-
-        let vm = makeViewModel(backupStatus: .localOnly)
+    func testChecklistHasOnlyLocalSetupActions() async {
+        let vm = makeViewModel()
         await vm.refresh()
-        XCTAssertEqual(row(.iCloudBackup, in: vm)?.isCompleted, false, "A local snapshot must not count as backup protection.")
-    }
-
-    func testBackupRowFollowsTheStatusWithoutARefresh() async {
-        let box = StatusBox(.uploading)
-        let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus, backupStatus: { box.status })
-        await vm.refresh()
-        XCTAssertEqual(row(.iCloudBackup, in: vm)?.isCompleted, false)
-
-        box.status = .backedUp(asOf: Date())
-        XCTAssertEqual(row(.iCloudBackup, in: vm)?.isCompleted, true)
-
-        box.status = .notBackedUp(localChangesSince: Date())
-        XCTAssertEqual(row(.iCloudBackup, in: vm)?.isCompleted, false, "The row is live, which is why the card latches once done.")
+        XCTAssertEqual(vm.checklist.map(\.action), [.branding, .addClient, .firstVisit])
+        XCTAssertEqual(vm.checklist.count, 3)
     }
 
     func testBrandingNeedsALogoOrContactDetails() async throws {
@@ -179,7 +129,7 @@ final class DashboardViewModelTests: XCTestCase {
         await vm.refresh()
 
         XCTAssertEqual(Set(vm.checklist.map(\.action)), Set(DashboardViewModel.ChecklistAction.allCases))
-        XCTAssertEqual(DashboardViewModel.ChecklistAction.allCases.count, 4)
+        XCTAssertEqual(DashboardViewModel.ChecklistAction.allCases.count, 3)
         XCTAssertTrue(vm.checklist.allSatisfy { !$0.isCompleted })
     }
 
@@ -241,12 +191,8 @@ final class DashboardViewModelTests: XCTestCase {
         context.insert(Visit(pet: pet, startedAt: .now))
         try context.save()
 
-        let box = StatusBox(.uploading)
-        let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus, backupStatus: { box.status })
+        let vm = makeViewModel()
         await vm.refresh()
-        XCTAssertFalse(vm.isChecklistComplete, "Everything but the backup.")
-
-        box.status = .backedUp(asOf: Date())
         XCTAssertTrue(vm.isChecklistComplete)
 
         XCTAssertFalse(DashboardViewModel.isComplete([]))
@@ -254,7 +200,6 @@ final class DashboardViewModelTests: XCTestCase {
 
     func testChecklistRowsOpenTheirOwnSettingsSection() {
         XCTAssertEqual(DashboardViewModel.ChecklistAction.branding.settingsSection, .business)
-        XCTAssertEqual(DashboardViewModel.ChecklistAction.iCloudBackup.settingsSection, .icloud)
         XCTAssertNil(DashboardViewModel.ChecklistAction.addClient.settingsSection)
         XCTAssertNil(DashboardViewModel.ChecklistAction.firstVisit.settingsSection)
     }
@@ -265,10 +210,10 @@ final class DashboardViewModelTests: XCTestCase {
         let note = Notification(name: .selectNavigationItem, object: nil, userInfo: [
             NavigationSelectionKey.item.rawValue: NavigationItem.settings.rawValue,
             NavigationSelectionKey.resetPath.rawValue: true,
-            NavigationSelectionKey.settingsSection.rawValue: SettingSection.icloud.rawValue
+            NavigationSelectionKey.settingsSection.rawValue: SettingSection.business.rawValue
         ])
         XCTAssertEqual(note.requestedNavigationItem, .settings)
-        XCTAssertEqual(note.requestedSettingsSection, .icloud)
+        XCTAssertEqual(note.requestedSettingsSection, .business)
 
         let router = NavigationRouter()
         router.activeNavigationItem = .settings

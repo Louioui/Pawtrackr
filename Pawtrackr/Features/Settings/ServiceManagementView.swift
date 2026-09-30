@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import OSLog
 
 struct ServiceManagementView: View {
     @Environment(\.modelContext) private var modelContext
@@ -160,7 +161,7 @@ struct EditServiceView: View {
             } catch let error as ValidationError {
                 viewModel.appError = .validation(error)
             } catch {
-                CloudKitMonitor.shared.reportLocalSaveError(error, operation: AppLocalization.localized("cloudkit.save_failed.save_service", value: "saving the service"))
+                Logger.database.error("Saving service failed: \(error.localizedDescription, privacy: .public)")
                 viewModel.appError = .database(error.localizedDescription)
             }
         }

@@ -304,22 +304,11 @@ final actor ClientRepository: ClientRepositoryProtocol {
         }
         client.emergencyContacts = emergencyContacts
         
-        let changedAt = Date()
         try modelContext.save()
         // The setters above indexed the client before its pets were attached,
         // and each pet before it had an owner. Index the saved state so the
         // client shows its pets and each pet is found by the owner's phone.
         SpotlightIndexer.shared.scheduleIndex(client: client, includingPets: true)
-        let clientUUID = client.uuid
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                AppLocalization.localized("cloudkit.change.created_client", value: "Created client"),
-                occurredAt: changedAt,
-                entityName: "Client",
-                recordUUID: clientUUID,
-                changedKeys: ["uuid", "firstName", "lastName", "phone", "email", "address", "photoData", "pets", "emergencyContacts", "createdAt", "updatedAt"]
-            )
-        }
         return client.persistentModelID
     }
 
@@ -329,18 +318,7 @@ final actor ClientRepository: ClientRepositoryProtocol {
         client.setLastName(lastName)
         client.setPhone(phone)
         client.setEmail(email)
-        let changedAt = Date()
         try modelContext.save()
-        let clientUUID = client.uuid
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                AppLocalization.localized("cloudkit.change.saved_client", value: "Saved client"),
-                occurredAt: changedAt,
-                entityName: "Client",
-                recordUUID: clientUUID,
-                changedKeys: ["firstName", "lastName", "phone", "email", "primaryContactInfo", "updatedAt", "lastModifiedBy"]
-            )
-        }
     }
 
     func deleteClient(id: PersistentIdentifier) async throws {
@@ -354,18 +332,8 @@ final actor ClientRepository: ClientRepositoryProtocol {
         let visitActivityDates = visits.map { $0.endedAt ?? $0.startedAt }
 
         modelContext.delete(client)
-        let changedAt = Date()
         try modelContext.save()
         SpotlightIndexer.shared.removeClientAndPetsFromIndex(clientID: clientUUID, petIDs: petUUIDs)
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                AppLocalization.localized("cloudkit.change.deleted_client", value: "Deleted client"),
-                occurredAt: changedAt,
-                entityName: "Client",
-                recordUUID: clientUUID,
-                changedKeys: ["deleted"]
-            )
-        }
 
         let cal = Calendar.current
         var affectedDays: Set<Date> = []

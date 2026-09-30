@@ -20,14 +20,9 @@ actor LoyaltyService {
             now: visit.endedAt ?? .now,
             config: config
         )
-        guard clientUUID != nil, let client = pet.owner else { return }
+        guard clientUUID != nil else { return }
 
         try modelContext.save()
-        await recordClientChange(
-            operation: AppLocalization.localized("cloudkit.change.applied_loyalty_points", value: "Applied loyalty points"),
-            client: client,
-            changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
-        )
     }
 
     /// Redeems points from a client balance without allowing overdrafts.
@@ -44,11 +39,6 @@ actor LoyaltyService {
         stampClientMutation(client)
         recordLedgerEntry(kind: .redeemed, points: -points, client: client, reason: reason)
         try modelContext.save()
-        await recordClientChange(
-            operation: AppLocalization.localized("cloudkit.change.redeemed_loyalty_points", value: "Redeemed loyalty points"),
-            client: client,
-            changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
-        )
     }
 
     /// Applies a staff-entered loyalty balance correction.
@@ -66,11 +56,6 @@ actor LoyaltyService {
         stampClientMutation(client)
         recordLedgerEntry(kind: .adjusted, points: delta, client: client, reason: reason)
         try modelContext.save()
-        await recordClientChange(
-            operation: AppLocalization.localized("cloudkit.change.adjusted_loyalty_points", value: "Adjusted loyalty points"),
-            client: client,
-            changedKeys: ["loyaltyPoints", "updatedAt", "lastModifiedBy"]
-        )
     }
 
     func updateConfig(
@@ -164,18 +149,6 @@ actor LoyaltyService {
     private func stampClientMutation(_ client: Client) {
         client.updatedAt = .now
         client.lastModifiedBy = DeviceIdentity.currentID
-    }
-
-    private func recordClientChange(operation: String, client: Client, changedKeys: [String]) async {
-        let clientUUID = client.uuid
-        await MainActor.run {
-            CloudKitMonitor.shared.recordLocalChange(
-                operation,
-                entityName: "Client",
-                recordUUID: clientUUID,
-                changedKeys: changedKeys
-            )
-        }
     }
 
     private func fetchOrCreateConfig() throws -> LoyaltyConfig {
