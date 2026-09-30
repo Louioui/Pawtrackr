@@ -457,9 +457,13 @@ struct ClientDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 16) {
-                    ownerHeader(client: vm.client, primaryEmergencyContact: vm.primaryEmergencyContact)
-                        .walkthroughTarget(.cdOwner)
-                    clientSafetyBanner(client: vm.client)
+                    // One tour stop covers the profile header and, when a pet
+                    // is flagged aggressive, the red Caution banner under it.
+                    VStack(spacing: 16) {
+                        ownerHeader(client: vm.client, primaryEmergencyContact: vm.primaryEmergencyContact)
+                        clientSafetyBanner(client: vm.client)
+                    }
+                    .walkthroughTarget(.cdOwner)
                     // The card's "+" button carries `.emergencyContactBadges`.
                     emergencyContactsCard(contacts: vm.emergencyContacts)
                         .walkthroughTarget(.cdEmergency)
@@ -1025,14 +1029,18 @@ struct ClientDetailView: View {
             HStack {
                 Text(NSLocalizedString("client_details.recent_history", comment: "")).font(.headline)
                 Spacer()
-                Picker(NSLocalizedString("client_detail.all", comment: ""), selection: Binding(
+                Picker(NSLocalizedString("client_detail.history_range", value: "History range", comment: ""), selection: Binding(
                     get: { vm.historyRange },
                     set: { vm.historyRange = $0 }
                 )) {
-                    Text(NSLocalizedString("client_detail.all", comment: "")).tag(ClientDetailViewModel.HistoryRange.all)
-                    Text(NSLocalizedString("client_detail.last_90d", comment: "")).tag(ClientDetailViewModel.HistoryRange.lastNDays(90))
+                    ForEach(ClientDetailViewModel.HistoryRange.pickerOptions, id: \.self) { range in
+                        Text(range.title).tag(range)
+                    }
                 }
                 .pickerStyle(.segmented)
+                // A segmented picker shows its title beside the segments on
+                // macOS, which read as a second "All" next to [All | Last 90 Days].
+                .labelsHidden()
                 .frame(maxWidth: 260)
             }
             .padding(.horizontal)

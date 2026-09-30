@@ -1393,7 +1393,7 @@ private struct AboutSectionView: View {
         }
     }
 
-    /// "Continue Tour (Lesson 3 of 7)" from saved progress and the role's
+    /// "Continue Tour (Lesson 3 of 6)" from saved progress and the role's
     /// lesson order, or "Replay the Tour" once every lesson is done.
     private var continueTourTitle: String {
         let order = tourRole.tourLessonOrder
@@ -1445,7 +1445,7 @@ private struct AboutSectionView: View {
             .pickerStyle(.menu)
             .accessibilityIdentifier("settings.tourRole")
 
-            Text(settingsLocalized("settings.tour.role_caption", value: "The role sets the lesson order and some tips on this device."))
+            Text(settingsLocalized("settings.tour.role_caption", value: "The role sets which lessons and tips this device shows. Every tour follows the app screen by screen."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)

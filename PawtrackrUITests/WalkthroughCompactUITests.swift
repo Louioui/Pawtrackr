@@ -17,10 +17,21 @@ final class WalkthroughCompactUITests: QualityControlUITestCase {
         XCTAssertTrue(bubble.waitForExistence(timeout: 8), "Recent History walkthrough bubble should be visible.")
 
         let screen = app.windows.firstMatch.frame
-        XCTAssertGreaterThanOrEqual(
-            bubble.frame.height,
-            240,
-            "The Recent History stop should leave enough visible bubble height for the guide text. layout=\(activeWalkthroughLayoutDebug())"
+        // The card is as tall as its copy. Its controls sit inside it, so the
+        // guide text above them isn't cut off, and nothing but padding sits
+        // below them (the card used to stretch to a fixed height, leaving an
+        // empty band under Back and Next).
+        let primary = app.buttons["walkthrough.primary"]
+        let skip = app.buttons["walkthrough.skip"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 4) && skip.exists)
+        XCTAssertTrue(primary.isHittable, "layout=\(activeWalkthroughLayoutDebug())")
+        XCTAssertTrue(bubble.frame.contains(primary.frame), "layout=\(activeWalkthroughLayoutDebug())")
+        XCTAssertTrue(bubble.frame.contains(skip.frame), "layout=\(activeWalkthroughLayoutDebug())")
+        let lowestControl = max(primary.frame.maxY, skip.frame.maxY)
+        XCTAssertLessThanOrEqual(
+            bubble.frame.maxY - lowestControl,
+            30,
+            "The card should end just below its controls. layout=\(activeWalkthroughLayoutDebug())"
         )
         XCTAssertGreaterThanOrEqual(bubble.frame.minY, screen.minY)
         XCTAssertLessThanOrEqual(

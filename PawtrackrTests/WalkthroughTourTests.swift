@@ -2,10 +2,10 @@ import XCTest
 import SwiftData
 @testable import Pawtrackr
 
-/// The guided tour: stable step IDs, lessons ordered by role, stops chosen
-/// and worded from what the salon and device hold, saved progress, hands-on
-/// stops that always have a way forward, and anchors attached where the
-/// overlay that draws them can see them.
+/// The guided tour: stable step IDs, one screen-by-screen order for every
+/// role, stops chosen and worded from what the salon and device hold, saved
+/// progress, hands-on stops that always have a way forward, and anchors
+/// attached where the overlay that draws them can see them.
 @MainActor
 final class WalkthroughTourTests: XCTestCase {
     private var defaultsSuiteName: String!
@@ -75,7 +75,7 @@ final class WalkthroughTourTests: XCTestCase {
             XCTAssertFalse(id.contains(" "), id)
         }
         // Saved progress refers to these. Renaming one loses users' place.
-        for id in ["nav.dashboard", "dash.kpis", "clients.sort", "nc.save", "cd.checkin", "cd.checkout", "co.confirm", "set.start_fresh"] {
+        for id in ["dash.kpis", "nav.clients", "clients.sort", "nc.save", "cd.checkin", "cd.checkout", "co.confirm", "set.start_fresh"] {
             XCTAssertTrue(ids.contains(id), id)
         }
     }
@@ -95,14 +95,14 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertEqual(lessonSequence(WalkthroughController.fullTour()), WalkthroughLesson.allCases)
     }
 
-    // MARK: - Roles
+    // MARK: - Order
 
-    func testRolesOrderTheLessons() {
+    func testEveryRoleWalksTheAppInScreenOrder() {
         let owner = WalkthroughController.tour(for: .ownerManager, context: .practice)
         let frontDesk = WalkthroughController.tour(for: .frontDeskGroomer, context: .practice)
 
-        XCTAssertEqual(lessonSequence(owner), [.appMap, .businessInsights, .settingsAndSafety, .dataOwnership, .dailyWorkflow, .clientRecords, .checkoutAndMoney])
-        XCTAssertEqual(lessonSequence(frontDesk), [.dailyWorkflow, .clientRecords, .checkoutAndMoney, .appMap])
+        XCTAssertEqual(lessonSequence(owner), WalkthroughLesson.allCases)
+        XCTAssertEqual(lessonSequence(frontDesk), [.dailyWorkflow, .clientRecords, .checkoutAndMoney])
         XCTAssertEqual(OnboardingRole.ownerManager.tourLessonOrder, lessonSequence(owner))
         XCTAssertEqual(OnboardingRole.frontDeskGroomer.tourLessonOrder, lessonSequence(frontDesk))
 
@@ -110,13 +110,46 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertFalse(frontDesk.contains { $0.surface == .insights })
         XCTAssertTrue(frontDesk.filter { $0.surface == .settings }.isEmpty)
 
-        // Owner: numbers, setup and data safety before the daily work.
-        let ownerIDs = owner.map(\.id)
-        let index = { (id: String) in ownerIDs.firstIndex(of: id) ?? .max }
-        XCTAssertLessThan(index("nav.insights"), index("dash.kpis"))
-        XCTAssertLessThan(index("set.security"), index("dash.kpis"))
-        XCTAssertLessThan(index("set.data"), index("cd.checkin"))
-        XCTAssertEqual(owner.first?.anchor, .dashboard)
+        // Both tours: the Today cards, the Clients tab, the client list, a
+        // client's profile, then the pet's Check In.
+        for tour in [owner, frontDesk] {
+            let ids = tour.map(\.id)
+            let index = { (id: String) in ids.firstIndex(of: id) ?? .max }
+            XCTAssertEqual(tour.first?.anchor, .dashKpis)
+            XCTAssertEqual(index("nav.clients") + 1, index("clients.list"))
+            XCTAssertLessThan(index("clients.list"), index("cd.owner"))
+            XCTAssertEqual(index("cd.owner") + 1, index("cd.emergency"))
+            XCTAssertLessThan(index("cd.emergency"), index("cd.pets"))
+            XCTAssertEqual(index("cd.pets") + 1, index("cd.checkin"))
+        }
+    }
+
+    /// The tour moves through the app once: after it leaves a screen (or a
+    /// client's profile) it never comes back to it.
+    func testTheTourNeverReturnsToAScreenItLeft() {
+        for role in OnboardingRole.allCases {
+            for context in Self.contextMatrix {
+                var screens: [String] = []
+                for step in WalkthroughController.tour(for: role, context: context) {
+                    let screen = "\(step.surface.map { "\($0)" } ?? "none")\(step.route == .demoClientDetail ? ".detail" : "")"
+                    if screens.last != screen { screens.append(screen) }
+                }
+                XCTAssertEqual(Set(screens).count, screens.count, "\(role) \(context): \(screens)")
+            }
+        }
+    }
+
+    /// No control is spotlighted twice. Quick Actions used to come back as
+    /// "Check-In to Checkout", and the Dashboard row at the end of the
+    /// front desk tour.
+    func testNoStopRepeatsAnotherStopsSpotlight() {
+        for role in OnboardingRole.allCases {
+            for context in Self.contextMatrix {
+                let anchors = WalkthroughController.tour(for: role, context: context).map(\.anchor)
+                XCTAssertEqual(Set(anchors).count, anchors.count, "\(role) \(context): \(anchors)")
+            }
+        }
+        XCTAssertNil(WalkthroughController.fullTour().first { $0.id == "workflow.checkout" || $0.id == "nav.dashboard" })
     }
 
     func testEveryTourKeepsItsLessonsTogether() {
@@ -141,7 +174,7 @@ final class WalkthroughTourTests: XCTestCase {
     func testRolesChangeCoachTipsNotJustWhichStopsShow() {
         let owner = Dictionary(uniqueKeysWithValues: WalkthroughController.tour(for: .ownerManager, context: .practice).map { ($0.id, $0) })
         let frontDesk = Dictionary(uniqueKeysWithValues: WalkthroughController.tour(for: .frontDeskGroomer, context: .practice).map { ($0.id, $0) })
-        for id in ["nav.dashboard", "dash.kpis", "clients.filters", "workflow.checkout", "cd.checkin"] {
+        for id in ["dash.kpis", "clients.filters", "cd.checkin"] {
             let ownerTip = owner[id]?.coachTip
             let frontDeskTip = frontDesk[id]?.coachTip
             XCTAssertNotNil(ownerTip, id)
@@ -238,9 +271,14 @@ final class WalkthroughTourTests: XCTestCase {
         controller.start(steps, at: "dash.attention")
         XCTAssertEqual(controller.currentStep?.id, "dash.attention")
 
+        let count = controller.stepCount
+
         controller.checkTargets()
 
-        XCTAssertEqual(controller.currentStep?.id, "clients.filters", "No pet is due, so the stop is skipped.")
+        XCTAssertEqual(controller.currentStep?.id, "dash.recent", "No pet is due, so the stop is skipped.")
+        XCTAssertEqual(controller.stepCount, count - 1, "The counter no longer counts it.")
+        controller.goBack()
+        XCTAssertEqual(controller.currentStep?.id, "dash.quick", "Back doesn't land on it again.")
     }
 
     func testNeedsAttentionStaysWhenItsSectionShows() {
@@ -252,13 +290,54 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertFalse(controller.isCurrentStepOrphaned)
     }
 
-    func testAMissingSectionIsSkippedInTheDirectionTheUserWasGoing() {
+    func testAMissingSectionIsSkippedInTheDirectionTheUserWasGoingAndOnlyOnce() {
         let controller = makeController()
-        controller.start(WalkthroughController.tour(for: .frontDeskGroomer, context: .practice), at: "clients.filters")
+        controller.start(WalkthroughController.tour(for: .frontDeskGroomer, context: .practice), at: "dash.recent")
+        controller.noteStepShown("dash.recent", hasTarget: true)
         controller.goBack()
         XCTAssertEqual(controller.currentStep?.id, "dash.attention")
         controller.checkTargets()
         XCTAssertEqual(controller.currentStep?.id, "dash.quick", "Going Back past a missing section keeps going back.")
+        controller.advance()
+        XCTAssertEqual(controller.currentStep?.id, "dash.recent", "Next doesn't wait on the missing section a second time.")
+    }
+
+    func testTheLastMissingStopOfALessonStillFinishesTheLesson() {
+        let controller = makeController()
+        var progress = WalkthroughProgress()
+        controller.onProgress = { progress = progress.recording($0) }
+        // The owner's dashboard ends on Getting Started, hidden once set up.
+        controller.start(WalkthroughController.tour(for: .ownerManager, context: .practice), at: WalkthroughStepID.setupChecklist)
+        controller.checkTargets()
+        XCTAssertEqual(controller.currentStep?.id, "nav.clients")
+        XCTAssertTrue(progress.isComplete(.dailyWorkflow))
+    }
+
+    func testARepeatedTapCannotSkipOrRewindAStop() {
+        let controller = makeController()
+        let steps = WalkthroughController.tour(for: .frontDeskGroomer, context: .practice)
+        controller.start(steps)
+
+        // A double-click on Next: both taps come from the first stop's bubble.
+        controller.advance(from: steps[0].id)
+        controller.advance(from: steps[0].id)
+        XCTAssertEqual(controller.currentStep?.id, steps[1].id)
+
+        controller.advance(from: steps[1].id)
+        controller.goBack(from: steps[2].id)
+        controller.goBack(from: steps[2].id)
+        XCTAssertEqual(controller.currentStep?.id, steps[1].id)
+    }
+
+    func testRestartingOrReappearingDoesNotResetARunningTour() {
+        let controller = makeController()
+        let steps = WalkthroughController.tour(for: .frontDeskGroomer, context: .practice)
+        controller.start(steps)
+        controller.advance()
+        controller.advance()
+        // A screen appearing again asks to start: the running tour keeps its place.
+        controller.start(steps)
+        XCTAssertEqual(controller.currentStep?.id, steps[2].id)
     }
 
     func testSortStopIsSkippedWithAnEmptyClientList() {
@@ -273,8 +352,8 @@ final class WalkthroughTourTests: XCTestCase {
     func testHandsOnStopsMoveOnWhenTheRealActionHappens() {
         let cases: [(String, WalkthroughTrigger, String)] = [
             ("clients.sort", .clientSortChanged, "nc.owner"),
-            ("cd.emergency_badges", .emergencyContactEditorClosed, "cd.gender_dots"),
-            ("cd.addpet", .petAdded, "workflow.checkout")
+            ("cd.emergency_badges", .emergencyContactEditorClosed, "cd.loyalty"),
+            ("cd.addpet", .petAdded, "cd.gender_dots")
         ]
         for (stepID, trigger, nextID) in cases {
             let controller = makeController()
@@ -385,7 +464,7 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertTrue(progress.isComplete(.dailyWorkflow))
         XCTAssertEqual(progress.lastCompletedStepID, steps[firstLessonCount - 1].id)
         XCTAssertEqual(progress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.lesson, 2)
-        XCTAssertEqual(progress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.of, 4)
+        XCTAssertEqual(progress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.of, 3)
 
         controller.skip()
         XCTAssertTrue(progress.isComplete(.dailyWorkflow), "Skipping keeps what was finished.")
@@ -425,14 +504,16 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertEqual(WalkthroughProgress().resumeStepID(in: steps), steps.first?.id)
 
         var progress = WalkthroughProgress()
-        for step in steps.prefix(while: { $0.lesson == .dailyWorkflow }) {
-            progress = progress.recording(WalkthroughProgressEvent(stepID: step.id, lesson: step.lesson, completesLesson: step.id == "clients.filters"))
+        let dashboard = steps.prefix(while: { $0.lesson == .dailyWorkflow })
+        for step in dashboard {
+            progress = progress.recording(WalkthroughProgressEvent(stepID: step.id, lesson: step.lesson, completesLesson: step.id == dashboard.last?.id))
         }
         let clientRecordsStart = steps.first { $0.lesson == .clientRecords }?.id
+        XCTAssertEqual(clientRecordsStart, "nav.clients")
         XCTAssertEqual(progress.resumeStepID(in: steps), clientRecordsStart)
 
-        progress = progress.recording(WalkthroughProgressEvent(stepID: "dash.recent", lesson: .clientRecords, completesLesson: false))
-        XCTAssertEqual(progress.resumeStepID(in: steps), "clients.sort", "Continue picks up mid-lesson.")
+        progress = progress.recording(WalkthroughProgressEvent(stepID: "clients.list", lesson: .clientRecords, completesLesson: false))
+        XCTAssertEqual(progress.resumeStepID(in: steps), "clients.filters", "Continue picks up mid-lesson.")
 
         // A lesson replayed out of order doesn't pull Continue forward.
         var outOfOrder = WalkthroughProgress()
@@ -464,10 +545,14 @@ final class WalkthroughTourTests: XCTestCase {
 
         settings.resetTourProgress()
         XCTAssertEqual(settings.tourProgress, WalkthroughProgress())
-        settings.recordTourProgress(WalkthroughProgressEvent(stepID: "nav.clients", lesson: .appMap, completesLesson: true))
+        settings.recordTourProgress(WalkthroughProgressEvent(stepID: "dash.checklist", lesson: .dailyWorkflow, completesLesson: true))
         XCTAssertEqual(AppSettings.loadTourProgress(), settings.tourProgress, "Written through to UserDefaults.")
-        XCTAssertEqual(settings.tourProgress.continuePosition(in: OnboardingRole.ownerManager.tourLessonOrder)?.lesson, 2)
-        XCTAssertEqual(settings.tourProgress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)?.lesson, 1)
+        let owner = settings.tourProgress.continuePosition(in: OnboardingRole.ownerManager.tourLessonOrder)
+        let frontDesk = settings.tourProgress.continuePosition(in: OnboardingRole.frontDeskGroomer.tourLessonOrder)
+        XCTAssertEqual(owner?.lesson, 2)
+        XCTAssertEqual(owner?.of, 6)
+        XCTAssertEqual(frontDesk?.lesson, 2)
+        XCTAssertEqual(frontDesk?.of, 3)
     }
 
     // MARK: - Anchors
@@ -495,6 +580,7 @@ final class WalkthroughTourTests: XCTestCase {
         .dashRecentClients: (.rootContent, "Pawtrackr/Features/Dashboard/DashboardView.swift"),
         .dashRevenue: (.rootContent, "Pawtrackr/Features/Dashboard/DashboardView.swift"),
         .setupChecklist: (.rootContent, "Pawtrackr/Features/Dashboard/DashboardView.swift"),
+        .clientList: (.rootContent, "Pawtrackr/Features/Clients/ClientsView.swift"),
         .clientFilters: (.rootContent, "Pawtrackr/Features/Clients/ClientsView.swift"),
         .clientSort: (.rootContent, "Pawtrackr/Features/Clients/ClientsView.swift"),
         .insKpis: (.rootContent, "Pawtrackr/Features/Insights/InsightsView.swift"),

@@ -389,6 +389,7 @@
 "client_detail.available" = "Disponible";
 "client_detail.all" = "Todos";
 "client_detail.last_90d" = "Últimos 90 días";
+"client_detail.last_n_days_fmt" = "Últimos %d días";
 "client_detail.no_history_yet" = "Sin historial";
 "client_detail.visits_count_fmt" = "%d visitas";
 "client_detail.saved_successfully" = "Guardado correctamente";
@@ -986,7 +987,6 @@
 "settings.wipe.title" = "¿Borrar todo y empezar desde cero?";
 "tour.done" = "Listo";
 "tour.dash.kpis.title" = "Hoy de un vistazo";
-"tour.dash.kpis.directive" = "Tus números en vivo de hoy.";
 "tour.dash.kpis.purpose" = "“En progreso” son mascotas atendidas ahora. “Completados” son las de hoy. “Ingresos” es el dinero ganado.";
 "tour.dash.quick.title" = "Acciones rápidas";
 "tour.dash.quick.directive" = "Atajos de un toque.";
@@ -1023,9 +1023,6 @@
 "tour.nav.clients.directive" = "Abre Clientes para ver a todos los que atiendes.";
 "tour.nav.clients.purpose" = "Aquí viven dueños, mascotas, razas e historial completo de visitas. Las mascotas agresivas muestran una advertencia roja para que tu equipo las maneje con cuidado.";
 "tour.nav.clients.title" = "Clientes y mascotas";
-"tour.nav.dashboard.directive" = "Esta es tu base de trabajo.";
-"tour.nav.dashboard.purpose" = "Mira visitas activas e ingresos de hoy. Toca una tarjeta para ir directo al trabajo.";
-"tour.nav.dashboard.title" = "Tu panel";
 "tour.nav.insights.directive" = "Abre Estadísticas para ver tus números.";
 "tour.nav.insights.purpose" = "Mira ingresos, servicios principales y mascotas atrasadas en gráficas simples. Sin hojas de cálculo.";
 "tour.nav.insights.title" = "Estadísticas";
@@ -1115,7 +1112,6 @@
 
 // Full guided walkthrough localization.
 "dashboard.action_required" = "Acción requerida";
-"tour.lesson.app_map" = "Mapa de la app";
 "tour.lesson.daily_workflow" = "Flujo diario";
 "tour.lesson.client_records" = "Registros de clientes";
 "tour.lesson.checkout_money" = "Cobro y dinero";
@@ -1123,13 +1119,8 @@
 "tour.lesson.settings_safety" = "Ajustes y seguridad";
 "tour.lesson.data_ownership" = "Propiedad de datos";
 "tour.tap_highlighted" = "Toca el botón resaltado";
-"tour.nav.dashboard.tip" = "El ciclo de la app es simple: busca el cliente, registra la entrada de la mascota, termina el cobro y revisa los números.";
 "tour.dash.kpis.tip" = "Si un número se ve raro, Historial reciente y Estadísticas te ayudan a conciliar la visita detrás de él.";
 "tour.dash.quick.tip" = "Estos atajos reflejan el flujo real del mostrador para que puedas avanzar rápido con una mano.";
-"tour.workflow.checkout.title" = "De entrada a cobro";
-"tour.workflow.checkout.directive" = "Este es el flujo principal de trabajo.";
-"tour.workflow.checkout.purpose" = "Registrar entrada inicia el cronómetro, la visita reúne servicios, notas y fotos, y el cobro registra pago, propina, referencia y detalles del recibo para historial y reportes.";
-"tour.workflow.checkout.tip" = "El dinero usa cálculos Decimal exactos, para que los totales de servicios, propinas y pagos sean confiables.";
 "tour.dash.recent.tip" = "Las etiquetas de comportamiento agresivo aparecen en rojo donde el equipo necesita verlas.";
 "tour.dash.recent.empty.title" = "Aún no hay clientes recientes";
 "tour.dash.recent.empty.message" = "Cuando agregues clientes, los de visitas más recientes aparecen aquí para volver rápido a su perfil.";
@@ -1149,7 +1140,6 @@
 "tour.cd.owner.title" = "Detalles del cliente";
 "tour.cd.owner.directive" = "Este es el perfil que abres desde la lista de Clientes.";
 "tour.cd.owner.purpose" = "La tarjeta superior mantiene juntos teléfono, correo, dirección, mensajes y acciones rápidas de edición del dueño para confirmar datos al agendar o entregar.";
-"tour.cd.owner.tip" = "Usa esta pantalla antes de cada cita cuando necesites contacto, notas de mascotas o historial en un solo lugar.";
 "tour.cd.emergency.title" = "Contactos de emergencia";
 "tour.cd.emergency.directive" = "Mantén cerca contactos de respaldo.";
 "tour.cd.emergency.purpose" = "Cada contacto muestra relación y teléfono. El botón Llamar marca su número y el menú ofrece Enviar mensaje, Copiar teléfono, Editar y Eliminar. La nota “Falta:” indica qué agregar.";
@@ -1198,7 +1188,7 @@
 "tour.cd.pet_history.purpose" = "Historial muestra visitas pasadas con servicios, notas, pagos, fotos, búsqueda, filtros por fecha y exportación.";
 "tour.cd.history.title" = "Historial reciente";
 "tour.cd.history.directive" = "Revisa qué pasó la última vez.";
-"tour.cd.history.purpose" = "Los cobros completados aparecen aquí. Usa Todo o Últimos 90 días para revisar precios, servicios, notas e historial.";
+"tour.cd.history.purpose" = "Los cobros completados aparecen aquí. Usa Todos o Últimos 90 días para revisar precios, servicios, notas e historial.";
 "tour.nav.insights.tip" = "Usa Estadísticas después de un día ocupado para detectar oportunidades de precios, personal y reagendado.";
 "tour.ins.services.tip" = "Mantén ordenado tu menú de servicios en Ajustes para que estas gráficas sigan siendo útiles.";
 "tour.nav.settings.tip" = "Ajustes también es donde continúas este recorrido o repites una lección para alguien nuevo.";
@@ -1614,7 +1604,6 @@
 "settings.sample.title" = "Clientes de ejemplo";
 
 /* Guided tour: roles, lessons, progress and live state */
-"tour.nav.dashboard.tip_front_desk" = "Vuelve aquí entre mascotas. “En progreso” muestra quién sigue a tu cuidado.";
 "tour.dash.kpis.tip_front_desk" = "Si “En progreso” no coincide con las mascotas a tu cuidado, registra la salida que faltó.";
 "tour.clients.filters.tip_front_desk" = "Empieza el turno en Necesita atención para ver mascotas atrasadas que nadie ha contactado.";
 "tour.clients.sort.title" = "Orden y nombres";
@@ -1623,12 +1612,18 @@
 "tour.clients.sort.purpose_explain" = "Apellido es el orden por defecto y muestra primero el apellido. Ordenar por también ofrece Nombre, Nombre de la mascota, Última visita y Más recientes.";
 "tour.clients.sort.tip" = "Ordenado por Apellido, “Ana Pérez” aparece como “Pérez Ana” en la lista. Su perfil sigue diciendo “Ana Pérez”.";
 "tour.cd.emergency_badges.purpose_explain" = "Guarda nombre, relación y teléfono. Si no localizan al dueño, el equipo llama a esta persona sin buscar entre notas.";
-"tour.workflow.checkout.tip_front_desk" = "Registra la entrada cuando llega la mascota y la salida al recogerla, para que tiempos y totales cuadren.";
 "tour.cd.checkin.tip_owner" = "La hora de entrada define la duración y los conteos de hoy, así que pide al equipo registrarla al llegar la mascota.";
 "tour.set.business.directive_filled" = "Los datos de tu negocio ya están. Actualízalos aquí cuando quieras.";
 "tour.set.business.tip_filled" = "Los recibos muestran el teléfono y el correo guardados aquí, así que mantenlos al día.";
 "tour.set.business.tip" = "Agrega tu teléfono o correo para que los recibos digan a tus clientes cómo contactarte.";
 "tour.set.security.tip_pin_set" = "Tu PIN ya está configurado en este dispositivo. Cámbialo aquí cuando quieras.";
+"tour.dash.kpis.directive_start" = "Empieza cada día aquí, en tu Panel.";
+"tour.clients.list.title" = "Tu lista de clientes";
+"tour.clients.list.directive" = "Toca la tarjeta de un cliente para abrir su perfil completo.";
+"tour.clients.list.purpose" = "Cada tarjeta muestra al dueño, su teléfono y sus mascotas. Los clientes con una mascota registrada aparecen primero, en En proceso.";
+"tour.clients.list.tip" = "Buscar, arriba, encuentra un dueño, una mascota o un teléfono.";
+"tour.cd.owner.tip_safety" = "Un aviso rojo de Precaución bajo esta tarjeta indica una mascota marcada como agresiva. Avisa al equipo antes de atenderla.";
+"client_detail.history_range" = "Rango del historial";
 "settings.tour.title" = "Recorrido guiado";
 "settings.tour.continue_fmt" = "Continuar recorrido (lección %1$d de %2$d)";
 "settings.tour.replay" = "Repetir el recorrido";
@@ -1638,7 +1633,7 @@
 "settings.tour.lesson_done" = "Terminada";
 "settings.tour.lesson_hint" = "Repite esta lección.";
 "settings.tour.role" = "Recorrido para";
-"settings.tour.role_caption" = "El rol define el orden de las lecciones y algunos consejos en este dispositivo.";
+"settings.tour.role_caption" = "El rol define qué lecciones y consejos muestra este dispositivo. Todo recorrido sigue la app pantalla por pantalla.";
 "settings.tour.restart_for_role" = "Reiniciar el recorrido para este rol";
 "clients.sort.inline_fmt" = "Orden: %@";
 

@@ -18,15 +18,20 @@ final class WalkthroughSetupStopsTests: XCTestCase {
         super.tearDown()
     }
 
-    func testGettingStartedStopFollowsTheDashboardForOwners() throws {
-        let owner = WalkthroughController.tour(for: .ownerManager, context: .practice).map(\.id)
-        let dashboard = try XCTUnwrap(owner.firstIndex(of: WalkthroughStepID.dashboard))
-        XCTAssertEqual(owner[dashboard + 1], WalkthroughStepID.setupChecklist)
+    func testGettingStartedStopClosesTheDashboardForOwners() throws {
+        let owner = WalkthroughController.tour(for: .ownerManager, context: .practice)
+        let ids = owner.map(\.id)
+        let checklist = try XCTUnwrap(ids.firstIndex(of: WalkthroughStepID.setupChecklist))
+        // The dashboard's last stop: everything before it is on the
+        // dashboard, and the tour moves on to the Clients tab after it.
+        XCTAssertEqual(ids.first, WalkthroughStepID.dashboard)
+        XCTAssertTrue(owner[..<checklist].allSatisfy { $0.surface == .dashboard })
+        XCTAssertEqual(ids[checklist + 1], "nav.clients")
 
         let step = try XCTUnwrap(WalkthroughController.fullTour().first { $0.id == WalkthroughStepID.setupChecklist })
         XCTAssertEqual(step.anchor, .setupChecklist)
         XCTAssertEqual(step.surface, .dashboard)
-        XCTAssertEqual(step.lesson, .appMap)
+        XCTAssertEqual(step.lesson, .dailyWorkflow)
         XCTAssertTrue(step.skipsWhenTargetMissing, "The card is hidden once every row is done or it was closed.")
         XCTAssertFalse(step.requiresTargetAction || step.allowsTargetInteraction, "Look-only: a tap mustn't open a sheet mid-tour.")
 

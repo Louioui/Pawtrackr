@@ -110,11 +110,10 @@ final class WalkthroughReplaySafetyTests: XCTestCase {
     func testAPracticeStoreKeepsTheHandsOnTour() {
         let practice = WalkthroughTourContext(hasSampleClient: true, hasRealClients: false)
         let steps = WalkthroughController.tour(for: .ownerManager, context: practice)
-        // Same stops as the catalog, less the ones the owner's curriculum
-        // leaves out, with hands-on flags intact. Only the lesson order
-        // differs, which the role decides.
+        // Same stops as the catalog, in the catalog's screen order, less the
+        // ones the owner's curriculum leaves out, with hands-on flags intact.
         let ownerCatalog = WalkthroughController.fullTour().filter { !$0.excludedRoles.contains(.ownerManager) }
-        XCTAssertEqual(Set(steps.map(\.id)), Set(ownerCatalog.map(\.id)))
+        XCTAssertEqual(steps.map(\.id), ownerCatalog.map(\.id))
         let catalog = Dictionary(uniqueKeysWithValues: WalkthroughController.fullTour().map { ($0.id, $0) })
         for step in steps {
             XCTAssertEqual(step, catalog[step.id], step.id)

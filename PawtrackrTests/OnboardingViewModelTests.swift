@@ -344,7 +344,6 @@ final class OnboardingViewModelTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(steps.count, 24)
         XCTAssertTrue(lessons.isSuperset(of: [
-            .appMap,
             .dailyWorkflow,
             .clientRecords,
             .checkoutAndMoney,

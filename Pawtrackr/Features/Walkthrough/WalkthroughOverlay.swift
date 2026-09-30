@@ -910,7 +910,7 @@ private struct WalkthroughOverlayView: View {
                 .frame(width: s.width, height: s.height)
                 .contentShape(Rectangle())
                 .position(x: s.midX, y: s.midY)
-                .onTapGesture { controller.advance() }
+                .onTapGesture { controller.advance(from: step.id) }
         }
     }
 
@@ -933,8 +933,9 @@ private struct WalkthroughOverlayView: View {
 
         return VStack(spacing: 0) {
             if below { verticalArrow(.up) }
-            bubbleCard(maxHeight: result.cardMaxHeight)
-                .frame(maxHeight: result.cardMaxHeight, alignment: .top)
+            // Keep the card against its arrow: the top of the slot below
+            // the target, the bottom of the slot above it.
+            bubbleCard(maxHeight: result.cardMaxHeight, alignment: below ? .top : .bottom)
             if !below { verticalArrow(.down) }
         }
         .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: below ? .top : .bottom)
@@ -948,7 +949,6 @@ private struct WalkthroughOverlayView: View {
 
         return HStack(alignment: .top, spacing: 0) {
             bubbleCard(maxHeight: result.cardMaxHeight)
-                .frame(maxHeight: result.cardMaxHeight, alignment: .top)
             ArrowTriangle(direction: .right)
                 .fill(DS.ColorToken.surface)
                 .frame(width: 11, height: 22)
@@ -969,7 +969,6 @@ private struct WalkthroughOverlayView: View {
                 .frame(width: 11, height: 22)
                 .padding(.top, result.arrowOffset)
             bubbleCard(maxHeight: result.cardMaxHeight)
-                .frame(maxHeight: result.cardMaxHeight, alignment: .top)
         }
         .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: .topLeading)
         .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
@@ -981,7 +980,7 @@ private struct WalkthroughOverlayView: View {
     /// the bubble.
     private var centerBubble: some View {
         let result = layout
-        return bubbleCard(maxHeight: result.cardMaxHeight)
+        return bubbleCard(maxHeight: result.cardMaxHeight, alignment: .center)
             .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: .center)
             .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -996,7 +995,9 @@ private struct WalkthroughOverlayView: View {
             .offset(x: layout.arrowOffset)
     }
 
-    private func bubbleCard(maxHeight: CGFloat) -> some View {
+    /// The card is as tall as its copy, up to `maxHeight`, and sits at
+    /// `alignment` inside the slot the layout gave it. Longer copy scrolls.
+    private func bubbleCard(maxHeight: CGFloat, alignment: Alignment = .top) -> some View {
         let bodyMaxHeight = max(72, maxHeight - bubbleChromeHeightEstimate)
 
         return VStack(alignment: .leading, spacing: isCompactViewport ? 8 : 10) {
@@ -1036,7 +1037,6 @@ private struct WalkthroughOverlayView: View {
         }
         .padding(bubbleCardPadding)
         .frame(width: bubbleWidth, alignment: .top)
-        .frame(maxHeight: maxHeight, alignment: .top)
         .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1051,6 +1051,10 @@ private struct WalkthroughOverlayView: View {
             controller.stepNumber,
             controller.stepCount
         )))
+        // The cap goes after the background. Before it, the flexible frame
+        // took the whole cap and the background filled it, leaving a tall
+        // empty band under Back and Next on every short stop.
+        .frame(maxHeight: maxHeight, alignment: alignment)
     }
 
     private var tourProgressBar: some View {
@@ -1103,7 +1107,7 @@ private struct WalkthroughOverlayView: View {
     private var backButton: some View {
         if controller.canGoBack {
             Button {
-                controller.goBack()
+                controller.goBack(from: step.id)
             } label: {
                 Label(AppLocalization.localized("tour.back", value: "Back"), systemImage: "chevron.left")
                     .font(.subheadline.weight(.medium))
@@ -1141,7 +1145,7 @@ private struct WalkthroughOverlayView: View {
                 .accessibilityIdentifier("walkthrough.tapHighlighted")
         } else {
             Button {
-                controller.advance()
+                controller.advance(from: step.id)
             } label: {
                 HStack(spacing: 6) {
                     Text(controller.isLastStep

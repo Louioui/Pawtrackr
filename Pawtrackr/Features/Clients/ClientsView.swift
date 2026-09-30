@@ -112,10 +112,8 @@ struct ClientsView: View {
                 }
                 #endif
 
-                ToolbarItem(placement: toolbarTrailingPlacement) {
-                    sortingMenu
-                }
-
+                // Sorting lives only in the list's "Sort:" menu, next to the
+                // names it orders. A second copy up here duplicated it.
                 ToolbarItem(placement: toolbarTrailingPlacement) {
                     notificationsToolbarButton
                 }
@@ -244,29 +242,16 @@ struct ClientsView: View {
                     .buttonStyle(.plain)
                 }
             }
+            // The tour spotlights the pills themselves, not the full-width
+            // scroll strip around them.
+            .walkthroughAnchor(.clientFilters)
             .padding(.horizontal)
-        }
-        .walkthroughTarget(.clientFilters)
-    }
-
-    private var sortingMenu: some View {
-        Menu {
-            ForEach(ClientsViewModel.SortOption.allCases, id: \.self) { option in
-                Button {
-                    viewModel?.sortOption = option
-                } label: {
-                    Label(option.displayName, systemImage: sortIcon(for: option))
-                }
-            }
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.title3)
         }
     }
 
     /// The current order, named, next to the list it orders. It also explains
-    /// why names read last-name-first. The guided tour's sort stop points
-    /// here, since toolbar items can't be spotlighted.
+    /// why names read last-name-first. This is the screen's only sort
+    /// control, and the guided tour's sort stop points here.
     private var inlineSortMenu: some View {
         Menu {
             Picker(selection: sortOptionBinding) {
@@ -316,14 +301,16 @@ struct ClientsView: View {
 
     @ViewBuilder
     private func clientSections(_ viewModel: ClientsViewModel) -> some View {
-        if !viewModel.inProgressClients.isEmpty {
+        // The tour's client-list stop points at the first card on screen.
+        let hasInProgress = !viewModel.inProgressClients.isEmpty
+        if hasInProgress {
             sectionHeader(NSLocalizedString("clients.in_progress", comment: ""), count: viewModel.inProgressCount, topPadding: 0)
-            clientList(for: viewModel.inProgressClients, isInProgress: true)
+            clientList(for: viewModel.inProgressClients, isInProgress: true, anchorsFirstCard: true)
         }
 
         sectionHeader(NSLocalizedString("clients.all_clients", comment: ""), count: viewModel.otherClients.count, topPadding: 16, showsSort: true)
         VStack(spacing: 10) {
-            clientList(for: viewModel.otherClients, isInProgress: false, enableInfiniteScroll: true)
+            clientList(for: viewModel.otherClients, isInProgress: false, enableInfiniteScroll: true, anchorsFirstCard: !hasInProgress)
             if viewModel.canLoadMore {
                 Button(action: { viewModel.loadMore() }) {
                     HStack(spacing: 8) {
@@ -343,7 +330,12 @@ struct ClientsView: View {
     }
 
     @ViewBuilder
-    private func clientList(for clients: [Client], isInProgress: Bool? = nil, enableInfiniteScroll: Bool = false) -> some View {
+    private func clientList(
+        for clients: [Client],
+        isInProgress: Bool? = nil,
+        enableInfiniteScroll: Bool = false,
+        anchorsFirstCard: Bool = false
+    ) -> some View {
         LazyVGrid(columns: clientGridColumns, spacing: 12) {
             ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
                 Button(action: { router.navigateToClient(client) }) {
@@ -356,6 +348,7 @@ struct ClientsView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
+                .walkthroughTarget(.clientList, isActive: anchorsFirstCard && idx == 0)
                 .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")
                 .contextMenu {
                     Button {

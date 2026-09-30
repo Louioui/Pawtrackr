@@ -434,8 +434,8 @@ struct ContentView: View {
     }
 
     private func openWalkthroughDemoClientDetail() {
-        // The route value (.demoClientDetail) is identical across tour steps
-        // 12–24, so `onChange(of: currentStep?.route)` fires this once (step 12)
+        // The route value (.demoClientDetail) is identical across the
+        // client-detail stops, so `onChange(of: currentStep?.route)` fires this once (the first)
         // — the same cycle the New Client sheet dismisses. On iPhone the push
         // lands fine. On iPad / macOS a navigation issued into the split-view
         // detail column while a cover dismisses is silently dropped, so the

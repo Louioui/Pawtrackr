@@ -344,6 +344,23 @@ final class ClientDetailViewModel {
     enum HistoryRange: Hashable {
         case all
         case lastNDays(Int)
+
+        /// The segments the Recent History picker offers, once each.
+        static let pickerOptions: [HistoryRange] = [.all, .lastNDays(90)]
+
+        var title: String {
+            switch self {
+            case .all:
+                return NSLocalizedString("client_detail.all", comment: "")
+            case .lastNDays(90):
+                return NSLocalizedString("client_detail.last_90d", comment: "")
+            case .lastNDays(let days):
+                return String.localizedStringWithFormat(
+                    NSLocalizedString("client_detail.last_n_days_fmt", value: "Last %d Days", comment: ""),
+                    days
+                )
+            }
+        }
     }
 
     // MARK: - Actions

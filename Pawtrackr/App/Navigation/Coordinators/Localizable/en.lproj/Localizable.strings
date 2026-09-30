@@ -386,7 +386,8 @@
 "client_detail.history" = "History";
 "client_detail.available" = "Available";
 "client_detail.all" = "All";
-"client_detail.last_90d" = "Last 90d";
+"client_detail.last_90d" = "Last 90 Days";
+"client_detail.last_n_days_fmt" = "Last %d Days";
 "client_detail.no_history_yet" = "No History Yet";
 "client_detail.visits_count_fmt" = "%d visits";
 "client_detail.saved_successfully" = "Saved successfully";
@@ -983,9 +984,6 @@
 "tour.nav.clients.directive" = "Open Clients to see everyone you groom.";
 "tour.nav.clients.purpose" = "Owners, pets, breeds, and full visit history live here. Aggressive pets show a red warning so your team handles them with care.";
 "tour.nav.clients.title" = "Clients & Pets";
-"tour.nav.dashboard.directive" = "This is your home base.";
-"tour.nav.dashboard.purpose" = "See active visits and today's money at a glance. Tap a card to jump into the work.";
-"tour.nav.dashboard.title" = "Your Dashboard";
 "tour.nav.insights.directive" = "Open Insights for your numbers.";
 "tour.nav.insights.purpose" = "See revenue, top services, and overdue pets in simple charts. No spreadsheets needed.";
 "tour.nav.insights.title" = "Insights";
@@ -1265,26 +1263,19 @@
 "handoff.viewing_fmt" = "Viewing %@";
 
 /* Guided tour (English source text, so English never falls back to the device language) */
-"tour.lesson.app_map" = "App Map";
 "tour.lesson.daily_workflow" = "Daily Workflow";
 "tour.lesson.client_records" = "Client Records";
 "tour.lesson.checkout_money" = "Checkout & Money";
 "tour.lesson.insights" = "Business Insights";
 "tour.lesson.settings_safety" = "Settings & Safety";
 "tour.lesson.data_ownership" = "Data Ownership";
-"tour.nav.dashboard.tip" = "The app loop is simple: find the client, check in the pet, finish checkout, then review the numbers.";
 "tour.dash.kpis.title" = "Today at a glance";
-"tour.dash.kpis.directive" = "Read your live day before opening any list.";
 "tour.dash.kpis.purpose" = "“In Progress” is pets currently being groomed, “Completed” is how many you have finished today, and “Revenue” is what you have earned so far.";
 "tour.dash.kpis.tip" = "If a number looks off, Recent History and Insights help you reconcile the visit behind it.";
 "tour.dash.quick.title" = "Quick Actions";
 "tour.dash.quick.directive" = "Use these when the salon gets busy.";
 "tour.dash.quick.purpose" = "New Client opens the intake form. Check Out lists the pets in session so you can finish a visit and take payment.";
 "tour.dash.quick.tip" = "These shortcuts mirror the real front-desk workflow so you can move fast with one hand.";
-"tour.workflow.checkout.title" = "Check-In to Checkout";
-"tour.workflow.checkout.directive" = "This is the main working loop.";
-"tour.workflow.checkout.purpose" = "Check in starts the timer, the visit collects services, notes, and photos, and checkout records payment, tip, reference, and receipt details for history and reporting.";
-"tour.workflow.checkout.tip" = "Money uses exact Decimal calculations, so service totals, tips, and payments stay dependable.";
 "tour.dash.attention.title" = "Needs Attention";
 "tour.dash.attention.directive" = "See who needs a follow-up.";
 "tour.dash.attention.purpose" = "Pets due for their next groom surface here, so you can call, message, and rebook them before they drift away.";
@@ -1315,7 +1306,6 @@
 "tour.cd.owner.title" = "Client Details";
 "tour.cd.owner.directive" = "This is the profile you open from the Clients list.";
 "tour.cd.owner.purpose" = "The top card keeps the owner’s phone, email, address, messaging, and quick edit actions together so you can confirm details during booking or pickup.";
-"tour.cd.owner.tip" = "Use this screen before every appointment when you need contact info, pet notes, or history in one place.";
 "tour.cd.emergency.title" = "Emergency Contacts";
 "tour.cd.emergency.directive" = "Keep backup contacts close.";
 "tour.cd.emergency.purpose" = "Each backup person shows relation and phone. Call dials them, and the row’s menu offers Message, Copy Phone, Edit, and Delete. A “Missing:” note lists what’s left to add.";
@@ -1360,7 +1350,7 @@
 "tour.cd.pet_history.purpose" = "History shows past visits for this pet with services, notes, payment details, photos, search, date filters, and export tools when you need records outside the app.";
 "tour.cd.history.title" = "Recent History";
 "tour.cd.history.directive" = "Review what happened last time.";
-"tour.cd.history.purpose" = "Completed checkouts roll into this client timeline automatically. Use All or Last 90d to answer pricing questions, repeat services, verify notes, and open a saved visit record.";
+"tour.cd.history.purpose" = "Completed checkouts roll into this client timeline automatically. Use All or Last 90 Days to answer pricing questions, repeat services, verify notes, and open a saved visit.";
 "tour.nav.insights.tip" = "Use Insights after a busy day to spot pricing, staffing, and rebooking opportunities.";
 "tour.ins.kpis.title" = "Headline numbers";
 "tour.ins.kpis.directive" = "The three that matter most.";
@@ -1601,7 +1591,6 @@
 "settings.sample.title" = "Sample Clients";
 
 /* Guided tour: roles, lessons, progress and live state */
-"tour.nav.dashboard.tip_front_desk" = "Come back here between pets. In Progress shows who is still in your care.";
 "tour.dash.kpis.tip_front_desk" = "If In Progress doesn’t match the pets in your care, finish the check-out that was missed.";
 "tour.clients.filters.tip_front_desk" = "Start a shift on Needs Attention to see overdue pets nobody has contacted yet.";
 "tour.clients.sort.title" = "Sort & Name Order";
@@ -1610,12 +1599,18 @@
 "tour.clients.sort.purpose_explain" = "Last Name is the default and lists last names first. Sort by also offers First Name, Pet’s Name, Last Visit, and Newest.";
 "tour.clients.sort.tip" = "Sorted by Last Name, “Jane Doe” shows as “Doe Jane” in the list. Her profile still reads “Jane Doe”.";
 "tour.cd.emergency_badges.purpose_explain" = "Save a name, relation, and phone. If the owner can’t be reached, staff call this person instead of searching through notes.";
-"tour.workflow.checkout.tip_front_desk" = "Check in when the pet arrives and check out at pickup, so times and totals stay right.";
 "tour.cd.checkin.tip_owner" = "Check-in times set visit length and today’s counts, so ask the team to check in on arrival.";
 "tour.set.business.directive_filled" = "Your business details are in. Update them here anytime.";
 "tour.set.business.tip_filled" = "Receipts show the phone and email saved here, so keep them current.";
 "tour.set.business.tip" = "Add your phone or email so receipts show clients how to reach you.";
 "tour.set.security.tip_pin_set" = "Your PIN is set on this device. Change it here anytime.";
+"tour.dash.kpis.directive_start" = "Start every day here on your Dashboard.";
+"tour.clients.list.title" = "Your Client List";
+"tour.clients.list.directive" = "Tap a client card to open the full profile.";
+"tour.clients.list.purpose" = "Each card shows the owner, phone, and pets. Clients with a pet checked in are listed first, under In Progress.";
+"tour.clients.list.tip" = "Search at the top finds an owner, a pet, or a phone number.";
+"tour.cd.owner.tip_safety" = "A red Caution banner under this card means a pet is flagged aggressive. Warn the team before handling.";
+"client_detail.history_range" = "History range";
 "settings.tour.title" = "Guided Tour";
 "settings.tour.continue_fmt" = "Continue Tour (Lesson %1$d of %2$d)";
 "settings.tour.replay" = "Replay the Tour";
@@ -1625,7 +1620,7 @@
 "settings.tour.lesson_done" = "Finished";
 "settings.tour.lesson_hint" = "Replays this lesson.";
 "settings.tour.role" = "Tour for";
-"settings.tour.role_caption" = "The role sets the lesson order and some tips on this device.";
+"settings.tour.role_caption" = "The role sets which lessons and tips this device shows. Every tour follows the app screen by screen.";
 "settings.tour.restart_for_role" = "Restart the Tour for This Role";
 "clients.sort.inline_fmt" = "Sort: %@";
 
