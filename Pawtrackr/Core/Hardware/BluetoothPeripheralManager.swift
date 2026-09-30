@@ -251,7 +251,9 @@ final class BluetoothPeripheralManager: NSObject, @unchecked Sendable {
     /// Connects to a discovered thermal printer and waits until a write characteristic is available.
     func connectThermalPrinter(id: UUID, timeout: TimeInterval = 8) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            workQueue.async {
+            // Strong here: this block runs once and lets go. The timeout
+            // below is stored on self, so it holds self weakly.
+            workQueue.async { [self] in
                 let manager = self.ensureCentralManager()
                 guard manager.state == .poweredOn else {
                     continuation.resume(throwing: self.stateError(for: manager.state))
