@@ -1305,7 +1305,6 @@ private struct AboutSectionView: View {
         VStack(alignment: .leading, spacing: 20) {
             appCard
             academyCard
-                .walkthroughTarget(.setAbout)
             sampleClientsCard
             startFreshCard
         }
@@ -1338,6 +1337,33 @@ private struct AboutSectionView: View {
     /// The Academy in one place: continue it, re-run it, or replay a chapter.
     private var academyCard: some View {
         CardView {
+            academyActions
+                // The Academy's last stop. Only this part, so the spotlight
+                // and its bubble still fit on an iPhone screen.
+                .walkthroughTarget(.setAbout)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(settingsLocalized("settings.tour.lessons", value: "Chapters"))
+                    .font(.subheadline.weight(.semibold))
+                Text(settingsLocalized("settings.tour.lessons_caption", value: "Replay any chapter on its own. A check mark means you finished it."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(spacing: 2) {
+                ForEach(Array(tourRole.tourLessonOrder.enumerated()), id: \.element) { index, lesson in
+                    tourLessonRow(lesson, number: index + 1)
+                }
+            }
+        }
+    }
+
+    /// The Academy's name, where it runs, and Continue / Re-run.
+    private var academyActions: some View {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Label(settingsLocalized("settings.tour.title", value: "Pawtrackr Academy"), systemImage: "graduationcap.fill")
                     .font(.headline)
@@ -1379,23 +1405,6 @@ private struct AboutSectionView: View {
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("settings.rerunAcademy")
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(settingsLocalized("settings.tour.lessons", value: "Chapters"))
-                    .font(.subheadline.weight(.semibold))
-                Text(settingsLocalized("settings.tour.lessons_caption", value: "Replay any chapter on its own. A check mark means you finished it."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(spacing: 2) {
-                ForEach(Array(tourRole.tourLessonOrder.enumerated()), id: \.element) { index, lesson in
-                    tourLessonRow(lesson, number: index + 1)
-                }
             }
         }
     }

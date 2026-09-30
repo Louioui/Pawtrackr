@@ -365,6 +365,12 @@ final class AppSettings {
             UserDefaults.standard.removeObject(forKey: AppSettingsKeys.lastPINChangeDate)
             KeychainStorage.remove(forKey: AppSettingsKeys.appPINKeychainAccount)
             KeychainStorage.set(Defaults.uiTestPIN, forKey: AppSettingsKeys.appPINKeychainAccount)
+            if AppRuntime.shouldStartWalkthroughForUITesting {
+                // A UI test that starts the Academy starts at its first stop,
+                // not where an earlier test on this simulator left off.
+                UserDefaults.standard.removeObject(forKey: AppSettingsKeys.tourCompletedLessons)
+                UserDefaults.standard.removeObject(forKey: AppSettingsKeys.tourLastCompletedStepID)
+            }
         }
 
         // Register defaults first
