@@ -435,10 +435,6 @@ final class CheckoutViewModel {
         recalculateCachedStrings()
     }
 
-    var subtotalDecimal: Decimal {
-        baseAmountDecimal
-    }
-
     /// What the client pays: the selected services, or the amount typed
     /// over them. Checkout doesn't take tips.
     var servicesTotalDecimal: Decimal {
