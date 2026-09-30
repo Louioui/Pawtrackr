@@ -125,18 +125,8 @@ struct ClientsView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            #if os(macOS)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        viewModel?.fetchClients()
-                    } label: {
-                        Label(NSLocalizedString("common.refresh", value: "Refresh", comment: ""), systemImage: "arrow.clockwise")
-                    }
-                    .keyboardShortcut("r", modifiers: .command)
-                }
-            }
-            #endif
+            // No toolbar Refresh: the list reloads when it appears and when
+            // clients or visits change.
             .sheet(isPresented: $showingNewClientSheet) {
             } content: {
                 NewClientSheet(modelContext: modelContext)

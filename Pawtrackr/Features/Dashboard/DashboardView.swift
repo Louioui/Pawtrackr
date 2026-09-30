@@ -106,17 +106,7 @@ struct DashboardView: View {
             }
             .keyboardShortcut("n", modifiers: .command)
         }
-
-        #if os(macOS)
-        ToolbarItem(placement: .navigation) {
-            Button {
-                Task { await vm?.refresh() }
-            } label: {
-                Label(NSLocalizedString("common.refresh", comment: ""), systemImage: "arrow.clockwise")
-            }
-            .keyboardShortcut("r", modifiers: .command)
-        }
-        #endif
+        // No toolbar Refresh: the dashboard reloads itself when data changes.
     }
 
     /// Dashboard sections the deep-dive tour can scroll to and spotlight.
