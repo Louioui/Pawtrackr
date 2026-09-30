@@ -56,7 +56,13 @@ struct CheckoutView: View {
         .safeAreaPadding(.bottom)
         .background(DS.ColorToken.background.ignoresSafeArea())
         #if os(macOS)
-        .frame(minWidth: 480, minHeight: 560)
+        // Roomy on the Mac: the sheet opens at its ideal size, and pushed in
+        // a window's detail column it fills the column.
+        .frame(
+            minWidth: 560, idealWidth: 960, maxWidth: .infinity,
+            minHeight: 600, idealHeight: 780, maxHeight: .infinity
+        )
+        .presentationSizing(.fitted)
         #endif
         .navigationTitle(viewModel.currentStep.title)
         #if os(iOS)
@@ -160,14 +166,14 @@ struct CheckoutView: View {
 
     private var primaryButtonHeight: CGFloat {
         #if os(macOS)
-        return 38
+        return 44
         #else
         return 50
         #endif
     }
 
     private let compactMaxWidth: CGFloat = 640
-    private let macOSCheckoutMaxWidth: CGFloat = 820
+    private let macOSCheckoutMaxWidth: CGFloat = 940
     private let regularCheckoutMaxWidth: CGFloat = 860
 
     private var checkoutContentMaxWidth: CGFloat {
@@ -180,7 +186,7 @@ struct CheckoutView: View {
 
     private var paymentGridColumns: [GridItem] {
         #if os(macOS)
-        return [GridItem(.adaptive(minimum: 120, maximum: 160))]
+        return [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 12)]
         #else
         if horizontalSizeClass == .compact {
             return [GridItem(.flexible()), GridItem(.flexible())]
@@ -226,7 +232,7 @@ struct CheckoutView: View {
                         .fill(isActive ? Color.blue : Color.gray.opacity(0.3))
                         .frame(width: isActive ? 12 : 10, height: isActive ? 12 : 10)
                     Text(step.title)
-                        .font(Font.caption2.weight(isActive ? .semibold : .medium))
+                        .font(stepTitleFont.weight(isActive ? .semibold : .medium))
                         .foregroundStyle(isActive ? Color.primary : Color.secondary)
                 }
                 .frame(maxWidth: .infinity)
@@ -244,6 +250,16 @@ struct CheckoutView: View {
         }
         .padding(.top, 16)
         .padding(.horizontal, 32)
+        .frame(maxWidth: checkoutContentMaxWidth)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var stepTitleFont: Font {
+        #if os(macOS)
+        return .subheadline
+        #else
+        return horizontalSizeClass == .compact ? .caption2 : .caption
+        #endif
     }
 
     private var servicesStep: some View {
@@ -687,7 +703,9 @@ struct CheckoutView: View {
                 .keyboardShortcut(walkthrough?.isActive == true ? nil : KeyboardShortcut(.return))
                 #endif
             }
+            .frame(maxWidth: checkoutContentMaxWidth)
             .padding()
+            .frame(maxWidth: .infinity)
             .background(DS.ColorToken.background)
         }
     }
