@@ -469,6 +469,16 @@ final class WalkthroughTourTests: XCTestCase {
         finished.advance()
         XCTAssertEqual(finishedResult, true)
         XCTAssertTrue(finished.isCelebrating)
+        XCTAssertNil(finished.celebratedChapter, "The whole Academy: Academy complete.")
+
+        // Replaying one chapter from Settings celebrates that chapter, not
+        // the Academy.
+        let replay = makeController()
+        let dashboardChapter = practiceTour.filter { $0.lesson == .dailyWorkflow }
+        replay.start(dashboardChapter, at: dashboardChapter.last?.id)
+        replay.advance()
+        XCTAssertTrue(replay.isCelebrating)
+        XCTAssertEqual(replay.celebratedChapter, .dailyWorkflow)
 
         let skipped = makeController()
         var skippedResult: Bool?

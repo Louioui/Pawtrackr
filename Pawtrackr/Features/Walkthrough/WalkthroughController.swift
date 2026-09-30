@@ -521,6 +521,9 @@ final class WalkthroughController {
     /// they skip), so the host can fire a celebratory confetti burst. The host
     /// clears it via `endCelebration()` once the animation has played.
     private(set) var isCelebrating: Bool = false
+    /// The chapter a one-chapter replay just finished, so the celebration
+    /// names it. Nil after the whole Academy.
+    private(set) var celebratedChapter: WalkthroughLesson?
     /// The chapter just finished, for the host's reward toast. The host
     /// clears it with `endChapterWin(_:)`.
     private(set) var chapterWin: WalkthroughChapterWin?
@@ -867,6 +870,8 @@ final class WalkthroughController {
         withAnimation(.easeOut(duration: 0.25)) { isActive = false }
         // Reward finishing the whole tour with a confetti moment; skipping stays quiet.
         if completed {
+            let finishedChapters = chapters
+            celebratedChapter = finishedChapters.count == 1 ? finishedChapters.first : nil
             withAnimation(.easeIn(duration: 0.2)) { isCelebrating = true }
         }
         let handler = onFinish

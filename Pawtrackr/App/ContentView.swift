@@ -191,7 +191,7 @@ struct ContentView: View {
             // itself after the burst.
             .overlay {
                 if walkthrough.isCelebrating {
-                    WalkthroughCelebrationView()
+                    WalkthroughCelebrationView(chapter: walkthrough.celebratedChapter)
                         .transition(.opacity)
                 }
             }

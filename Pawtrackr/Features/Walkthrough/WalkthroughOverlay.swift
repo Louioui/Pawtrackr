@@ -1383,6 +1383,8 @@ struct WalkthroughChapterWinToast: View {
 /// non-interactive; the falling animation is skipped under Reduce Motion, which
 /// leaves just the "You're all set!" capsule.
 struct WalkthroughCelebrationView: View {
+    /// Set when one replayed chapter was finished, not the whole Academy.
+    var chapter: WalkthroughLesson? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var bannerIn = false
     private let pieceCount = 46
@@ -1399,10 +1401,7 @@ struct WalkthroughCelebrationView: View {
         }
         .ignoresSafeArea()
         .overlay(alignment: .top) {
-            Label(
-                AppLocalization.localized("tour.academy.complete", value: "Academy complete! You're ready for your first shift."),
-                systemImage: "graduationcap.fill"
-            )
+            Label(bannerText, systemImage: chapter == nil ? "graduationcap.fill" : "medal.fill")
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 18)
@@ -1417,6 +1416,16 @@ struct WalkthroughCelebrationView: View {
             }
         }
         .allowsHitTesting(false)
+    }
+
+    private var bannerText: String {
+        guard let chapter else {
+            return AppLocalization.localized("tour.academy.complete", value: "Academy complete! You're ready for your first shift.")
+        }
+        return String(
+            format: AppLocalization.localized("tour.chapter_win.title_fmt", value: "%@ mastered!"),
+            chapter.title
+        )
     }
 }
 
