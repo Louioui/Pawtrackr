@@ -11,9 +11,9 @@ final class InsightsPerformanceTests: XCTestCase {
 
             // 1. Seed 1000 summary records
             let context = dataStore.container.mainContext
-            for i in 0..<1000 {
+            for dayOffset in 0..<1000 {
                 let summary = DaySummary(
-                    day: Calendar.current.date(byAdding: .day, value: -i, to: .now)!,
+                    day: Calendar.current.date(byAdding: .day, value: -dayOffset, to: .now)!,
                     revenue: Decimal(100),
                     visitCount: 1
                 )

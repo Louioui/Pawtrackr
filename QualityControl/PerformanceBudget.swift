@@ -20,15 +20,17 @@ enum PerformanceBudget {
     ) async rethrows -> Double {
         precondition(runs > 0)
         let clock = ContinuousClock()
-        var fastest: Duration?
-        for _ in 0..<runs {
+        var fastest = Duration.zero
+        for run in 0..<runs {
             let fixture = try setUp()
             let start = clock.now
             try await operation(fixture)
             let elapsed = clock.now - start
-            fastest = fastest.map { min($0, elapsed) } ?? elapsed
+            if run == 0 || elapsed < fastest {
+                fastest = elapsed
+            }
         }
-        let parts = fastest!.components
+        let parts = fastest.components
         return Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1e15
     }
 }
