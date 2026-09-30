@@ -98,9 +98,8 @@ enum SettingSection: String, CaseIterable, Identifiable {
 enum SettingsAdaptiveLayout {
     static let maxReadableContentWidth: CGFloat = 940
     static let compactNavigatorThreshold: CGFloat = 700
-    static let macSidebarMinWidth: CGFloat = 132
-    static let macSidebarIdealWidth: CGFloat = 158
-    static let macSidebarMaxWidth: CGFloat = 188
+    /// The Mac section list beside the selected page.
+    static let macSectionListWidth: CGFloat = 176
 
     static func usesCompactSettingsNavigator(availableWidth: CGFloat) -> Bool {
         availableWidth < compactNavigatorThreshold
@@ -137,7 +136,6 @@ struct SettingsView: View {
     // State needed for sub-views
     @State private var showChangePIN = false
     @State private var pinChangeError: String? = nil
-    @State private var showResetFirstRunConfirm = false
     @State private var showWipeConfirm = false
 
     var body: some View {
@@ -179,7 +177,6 @@ struct SettingsView: View {
         .navigationDestination(for: SettingSection.self) { section in
             let detail = SettingsDetailView(section: section,
                                             showChangePIN: $showChangePIN,
-                                            showResetFirstRunConfirm: $showResetFirstRunConfirm,
                                             showWipeConfirm: $showWipeConfirm)
             // Re-host the guided-tour overlay ON the pushed Settings detail so the
             // `set*` spotlights (which live in SettingsDetailView) resolve on iPad:
@@ -229,19 +226,18 @@ struct SettingsView: View {
         }
     }
 
+    /// The section list beside the selected page. Not a NavigationSplitView:
+    /// Settings already sits in the app's split view, and a nested one
+    /// pushed every page right by the app sidebar's width a second time.
     private var regularMacSettings: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             settingsSectionList
-                .navigationTitle(Text("settings.title"))
-                .navigationSplitViewColumnWidth(
-                    min: SettingsAdaptiveLayout.macSidebarMinWidth,
-                    ideal: SettingsAdaptiveLayout.macSidebarIdealWidth,
-                    max: SettingsAdaptiveLayout.macSidebarMaxWidth
-                )
-        } detail: {
+                .frame(width: SettingsAdaptiveLayout.macSectionListWidth)
+            Divider()
             settingsDetail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationSplitViewStyle(.balanced)
+        .navigationTitle(Text("settings.title"))
     }
 
     private var compactMacSettings: some View {
@@ -265,10 +261,12 @@ struct SettingsView: View {
     }
 
     private var settingsSectionList: some View {
-        List(SettingSection.allCases, selection: $selection) { section in
-            NavigationLink(value: section) {
+        List(selection: $selection) {
+            ForEach(SettingSection.allCases) { section in
                 Label(section.title, systemImage: section.icon)
                     .font(.system(.body, design: .rounded).weight(.medium))
+                    .tag(section)
+                    .accessibilityIdentifier("settings.section.\(section.rawValue)")
             }
         }
         .listStyle(.sidebar)
@@ -279,7 +277,6 @@ struct SettingsView: View {
         if let selection {
             let detail = SettingsDetailView(section: selection,
                                             showChangePIN: $showChangePIN,
-                                            showResetFirstRunConfirm: $showResetFirstRunConfirm,
                                             showWipeConfirm: $showWipeConfirm)
             if let walkthrough {
                 detail.walkthroughOverlay(walkthrough, scope: .detailContent)
@@ -299,7 +296,6 @@ private struct SettingsDetailView: View {
     @Environment(AppSettings.self) private var appSettings
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
     @Binding var showChangePIN: Bool
-    @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
     @State private var showWipeBlockedAlert = false
     @State private var storeRestoreClientCount: Int?
@@ -307,8 +303,6 @@ private struct SettingsDetailView: View {
     /// About section: what the sample-clients card shows.
     @State private var sampleStatus = SampleDataStatus()
     @State private var sampleRemovalInventory: SampleDataInventory?
-    @State private var sampleLoadMessage: String?
-    @State private var isLoadingSamples = false
 
     private static let walkthroughAnchors: Set<WalkthroughAnchorID> = [
         .setBusiness,
@@ -342,7 +336,8 @@ private struct SettingsDetailView: View {
                     .frame(maxWidth: SettingsAdaptiveLayout.contentMaxWidth(for: proxy.size.width), alignment: .leading)
                     .padding(.horizontal, SettingsAdaptiveLayout.detailHorizontalPadding(for: proxy.size.width))
                     .padding(.vertical, SettingsAdaptiveLayout.detailVerticalPadding(for: proxy.size.width))
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    // One readable column, centered in wide windows.
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
                 .onAppear {
                     scrollToWalkthroughAnchorIfNeeded(walkthrough?.currentStep?.anchor, proxy: scrollProxy)
@@ -361,20 +356,6 @@ private struct SettingsDetailView: View {
             set: { if !$0 { storeRestoreClientCount = nil } }
         )) {
             StoreRestoreView(currentClientCount: storeRestoreClientCount ?? 0)
-        }
-        .alert(
-            settingsLocalized("settings.reset_guide.title", value: "Replay Getting Started?"),
-            isPresented: $showResetFirstRunConfirm
-        ) {
-            Button(settingsLocalized("common.cancel", value: "Cancel"), role: .cancel) {}
-            Button(settingsLocalized("settings.reset_guide.confirm", value: "Replay")) {
-                replayGettingStarted()
-            }
-        } message: {
-            Text(settingsLocalized(
-                "settings.reset_guide.message",
-                value: "This re-shows the new-user tour and the dashboard checklist. When your salon has real clients, the tour only explains each screen. It doesn't check pets in, create clients, or save checkouts."
-            ))
         }
         .alert(
             settingsLocalized("settings.wipe.title", value: "Wipe Everything & Start Fresh?"),
@@ -404,17 +385,6 @@ private struct SettingsDetailView: View {
             }
         } message: { inventory in
             Text(SampleDataCopy.removeMessage(for: inventory))
-        }
-        .alert(
-            SampleDataCopy.settingsTitle,
-            isPresented: Binding(
-                get: { sampleLoadMessage != nil },
-                set: { if !$0 { sampleLoadMessage = nil } }
-            )
-        ) {
-            Button(settingsLocalized("common.ok", value: "OK"), role: .cancel) {}
-        } message: {
-            Text(sampleLoadMessage ?? "")
         }
         .task {
             refreshSampleStatus()
@@ -476,10 +446,7 @@ private struct SettingsDetailView: View {
     private func refreshSampleStatus() {
         guard section == .about else { return }
         do {
-            let status = SampleDataStatus(
-                inventory: try DataReset.sampleDataInventory(in: modelContext),
-                clientCount: try modelContext.fetchCount(FetchDescriptor<Client>())
-            )
+            let status = SampleDataStatus(inventory: try DataReset.sampleDataInventory(in: modelContext))
             if status != sampleStatus {
                 sampleStatus = status
             }
@@ -513,50 +480,6 @@ private struct SettingsDetailView: View {
         refreshSampleStatus()
     }
 
-    /// Adds the sample clients to an empty client list, under the same rules
-    /// onboarding uses (`SampleDataSeedPolicy`). The seeder re-checks that
-    /// the store is empty on the context that writes.
-    private func loadSampleClients() {
-        let decision = SampleDataSeedPolicy.decide(.init(
-            userChoseSampleData: true,
-            businessConfigExisted: false,
-            existingClientCount: sampleStatus.clientCount,
-            existingPetCount: 0,
-            // The launch check's restore offer (the banner RootView shows): an
-            // empty list may be clients this device can still bring back.
-            restorableClientCount: UserDefaults.standard.integer(forKey: StoreBackupRestore.offerClientCountKey)
-        ))
-        switch decision {
-        case .seed:
-            break
-        case .skip(.backupFound):
-            sampleLoadMessage = SampleDataCopy.loadBackupFound
-            return
-        case .skip:
-            sampleLoadMessage = SampleDataCopy.loadSkipped
-            return
-        }
-
-        isLoadingSamples = true
-        let container = modelContext.container
-        Task { @MainActor in
-            let seeded = await Task.detached(priority: .userInitiated) { () -> Bool in
-                let context = ModelContext(container)
-                do {
-                    return try DemoDataSeeder.seedIfNeeded(in: context)
-                } catch {
-                    Logger.database.error("Loading sample clients failed: \(error.localizedDescription, privacy: .public)")
-                    return false
-                }
-            }.value
-            isLoadingSamples = false
-            if !seeded {
-                sampleLoadMessage = SampleDataCopy.loadSkipped
-            }
-            refreshSampleStatus()
-        }
-    }
-
     @ViewBuilder
     private var content: some View {
         switch section {
@@ -569,28 +492,16 @@ private struct SettingsDetailView: View {
         }
         case .help: HelpSectionView(modelContext: modelContext)
         case .about: AboutSectionView(
-            showResetFirstRunConfirm: $showResetFirstRunConfirm,
             showWipeConfirm: $showWipeConfirm,
             tourProgress: appSettings.tourProgress,
             hasCompletedAcademy: appSettings.hasCompletedAcademy,
             tourRole: appSettings.onboardingRole,
-            onTourRoleChange: { role in
-                if appSettings.onboardingRole != role {
-                    appSettings.onboardingRole = role
-                }
-            },
             onLaunchTour: { $0.post() },
             dataLossSuspected: dataLossSuspected,
             sampleStatus: sampleStatus,
-            isLoadingSamples: isLoadingSamples,
-            onLoadSamples: loadSampleClients,
             onRemoveSamples: confirmSampleRemoval
         )
         }
-    }
-
-    private func replayGettingStarted() {
-        WalkthroughLaunchRequest.replayGettingStarted.post()
     }
 }
 
@@ -605,85 +516,123 @@ private struct DataExportSectionView: View {
     @State private var exportError: String?
 
     var body: some View {
-        CardView {
-            Button {
-                runExport(kind: .clients)
-            } label: {
-                Label(settingsLocalized("settings.export.clients_csv", value: "Export Clients (CSV)"), systemImage: "person.3.sequence.fill")
-            }
-            .accessibilityIdentifier("settings.exportClients")
-            .disabled(isExportingClients || isExportingVisits)
-            
-            Button {
-                runExport(kind: .visits)
-            } label: {
-                Label(settingsLocalized("settings.export.visits_csv", value: "Export Visits (CSV)"), systemImage: "calendar.badge.clock")
-            }
-            .accessibilityIdentifier("settings.exportVisits")
-            .disabled(isExportingClients || isExportingVisits)
+        VStack(alignment: .leading, spacing: 16) {
+            CardView {
+                SettingsCardHeader(
+                    title: settingsLocalized("settings.export.card_title", value: "Spreadsheets"),
+                    detail: settingsLocalized("settings.export.card_detail", value: "CSV files open in Numbers, Excel or Google Sheets. They hold client details, so keep them somewhere safe.")
+                )
 
-            Button(action: onRestoreBackup) {
-                Label(settingsLocalized("settings.restore_backup", value: "Restore from On-Device Backup"), systemImage: "clock.arrow.circlepath")
-            }
-            .accessibilityIdentifier("settings.restoreBackup")
-
-            // The raw-store snapshot can't be restored and its key never leaves
-            // this device, so it isn't offered as a backup (see
-            // SecureStoreSnapshotExporter.isUserFacingExportEnabled).
-            if SecureStoreSnapshotExporter.isUserFacingExportEnabled {
-                Button {
-                    Task { await createEncryptedBackup() }
-                } label: {
-                    Label(settingsLocalized("settings.export.encrypted_backup", value: "Create Encrypted Local Backup"), systemImage: "lock.doc.fill")
-                }
-                .accessibilityIdentifier("settings.createEncryptedBackup")
-                .disabled(isExportingClients || isExportingVisits || isCreatingEncryptedBackup)
-            }
-
-            if isExportingClients || isExportingVisits || isCreatingEncryptedBackup {
-                ProgressView(settingsLocalized("settings.export.preparing", value: "Preparing export..."))
-            }
-
-            if let exportDocument {
-                ShareLink(
-                    item: exportDocument,
-                    preview: SharePreview(exportDocument.filename, icon: Image(systemName: "doc.text.fill"))
+                SettingsActionRow(
+                    systemImage: "person.3.sequence.fill",
+                    tint: DS.ColorToken.primary,
+                    title: settingsLocalized("settings.export.clients_title", value: "Clients"),
+                    detail: settingsLocalized("settings.export.clients_detail", value: "Name, phone, email, address, notes and last visit for every client.")
                 ) {
-                    Label(
-                        String(format: settingsLocalized("settings.export.share_fmt", value: "Share %@"), exportDocument.filename),
-                        systemImage: "square.and.arrow.up"
-                    )
+                    Button {
+                        runExport(kind: .clients)
+                    } label: {
+                        Label(settingsLocalized("settings.export.csv_button", value: "Export CSV"), systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(settingsLocalized("settings.export.clients_csv", value: "Export Clients (CSV)"))
+                    .accessibilityIdentifier("settings.exportClients")
+                    .disabled(isExportingClients || isExportingVisits)
                 }
-                .buttonStyle(.borderedProminent)
-            }
 
-            if SecureStoreSnapshotExporter.isUserFacingExportEnabled, let encryptedBackupURL {
-                ShareLink(item: encryptedBackupURL) {
-                    Label(
-                        settingsLocalized("settings.export.share_encrypted_backup", value: "Share Encrypted Backup"),
-                        systemImage: "square.and.arrow.up"
-                    )
+                Divider()
+
+                SettingsActionRow(
+                    systemImage: "calendar.badge.clock",
+                    tint: DS.ColorToken.info,
+                    title: settingsLocalized("settings.export.visits_title", value: "Visits"),
+                    detail: settingsLocalized("settings.export.visits_detail", value: "Date, pet, client, total, payment, status and notes for every visit.")
+                ) {
+                    Button {
+                        runExport(kind: .visits)
+                    } label: {
+                        Label(settingsLocalized("settings.export.csv_button", value: "Export CSV"), systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(settingsLocalized("settings.export.visits_csv", value: "Export Visits (CSV)"))
+                    .accessibilityIdentifier("settings.exportVisits")
+                    .disabled(isExportingClients || isExportingVisits)
                 }
-                .buttonStyle(.borderedProminent)
 
-                Text(settingsLocalized(
-                    "settings.export.encrypted_backup_note",
-                    value: "This package can only be opened on this device, and Pawtrackr can't restore from it yet."
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+                // The raw-store snapshot can't be restored and its key never leaves
+                // this device, so it isn't offered as a backup (see
+                // SecureStoreSnapshotExporter.isUserFacingExportEnabled).
+                if SecureStoreSnapshotExporter.isUserFacingExportEnabled {
+                    Button {
+                        Task { await createEncryptedBackup() }
+                    } label: {
+                        Label(settingsLocalized("settings.export.encrypted_backup", value: "Create Encrypted Local Backup"), systemImage: "lock.doc.fill")
+                    }
+                    .accessibilityIdentifier("settings.createEncryptedBackup")
+                    .disabled(isExportingClients || isExportingVisits || isCreatingEncryptedBackup)
+                }
 
-            if let exportError {
-                Text(exportError)
+                if isExportingClients || isExportingVisits || isCreatingEncryptedBackup {
+                    ProgressView(settingsLocalized("settings.export.preparing", value: "Preparing export..."))
+                }
+
+                if let exportDocument {
+                    ShareLink(
+                        item: exportDocument,
+                        preview: SharePreview(exportDocument.filename, icon: Image(systemName: "doc.text.fill"))
+                    ) {
+                        Label(
+                            String(format: settingsLocalized("settings.export.share_fmt", value: "Share %@"), exportDocument.filename),
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                if SecureStoreSnapshotExporter.isUserFacingExportEnabled, let encryptedBackupURL {
+                    ShareLink(item: encryptedBackupURL) {
+                        Label(
+                            settingsLocalized("settings.export.share_encrypted_backup", value: "Share Encrypted Backup"),
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Text(settingsLocalized(
+                        "settings.export.encrypted_backup_note",
+                        value: "This package can only be opened on this device, and Pawtrackr can't restore from it yet."
+                    ))
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let exportError {
+                    Text(exportError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            CardView {
+                SettingsActionRow(
+                    systemImage: "clock.arrow.circlepath",
+                    tint: DS.ColorToken.success,
+                    title: settingsLocalized("settings.export.restore_title", value: "On-device backups"),
+                    detail: settingsLocalized("settings.export.restore_detail", value: "Pawtrackr keeps backup copies of your clients on this device. Restore one if clients go missing after an update.")
+                ) {
+                    Button(action: onRestoreBackup) {
+                        Label(settingsLocalized("settings.export.restore_button", value: "Restore…"), systemImage: "arrow.uturn.backward")
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(settingsLocalized("settings.restore_backup", value: "Restore from On-Device Backup"))
+                    .accessibilityIdentifier("settings.restoreBackup")
+                }
             }
         }
     }
-    
+
     enum ExportKind { case clients, visits }
     private func runExport(kind: ExportKind) {
         exportError = nil
@@ -778,14 +727,6 @@ private struct HelpSectionView: View {
                     )
                 )
                 HelpTopicRow(
-                    icon: "printer.fill",
-                    title: settingsLocalized("settings.help.hardware_title", value: "Printers & Hardware"),
-                    detail: settingsLocalized(
-                        "settings.help.hardware_detail",
-                        value: "Bluetooth receipt printing requires a physical iPad or iPhone and supported salon hardware. The simulator cannot discover printers."
-                    )
-                )
-                HelpTopicRow(
                     icon: "square.and.arrow.up",
                     title: settingsLocalized("settings.help.exports_title", value: "Exports & Backups"),
                     detail: settingsLocalized(
@@ -814,6 +755,63 @@ private struct HelpSectionView: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         #endif
+    }
+}
+
+/// One action in a settings card: an icon, what it does, and its button,
+/// which moves under the text when the row is too narrow for both.
+private struct SettingsActionRow<Action: View>: View {
+    let systemImage: String
+    let tint: Color
+    let title: String
+    let detail: String
+    let action: Action
+
+    init(systemImage: String, tint: Color, title: String, detail: String, @ViewBuilder action: () -> Action) {
+        self.systemImage = systemImage
+        self.tint = tint
+        self.title = title
+        self.detail = detail
+        self.action = action()
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                icon
+                text
+                Spacer(minLength: 12)
+                action
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    icon
+                    text
+                }
+                action
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var icon: some View {
+        Image(systemName: systemImage)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(width: 34, height: 34)
+            .background(tint.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .accessibilityHidden(true)
+    }
+
+    private var text: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -1290,134 +1288,124 @@ private struct SettingsLabeledField<Content: View>: View {
 /// What the About section's sample-clients card needs to know.
 struct SampleDataStatus: Equatable {
     var inventory = SampleDataInventory(clientNames: [], addedPetNames: [])
-    var clientCount = 0
 }
 
 private struct AboutSectionView: View {
-    @Binding var showResetFirstRunConfirm: Bool
     @Binding var showWipeConfirm: Bool
     let tourProgress: WalkthroughProgress
     /// Finished the whole Academy once: shows the graduate badge.
     let hasCompletedAcademy: Bool
     let tourRole: OnboardingRole
-    let onTourRoleChange: (OnboardingRole) -> Void
     let onLaunchTour: (WalkthroughLaunchRequest) -> Void
     let dataLossSuspected: Bool
     let sampleStatus: SampleDataStatus
-    let isLoadingSamples: Bool
-    let onLoadSamples: () -> Void
     let onRemoveSamples: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            CardView {
-                HStack {
-                    Text(settingsLocalized("settings.about.version", value: "Version"))
-                    Spacer()
-                    Text(versionText)
-                        .foregroundStyle(.secondary)
-                }
-
-                Divider()
-
-                HStack {
-                    Label(settingsLocalized("settings.tour.title", value: "Pawtrackr Academy"), systemImage: "graduationcap.fill")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer(minLength: 8)
-                    if hasCompletedAcademy {
-                        Label(settingsLocalized("settings.tour.graduate", value: "Graduate"), systemImage: "medal.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(DS.ColorToken.primary, in: Capsule())
-                            .accessibilityIdentifier("settings.academyGraduate")
-                    }
-                }
-
-                Button {
-                    onLaunchTour(.continueTour)
-                } label: {
-                    Label(continueTourTitle, systemImage: "play.fill")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("settings.continueTour")
-
-                if hasCompletedAcademy {
-                    // Unlocked by finishing the Academy: the whole thing again,
-                    // for training someone new.
-                    Button {
-                        onLaunchTour(.startOver)
-                    } label: {
-                        Label(settingsLocalized("settings.tour.rerun_academy", value: "Re-run Academy"), systemImage: "graduationcap")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("settings.rerunAcademy")
-                }
-
-                Button {
-                    showResetFirstRunConfirm = true
-                } label: {
-                    Label(settingsLocalized("settings.about.replay_guide", value: "Replay Getting Started"), systemImage: "arrow.counterclockwise")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("settings.replayGettingStarted")
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text(settingsLocalized(
-                    "settings.tour.caption",
-                    value: "The Academy runs in a practice salon with sample clients, so you can try everything. Your real clients are never changed."
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .walkthroughTarget(.setAbout)
-
-            tourLessonsCard
-
+            appCard
+            academyCard
+                .walkthroughTarget(.setAbout)
             sampleClientsCard
+            startFreshCard
+        }
+    }
 
-            // Destructive "Start Fresh": erases EVERY client, pet, visit and
-            // payment on this device, including real records.
-            // To drop only the sample clients, use the card above.
-            CardView {
-                Label(settingsLocalized("settings.wipe.section_title", value: "Start Fresh"), systemImage: "trash")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.red)
-
-                Text(settingsLocalized("settings.wipe.section_caption", value: "Erase every client, pet, visit, and payment, real or sample, on this device and begin with an empty workspace. Your business profile and service menu are kept."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if dataLossSuspected {
-                    Label(
-                        settingsLocalized(
-                            "data_safety.start_fresh_locked",
-                            value: "Locked while Pawtrackr checks missing client data."
-                        ),
-                        systemImage: "lock.fill"
-                    )
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(DS.ColorToken.danger)
+    /// The app and the version running.
+    private var appCard: some View {
+        CardView {
+            HStack(spacing: 14) {
+                Image(systemName: "pawprint.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(DS.ColorToken.primary.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: "Pawtrackr")
+                        .font(.headline)
+                    Text(verbatim: "\(settingsLocalized("settings.about.version", value: "Version")) \(versionText)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .textSelection(.enabled)
                 }
-
-                Button(role: .destructive) {
-                    showWipeConfirm = true
-                } label: {
-                    Label(settingsLocalized("settings.wipe.button", value: "Wipe & Start Fresh"), systemImage: "exclamationmark.triangle.fill")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-                .tint(.red)
-                .disabled(dataLossSuspected)
-                .walkthroughTarget(.setStartFresh)
+                Spacer(minLength: 0)
             }
         }
+    }
+
+    /// The Academy in one place: continue it, re-run it, or replay a chapter.
+    private var academyCard: some View {
+        CardView {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label(settingsLocalized("settings.tour.title", value: "Pawtrackr Academy"), systemImage: "graduationcap.fill")
+                    .font(.headline)
+                Spacer(minLength: 8)
+                if hasCompletedAcademy {
+                    Label(settingsLocalized("settings.tour.graduate", value: "Graduate"), systemImage: "medal.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(DS.ColorToken.primary, in: Capsule())
+                        .accessibilityIdentifier("settings.academyGraduate")
+                }
+            }
+
+            Text(settingsLocalized(
+                "settings.tour.caption",
+                value: "The Academy runs in a practice salon with sample clients, so you can try everything. Your real clients are never changed."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                onLaunchTour(.continueTour)
+            } label: {
+                Label(continueTourTitle, systemImage: "play.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("settings.continueTour")
+
+            if showsRerun {
+                Button {
+                    onLaunchTour(.startOver)
+                } label: {
+                    Label(settingsLocalized("settings.tour.rerun_academy", value: "Re-run Academy"), systemImage: "arrow.counterclockwise")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("settings.rerunAcademy")
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(settingsLocalized("settings.tour.lessons", value: "Chapters"))
+                    .font(.subheadline.weight(.semibold))
+                Text(settingsLocalized("settings.tour.lessons_caption", value: "Replay any chapter on its own. A check mark means you finished it."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(spacing: 2) {
+                ForEach(Array(tourRole.tourLessonOrder.enumerated()), id: \.element) { index, lesson in
+                    tourLessonRow(lesson, number: index + 1)
+                }
+            }
+        }
+    }
+
+    /// Re-run starts over from the first stop. It's offered once there is
+    /// progress to start over from, and not after every chapter is done,
+    /// when the main button already replays from the start.
+    private var showsRerun: Bool {
+        guard tourProgress.continuePosition(in: tourRole.tourLessonOrder) != nil else { return false }
+        return hasCompletedAcademy || tourProgress != WalkthroughProgress()
     }
 
     /// "Continue Academy (Chapter 3 of 5)" from saved progress and the role's
@@ -1432,61 +1420,6 @@ private struct AboutSectionView: View {
             position.lesson,
             position.of
         )
-    }
-
-    private var tourRoleBinding: Binding<OnboardingRole> {
-        Binding(
-            get: { tourRole },
-            set: { onTourRoleChange($0) }
-        )
-    }
-
-    /// Replay any lesson on its own, and pick whose tour this device shows.
-    private var tourLessonsCard: some View {
-        CardView {
-            Label(settingsLocalized("settings.tour.lessons", value: "Chapters"), systemImage: "list.bullet.rectangle")
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(settingsLocalized("settings.tour.lessons_caption", value: "Replay any chapter on its own. A check mark means you finished it."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(spacing: 8) {
-                ForEach(Array(tourRole.tourLessonOrder.enumerated()), id: \.element) { index, lesson in
-                    tourLessonRow(lesson, number: index + 1)
-                }
-            }
-
-            Divider()
-
-            Picker(selection: tourRoleBinding) {
-                ForEach(OnboardingRole.allCases) { role in
-                    Text(role.title).tag(role)
-                }
-            } label: {
-                Label(settingsLocalized("settings.tour.role", value: "Tour for"), systemImage: "person.2.fill")
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier("settings.tourRole")
-
-            Text(settingsLocalized("settings.tour.role_caption", value: "The role picks a few tips for this device. Everyone takes the same chapters, screen by screen."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                onLaunchTour(.startOver)
-            } label: {
-                Label(settingsLocalized("settings.tour.restart_for_role", value: "Restart the Academy for This Role"), systemImage: "arrow.counterclockwise.circle")
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("settings.restartTourForRole")
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 
     private func tourLessonRow(_ lesson: WalkthroughLesson, number: Int) -> some View {
@@ -1513,6 +1446,7 @@ private struct AboutSectionView: View {
                     .foregroundStyle(DS.ColorToken.primary)
                     .accessibilityHidden(true)
             }
+            .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -1521,19 +1455,17 @@ private struct AboutSectionView: View {
         .accessibilityIdentifier("settings.tourLesson.\(lesson.rawValue)")
     }
 
-    /// Remove the sample clients while they exist; offer to load them while
-    /// the client list is empty; otherwise nothing to show.
+    /// Only while sample clients are in the salon: removes them. Trying the
+    /// app with sample clients is what the Academy's practice salon is for.
     @ViewBuilder
     private var sampleClientsCard: some View {
         if !sampleStatus.inventory.isEmpty {
             CardView {
                 Label(SampleDataCopy.settingsTitle, systemImage: "wand.and.stars")
                     .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 Text(SampleDataCopy.loadedCaption(for: sampleStatus.inventory))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(action: onRemoveSamples) {
                     Label(SampleDataCopy.removeConfirm, systemImage: "person.2.slash")
@@ -1542,31 +1474,45 @@ private struct AboutSectionView: View {
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("settings.removeSampleData")
             }
-        } else if sampleStatus.clientCount == 0 {
-            CardView {
-                Label(SampleDataCopy.settingsTitle, systemImage: "wand.and.stars")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(SampleDataCopy.loadCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button(action: onLoadSamples) {
-                    HStack {
-                        Label(SampleDataCopy.loadButton, systemImage: "person.2.badge.plus")
-                        if isLoadingSamples {
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-                .disabled(isLoadingSamples)
-                .accessibilityIdentifier("settings.loadSampleData")
+        }
+    }
+
+    /// Destructive "Start Fresh": erases EVERY client, pet, visit and
+    /// payment on this device, including real records. To drop only the
+    /// sample clients, use the card above.
+    private var startFreshCard: some View {
+        CardView {
+            Label(settingsLocalized("settings.wipe.section_title", value: "Start Fresh"), systemImage: "trash")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.red)
+
+            Text(settingsLocalized("settings.wipe.section_caption", value: "Erase every client, pet, visit, and payment, real or sample, on this device and begin with an empty workspace. Your business profile and service menu are kept."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if dataLossSuspected {
+                Label(
+                    settingsLocalized(
+                        "data_safety.start_fresh_locked",
+                        value: "Locked while Pawtrackr checks missing client data."
+                    ),
+                    systemImage: "lock.fill"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(DS.ColorToken.danger)
             }
+
+            Button(role: .destructive) {
+                showWipeConfirm = true
+            } label: {
+                Label(settingsLocalized("settings.wipe.button", value: "Wipe & Start Fresh"), systemImage: "exclamationmark.triangle.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+            .disabled(dataLossSuspected)
+            .walkthroughTarget(.setStartFresh)
         }
     }
 
@@ -1585,7 +1531,8 @@ private struct CardView<Content: View>: View {
     init(@ViewBuilder content: () -> Content) { self.content = content() }
     
     var body: some View {
-        VStack(spacing: 16) { content }
+        VStack(alignment: .leading, spacing: 16) { content }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(.background, in: RoundedRectangle(cornerRadius: 12))
             .overlay {

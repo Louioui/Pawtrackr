@@ -150,18 +150,15 @@ final class WalkthroughIPadStressUITests: QualityControlUITestCase {
         tapSettingsOnIPad()
         openAboutSettingsSection()
 
-        let replayButton = app.buttons["settings.replayGettingStarted"]
+        // Skipped on its first stop, so Continue starts the Academy over.
+        let continueButton = app.buttons["settings.continueTour"]
         let settingsScroll = app.scrollViews.firstMatch
-        for _ in 0..<6 where !replayButton.exists {
+        for _ in 0..<6 where !continueButton.exists {
             settingsScroll.exists ? settingsScroll.swipeUp() : app.swipeUp()
         }
 
-        XCTAssertTrue(waitUntilHittable(replayButton, timeout: 8), "Replay Getting Started should be visible in Settings.")
-        replayButton.tap()
-
-        let replayAlertButton = app.alerts.buttons["Replay"]
-        XCTAssertTrue(waitUntilHittable(replayAlertButton, timeout: 5), "Replay confirmation should appear.")
-        replayAlertButton.tap()
+        XCTAssertTrue(waitUntilHittable(continueButton, timeout: 8), "Continue Academy should be visible in Settings.")
+        continueButton.tap()
 
         XCTAssertTrue(app.otherElements["walkthrough.card"].waitForExistence(timeout: 12))
         let stepCounter = app.staticTexts["walkthrough.stepCounter"]

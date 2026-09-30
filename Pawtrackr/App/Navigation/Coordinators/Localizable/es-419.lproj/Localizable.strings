@@ -244,6 +244,16 @@
 "settings.section.devices" = "Dispositivos";
 "settings.section.about" = "Acerca de";
 "settings.select_setting" = "Selecciona un ajuste";
+"settings.export.card_title" = "Hojas de cálculo";
+"settings.export.card_detail" = "Los archivos CSV se abren en Numbers, Excel o Google Sheets. Contienen datos de clientes, así que guárdalos en un lugar seguro.";
+"settings.export.clients_title" = "Clientes";
+"settings.export.clients_detail" = "Nombre, teléfono, correo, dirección, notas y última visita de cada cliente.";
+"settings.export.visits_title" = "Visitas";
+"settings.export.visits_detail" = "Fecha, mascota, cliente, total, pago, estado y notas de cada visita.";
+"settings.export.csv_button" = "Exportar CSV";
+"settings.export.restore_title" = "Respaldos en el dispositivo";
+"settings.export.restore_detail" = "Pawtrackr guarda copias de respaldo de tus clientes en este dispositivo. Restaura una si faltan clientes después de una actualización.";
+"settings.export.restore_button" = "Restaurar…";
 "settings.export.clients_csv" = "Exportar clientes (CSV)";
 "settings.export.visits_csv" = "Exportar visitas (CSV)";
 "settings.export.preparing" = "Preparando exportación...";
@@ -254,8 +264,6 @@
 "settings.help.copy_report" = "Copiar reporte de soporte";
 "settings.help.preparing_report" = "Preparando reporte...";
 "settings.help.report_copied" = "Reporte de soporte copiado.";
-"settings.help.hardware_title" = "Impresoras y hardware";
-"settings.help.hardware_detail" = "La impresión Bluetooth requiere un iPad o iPhone físico y hardware compatible del salón. El simulador no puede descubrir impresoras.";
 "settings.help.exports_title" = "Exportaciones y respaldos";
 "settings.help.exports_detail" = "Usa Exportar datos para crear archivos CSV de clientes o visitas antes de limpiezas, migraciones o sesiones de soporte.";
 "settings.business.name" = "Nombre del negocio";
@@ -954,7 +962,6 @@
 "recovery.reset_failed" = "No se pudo restablecer: %@";
 "recovery.show_details" = "Mostrar detalles técnicos";
 "recovery.title" = "No se pudieron abrir tus datos";
-"settings.about.replay_guide" = "Repetir primeros pasos";
 "settings.appearance.dark" = "Oscuro";
 "settings.appearance.light" = "Claro";
 "settings.appearance.system" = "Seguir sistema";
@@ -965,9 +972,6 @@
 "settings.pin.mismatch" = "Los PIN no coinciden";
 "settings.pin.new" = "Nuevo PIN";
 "settings.pin.set" = "Establecer PIN";
-"settings.reset_guide.confirm" = "Repetir";
-"settings.reset_guide.message" = "Esto reinicia el recorrido para nuevos usuarios desde la lección 1 y vuelve a mostrar la lista de primeros pasos del panel. Si tu salón tiene clientes reales, el recorrido solo explica cada pantalla. No registra entradas, no crea clientes ni guarda cobros.";
-"settings.reset_guide.title" = "¿Repetir primeros pasos?";
 "settings.security.disable_lock_confirm" = "Desactivar";
 "settings.security.disable_lock_message" = "Pawtrackr dejará de pedir tu PIN al abrir la app o volver al primer plano.";
 "settings.security.disable_lock_title" = "¿Desactivar bloqueo de la app?";
@@ -1395,7 +1399,6 @@
 "loyalty.settings.earning_mode" = "Forma de ganar puntos";
 "loyalty.settings.points_per_dollar" = "Puntos por unidad de moneda";
 "loyalty.settings.flat_visit_points" = "Puntos fijos por visita";
-"loyalty.settings.reward_threshold" = "Mínimo para canjear";
 "loyalty.settings.templates" = "Plantillas de recompensas";
 "loyalty.settings.no_rewards_title" = "Sin recompensas";
 "loyalty.settings.no_rewards_detail" = "Las recompensas predeterminadas se agregan al abrir la app.";
@@ -1501,9 +1504,6 @@
 "sample_data.remove.confirm" = "Quitar clientes de ejemplo";
 "sample_data.remove.message_fmt" = "Esto elimina los clientes de ejemplo %@ con sus mascotas, visitas y pagos de este dispositivo. Tus propios clientes no se modifican.";
 "sample_data.remove.title" = "¿Quitar los clientes de ejemplo?";
-"settings.sample.load" = "Cargar clientes de ejemplo";
-"settings.sample.load_caption" = "Agrega 2 clientes de práctica con mascotas y visitas, y precios de ejemplo a los servicios sin precio, para que pruebes el registro de entrada y el cobro. Disponible mientras tu lista de clientes esté vacía.";
-"settings.sample.load_skipped" = "No se agregaron clientes de ejemplo porque tu salón ya tiene clientes.";
 "settings.sample.loaded_caption_fmt" = "%@ son clientes de práctica. Quitarlos no afecta a tus propios clientes.";
 "settings.sample.title" = "Clientes de ejemplo";
 
@@ -1523,9 +1523,6 @@
 "settings.tour.lessons_caption" = "Repite cualquier capítulo por separado. La marca de verificación indica que lo terminaste.";
 "settings.tour.lesson_done" = "Terminada";
 "settings.tour.lesson_hint" = "Repite este capítulo.";
-"settings.tour.role" = "Recorrido para";
-"settings.tour.role_caption" = "El rol elige algunos consejos en este dispositivo. Todos toman los mismos capítulos, pantalla por pantalla.";
-"settings.tour.restart_for_role" = "Reiniciar la Academia para este rol";
 "clients.sort.inline_fmt" = "Orden: %@";
 
 /* Loyalty preview card and the Getting Started / loyalty tour stops */

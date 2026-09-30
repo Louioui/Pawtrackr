@@ -2,8 +2,8 @@
 //  SampleDataCopy.swift
 //  Pawtrackr
 //
-//  Wording shared by the Dashboard checklist and Settings for loading and
-//  removing the sample clients.
+//  Wording Settings uses for the sample clients a salon still has, and for
+//  removing them.
 //
 
 import Foundation
@@ -48,23 +48,6 @@ enum SampleDataCopy {
 
     static var settingsTitle: String {
         AppLocalization.localized("settings.sample.title", value: "Sample Clients")
-    }
-
-    static var loadButton: String {
-        AppLocalization.localized("settings.sample.load", value: "Load Sample Clients")
-    }
-
-    static var loadCaption: String {
-        AppLocalization.localized("settings.sample.load_caption", value: "Adds 2 practice clients with pets and visits, and example prices for services that have none, so you can try check-in and checkout. Available while your client list is empty.")
-    }
-
-    /// A backup on this device holds the user's own clients.
-    static var loadBackupFound: String {
-        AppLocalization.localized("onboarding.finish.sample.unavailable_backup", value: "This device has a backup of your clients. Restore it instead of adding sample clients.")
-    }
-
-    static var loadSkipped: String {
-        AppLocalization.localized("settings.sample.load_skipped", value: "Sample clients weren't added because your salon already has clients.")
     }
 
     static func loadedCaption(for inventory: SampleDataInventory) -> String {

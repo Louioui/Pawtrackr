@@ -123,14 +123,6 @@ struct LoyaltyManagementView: View {
                     .accessibilityIdentifier("loyaltySettings.pointsPerVisit")
                 }
 
-                Stepper(value: thresholdBinding, in: 1...10_000, step: 25) {
-                    settingsValueRow(
-                        title: AppLocalization.localized("loyalty.settings.reward_threshold", value: "Reward threshold"),
-                        value: "\(thresholdBinding.wrappedValue)"
-                    )
-                }
-                .accessibilityIdentifier("loyaltySettings.redemptionThreshold")
-
                 Toggle(isOn: catalogEnabledBinding) {
                     Label(AppLocalization.localized("loyalty.catalog.title", value: "Rewards Catalog"), systemImage: "gift.fill")
                 }
@@ -165,7 +157,7 @@ struct LoyaltyManagementView: View {
                     )
                     .frame(maxWidth: .infinity)
                 } else {
-                    VStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
                         ForEach(rewards) { reward in
                             rewardTemplateRow(reward)
                         }
@@ -228,24 +220,30 @@ struct LoyaltyManagementView: View {
     }
 
     private func rewardTemplateRow(_ reward: LoyaltyRewardTemplate) -> some View {
-        Toggle(isOn: enabledBinding(for: reward)) {
-            HStack(spacing: 12) {
-                Image(systemName: reward.style.systemImage)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(reward.style.tint, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        HStack(spacing: 12) {
+            Image(systemName: reward.style.systemImage)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(reward.style.tint, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(reward.title)
-                        .font(.subheadline.weight(.semibold))
-                    Text(LoyaltyCopy.points(reward.pointCost))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reward.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(LoyaltyCopy.points(reward.pointCost))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+
+            Spacer(minLength: 12)
+
+            Toggle(reward.title, isOn: enabledBinding(for: reward))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("loyaltySettings.reward.\(reward.uuid.uuidString).enabled")
         }
-        .accessibilityIdentifier("loyaltySettings.reward.\(reward.uuid.uuidString).enabled")
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var earnModeBinding: Binding<LoyaltyEarnMode> {
@@ -272,14 +270,6 @@ struct LoyaltyManagementView: View {
         }
     }
 
-    private var thresholdBinding: Binding<Int> {
-        Binding {
-            config?.redemptionThreshold ?? 100
-        } set: { value in
-            updateConfig(redemptionThreshold: value)
-        }
-    }
-
     private var catalogEnabledBinding: Binding<Bool> {
         Binding {
             config?.isRewardsCatalogEnabled ?? true
@@ -302,7 +292,6 @@ struct LoyaltyManagementView: View {
         earnMode: LoyaltyEarnMode? = nil,
         pointsPerDollar: Decimal? = nil,
         pointsPerVisit: Int? = nil,
-        redemptionThreshold: Int? = nil,
         isRewardsCatalogEnabled: Bool? = nil
     ) {
         mutate { service in
@@ -310,7 +299,6 @@ struct LoyaltyManagementView: View {
                 earnMode: earnMode,
                 pointsPerDollar: pointsPerDollar,
                 pointsPerVisit: pointsPerVisit,
-                redemptionThreshold: redemptionThreshold,
                 isRewardsCatalogEnabled: isRewardsCatalogEnabled
             )
         }

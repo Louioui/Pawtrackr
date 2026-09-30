@@ -243,6 +243,16 @@
 "settings.section.devices" = "Devices";
 "settings.section.about" = "About";
 "settings.select_setting" = "Select a setting";
+"settings.export.card_title" = "Spreadsheets";
+"settings.export.card_detail" = "CSV files open in Numbers, Excel or Google Sheets. They hold client details, so keep them somewhere safe.";
+"settings.export.clients_title" = "Clients";
+"settings.export.clients_detail" = "Name, phone, email, address, notes and last visit for every client.";
+"settings.export.visits_title" = "Visits";
+"settings.export.visits_detail" = "Date, pet, client, total, payment, status and notes for every visit.";
+"settings.export.csv_button" = "Export CSV";
+"settings.export.restore_title" = "On-device backups";
+"settings.export.restore_detail" = "Pawtrackr keeps backup copies of your clients on this device. Restore one if clients go missing after an update.";
+"settings.export.restore_button" = "Restore…";
 "settings.export.clients_csv" = "Export Clients (CSV)";
 "settings.export.visits_csv" = "Export Visits (CSV)";
 "settings.export.preparing" = "Preparing export...";
@@ -253,8 +263,6 @@
 "settings.help.copy_report" = "Copy Support Report";
 "settings.help.preparing_report" = "Preparing report...";
 "settings.help.report_copied" = "Support report copied.";
-"settings.help.hardware_title" = "Printers & Hardware";
-"settings.help.hardware_detail" = "Bluetooth receipt printing requires a physical iPad or iPhone and supported salon hardware. The simulator cannot discover printers.";
 "settings.help.exports_title" = "Exports & Backups";
 "settings.help.exports_detail" = "Use Data Export to create client or visit CSV files before major cleanup, migrations, or support sessions.";
 "settings.business.name" = "Business Name";
@@ -944,7 +952,6 @@
 "recovery.reset_failed" = "Couldn't reset: %@";
 "recovery.show_details" = "Show technical details";
 "recovery.title" = "Couldn't open your data";
-"settings.about.replay_guide" = "Replay Getting Started";
 "settings.appearance.dark" = "Dark";
 "settings.appearance.light" = "Light";
 "settings.appearance.system" = "Follow System";
@@ -955,9 +962,6 @@
 "settings.pin.mismatch" = "PINs do not match";
 "settings.pin.new" = "New PIN";
 "settings.pin.set" = "Set PIN";
-"settings.reset_guide.confirm" = "Replay";
-"settings.reset_guide.message" = "This starts the new-user tour again from lesson 1 and re-shows the dashboard checklist. When your salon has real clients, the tour only explains each screen. It doesn't check pets in, create clients, or save checkouts.";
-"settings.reset_guide.title" = "Replay Getting Started?";
 "settings.security.disable_lock_confirm" = "Disable";
 "settings.security.disable_lock_message" = "Pawtrackr will stop requiring your PIN when the app opens or returns to the foreground.";
 "settings.security.disable_lock_title" = "Disable App Lock?";
@@ -1382,7 +1386,6 @@
 "loyalty.settings.earning_mode" = "Earning Mode";
 "loyalty.settings.points_per_dollar" = "Points per dollar";
 "loyalty.settings.flat_visit_points" = "Flat visit points";
-"loyalty.settings.reward_threshold" = "Reward threshold";
 "loyalty.settings.templates" = "Reward Templates";
 "loyalty.settings.no_rewards_title" = "No Rewards";
 "loyalty.settings.no_rewards_detail" = "Default rewards are added on launch.";
@@ -1488,9 +1491,6 @@
 "sample_data.remove.confirm" = "Remove Sample Clients";
 "sample_data.remove.message_fmt" = "This deletes the sample clients %@ with their pets, visits and payments on this device. Your own clients aren't touched.";
 "sample_data.remove.title" = "Remove Sample Clients?";
-"settings.sample.load" = "Load Sample Clients";
-"settings.sample.load_caption" = "Adds 2 practice clients with pets and visits, and example prices for services that have none, so you can try check-in and checkout. Available while your client list is empty.";
-"settings.sample.load_skipped" = "Sample clients weren't added because your salon already has clients.";
 "settings.sample.loaded_caption_fmt" = "%@ are practice clients. Removing them leaves your own clients alone.";
 "settings.sample.title" = "Sample Clients";
 
@@ -1510,9 +1510,6 @@
 "settings.tour.lessons_caption" = "Replay any chapter on its own. A check mark means you finished it.";
 "settings.tour.lesson_done" = "Finished";
 "settings.tour.lesson_hint" = "Replays this chapter.";
-"settings.tour.role" = "Tour for";
-"settings.tour.role_caption" = "The role picks a few tips for this device. Everyone takes the same chapters, screen by screen.";
-"settings.tour.restart_for_role" = "Restart the Academy for This Role";
 "clients.sort.inline_fmt" = "Sort: %@";
 
 /* Loyalty preview card and the Getting Started / loyalty tour stops */
