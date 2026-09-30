@@ -458,7 +458,11 @@ final class WalkthroughTourTests: XCTestCase {
         XCTAssertEqual(controller.masteredFraction, 0)
         XCTAssertEqual(controller.chapterNumber, 1)
         controller.advance()
-        XCTAssertEqual(controller.masteredFraction, 1 / Double(controller.stepCount), accuracy: 0.0001)
+        XCTAssertEqual(controller.masteredFraction, 1 / Double(controller.stepCount - 1), accuracy: 0.0001)
+
+        let lastStop = makeController()
+        lastStop.start(practiceTour, at: WalkthroughStepID.academyHome)
+        XCTAssertEqual(lastStop.masteredFraction, 1, "The last stop reads 100% mastered.")
     }
 
     func testOnFinishSaysWhetherTheAcademyWasCompleted() {

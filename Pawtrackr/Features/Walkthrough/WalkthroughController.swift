@@ -569,10 +569,11 @@ final class WalkthroughController {
 
     var stepNumber: Int { currentIndex + 1 }
     var stepCount: Int { steps.count }
-    /// Share of this run already passed: 0 on the first stop, 1 once done.
+    /// How far through this run the current stop is: 0 on the first stop,
+    /// 1 on the last, so the final stop reads 100% mastered.
     var masteredFraction: Double {
-        guard !steps.isEmpty else { return 0 }
-        return Double(currentIndex) / Double(steps.count)
+        guard steps.count > 1 else { return steps.isEmpty ? 0 : 1 }
+        return Double(currentIndex) / Double(steps.count - 1)
     }
     /// This run's chapters, in order.
     var chapters: [WalkthroughLesson] {
