@@ -1,3 +1,11 @@
+//
+//  ClientLoyaltyView.swift
+//  Pawtrackr
+//
+//  Loyalty 2.0: a client's points pass, the reward track, the rewards they
+//  can spend, and their points activity.
+//
+
 import SwiftData
 import SwiftUI
 
@@ -5,29 +13,33 @@ import SwiftUI
 struct ClientLoyaltyView: View {
     private enum SheetDestination: Identifiable {
         case adjustment
-        case catalog
+        case redeem(LoyaltyReward)
 
         var id: String {
             switch self {
             case .adjustment:
                 "adjustment"
-            case .catalog:
-                "catalog"
+            case .redeem(let reward):
+                "redeem.\(reward.id)"
             }
         }
     }
 
+    /// Activity rows shown before "Show all".
+    private static let activityPreviewCount = 6
+
     @Bindable var client: Client
     @Query private var ledgerEntries: [LoyaltyLedgerEntry]
-    @Query(
-        filter: #Predicate<LoyaltyRewardTemplate> { $0.isEnabled == true },
-        sort: \LoyaltyRewardTemplate.sortOrder,
-        order: .forward
-    ) private var rewardTemplates: [LoyaltyRewardTemplate]
-    @Query(sort: \LoyaltyRewardTemplate.sortOrder, order: .forward) private var allRewardTemplates: [LoyaltyRewardTemplate]
+    @Query(sort: \LoyaltyRewardTemplate.sortOrder, order: .forward) private var rewardTemplates: [LoyaltyRewardTemplate]
     @Query(sort: \LoyaltyConfig.createdAt, order: .forward) private var configs: [LoyaltyConfig]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var sheetDestination: SheetDestination?
     @State private var animatedTierProgress: Double = 0
+    @State private var showsAllActivity = false
+    @State private var redeemedRewardID: LoyaltyReward.ID?
+    @State private var statusMessage: String?
+    @State private var feedbackResetTask: Task<Void, Never>?
 
     init(client: Client) {
         self.client = client
@@ -40,13 +52,12 @@ struct ClientLoyaltyView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                balanceCard
-                rewardProgressCard
-                quickActions
-                smartStatsGrid
+            VStack(alignment: .leading, spacing: 22) {
+                pointsPass
+                rewardsSection
+                statsStrip
                 tierCard
-                ledgerSection
+                activitySection
             }
             .padding(.vertical, 12)
             .frame(maxWidth: 780)
@@ -57,89 +68,192 @@ struct ClientLoyaltyView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .safeAreaInset(edge: .bottom) {
+            if let statusMessage {
+                statusToast(statusMessage)
+            }
+        }
         .sheet(item: $sheetDestination) { destination in
             switch destination {
             case .adjustment:
                 LoyaltyAdjustmentSheet(client: client)
-            case .catalog:
-                RewardsCatalogView(client: client)
-            }
-        }
-    }
-
-    private var balanceCard: some View {
-        Card(
-            cornerRadius: 18,
-            padding: EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18),
-            accent: .top(.gradient(LinearGradient(
-                colors: [DS.ColorToken.warning, DS.ColorToken.info],
-                startPoint: .leading,
-                endPoint: .trailing
-            )))
-        ) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Image(systemName: tier.systemImage)
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 42, height: 42)
-                                .background(tier.tint.gradient, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(client.fullName)
-                                    .font(.headline)
-                                Text(String(format: AppLocalization.localized("loyalty.client.member_fmt", value: "%1$@ member • %2$@ earn rate"), tier.displayName, tier.earnRateText))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        loyaltyCoachMessage
-                    }
-
-                    Spacer(minLength: 12)
-
-                    LoyaltyPointsBadge(client: client, scale: .prominent)
+            case .redeem(let reward):
+                LoyaltyRedeemSheet(client: client, reward: reward) { redeemed in
+                    celebrateRedemption(of: redeemed)
                 }
             }
         }
-        .padding(.horizontal)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(String(format: AppLocalization.localized("loyalty.client.balance_accessibility_fmt", value: "%1$@, %2$d loyalty points, %3$@ tier"), client.fullName, client.loyaltyPoints, tier.displayName))
     }
 
-    private var loyaltyCoachMessage: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: loyaltyCoachSymbol)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(loyaltyCoachTint)
-                .frame(width: 26, height: 26)
-                .background(loyaltyCoachTint.opacity(0.12), in: Circle())
+    // MARK: - Points pass
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(loyaltyCoachTitle)
-                    .font(.subheadline.weight(.bold))
-                Text(loyaltyCoachBody)
+    private var pointsPass: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(client.fullName)
+                        .font(.headline)
+                    Label(
+                        String(format: AppLocalization.localized("loyalty.client.member_fmt", value: "%1$@ member • %2$@ earn rate"), tier.displayName, tier.earnRateText),
+                        systemImage: tier.systemImage
+                    )
+                    .font(.caption.weight(.semibold))
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 9)
+                    .background(.white.opacity(0.2), in: Capsule())
+                }
+
+                Spacer(minLength: 12)
+
+                Button {
+                    sheetDestination = .adjustment
+                } label: {
+                    Label(AppLocalization.localized("loyalty2.pass.adjust", value: "Adjust"), systemImage: "slider.horizontal.3")
+                        .font(.caption.weight(.bold))
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 11)
+                        .background(.white.opacity(0.2), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .pressScaleStyle(hapticsEnabled: true)
+                .accessibilityLabel(AppLocalization.localized("loyalty.client.adjust_accessibility", value: "Adjust loyalty points"))
+                .accessibilityIdentifier("clientLoyalty.adjustPoints")
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("\(client.loyaltyPoints)")
+                    .font(.system(size: 60, weight: .black, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(client.loyaltyPoints)))
+                    .animation(MotionSystem.resolved(MotionSystem.bouncy, reduceMotion: reduceMotion), value: client.loyaltyPoints)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(AppLocalization.localized("loyalty2.pass.points_label", value: "points to spend"))
+                    .font(.subheadline.weight(.semibold))
+                    .opacity(0.85)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(String(
+                format: AppLocalization.localized("loyalty.client.balance_accessibility_fmt", value: "%1$@, %2$d loyalty points, %3$@ tier"),
+                client.fullName,
+                client.loyaltyPoints,
+                tier.displayName
+            ))
+            .accessibilityIdentifier("clientLoyalty.balance")
+
+            if !rewardsByCost.isEmpty {
+                LoyaltyRewardTrack(rewards: rewardsByCost, balance: client.loyaltyPoints)
+                    .accessibilityIdentifier("clientLoyalty.rewardTrack")
+            }
+
+            Text(passCaption)
+                .font(.footnote.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("clientLoyalty.nextReward")
+        }
+        .foregroundStyle(.white)
+        .padding(20)
+        .background(passBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .shadow(color: tier.tint.opacity(0.35), radius: 18, y: 10)
+        .padding(.horizontal)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("clientLoyalty.pass")
+    }
+
+    private var passBackground: some View {
+        ZStack(alignment: .topTrailing) {
+            LinearGradient(
+                colors: [tier.tint, tier.tint.mix(with: .black, by: 0.35)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: "pawprint.fill")
+                .font(.system(size: 150, weight: .black))
+                .foregroundStyle(.white.opacity(0.08))
+                .rotationEffect(.degrees(-18))
+                .offset(x: 34, y: -18)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var passCaption: String {
+        if rewardCatalog.isEmpty {
+            return AppLocalization.localized("loyalty.client.rewards_paused_settings", value: "Rewards are paused in Loyalty settings")
+        }
+        if let nextReward {
+            let remaining = nextReward.pointsNeeded(from: client.loyaltyPoints)
+            let title = LoyaltyCopy.title(for: nextReward)
+            if let visits = projectedVisits(toEarn: remaining) {
+                return visits == 1
+                    ? String(format: AppLocalization.localized("loyalty2.pass.next_one_visit_fmt", value: "%1$@ to %2$@, about 1 visit away."), LoyaltyCopy.points(remaining), title)
+                    : String(format: AppLocalization.localized("loyalty2.pass.next_visits_fmt", value: "%1$@ to %2$@, about %3$d visits away."), LoyaltyCopy.points(remaining), title, visits)
+            }
+            return String(format: AppLocalization.localized("loyalty2.pass.next_fmt", value: "%1$@ to %2$@."), LoyaltyCopy.points(remaining), title)
+        }
+        return AppLocalization.localized("loyalty.client.all_unlocked", value: "Every active reward is unlocked")
+    }
+
+    // MARK: - Rewards
+
+    private var rewardsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(AppLocalization.localized("loyalty2.rewards.title", value: "Rewards"))
+                        .font(.title3.weight(.bold))
+                    Spacer()
+                    if !redeemableRewards.isEmpty {
+                        Text(String(format: AppLocalization.localized("loyalty2.rewards.ready_count_fmt", value: "%d ready"), redeemableRewards.count))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 9)
+                            .background(DS.ColorToken.success, in: Capsule())
+                            .contentTransition(.numericText())
+                    }
+                }
+                Text(AppLocalization.localized("loyalty2.rewards.subtitle", value: "Apply a reward on the Payment step to take it off the bill, or redeem it here."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.horizontal)
+
+            if rewardCatalog.isEmpty {
+                ContentUnavailableView(
+                    AppLocalization.localized("loyalty.catalog.paused_title", value: "Rewards Paused"),
+                    systemImage: "gift",
+                    description: Text(AppLocalization.localized("loyalty.catalog.paused_detail", value: "Rewards can be re-enabled in Loyalty settings."))
+                )
+                .padding(.vertical, 12)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
+                    ForEach(rewardsByCost) { reward in
+                        LoyaltyRewardCard(
+                            reward: reward,
+                            balance: client.loyaltyPoints,
+                            isCelebrating: redeemedRewardID == reward.id
+                        ) {
+                            sheetDestination = .redeem(reward)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
         }
-        .padding(.top, 2)
     }
 
-    private var smartStatsGrid: some View {
-        LazyVGrid(columns: smartStatColumns, spacing: 10) {
+    // MARK: - Stats
+
+    private var statsStrip: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 10)], spacing: 10) {
             LoyaltySmartStatCard(
-                title: AppLocalization.localized("loyalty.client.stat.ready", value: "Ready Rewards"),
-                value: "\(redeemableRewards.count)",
-                detail: rewardCatalog.isEmpty
-                    ? AppLocalization.localized("loyalty.client.stat.catalog_paused", value: "Catalog paused")
-                    : AppLocalization.localized("loyalty.client.stat.can_redeem", value: "Can redeem now"),
-                systemImage: "gift.fill",
-                tint: bestRedeemableReward?.style.tint ?? DS.ColorToken.info
+                title: AppLocalization.localized("loyalty2.stat.lifetime", value: "Lifetime Earned"),
+                value: "\(lifetimeEarned)",
+                detail: AppLocalization.localized("loyalty2.stat.lifetime_detail", value: "Points from visits"),
+                systemImage: "star.fill",
+                tint: tier.tint
             )
 
             LoyaltySmartStatCard(
@@ -159,65 +273,13 @@ struct ClientLoyaltyView: View {
                     ? AppLocalization.localized("loyalty.client.stat.points_per_visit", value: "Points per visit")
                     : AppLocalization.localized("loyalty.client.stat.no_visits", value: "No visits yet"),
                 systemImage: "pawprint.fill",
-                tint: tier.tint
+                tint: DS.ColorToken.info
             )
         }
         .padding(.horizontal)
     }
 
-    private var smartStatColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 160), spacing: 10)]
-    }
-
-    private var rewardProgressCard: some View {
-        Card(
-            cornerRadius: 18,
-            padding: EdgeInsets(top: 16, leading: 18, bottom: 16, trailing: 18),
-            accent: .leading(.color(rewardProgressTint), thickness: 4)
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: rewardProgressSymbol)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(rewardProgressTint.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(rewardProgressTitle)
-                            .font(.headline)
-                        Text(rewardProgressDetail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    if let nextReward {
-                        Text(String(format: AppLocalization.localized("loyalty.client.points_short_fmt", value: "%d pts"), max(0, nextReward.pointCost - client.loyaltyPoints)))
-                            .font(.caption.weight(.bold))
-                            .monospacedDigit()
-                            .foregroundStyle(rewardProgressTint)
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .background(rewardProgressTint.opacity(0.12), in: Capsule())
-                    }
-                }
-
-                if !rewardCatalog.isEmpty {
-                    ProgressView(value: nextRewardProgress)
-                        .tint(rewardProgressTint)
-                    Text(nextRewardText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.horizontal)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("clientLoyalty.rewardProgress")
-    }
+    // MARK: - Tier
 
     private var tierCard: some View {
         Card(
@@ -241,24 +303,13 @@ struct ClientLoyaltyView: View {
                     }
 
                     Spacer(minLength: 8)
-
-                    if let next = tier.next {
-                        Text(next.displayName)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(next.tint)
-                            .padding(.vertical, 3)
-                            .padding(.horizontal, 8)
-                            .background(Capsule().fill(next.tint.opacity(0.14)))
-                    }
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    ProgressView(value: animatedTierProgress)
-                        .tint(tier.next?.tint ?? tier.tint)
-                    Text(tierProgressText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                ProgressView(value: animatedTierProgress)
+                    .tint(tier.next?.tint ?? tier.tint)
+                Text(tierProgressText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 tierLadder
             }
@@ -268,12 +319,12 @@ struct ClientLoyaltyView: View {
         .accessibilityLabel(tierAccessibilityLabel)
         .accessibilityIdentifier("clientLoyalty.tierCard")
         .task {
-            withAnimation(MotionSystem.fluid.delay(0.15)) {
+            withAnimation(MotionSystem.resolved(MotionSystem.fluid.delay(0.15), reduceMotion: reduceMotion)) {
                 animatedTierProgress = LoyaltyEngine.tierProgress(lifetimeEarned: lifetimeEarned)
             }
         }
         .onChange(of: lifetimeEarned) { _, newValue in
-            withAnimation(MotionSystem.fluid) {
+            withAnimation(MotionSystem.resolved(MotionSystem.fluid, reduceMotion: reduceMotion)) {
                 animatedTierProgress = LoyaltyEngine.tierProgress(lifetimeEarned: newValue)
             }
         }
@@ -282,8 +333,8 @@ struct ClientLoyaltyView: View {
     private var tierLadder: some View {
         HStack(spacing: 8) {
             ForEach(LoyaltyTier.allCases, id: \.self) { ladderTier in
-                let isCurrentOrUnlocked = lifetimeEarned >= ladderTier.threshold
-                let accessibilityDetail = isCurrentOrUnlocked
+                let isUnlocked = lifetimeEarned >= ladderTier.threshold
+                let accessibilityDetail = isUnlocked
                     ? AppLocalization.localized("loyalty.client.ladder_unlocked", value: "unlocked")
                     : String(format: AppLocalization.localized("loyalty.client.points_away_fmt", value: "%d points away"), max(0, ladderTier.threshold - lifetimeEarned))
                 HStack(spacing: 6) {
@@ -294,64 +345,23 @@ struct ClientLoyaltyView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                .foregroundStyle(isCurrentOrUnlocked ? .white : ladderTier.tint)
+                .foregroundStyle(isUnlocked ? .white : ladderTier.tint)
                 .padding(.vertical, 5)
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity)
-                .background(
-                    isCurrentOrUnlocked ? ladderTier.tint : ladderTier.tint.opacity(0.12),
-                    in: Capsule()
-                )
+                .background(isUnlocked ? ladderTier.tint : ladderTier.tint.opacity(0.12), in: Capsule())
                 .accessibilityLabel(String(format: AppLocalization.localized("loyalty.client.ladder_accessibility_fmt", value: "%1$@ tier, %2$@"), ladderTier.displayName, accessibilityDetail))
             }
         }
     }
 
-    private var quickActions: some View {
-        HStack(spacing: 12) {
-            Button {
-                sheetDestination = .catalog
-            } label: {
-                Label(
-                    bestRedeemableReward == nil
-                        ? AppLocalization.localized("loyalty.client.view_rewards", value: "View Rewards")
-                        : AppLocalization.localized("loyalty.client.redeem_best", value: "Redeem Best Reward"),
-                    systemImage: "gift.fill"
-                )
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background((bestRedeemableReward?.style.tint ?? DS.ColorToken.info), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .foregroundStyle(.white)
-            }
-            .buttonStyle(.plain)
-            .pressScaleStyle(hapticsEnabled: true)
-            .accessibilityLabel(AppLocalization.localized("loyalty.client.redeem_rewards_accessibility", value: "Redeem rewards"))
-            .accessibilityIdentifier("clientLoyalty.redeemRewards")
+    // MARK: - Activity
 
-            Button {
-                sheetDestination = .adjustment
-            } label: {
-                Label(AppLocalization.localized("loyalty.client.adjust_balance", value: "Adjust Balance"), systemImage: "slider.horizontal.3")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(minWidth: 104)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 14)
-                    .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .pressScaleStyle(hapticsEnabled: true)
-            .accessibilityLabel(AppLocalization.localized("loyalty.client.adjust_accessibility", value: "Adjust loyalty points"))
-            .accessibilityIdentifier("clientLoyalty.adjustPoints")
-        }
-        .padding(.horizontal)
-    }
-
-    private var ledgerSection: some View {
+    private var activitySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(AppLocalization.localized("loyalty.client.ledger_title", value: "Points Ledger"))
-                    .font(.headline)
+                Text(AppLocalization.localized("loyalty2.activity.title", value: "Points Activity"))
+                    .font(.title3.weight(.bold))
                 Spacer()
                 Text("\(ledgerEntries.count)")
                     .font(.caption.weight(.bold))
@@ -371,15 +381,82 @@ struct ClientLoyaltyView: View {
                 .padding(.vertical, 28)
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(ledgerEntries) { entry in
+                    ForEach(visibleActivity) { entry in
                         LoyaltyLedgerEntryRow(entry: entry)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
                 .padding(.horizontal)
+
+                if ledgerEntries.count > Self.activityPreviewCount {
+                    Button {
+                        withAnimation(MotionSystem.resolved(MotionSystem.fluid, reduceMotion: reduceMotion)) {
+                            showsAllActivity.toggle()
+                        }
+                    } label: {
+                        Text(showsAllActivity
+                             ? AppLocalization.localized("loyalty2.activity.show_less", value: "Show less")
+                             : String(format: AppLocalization.localized("loyalty2.activity.show_all_fmt", value: "Show all %d"), ledgerEntries.count))
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal)
+                    .accessibilityIdentifier("clientLoyalty.activity.toggle")
+                }
             }
         }
         .padding(.bottom, 24)
     }
+
+    private var visibleActivity: [LoyaltyLedgerEntry] {
+        showsAllActivity ? ledgerEntries : Array(ledgerEntries.prefix(Self.activityPreviewCount))
+    }
+
+    // MARK: - Redemption feedback
+
+    private func celebrateRedemption(of reward: LoyaltyReward) {
+        let animation = MotionSystem.resolved(MotionSystem.bouncy, reduceMotion: reduceMotion)
+        withAnimation(animation) {
+            redeemedRewardID = reward.id
+            statusMessage = String(
+                format: AppLocalization.localized("loyalty.catalog.redeemed_fmt", value: "Redeemed %@"),
+                LoyaltyCopy.title(for: reward)
+            )
+        }
+        feedbackResetTask?.cancel()
+        feedbackResetTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2.4))
+            } catch {
+                return
+            }
+            withAnimation(animation) {
+                redeemedRewardID = nil
+                statusMessage = nil
+            }
+        }
+    }
+
+    private func statusToast(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+            Text(message)
+                .font(.footnote.weight(.semibold))
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(DS.ColorToken.success)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("clientLoyalty.status")
+    }
+
+    // MARK: - Derived state
 
     private var tier: LoyaltyTier {
         LoyaltyEngine.tier(forLifetimeEarned: lifetimeEarned)
@@ -404,52 +481,22 @@ struct ClientLoyaltyView: View {
     }
 
     private var rewardCatalog: [LoyaltyReward] {
-        guard configs.first?.isRewardsCatalogEnabled ?? true else { return [] }
-        let persistentRewards = rewardTemplates.map(\.displayReward)
-        return persistentRewards.isEmpty && allRewardTemplates.isEmpty ? LoyaltyReward.builtInCatalog : persistentRewards
+        LoyaltyRewardCatalog.active(
+            templates: rewardTemplates,
+            config: LoyaltyConfigResolver.snapshot(from: configs)
+        )
     }
 
     private var rewardsByCost: [LoyaltyReward] {
-        rewardCatalog.sorted { first, second in
-            if first.pointCost == second.pointCost {
-                return first.title.localizedStandardCompare(second.title) == .orderedAscending
-            }
-            return first.pointCost < second.pointCost
-        }
+        LoyaltyRewardCatalog.byCost(rewardCatalog)
     }
 
     private var redeemableRewards: [LoyaltyReward] {
         rewardsByCost.filter { $0.isRedeemable(with: client.loyaltyPoints) }
     }
 
-    private var bestRedeemableReward: LoyaltyReward? {
-        redeemableRewards.last
-    }
-
     private var nextReward: LoyaltyReward? {
         rewardsByCost.first { $0.pointCost > client.loyaltyPoints }
-    }
-
-    private var previousRewardCost: Int {
-        rewardsByCost.last { $0.pointCost <= client.loyaltyPoints }?.pointCost ?? 0
-    }
-
-    private var nextRewardProgress: Double {
-        guard !rewardCatalog.isEmpty else { return 0 }
-        guard let nextReward else { return 1 }
-        let span = max(1, nextReward.pointCost - previousRewardCost)
-        return min(1, max(0, Double(client.loyaltyPoints - previousRewardCost) / Double(span)))
-    }
-
-    private var nextRewardText: String {
-        if rewardCatalog.isEmpty {
-            return AppLocalization.localized("loyalty.client.rewards_paused_settings", value: "Rewards are paused in Loyalty settings")
-        }
-        if let nextReward {
-            let remaining = max(0, nextReward.pointCost - client.loyaltyPoints)
-            return String(format: AppLocalization.localized("loyalty.client.points_until_fmt", value: "%1$d points until %2$@"), remaining, nextReward.title)
-        }
-        return AppLocalization.localized("loyalty.client.all_unlocked", value: "Every active reward is unlocked")
     }
 
     private var pointsDelta30Days: Int {
@@ -466,95 +513,364 @@ struct ClientLoyaltyView: View {
         return max(1, total / earnedEntries.count)
     }
 
-    private var projectedVisitsToNextReward: Int? {
-        guard let nextReward else { return nil }
-        let remaining = max(0, nextReward.pointCost - client.loyaltyPoints)
+    private func projectedVisits(toEarn remaining: Int) -> Int? {
         guard remaining > 0, averageEarnedPerVisit > 0 else { return nil }
-        return max(1, Int(ceil(Double(remaining) / Double(averageEarnedPerVisit))))
+        return (remaining + averageEarnedPerVisit - 1) / averageEarnedPerVisit
     }
 
     private func signedPointsText(_ value: Int) -> String {
         value > 0 ? "+\(value)" : "\(value)"
     }
+}
 
-    private var loyaltyCoachSymbol: String {
-        if rewardCatalog.isEmpty { return "pause.circle.fill" }
-        if bestRedeemableReward != nil { return "sparkles" }
-        if nextReward != nil { return "target" }
-        return "crown.fill"
+// MARK: - Reward track
+
+/// The pass's progress line: the balance fills toward the most expensive
+/// reward, and each reward sits on the line at its cost, lighting up once the
+/// balance reaches it.
+private struct LoyaltyRewardTrack: View {
+    let rewards: [LoyaltyReward]
+    let balance: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animatedFraction: Double = 0
+
+    private static let nodeSize: CGFloat = 28
+
+    private var maxCost: Int {
+        max(1, rewards.map(\.pointCost).max() ?? 1)
     }
 
-    private var loyaltyCoachTint: Color {
-        if rewardCatalog.isEmpty { return DS.ColorToken.warning }
-        if let bestRedeemableReward { return bestRedeemableReward.style.tint }
-        if let nextReward { return nextReward.style.tint }
-        return tier.tint
+    private var targetFraction: Double {
+        min(1, Double(balance) / Double(maxCost))
     }
 
-    private var loyaltyCoachTitle: String {
-        if rewardCatalog.isEmpty { return AppLocalization.localized("loyalty.client.coach.paused_title", value: "Rewards paused") }
-        if bestRedeemableReward != nil { return AppLocalization.localized("loyalty.client.coach.ready_title", value: "Ready to reward") }
-        if let nextReward { return String(format: AppLocalization.localized("loyalty.client.coach.next_title_fmt", value: "Next up: %@"), nextReward.title) }
-        return AppLocalization.localized("loyalty.client.coach.vip_title", value: "VIP-ready balance")
-    }
+    var body: some View {
+        GeometryReader { proxy in
+            let usable = max(0, proxy.size.width - Self.nodeSize)
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.22))
+                    .frame(height: 8)
+                    .padding(.horizontal, Self.nodeSize / 2)
 
-    private var loyaltyCoachBody: String {
-        if rewardCatalog.isEmpty {
-            return AppLocalization.localized("loyalty.client.coach.paused_body", value: "Turn the catalog back on in Loyalty settings when the shop is ready.")
-        }
-        if let bestRedeemableReward {
-            let remainingAfterRedeem = max(0, client.loyaltyPoints - bestRedeemableReward.pointCost)
-            return String(format: AppLocalization.localized("loyalty.client.coach.ready_body_fmt", value: "%1$@ can redeem %2$@ now and keep %3$d points."), client.firstName, bestRedeemableReward.title, remainingAfterRedeem)
-        }
-        guard let nextReward else {
-            return String(format: AppLocalization.localized("loyalty.client.coach.all_body_fmt", value: "%@ has enough points for every active reward."), client.firstName)
-        }
+                Capsule()
+                    .fill(.white)
+                    .frame(width: usable * animatedFraction, height: 8)
+                    .padding(.leading, Self.nodeSize / 2)
 
-        let remaining = max(0, nextReward.pointCost - client.loyaltyPoints)
-        if let projectedVisitsToNextReward {
-            if projectedVisitsToNextReward == 1 {
-                return String(format: AppLocalization.localized("loyalty.client.coach.pace_one_fmt", value: "%d more points, roughly 1 visit at the current pace."), remaining)
+                ForEach(rewards) { reward in
+                    let isUnlocked = reward.isRedeemable(with: balance)
+                    Image(systemName: isUnlocked ? reward.systemImage : "lock.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(isUnlocked ? reward.tint : .white.opacity(0.8))
+                        .frame(width: Self.nodeSize, height: Self.nodeSize)
+                        .background(isUnlocked ? Color.white : Color.white.opacity(0.18), in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(isUnlocked ? 0 : 0.5), lineWidth: 1))
+                        .scaleEffect(isUnlocked ? 1 : 0.82)
+                        .offset(x: usable * Double(reward.pointCost) / Double(maxCost))
+                        .animation(MotionSystem.resolved(MotionSystem.bouncy, reduceMotion: reduceMotion), value: isUnlocked)
+                }
             }
-            return String(format: AppLocalization.localized("loyalty.client.coach.pace_fmt", value: "%1$d more points, roughly %2$d visits at the current pace."), remaining, projectedVisitsToNextReward)
+            .frame(height: Self.nodeSize)
         }
-        return String(format: AppLocalization.localized("loyalty.client.coach.no_pace_fmt", value: "%d more points needed. Complete a checkout to start projecting visit pace."), remaining)
-    }
-
-    private var rewardProgressTint: Color {
-        if rewardCatalog.isEmpty { return DS.ColorToken.warning }
-        return bestRedeemableReward?.style.tint ?? nextReward?.style.tint ?? tier.tint
-    }
-
-    private var rewardProgressSymbol: String {
-        if rewardCatalog.isEmpty { return "gift" }
-        return bestRedeemableReward?.systemImage ?? nextReward?.systemImage ?? "crown.fill"
-    }
-
-    private var rewardProgressTitle: String {
-        if rewardCatalog.isEmpty { return AppLocalization.localized("loyalty.client.progress.paused_title", value: "Rewards catalog is paused") }
-        if let bestRedeemableReward { return String(format: AppLocalization.localized("loyalty.client.progress.ready_title_fmt", value: "%@ is ready"), bestRedeemableReward.title) }
-        if let nextReward { return String(format: AppLocalization.localized("loyalty.client.progress.next_title_fmt", value: "Progress to %@"), nextReward.title) }
-        return AppLocalization.localized("loyalty.client.progress.all_title", value: "All active rewards unlocked")
-    }
-
-    private var rewardProgressDetail: String {
-        if rewardCatalog.isEmpty {
-            return AppLocalization.localized("loyalty.client.progress.paused_detail", value: "Clients can still earn points, but reward redemption is hidden until the catalog is enabled.")
-        }
-        if let bestRedeemableReward {
-            let otherReadyCount = max(0, redeemableRewards.count - 1)
-            if otherReadyCount > 0 {
-                return String(format: AppLocalization.localized("loyalty.client.progress.several_ready_fmt", value: "%1$@ has %2$d rewards available. The highest-value option costs %3$d points."), client.firstName, otherReadyCount + 1, bestRedeemableReward.pointCost)
+        .frame(height: Self.nodeSize)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .onAppear {
+            withAnimation(MotionSystem.resolved(MotionSystem.fluid.delay(0.1), reduceMotion: reduceMotion)) {
+                animatedFraction = targetFraction
             }
-            return String(format: AppLocalization.localized("loyalty.client.progress.one_ready_fmt", value: "%@ can redeem this reward from the catalog now."), client.firstName)
         }
-        if let projectedVisitsToNextReward {
-            if projectedVisitsToNextReward == 1 {
-                return String(format: AppLocalization.localized("loyalty.client.progress.pace_one_fmt", value: "At about %d points per earning visit, this is around 1 visit away."), averageEarnedPerVisit)
+        .onChange(of: balance) { _, _ in
+            withAnimation(MotionSystem.resolved(MotionSystem.fluid, reduceMotion: reduceMotion)) {
+                animatedFraction = targetFraction
             }
-            return String(format: AppLocalization.localized("loyalty.client.progress.pace_fmt", value: "At about %1$d points per earning visit, this is around %2$d visits away."), averageEarnedPerVisit, projectedVisitsToNextReward)
         }
-        return AppLocalization.localized("loyalty.client.progress.no_history", value: "No earning history yet, so the next reward projection will appear after a checkout.")
+    }
+
+    private var accessibilitySummary: String {
+        let unlocked = rewards.filter { $0.isRedeemable(with: balance) }.count
+        return String(
+            format: AppLocalization.localized("loyalty2.track.a11y_fmt", value: "%1$d of %2$d rewards unlocked"),
+            unlocked,
+            rewards.count
+        )
+    }
+}
+
+// MARK: - Reward card
+
+/// One reward in the grid: its value up front, then either "Ready" or a ring
+/// showing how close the client is.
+private struct LoyaltyRewardCard: View {
+    let reward: LoyaltyReward
+    let balance: Int
+    let isCelebrating: Bool
+    let onRedeem: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isReady: Bool { reward.isRedeemable(with: balance) }
+
+    private var progress: Double {
+        min(1, Double(balance) / Double(max(1, reward.pointCost)))
+    }
+
+    var body: some View {
+        Button(action: onRedeem) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    LoyaltyRewardGlyph(reward: reward, size: 40, isDimmed: !isReady)
+                    Spacer(minLength: 6)
+                    statusBadge
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    if let headline = reward.benefitHeadline {
+                        Text(headline)
+                            .font(.system(.largeTitle, design: .rounded).weight(.black))
+                            .foregroundStyle(isReady ? reward.tint : Color.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                    }
+                    Text(LoyaltyCopy.title(for: reward))
+                        .font(.subheadline.weight(.bold))
+                        .lineLimit(2)
+                    Text(reward.benefitSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Text(LoyaltyCopy.points(reward.pointCost))
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(isReady ? .white : .secondary)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 10)
+                    .background(isReady ? AnyShapeStyle(reward.tint) : AnyShapeStyle(Color.gray.opacity(0.14)), in: Capsule())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(isReady ? reward.tint.opacity(0.6) : DS.ColorToken.border, lineWidth: isReady ? 1.5 : 1)
+            )
+            .overlay(alignment: .center) {
+                if isCelebrating {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 64, weight: .bold))
+                        .foregroundStyle(reward.tint)
+                        .shadow(color: reward.tint.opacity(0.4), radius: 10)
+                        .transition(.scale(scale: 0.3).combined(with: .opacity))
+                        .accessibilityHidden(true)
+                }
+            }
+            .scaleEffect(isCelebrating ? 0.96 : 1)
+            .shadow(color: isReady ? reward.tint.opacity(0.18) : .clear, radius: 10, y: 5)
+        }
+        .buttonStyle(.plain)
+        .pressScaleStyle(hapticsEnabled: true)
+        .disabled(!isReady)
+        .animation(MotionSystem.resolved(MotionSystem.bouncy, reduceMotion: reduceMotion), value: isReady)
+        .animation(MotionSystem.resolved(MotionSystem.bouncy, reduceMotion: reduceMotion), value: isCelebrating)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint(isReady ? AppLocalization.localized("loyalty2.card.a11y_hint", value: "Opens redemption") : "")
+        .accessibilityIdentifier("clientLoyalty.reward.\(reward.id)")
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        if isReady {
+            Text(AppLocalization.localized("loyalty2.card.ready", value: "Ready"))
+                .font(.caption2.weight(.heavy))
+                .textCase(.uppercase)
+                .foregroundStyle(.white)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(DS.ColorToken.success, in: Capsule())
+        } else {
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.18), lineWidth: 4)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(reward.tint, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text("\(Int((progress * 100).rounded(.down)))%")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 36, height: 36)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var accessibilityLabel: String {
+        let title = LoyaltyCopy.title(for: reward)
+        if isReady {
+            return String(
+                format: AppLocalization.localized("loyalty2.card.a11y_ready_fmt", value: "%1$@, ready. %2$@. Costs %3$@."),
+                title,
+                reward.benefitSummary,
+                LoyaltyCopy.points(reward.pointCost)
+            )
+        }
+        return String(
+            format: AppLocalization.localized("loyalty2.card.a11y_locked_fmt", value: "%1$@, locked. %2$@ to go."),
+            title,
+            LoyaltyCopy.points(reward.pointsNeeded(from: balance))
+        )
+    }
+}
+
+// MARK: - Redeem sheet
+
+/// Confirms spending points on a reward outside checkout. Says plainly that
+/// this only spends the points: the discount itself is applied at checkout.
+@MainActor
+private struct LoyaltyRedeemSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    @Bindable var client: Client
+    let reward: LoyaltyReward
+    let onRedeemed: (LoyaltyReward) -> Void
+
+    @State private var isRedeeming = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    VStack(spacing: 10) {
+                        LoyaltyRewardGlyph(reward: reward, size: 72)
+                        if let headline = reward.benefitHeadline {
+                            Text(headline)
+                                .font(.system(size: 44, weight: .black, design: .rounded))
+                                .foregroundStyle(reward.tint)
+                        }
+                        Text(LoyaltyCopy.title(for: reward))
+                            .font(.title3.weight(.bold))
+                        Text(reward.benefitSummary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+
+                    HStack(spacing: 12) {
+                        balanceColumn(
+                            title: AppLocalization.localized("loyalty2.redeem.now", value: "Now"),
+                            points: client.loyaltyPoints
+                        )
+                        Image(systemName: "arrow.right")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        balanceColumn(
+                            title: AppLocalization.localized("loyalty2.redeem.after", value: "After"),
+                            points: max(0, client.loyaltyPoints - reward.pointCost)
+                        )
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity)
+                    .background(DS.ColorToken.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                    Label(
+                        reward.benefit.appliesAtCheckout
+                            ? AppLocalization.localized("loyalty2.redeem.checkout_note", value: "To take it off today's bill, apply it on the Payment step at checkout instead. Redeeming here only spends the points.")
+                            : AppLocalization.localized("loyalty2.redeem.manual_note", value: "Give the client this reward yourself. Redeeming records it and spends the points."),
+                        systemImage: "info.circle"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(DS.ColorToken.danger)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    Button {
+                        redeem()
+                    } label: {
+                        Group {
+                            if isRedeeming {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Text(String(
+                                    format: AppLocalization.localized("loyalty2.redeem.confirm_fmt", value: "Redeem for %@"),
+                                    LoyaltyCopy.points(reward.pointCost)
+                                ))
+                                .font(.headline)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .foregroundStyle(.white)
+                        .background(reward.tint.gradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .pressScaleStyle(hapticsEnabled: true)
+                    .disabled(isRedeeming || !reward.isRedeemable(with: client.loyaltyPoints))
+                    .accessibilityIdentifier("rewardRedeem.confirm")
+                }
+                .padding(20)
+            }
+            .navigationTitle(AppLocalization.localized("loyalty2.redeem.title", value: "Redeem Reward"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(AppLocalization.localized("common.cancel", value: "Cancel")) { dismiss() }
+                        .disabled(isRedeeming)
+                        .accessibilityIdentifier("rewardRedeem.cancel")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func balanceColumn(title: String, points: Int) -> some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text("\(points)")
+                .font(.system(.title, design: .rounded).weight(.black))
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func redeem() {
+        guard reward.isRedeemable(with: client.loyaltyPoints) else { return }
+        isRedeeming = true
+        errorMessage = nil
+
+        Task {
+            do {
+                let service = LoyaltyService(modelContainer: modelContext.container)
+                try await service.redeemPoints(clientUUID: client.uuid, points: reward.pointCost, reason: LoyaltyCopy.title(for: reward))
+                HapticManager.notify(.success)
+                onRedeemed(reward)
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                HapticManager.notify(.error)
+            }
+            isRedeeming = false
+        }
     }
 }
 
@@ -665,21 +981,6 @@ private struct LoyaltyLedgerEntryRow: View {
 
     private var pointsText: String {
         entry.points > 0 ? "+\(entry.points)" : "\(entry.points)"
-    }
-}
-
-private extension LoyaltyReward.Style {
-    var tint: Color {
-        switch self {
-        case .credit:
-            DS.ColorToken.success
-        case .care:
-            DS.ColorToken.info
-        case .upgrade:
-            DS.ColorToken.warning
-        case .vip:
-            Color.purple
-        }
     }
 }
 
@@ -794,7 +1095,7 @@ private struct LoyaltyAdjustmentSheet: View {
         Task {
             do {
                 let service = LoyaltyService(modelContainer: modelContext.container)
-                try await service.adjustPoints(client: client, delta: previewDelta)
+                try await service.adjustPoints(clientUUID: client.uuid, delta: previewDelta)
                 HapticManager.notify(.success)
                 dismiss()
             } catch {

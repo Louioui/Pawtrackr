@@ -227,12 +227,7 @@ struct LoyaltySimulatorCard: View {
     /// while no template exists yet (what `ensureLoyaltyDefaults` seeds), and
     /// nothing while the catalog is turned off.
     static func rewards(templates: [LoyaltyRewardTemplate], config: LoyaltyConfigSnapshot) -> [LoyaltyReward] {
-        guard config.isRewardsCatalogEnabled else { return [] }
-        guard !templates.isEmpty else { return LoyaltyReward.builtInCatalog }
-        return templates
-            .filter(\.isEnabled)
-            .sorted { $0.sortOrder < $1.sortOrder }
-            .map(\.displayReward)
+        LoyaltyRewardCatalog.active(templates: templates, config: config)
     }
 
     /// The starter catalog, in order, with each reward's point cost.
@@ -244,28 +239,7 @@ struct LoyaltySimulatorCard: View {
     /// carrying a built-in reward's exact title and cost (seeded, not edited),
     /// show translated. Anything the salon wrote shows as written.
     static func displayTitle(for reward: LoyaltyReward) -> String {
-        let builtIn = LoyaltyReward.builtInCatalog.first { $0.id == reward.id }
-            ?? LoyaltyReward.builtInCatalog.first { $0.title == reward.title && $0.pointCost == reward.pointCost }
-        guard let builtIn else { return reward.title }
-        return localizedTitle(for: builtIn)
-    }
-
-    /// Literal keys, so LocalizationTests can see them.
-    static func localizedTitle(for reward: LoyaltyReward) -> String {
-        switch reward.id {
-        case "visit-credit-5":
-            return AppLocalization.localized("onboarding.loyalty_sim.reward.visit_credit_5", value: reward.title)
-        case "visit-credit-10":
-            return AppLocalization.localized("onboarding.loyalty_sim.reward.visit_credit_10", value: reward.title)
-        case "addon-discount-15":
-            return AppLocalization.localized("onboarding.loyalty_sim.reward.addon_discount_15", value: reward.title)
-        case "groom-credit-20":
-            return AppLocalization.localized("onboarding.loyalty_sim.reward.groom_credit_20", value: reward.title)
-        case "basic-groom-credit":
-            return AppLocalization.localized("onboarding.loyalty_sim.reward.basic_groom_credit", value: reward.title)
-        default:
-            return reward.title
-        }
+        LoyaltyCopy.title(for: reward)
     }
 }
 

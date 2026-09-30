@@ -183,10 +183,13 @@ final class LoyaltyPreviewTests: XCTestCase {
         UserDefaults.standard.set(AppLanguageOverride.es.rawValue, forKey: AppSettingsKeys.appLanguageOverride)
 
         let seeded = LoyaltyRewardTemplate(reward: LoyaltyReward.builtInCatalog[0], sortOrder: 0)
-        XCTAssertEqual(LoyaltySimulatorCard.displayTitle(for: seeded.displayReward), "Crédito de $5 para una visita")
+        XCTAssertEqual(LoyaltySimulatorCard.displayTitle(for: seeded.displayReward), "$5 de descuento")
 
-        let edited = LoyaltyRewardTemplate(title: "$5 Visit Credit", detail: "", pointCost: 75, systemImage: "gift.fill", styleRaw: "credit", sortOrder: 0)
-        XCTAssertEqual(LoyaltySimulatorCard.displayTitle(for: edited.displayReward), "$5 Visit Credit", "A changed cost means the salon made it its own.")
+        let legacy = LoyaltyRewardTemplate(reward: LoyaltyReward.legacyStarterCatalog[0], sortOrder: 0)
+        XCTAssertEqual(LoyaltySimulatorCard.displayTitle(for: legacy.displayReward), "Crédito de $5 para una visita", "Salons that kept an edited 1.x catalog still see it translated.")
+
+        let edited = LoyaltyRewardTemplate(title: "$5 Off", detail: "", pointCost: 75, systemImage: "gift.fill", styleRaw: "credit", sortOrder: 0)
+        XCTAssertEqual(LoyaltySimulatorCard.displayTitle(for: edited.displayReward), "$5 Off", "A changed cost means the salon made it its own.")
     }
 
     func testExplainerSaysTheTipEarnsPointsOnlyWhenItDoes() {

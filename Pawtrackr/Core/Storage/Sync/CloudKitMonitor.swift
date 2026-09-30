@@ -2104,7 +2104,7 @@ final class CloudKitMonitor {
         localChangeRebuildTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
-            await Task.detached(priority: .utility) {
+            _ = await Task.detached(priority: .utility) {
                 SummaryUpdater.rebuildAllSummaries(in: ModelContext(modelContainer))
             }.value
         }

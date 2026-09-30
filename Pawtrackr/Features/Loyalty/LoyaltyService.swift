@@ -51,6 +51,18 @@ actor LoyaltyService {
         )
     }
 
+    /// Redeems by client UUID, resolving the client in this actor's own
+    /// context. Views call this form so no main-context model crosses into
+    /// the actor.
+    func redeemPoints(clientUUID: UUID, points: Int, reason: String? = nil) async throws {
+        try await redeemPoints(client: try fetchClient(uuid: clientUUID), points: points, reason: reason)
+    }
+
+    /// Adjusts by client UUID; see `redeemPoints(clientUUID:points:reason:)`.
+    func adjustPoints(clientUUID: UUID, delta: Int, reason: String? = nil) async throws {
+        try await adjustPoints(client: try fetchClient(uuid: clientUUID), delta: delta, reason: reason)
+    }
+
     /// Applies a staff-entered loyalty balance correction.
     func adjustPoints(client: Client, delta: Int, reason: String? = nil) async throws {
         guard delta != 0 else {
@@ -114,7 +126,8 @@ actor LoyaltyService {
         detail: String,
         pointCost: Int,
         systemImage: String,
-        style: LoyaltyReward.Style
+        style: LoyaltyReward.Style,
+        benefit: LoyaltyReward.Benefit = .manual
     ) throws {
         guard pointCost > 0 else {
             throw AppError.validation(.custom(message: AppLocalization.localized("loyalty.error.cost_zero", value: "Reward cost must be greater than zero.")))
@@ -128,7 +141,8 @@ actor LoyaltyService {
             pointCost: pointCost,
             systemImage: systemImage,
             styleRaw: style.rawValue,
-            sortOrder: nextOrder
+            sortOrder: nextOrder,
+            benefit: benefit
         )
         modelContext.insert(reward)
         try modelContext.save()
@@ -176,6 +190,15 @@ actor LoyaltyService {
                 changedKeys: changedKeys
             )
         }
+    }
+
+    private func fetchClient(uuid: UUID) throws -> Client {
+        var descriptor = FetchDescriptor<Client>(predicate: #Predicate<Client> { $0.uuid == uuid })
+        descriptor.fetchLimit = 1
+        guard let client = try modelContext.fetch(descriptor).first else {
+            throw AppError.database(AppLocalization.localized("loyalty.error.client_missing", value: "This client could not be found."))
+        }
+        return client
     }
 
     private func fetchOrCreateConfig() throws -> LoyaltyConfig {

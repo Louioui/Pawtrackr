@@ -91,23 +91,133 @@ final class CheckoutViewModel {
         }
     }
 
-    // MARK: - Loyalty
-    var pointsToRedeem: Int = 0 {
-        didSet {
-            triggerBackgroundCalculation(reason: "points_redeemed", immediate: true)
+    // MARK: - Loyalty rewards
+
+    /// How a reward stands against this checkout.
+    enum RewardAvailability: Equatable {
+        /// The client can spend it here; `discount` is what it takes off.
+        case ready(discount: Decimal)
+        /// The client is this many points short.
+        case needsPoints(Int)
+        /// It can't discount this ticket (no Bath service priced, or nothing
+        /// to discount yet).
+        case notApplicable
+    }
+
+    /// Rewards checkout can apply by itself, cheapest first. Loaded with the
+    /// services; manual rewards stay on the client's Loyalty screen.
+    private(set) var loyaltyRewards: [LoyaltyReward] = []
+    /// The reward applied on the Payment step. Changing it is critical draft
+    /// state, saved immediately like the payment method and tip.
+    private(set) var appliedReward: LoyaltyReward?
+    /// The salon's Bath price, which a Free Bath reward takes off.
+    private(set) var bathServicePrice: Decimal?
+    /// Rewards are part of the Pro loyalty suite. The view sets this from the
+    /// entitlement before services load and whenever it changes; while it is
+    /// false no reward is offered, restored from a draft, or sent to the
+    /// transaction.
+    private(set) var isLoyaltyRewardsEntitled = false
+
+    func setLoyaltyRewardsEntitled(_ entitled: Bool) {
+        guard entitled != isLoyaltyRewardsEntitled else { return }
+        isLoyaltyRewardsEntitled = entitled
+        if !entitled, appliedReward != nil {
+            appliedReward = nil
+            recalculateCachedStrings()
+            scheduleCriticalDraftSave(reason: "reward_cleared_not_entitled")
         }
     }
-    
+
     var clientLoyaltyPoints: Int {
         pet.owner?.loyaltyPoints ?? 0
     }
-    
-    @MainActor
-    func applyPointRedemption() async throws {
-        guard let client = pet.owner else { return }
-        // Use loyaltyService (which is a ModelActor) to redeem points
-        let loyalty = LoyaltyService(modelContainer: pet.modelContext!.container)
-        try await loyalty.redeemPoints(client: client, points: pointsToRedeem)
+
+    /// Rewards only apply to a pet with an owner (points live on the client).
+    var canUseLoyaltyRewards: Bool {
+        isLoyaltyRewardsEntitled && pet.owner != nil && !loyaltyRewards.isEmpty
+    }
+
+    func availability(of reward: LoyaltyReward) -> RewardAvailability {
+        guard isLoyaltyRewardsEntitled else { return .notApplicable }
+        guard let discount = LoyaltyRewardPricing.discount(
+            for: reward.benefit,
+            subtotal: subtotalDecimal,
+            bathPrice: bathServicePrice
+        ) else {
+            return .notApplicable
+        }
+        guard reward.isRedeemable(with: clientLoyaltyPoints) else {
+            return .needsPoints(reward.pointsNeeded(from: clientLoyaltyPoints))
+        }
+        return .ready(discount: discount)
+    }
+
+    /// What the applied reward takes off right now. Zero when none is applied
+    /// or it stopped fitting the ticket (for example the amount was cleared),
+    /// in which case no points are spent either.
+    var rewardDiscountDecimal: Decimal {
+        guard let appliedReward, case .ready(let discount) = availability(of: appliedReward) else {
+            return .zero
+        }
+        return discount
+    }
+
+    /// Applies `reward`, or removes it when it is the one already applied.
+    func toggleReward(_ reward: LoyaltyReward) {
+        if appliedReward?.id == reward.id {
+            appliedReward = nil
+            trace("reward_removed_\(reward.id)")
+        } else {
+            guard case .ready = availability(of: reward) else { return }
+            appliedReward = reward
+            trace("reward_applied_\(reward.id)")
+        }
+        recalculateCachedStrings()
+        scheduleCriticalDraftSave(reason: "reward_changed")
+    }
+
+    func removeAppliedReward() {
+        guard let appliedReward else { return }
+        toggleReward(appliedReward)
+    }
+
+    /// The redemption sent with the checkout: only when the reward actually
+    /// discounts this ticket, so points are never spent for nothing.
+    var rewardRedemption: CheckoutRewardRedemption? {
+        guard let appliedReward else { return nil }
+        let discount = rewardDiscountDecimal
+        guard discount > .zero else { return nil }
+        return CheckoutRewardRedemption(
+            rewardID: appliedReward.id,
+            title: LoyaltyCopy.title(for: appliedReward),
+            pointCost: appliedReward.pointCost,
+            discount: discount
+        )
+    }
+
+    /// UI-bound read on the main context, like the service list.
+    private func loadLoyaltyRewards(in modelContext: ModelContext) {
+        let config = LoyaltyConfigResolver.snapshot(in: modelContext)
+        do {
+            let templates = try modelContext.fetch(FetchDescriptor<LoyaltyRewardTemplate>())
+            let active = LoyaltyRewardCatalog.active(templates: templates, config: config)
+            loyaltyRewards = LoyaltyRewardCatalog.byCost(active.filter(\.benefit.appliesAtCheckout))
+        } catch {
+            Logger.checkout.error("CheckoutViewModel: Loading loyalty rewards failed - \(error.localizedDescription)")
+            loyaltyRewards = []
+        }
+    }
+
+    /// The enabled service that is the salon's Bath (the built-in one under
+    /// any of its translated names, else the first whose name says bath).
+    static func bathPrice(in services: [Service]) -> Decimal? {
+        let bath = services.first { DefaultServiceCatalog.englishName(forKnownName: $0.name) == "Bath" }
+            ?? services.first { service in
+                let name = service.name.lowercased()
+                return name.contains("bath") || name.contains("baño")
+            }
+        guard let price = bath?.effectiveBasePrice, price > .zero else { return nil }
+        return price.roundedMoney()
     }
 
     // MARK: - Async Calculations (Off-Main-Thread)
@@ -223,7 +333,7 @@ final class CheckoutViewModel {
     }
 
     var isConfirmEnabled: Bool {
-        let hasValidAmount = servicesTotalDecimal > 0
+        let hasValidAmount = hasPayableAmount
         let hasValidReference = selectedPaymentMethod.isValidReference(externalReference)
         return hasValidAmount && !isSaving && (!requiresExternalReference || hasValidReference)
     }
@@ -317,6 +427,8 @@ final class CheckoutViewModel {
                 }
 
                 self.addOnServices = all.filter { $0.category == .addOn }
+                self.bathServicePrice = Self.bathPrice(in: mainServices)
+                self.loadLoyaltyRewards(in: modelContext)
                 self.isBootstrappingCheckout = true
                 self.hydrateStateFromVisit()
                 await self.restoreDraftIfAvailable()
@@ -348,6 +460,7 @@ final class CheckoutViewModel {
 
         beforePhotoData = visit.beforePhotoData
         afterPhotoData  = visit.afterPhotoData
+        appliedReward = nil
 
         let allIDs = Set((visit.items ?? []).compactMap { $0.service?.persistentModelID })
         selectedServiceIDs = allIDs.filter { id in allServices.contains(where: { $0.persistentModelID == id }) }
@@ -448,8 +561,15 @@ final class CheckoutViewModel {
         baseAmountDecimal
     }
 
+    /// What the client pays: services, less any loyalty reward, plus tip.
     var servicesTotalDecimal: Decimal {
-        (baseAmountDecimal + tipAmountDecimal).roundedMoney()
+        (baseAmountDecimal - rewardDiscountDecimal + tipAmountDecimal).roundedMoney()
+    }
+
+    /// A reward may cover the whole ticket (a Free Bath on a bath-only
+    /// visit), so a zero charge is valid when a reward made it zero.
+    private var hasPayableAmount: Bool {
+        servicesTotalDecimal > .zero || (rewardDiscountDecimal > .zero && subtotalDecimal > .zero)
     }
 
     private var baseAmountDecimal: Decimal {
@@ -671,7 +791,8 @@ final class CheckoutViewModel {
             beforePhotoData: beforePhotoData,
             afterPhotoData: afterPhotoData,
             selectedServiceIDs: Array(selectedServiceIDs),
-            selectedAddOnIDs: Array(selectedAddOnIDs)
+            selectedAddOnIDs: Array(selectedAddOnIDs),
+            rewardRedemption: rewardRedemption
         )
 
         do {
@@ -773,8 +894,7 @@ final class CheckoutViewModel {
         case .details:
             break
         case .payment, .review:
-            let total = servicesTotalDecimal
-            guard total > 0 else {
+            guard hasPayableAmount else {
                 throw ValidationError.custom(message: AppLocalization.localized("checkout.error.zero_total", value: "Cannot check out with a total amount of zero."))
             }
             if let message = selectedPaymentMethod.validationMessage(for: externalReference) {
@@ -803,6 +923,9 @@ final class CheckoutViewModel {
         let addOnIDs = Set(addOnServices.filter { draft.selectedAddOnUUIDs.contains($0.uuid) }.map(\.persistentModelID))
         selectedServiceIDs = mainIDs
         selectedAddOnIDs = addOnIDs
+        appliedReward = isLoyaltyRewardsEntitled
+            ? draft.appliedRewardID.flatMap { id in loyaltyRewards.first { $0.id == id } }
+            : nil
         if let restoredStep = CheckoutFlowStep(rawValue: draft.currentStepRawValue) {
             currentStep = restoredStep
         } else {
@@ -846,7 +969,8 @@ final class CheckoutViewModel {
             externalReference,
             tagList,
             String(beforePhotoData?.count ?? 0),
-            String(afterPhotoData?.count ?? 0)
+            String(afterPhotoData?.count ?? 0),
+            appliedReward?.id ?? ""
         ]
         return parts.joined(separator: "||")
     }
@@ -916,7 +1040,8 @@ final class CheckoutViewModel {
             hadBeforePhoto: beforePhotoData != nil,
             hadAfterPhoto: afterPhotoData != nil,
             externalReference: externalReference,
-            tags: Array(tags.sorted())
+            tags: Array(tags.sorted()),
+            appliedRewardID: appliedReward?.id
         )
     }
 

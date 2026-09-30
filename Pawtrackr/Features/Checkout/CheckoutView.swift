@@ -13,6 +13,8 @@ struct CheckoutView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(GlobalEventBus.self) private var eventBus
     @Environment(WalkthroughController.self) private var walkthrough: WalkthroughController?
+    @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: CheckoutViewModel
     @State private var receiptPDFData: Data?
     @State private var receiptFailed = false
@@ -91,11 +93,15 @@ struct CheckoutView: View {
             guard !didLoadViewModel else { return }
             didLoadViewModel = true
             viewModel = CheckoutViewModel(pet: viewModel.pet, visit: viewModel.visit, eventBus: eventBus)
+            viewModel.setLoyaltyRewardsEntitled(entitlements?.isPremium ?? false)
             viewModel.loadServices(modelContext: modelContext)
             notesEditorText = viewModel.sessionNotes
             amountEditorText = viewModel.amountString
             referenceEditorText = viewModel.externalReference
             synchronizeWalkthroughCheckoutStep(walkthrough?.currentStep?.anchor)
+        }
+        .onChange(of: entitlements?.isPremium ?? false) { _, isPremium in
+            viewModel.setLoyaltyRewardsEntitled(isPremium)
         }
         .onDisappear {
             notesSyncTask?.cancel()
@@ -423,6 +429,10 @@ struct CheckoutView: View {
                         }
                     }
 
+                    if showsLoyaltyRewards {
+                        CheckoutRewardsSection(viewModel: viewModel)
+                    }
+
                     VStack(alignment: .leading, spacing: 12) {
                         Text(NSLocalizedString("checkout.tip_amount", comment: "")).font(.headline).padding(.horizontal)
                         Card {
@@ -510,6 +520,7 @@ struct CheckoutView: View {
                                 summaryRow(title: localized("checkout.pet", value: "Pet"), value: viewModel.pet.name)
                                 summaryRow(title: localized("checkout.duration", value: "Duration"), value: viewModel.sessionDurationString)
                                 summaryRow(title: localized("checkout.services", value: "Services"), value: selectedServicesSummary)
+                                rewardSummaryRow
                                 Divider()
                                 summaryRow(title: NSLocalizedString("checkout.total", comment: ""), value: viewModel.finalTotalString, isTotal: true)
                             }
@@ -558,6 +569,7 @@ struct CheckoutView: View {
                             summaryRow(title: NSLocalizedString("checkout.behavior_tags", comment: ""), value: viewModel.behaviorTagsSummary)
                             summaryRow(title: localized("checkout.notes", value: "Notes"), value: viewModel.notesPreview)
                             summaryRow(title: localized("checkout.photos", value: "Photos"), value: "\(viewModel.totalPhotoCount)")
+                            rewardSummaryRow
                             Divider()
                             summaryRow(title: NSLocalizedString("checkout.total", comment: ""), value: viewModel.finalTotalString, isTotal: true)
                         }
@@ -668,11 +680,10 @@ struct CheckoutView: View {
                 Button {
                     advance()
                 } label: {
-                    Text(viewModel.currentStep.primaryButtonTitle)
-                        .font(.headline)
+                    primaryButtonLabel
                         .frame(maxWidth: .infinity)
-                        .frame(height: primaryButtonHeight)
-                        .background(RoundedRectangle(cornerRadius: 15).fill(viewModel.isAdvanceEnabled ? Color.blue : Color.gray.opacity(0.3)))
+                        .frame(minHeight: primaryButtonHeight)
+                        .background(RoundedRectangle(cornerRadius: 15).fill(primaryButtonFill))
                         .foregroundStyle(.white)
                         .scaleEffect(viewModel.isAdvanceEnabled ? 1.0 : 0.97)
                 }
@@ -680,6 +691,7 @@ struct CheckoutView: View {
                 .accessibilityIdentifier("checkout.primaryButton")
                 .walkthroughTarget(.coConfirm)
                 .animation(Animations.responsiveSpring, value: viewModel.isAdvanceEnabled)
+                .animation(MotionSystem.resolved(MotionSystem.bouncy, reduceMotion: reduceMotion), value: showsRewardMorph)
                 #if os(macOS)
                 // Off during the guided tour: the overlay intercepts clicks on
                 // this button, but not keyboard shortcuts, and ⌘Return on the
@@ -689,6 +701,77 @@ struct CheckoutView: View {
             }
             .padding()
             .background(DS.ColorToken.background)
+        }
+    }
+
+    // MARK: - Loyalty rewards
+
+    /// Rewards are part of the Pro loyalty suite; earning stays free.
+    private var showsLoyaltyRewards: Bool {
+        viewModel.canUseLoyaltyRewards && !viewModel.isWalkthroughPreview
+    }
+
+    @ViewBuilder
+    private var rewardSummaryRow: some View {
+        if let reward = viewModel.appliedReward, viewModel.rewardDiscountDecimal > .zero {
+            HStack {
+                Label(LoyaltyCopy.title(for: reward), systemImage: "gift.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(reward.tint)
+                Spacer()
+                Text(String(
+                    format: localized("checkout.rewards.minus_fmt", value: "−%@"),
+                    viewModel.rewardDiscountDecimal.moneyString
+                ))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(reward.tint)
+                .contentTransition(.numericText())
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("checkout.rewardDiscountRow")
+        }
+    }
+
+    /// On the last two steps an applied reward morphs the button: it turns
+    /// the reward's color and shows the saving under the charge.
+    private var showsRewardMorph: Bool {
+        guard viewModel.appliedReward != nil else { return false }
+        return (viewModel.currentStep == .payment || viewModel.currentStep == .review)
+            && viewModel.rewardDiscountDecimal > .zero
+    }
+
+    private var primaryButtonFill: AnyShapeStyle {
+        guard viewModel.isAdvanceEnabled else { return AnyShapeStyle(Color.gray.opacity(0.3)) }
+        if showsRewardMorph, let reward = viewModel.appliedReward {
+            return AnyShapeStyle(LinearGradient(colors: [reward.tint, Color.blue], startPoint: .leading, endPoint: .trailing))
+        }
+        return AnyShapeStyle(Color.blue)
+    }
+
+    @ViewBuilder
+    private var primaryButtonLabel: some View {
+        if showsRewardMorph, let reward = viewModel.appliedReward {
+            VStack(spacing: 2) {
+                Text(viewModel.currentStep == .review
+                     ? String(format: localized("checkout.rewards.confirm_pay_fmt", value: "Confirm & Pay %@"), viewModel.finalTotalString)
+                     : viewModel.currentStep.primaryButtonTitle)
+                    .font(.headline)
+                    .contentTransition(.numericText())
+                Text(String(
+                    format: localized("checkout.rewards.button_saving_fmt", value: "%1$@ applied · saves %2$@"),
+                    LoyaltyCopy.title(for: reward),
+                    viewModel.rewardDiscountDecimal.moneyString
+                ))
+                .font(.caption.weight(.semibold))
+                .opacity(0.9)
+                .contentTransition(.numericText())
+            }
+            .padding(.vertical, 6)
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
+        } else {
+            Text(viewModel.currentStep.primaryButtonTitle)
+                .font(.headline)
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
     }
 

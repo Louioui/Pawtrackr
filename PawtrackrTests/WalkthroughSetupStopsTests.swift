@@ -85,7 +85,7 @@ final class WalkthroughSetupStopsTests: XCTestCase {
         XCTAssertEqual(step.anchor, .setLoyalty)
         XCTAssertEqual(SettingSection.walkthroughSection(for: step.anchor), .loyalty)
         XCTAssertTrue(step.isOwnerOnly)
-        XCTAssertFalse(step.requiresTargetAction || step.allowsTargetInteraction, "Look-only: Reset to Discount Ladder replaces every reward.")
+        XCTAssertFalse(step.requiresTargetAction || step.allowsTargetInteraction, "Look-only: Use Rewards 2.0 replaces every reward.")
     }
 
     func testClientLoyaltyAndDeviceStopsAreInBothTours() throws {

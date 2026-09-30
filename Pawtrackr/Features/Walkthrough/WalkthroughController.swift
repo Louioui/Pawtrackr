@@ -1268,7 +1268,7 @@ extension WalkthroughController {
                 id: WalkthroughStepID.loyaltyLadder, anchor: .setLoyalty, surface: .settings,
                 title: AppLocalization.localized("tour.set.loyalty_ladder.title", value: "Loyalty ladder"),
                 directive: AppLocalization.localized("tour.set.loyalty_ladder.directive", value: "Pick rewards before staff start checking out."),
-                purpose: AppLocalization.localized("tour.set.loyalty_ladder.purpose", value: "Discount Ladder gives simple point rewards. Reset to Discount Ladder replaces every reward on the list, custom ones included. Client points stay as they are."),
+                purpose: AppLocalization.localized("tour.set.loyalty_ladder.purpose", value: "Rewards 2.0 is $5 Off, $20 Off, 25% Off and Free Bath, taken off the bill at checkout. Use Rewards 2.0 replaces every reward, custom ones included. Client points stay as they are."),
                 lesson: .settingsAndSafety,
                 coachTip: AppLocalization.localized("tour.set.loyalty_ladder.tip", value: "Keep rewards easy to explain at pickup: points should feel automatic, not like extra paperwork."),
                 icon: "giftcard.fill",
@@ -1280,7 +1280,7 @@ extension WalkthroughController {
                 directive: AppLocalization.localized("tour.set.loyalty.directive", value: "Try your loyalty rules before a client earns anything."),
                 purpose: AppLocalization.localized("tour.set.loyalty.purpose", value: "Move the checkout total, pick a tier, and see the points a visit earns. Checkout awards points with this same math, and the rules sit right above."),
                 lesson: .settingsAndSafety,
-                coachTip: AppLocalization.localized("tour.set.loyalty.tip", value: "Clients redeem from Loyalty & Rewards on their profile. You give the reward yourself, for example as a discount."),
+                coachTip: AppLocalization.localized("tour.set.loyalty.tip", value: "Apply a reward on the Payment step at checkout and it comes off the bill, or redeem it from Loyalty & Rewards on the client's profile."),
                 icon: "giftcard.fill",
                 isOwnerOnly: true
             ),
