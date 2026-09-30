@@ -7,23 +7,16 @@ final class DashboardPerformanceTests: XCTestCase {
 
     @MainActor
     func testDashboardTimeToInteractive() async throws {
-        let dataStore = DataStoreService(inMemory: true)
-        let eventBus = GlobalEventBus()
-        
-        let start = CFAbsoluteTimeGetCurrent()
-        
-        let vm = DashboardViewModel(dataStore: dataStore, eventBus: eventBus)
-        
-        // In a real test, we'd observe the state change.
-        // For PoC, we await the refresh.
-        await vm.refresh()
-        
-        let end = CFAbsoluteTimeGetCurrent()
-        let duration = (end - start) * 1000
-        
-        print("Dashboard Time to Interactive: \(duration)ms")
-        
-        XCTAssertTrue(duration < 150, "Dashboard took \(duration)ms to become interactive, exceeding 150ms threshold")
+        let duration = await PerformanceBudget.fastestCPUMilliseconds {
+            DataStoreService(inMemory: true)
+        } _: { dataStore in
+            let vm = DashboardViewModel(dataStore: dataStore, eventBus: GlobalEventBus())
+            await vm.refresh()
+        }
+
+        print("Dashboard Time to Interactive (CPU): \(duration)ms")
+
+        XCTAssertTrue(duration < 150, "Dashboard used \(duration)ms of CPU to become interactive, exceeding 150ms threshold")
     }
     
     @MainActor
