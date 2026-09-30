@@ -71,8 +71,13 @@ enum WalkthroughOverlayLayout {
         let cardMaxHeight: CGFloat
         let placement: Placement
         let arrowDirection: ArrowDirection?
+        /// For side placements: the arrow's distance from the top of the
+        /// slot, or from its bottom when `hugsBottom`.
         let arrowOffset: CGFloat
         let isCompactViewport: Bool
+        /// A side slot had to move up to fit on screen, so it ends near the
+        /// target: the card sits at the slot's bottom instead of its top.
+        var hugsBottom = false
     }
 
     private struct Metrics {
@@ -374,6 +379,7 @@ enum WalkthroughOverlayLayout {
         let y = max(safe.minY, min(spotlight.minY - 8, safe.maxY - cardHeight))
         let frame = CGRect(x: x, y: y, width: outerWidth, height: cardHeight)
             .clamped(to: safe)
+        let arrow = sideArrow(in: frame, spotlight: spotlight, metrics: metrics)
 
         return Result(
             spotlight: spotlight,
@@ -382,8 +388,9 @@ enum WalkthroughOverlayLayout {
             cardMaxHeight: frame.height,
             placement: .trailing,
             arrowDirection: .left,
-            arrowOffset: 16,
-            isCompactViewport: metrics.isCompactViewport
+            arrowOffset: arrow.offset,
+            isCompactViewport: metrics.isCompactViewport,
+            hugsBottom: arrow.hugsBottom
         )
     }
 
@@ -400,6 +407,7 @@ enum WalkthroughOverlayLayout {
         let y = max(safe.minY, min(spotlight.minY - 8, safe.maxY - cardHeight))
         let frame = CGRect(x: x, y: y, width: outerWidth, height: cardHeight)
             .clamped(to: safe)
+        let arrow = sideArrow(in: frame, spotlight: spotlight, metrics: metrics)
 
         return Result(
             spotlight: spotlight,
@@ -408,9 +416,26 @@ enum WalkthroughOverlayLayout {
             cardMaxHeight: frame.height,
             placement: .leading,
             arrowDirection: .right,
-            arrowOffset: 16,
-            isCompactViewport: metrics.isCompactViewport
+            arrowOffset: arrow.offset,
+            isCompactViewport: metrics.isCompactViewport,
+            hugsBottom: arrow.hugsBottom
         )
+    }
+
+    /// Where a side bubble's card and arrow sit in its slot. The slot is as
+    /// tall as the longest card and starts level with the target, unless
+    /// that would run off the bottom of the screen. Then it moves up and
+    /// ends near the target, and a shorter card at its top would float
+    /// above the control it describes. So the card sits at the bottom
+    /// instead, with the arrow pointing at the target's middle, kept low
+    /// enough to stay on even the shortest card.
+    private static func sideArrow(in frame: CGRect, spotlight: CGRect, metrics: Metrics) -> (offset: CGFloat, hugsBottom: Bool) {
+        let arrowHeight: CGFloat = 22
+        let edgeInset: CGFloat = 16
+        guard frame.minY < spotlight.minY - 8 - 1 else { return (edgeInset, false) }
+        let fromBottom = frame.maxY - spotlight.midY - arrowHeight / 2
+        let highest = max(edgeInset, metrics.bubbleMinHeight - arrowHeight - edgeInset)
+        return (min(max(edgeInset, fromBottom), highest), true)
     }
 
     private static func availableAbove(spotlight: CGRect, metrics: Metrics, gap: CGFloat) -> CGFloat {
@@ -947,14 +972,16 @@ private struct WalkthroughOverlayView: View {
     private var leadingBubble: some View {
         let result = layout
 
-        return HStack(alignment: .top, spacing: 0) {
-            bubbleCard(maxHeight: result.cardMaxHeight)
+        let edge: VerticalAlignment = result.hugsBottom ? .bottom : .top
+
+        return HStack(alignment: edge, spacing: 0) {
+            bubbleCard(maxHeight: result.cardMaxHeight, alignment: result.hugsBottom ? .bottom : .top)
             ArrowTriangle(direction: .right)
                 .fill(DS.ColorToken.surface)
                 .frame(width: 11, height: 22)
-                .padding(.top, result.arrowOffset)
+                .padding(result.hugsBottom ? .bottom : .top, result.arrowOffset)
         }
-        .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: .topLeading)
+        .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: result.hugsBottom ? .bottomLeading : .topLeading)
         .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
@@ -963,14 +990,16 @@ private struct WalkthroughOverlayView: View {
     private var trailingBubble: some View {
         let result = layout
 
-        return HStack(alignment: .top, spacing: 0) {
+        let edge: VerticalAlignment = result.hugsBottom ? .bottom : .top
+
+        return HStack(alignment: edge, spacing: 0) {
             ArrowTriangle(direction: .left)
                 .fill(DS.ColorToken.surface)
                 .frame(width: 11, height: 22)
-                .padding(.top, result.arrowOffset)
-            bubbleCard(maxHeight: result.cardMaxHeight)
+                .padding(result.hugsBottom ? .bottom : .top, result.arrowOffset)
+            bubbleCard(maxHeight: result.cardMaxHeight, alignment: result.hugsBottom ? .bottom : .top)
         }
-        .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: .topLeading)
+        .frame(width: result.bubbleFrame.width, height: result.bubbleFrame.height, alignment: result.hugsBottom ? .bottomLeading : .topLeading)
         .position(x: result.bubbleFrame.midX, y: result.bubbleFrame.midY)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }

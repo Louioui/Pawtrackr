@@ -728,6 +728,27 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(CGRect(origin: .zero, size: container).contains(result.bubbleFrame))
     }
 
+    /// The card hugs its copy, so a side slot that had to move up to fit on
+    /// screen puts the card at its bottom, next to the target, with the
+    /// arrow on the target. A slot level with the target keeps both on top.
+    func testSideBubbleStaysBesideATargetNearTheBottom() throws {
+        let step = WalkthroughStep(id: "layout", anchor: .cdHistory, title: "History", directive: "Look here.", purpose: "Past visits.")
+        let container = CGSize(width: 1_194, height: 834)
+        let insets = EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)
+
+        let low = WalkthroughOverlayLayout.layout(step: step, targetRect: CGRect(x: 800, y: 720, width: 300, height: 60), containerSize: container, safeAreaInsets: insets)
+        let lowSpotlight = try XCTUnwrap(low.spotlight)
+        XCTAssertEqual(low.placement, .leading)
+        XCTAssertLessThan(low.bubbleFrame.minY, lowSpotlight.minY - 8, "The slot moved up to fit.")
+        XCTAssertTrue(low.hugsBottom)
+        XCTAssertEqual(low.bubbleFrame.maxY - low.arrowOffset - 11, lowSpotlight.midY, accuracy: 0.5, "The arrow points at the target.")
+
+        let high = WalkthroughOverlayLayout.layout(step: step, targetRect: CGRect(x: 800, y: 100, width: 300, height: 60), containerSize: container, safeAreaInsets: insets)
+        XCTAssertEqual(high.placement, .leading)
+        XCTAssertFalse(high.hugsBottom)
+        XCTAssertEqual(high.arrowOffset, 16)
+    }
+
     func testWalkthroughBubbleStaysInBoundsForIPadLandscapePetHistoryTarget() {
         let step = WalkthroughStep(
             id: "layout",

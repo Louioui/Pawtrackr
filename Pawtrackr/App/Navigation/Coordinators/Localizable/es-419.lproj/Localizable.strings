@@ -1621,7 +1621,7 @@
 "tour.clients.list.title" = "Tu lista de clientes";
 "tour.clients.list.directive" = "Toca la tarjeta de un cliente para abrir su perfil completo.";
 "tour.clients.list.purpose" = "Cada tarjeta muestra al dueño, su teléfono y sus mascotas. Los clientes con una mascota registrada aparecen primero, en En proceso.";
-"tour.clients.list.tip" = "Buscar, arriba, encuentra un dueño, una mascota o un teléfono.";
+"tour.clients.list.tip" = "La búsqueda de arriba encuentra un dueño, una mascota o un teléfono.";
 "tour.cd.owner.tip_safety" = "Un aviso rojo de Precaución bajo esta tarjeta indica una mascota marcada como agresiva. Avisa al equipo antes de atenderla.";
 "client_detail.history_range" = "Rango del historial";
 "settings.tour.title" = "Recorrido guiado";
