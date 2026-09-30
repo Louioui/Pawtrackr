@@ -72,6 +72,12 @@ final class RecordingSpotlightIndex: SpotlightIndexWriting, @unchecked Sendable 
 }
 
 final class SpotlightIndexingTests: XCTestCase {
+    /// How long to wait for an index call. The indexer flushes on a utility
+    /// queue, which a loaded CI simulator can starve for seconds (a 3 s wait
+    /// timed out there), so this is a ceiling, not an expected time: a passing
+    /// test returns as soon as the call lands.
+    private static let indexTimeout: TimeInterval = 30
+
     private var suiteName = ""
     private var defaults: UserDefaults!
 
@@ -412,7 +418,7 @@ final class SpotlightIndexingTests: XCTestCase {
         let openIndexer = makeIndexer(open)
         openIndexer.applyPrivacyPolicy(allowsIndexing: true)
         openIndexer.scheduleIndex(client: client)
-        await fulfillment(of: [indexed], timeout: 3)
+        await fulfillment(of: [indexed], timeout: Self.indexTimeout)
 
         let item = try XCTUnwrap(open.indexedItems["client-\(client.uuid.uuidString)"])
         XCTAssertTrue(item.attributeSet.keywords?.contains("5552345678") == true, "Live edits carry the phone keywords too.")
@@ -437,7 +443,7 @@ final class SpotlightIndexingTests: XCTestCase {
         let indexer = makeIndexer(index)
         indexer.applyPrivacyPolicy(allowsIndexing: true)
         indexer.scheduleIndex(client: client, includingPets: true)
-        await fulfillment(of: [indexed], timeout: 3)
+        await fulfillment(of: [indexed], timeout: Self.indexTimeout)
 
         let petItem = try XCTUnwrap(index.indexedItems["pet-\(pet.uuid.uuidString)"])
         XCTAssertTrue(petItem.attributeSet.keywords?.contains("5559876543") == true)
@@ -465,7 +471,7 @@ final class SpotlightIndexingTests: XCTestCase {
         rebuilt.assertForOverFulfill = false
         index.onCall = { call in if case .index = call { rebuilt.fulfill() } }
         XCTAssertEqual(indexer.applyPrivacyPolicy(allowsIndexing: true), .rebuild)
-        await fulfillment(of: [rebuilt], timeout: 5)
+        await fulfillment(of: [rebuilt], timeout: Self.indexTimeout)
         XCTAssertEqual(index.indexedItems.count, 1)
     }
 
