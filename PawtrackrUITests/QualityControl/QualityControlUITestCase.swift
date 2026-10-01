@@ -12,13 +12,21 @@ class QualityControlUITestCase: XCTestCase {
         app = nil
     }
 
-    func launch(startTab: String? = nil, onboarding: Bool = false, startWalkthrough: Bool = false) {
+    /// `scenario` sets PAWTRACKR_SCENARIO (e.g. "heavy_load" seeds the
+    /// stress book); `extraArguments` go after the standard ones.
+    func launch(
+        startTab: String? = nil,
+        onboarding: Bool = false,
+        startWalkthrough: Bool = false,
+        scenario: String? = nil,
+        extraArguments: [String] = []
+    ) {
         app = XCUIApplication()
         app.launchArguments = [
             "-pawtrackr-ui-testing",
             "-AppleLanguages", "(en)",
             "-AppleLocale", "en_US"
-        ]
+        ] + extraArguments
         if onboarding {
             app.launchArguments.append("-pawtrackr-ui-onboarding")
             app.launchArguments.append("--mock-storekit-unknown")
@@ -34,6 +42,9 @@ class QualityControlUITestCase: XCTestCase {
         }
         if startWalkthrough {
             app.launchEnvironment["PAWTRACKR_UI_START_WALKTHROUGH"] = "1"
+        }
+        if let scenario {
+            app.launchEnvironment["PAWTRACKR_SCENARIO"] = scenario
         }
         app.launch()
     }

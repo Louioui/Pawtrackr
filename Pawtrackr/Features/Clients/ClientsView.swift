@@ -367,7 +367,9 @@ struct ClientsView: View {
         anchorsFirstCard: Bool = false
     ) -> some View {
         LazyVGrid(columns: clientGridColumns, spacing: 12) {
-            ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
+            // Rows are identified by the store ID alone. Nothing below may add
+            // an `.id` or an `if` at the row root (see `walkthroughAnchor(_:isActive:)`).
+            ForEach(Array(clients.enumerated()), id: \.element.persistentModelID) { idx, client in
                 Button(action: {
                     router.navigateToClient(client)
                     walkthrough?.observe(.clientOpened)
@@ -382,7 +384,7 @@ struct ClientsView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
-                .walkthroughTarget(.clientList, isActive: anchorsFirstCard && idx == 0)
+                .walkthroughAnchor(.clientList, isActive: anchorsFirstCard && idx == 0)
                 .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")
                 .contextMenu {
                     Button {

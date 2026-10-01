@@ -181,7 +181,10 @@ final actor ClientRepository: ClientRepositoryProtocol {
             }
         }
 
-        return SearchEngine.matches(query, in: Array(fieldMap.values)) || phoneMatches(client.phone, query: trimmed)
+        // The list shows "Last First" under its default sort, so a name typed
+        // the way it reads there must match too.
+        let fields = Array(fieldMap.values) + [client.displayName(lastNameFirst: true)]
+        return SearchEngine.matches(query, in: fields) || phoneMatches(client.phone, query: trimmed)
     }
 
     private static func phoneMatches(_ storedPhone: String?, query: String) -> Bool {

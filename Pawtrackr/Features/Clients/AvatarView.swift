@@ -201,14 +201,10 @@ public struct AvatarView: View {
         }
     }
 
+    /// One rule for every avatar: `IconCircle.makeInitials` skips invisible
+    /// characters and Zalgo marks and keeps emoji whole.
     private func initials(from name: String?) -> String? {
-        guard let name = name else { return nil }
-        let parts = name.split(separator: " ").filter { !$0.isEmpty }
-        if parts.isEmpty { return nil }
-        let first = parts.first?.first
-        let last = parts.dropFirst().first?.first
-        let chars: [Character] = [first, last].compactMap { $0 }
-        return String(chars).uppercased()
+        IconCircle.makeInitials(from: name)
     }
 
     private func systemImageForPet(species: Species?) -> String {

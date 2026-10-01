@@ -89,6 +89,12 @@ enum UITestDataSeeder {
             summaryDates.append(endedAt)
         }
 
+        #if DEBUG
+        if AppRuntime.currentScenario == .heavyLoad {
+            try ClientStressDataset.seed(into: context, includingPoison: true)
+        }
+        #endif
+
         try context.save()
 
         for date in summaryDates {

@@ -72,13 +72,12 @@ struct ClientCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            if let namespace {
-                AvatarView(.client(name: displayName), size: .sm)
-                    .matchedGeometryEffect(id: "avatar-\(client.id)", in: namespace)
-            } else {
-                AvatarView(.client(name: displayName), size: .sm)
-            }
-            
+            // No matchedGeometryEffect: nothing else draws "avatar-<id>", so it
+            // only made a card rebuilt by `.id(identityKey)` or a reused grid
+            // cell fly its avatar in from the old frame. Initials come from the
+            // first-last name so the sort order can't swap them ("DJ" ⇄ "JD").
+            AvatarView(.client(name: client.fullName), size: .sm)
+
             VStack(alignment: .leading, spacing: 0) {
                 Text(displayName)
                     .font(.body.weight(.semibold))
@@ -124,9 +123,12 @@ struct ClientCard: View {
     @ViewBuilder
     private var phoneInfo: some View {
         if let phone = client.phone, !phone.isEmpty {
+            // Two lines fit any real number at the largest text sizes; an
+            // imported phone (not clamped like the form's) can't grow the card.
             Label(PhoneUtils.display(phone) ?? phone, systemImage: "phone.fill")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
     }
     

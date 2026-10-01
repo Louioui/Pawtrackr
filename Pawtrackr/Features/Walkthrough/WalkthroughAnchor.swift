@@ -87,6 +87,19 @@ extension View {
         }
     }
 
+    /// A spotlight anchor on one row of a reorderable `ForEach` (no scroll
+    /// target). Unlike `walkthroughTarget(_:isActive:)` the row keeps the same
+    /// identity and view structure whichever row is active: an `.id` or an
+    /// `if` on a lazy grid's row makes it drop and reinsert rows when the list
+    /// reorders, which left ghost duplicate client cards until a refresh.
+    func walkthroughAnchor(_ id: WalkthroughAnchorID, isActive: Bool) -> some View {
+        background {
+            if isActive {
+                Color.clear.walkthroughAnchor(id)
+            }
+        }
+    }
+
     @ViewBuilder
     func optionalWalkthroughAnchor(_ id: WalkthroughAnchorID?) -> some View {
         if let id {

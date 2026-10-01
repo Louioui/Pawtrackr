@@ -149,8 +149,14 @@ final class ClientsViewModel {
                 // 1. Fetch Active/In-Progress Clients
                 let inProgressIDs = try await repository.fetchActiveClients(query: trimmedSearch)
                 guard !Task.isCancelled else { return }
-                
-                var inProgress = inProgressIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+
+                // Each fetch below reads the open visits on its own, so a
+                // check-in landing between them lists a client in both. One
+                // card per client: a repeated ID also breaks the grid's identity.
+                var listed = Set<PersistentIdentifier>()
+                var inProgress = inProgressIDs
+                    .filter { listed.insert($0).inserted }
+                    .compactMap { self.modelContext.model(for: $0) as? Client }
 
                 // 2. Fetch Others based on filter.
                 // One bounded fetch, not pages: the smart filters and every sort
@@ -162,7 +168,9 @@ final class ClientsViewModel {
                 let (pageIDs, _) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: Self.clientListFetchLimit, offset: 0)
                 guard !Task.isCancelled else { return }
                 
-                var others = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+                var others = pageIDs
+                    .filter { listed.insert($0).inserted }
+                    .compactMap { self.modelContext.model(for: $0) as? Client }
 
                 // Apply Smart Filters
                 switch selectedFilter {
@@ -227,48 +235,50 @@ final class ClientsViewModel {
     }
 
     private func sortClients(_ clients: [Client]) -> [Client] {
-        switch sortOption {
-        case .lastName:
-            return clients.sorted { client1, client2 in
-                let comparison = client1.lastName.localizedStandardCompare(client2.lastName)
-                if comparison == .orderedSame {
-                    return client1.firstName.localizedStandardCompare(client2.firstName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .firstName:
-            return clients.sorted { client1, client2 in
-                let comparison = client1.firstName.localizedStandardCompare(client2.firstName)
-                if comparison == .orderedSame {
-                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .petName:
-            return clients.sorted { client1, client2 in
-                let pet1 = client1.pets?.first?.name ?? ""
-                let pet2 = client2.pets?.first?.name ?? ""
-                let comparison = pet1.localizedStandardCompare(pet2)
-                if comparison == .orderedSame {
-                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .lastVisit:
-            return clients.sorted { ($0.lastVisitDate ?? .distantPast) > ($1.lastVisitDate ?? .distantPast) }
-            
-        case .newest:
-            return clients.sorted { $0.createdAt > $1.createdAt }
-        }
+        Self.sorted(clients, by: sortOption)
     }
 
-    /// Waits for the fetch started by the most recent `fetchClients()` (or a
-    /// filter/sort change) and any Load More. Lets tests read the lists
-    /// without sleeping.
+    /// The list's order. Every option ends in a total tiebreak (name, then
+    /// creation date, then UUID), so two fetches of the same book list it the
+    /// same way: equal keys (two "Maria Lopez", every client without a visit)
+    /// used to keep whatever order the store returned and swap cards between
+    /// refreshes. Names compare trimmed, ignoring case and accents
+    /// (`localizedStandardCompare`); a blank last name sorts by the first name
+    /// the card shows instead, and a client with no name at all goes last.
+    /// Pet's Name uses the alphabetically first pet, the one the card lists
+    /// first (`pets.first` has no defined order in SwiftData).
+    static func sorted(_ clients: [Client], by option: SortOption) -> [Client] {
+        // Keys are read once per client, not once per comparison: comparisons
+        // would otherwise fault the pets relationship O(n log n) times.
+        let keys = clients.map(ClientSortKey.init)
+        return keys.sorted { a, b in
+            let order: ComparisonResult
+            switch option {
+            case .lastName:
+                order = a.blankName(b) ?? a.byLastName(b)
+            case .firstName:
+                order = a.blankName(b) ?? a.byFirstName(b)
+            case .petName:
+                order = ClientSortKey.blanksLast(a.petName == nil, b.petName == nil)
+                    .then(ClientSortKey.compareText(a.petName ?? "", b.petName ?? ""))
+                    .then(a.blankName(b) ?? a.byLastName(b))
+            case .lastVisit:
+                order = ClientSortKey.newestFirst(a.lastVisit ?? .distantPast, b.lastVisit ?? .distantPast)
+                    .then(a.blankName(b) ?? a.byLastName(b))
+            case .newest:
+                order = ClientSortKey.newestFirst(a.createdAt, b.createdAt)
+                    .then(a.blankName(b) ?? a.byLastName(b))
+            }
+            return order.then(a.byIdentity(b)) == .orderedAscending
+        }
+        .map(\.client)
+    }
+
+    /// Waits for a debounced search, the fetch started by the most recent
+    /// `fetchClients()` (or a filter/sort change) and any Load More. Lets
+    /// tests read the lists without sleeping.
     func waitForPendingFetch() async {
+        await searchTask?.value
         await refreshTask?.value
         await loadMoreTask?.value
     }
@@ -297,7 +307,10 @@ final class ClientsViewModel {
                 isLoadingMore = false
                 return
             }
-            let newPage = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+            let alreadyListed = resetOffset ? [] : Set(otherClients.map(\.persistentModelID))
+            let newPage = pageIDs
+                .filter { !alreadyListed.contains($0) }
+                .compactMap { self.modelContext.model(for: $0) as? Client }
 
             if resetOffset {
                 otherClients = newPage
@@ -327,5 +340,84 @@ final class ClientsViewModel {
                 self.appError = .database(error.localizedDescription)
             }
         }
+    }
+}
+
+/// One client's sort fields, read once (see `ClientsViewModel.sorted`).
+private struct ClientSortKey {
+    let client: Client
+    let first: String
+    let last: String
+    let petName: String?
+    let lastVisit: Date?
+    let createdAt: Date
+    let uuid: UUID
+
+    init(_ client: Client) {
+        self.client = client
+        first = client.firstName.trimmed
+        last = client.lastName.trimmed
+        petName = (client.pets ?? [])
+            .map(\.name.trimmed)
+            .filter { !$0.isEmpty }
+            .min { $0.localizedStandardCompare($1) == .orderedAscending }
+        lastVisit = client.lastVisitDate
+        createdAt = client.createdAt
+        uuid = client.uuid
+    }
+
+    private var isNameless: Bool { first.isEmpty && last.isEmpty }
+
+    /// Nameless clients after named ones; nil when that doesn't decide it.
+    func blankName(_ other: ClientSortKey) -> ComparisonResult? {
+        let order = Self.blanksLast(isNameless, other.isNameless)
+        return order == .orderedSame ? nil : order
+    }
+
+    /// "Last First", or the first name alone when there is no last name.
+    func byLastName(_ other: ClientSortKey) -> ComparisonResult {
+        let lhs = last.isEmpty ? (first, "") : (last, first)
+        let rhs = other.last.isEmpty ? (other.first, "") : (other.last, other.first)
+        return Self.compareText(lhs.0, rhs.0).then(Self.compareText(lhs.1, rhs.1))
+    }
+
+    /// "First Last", or the last name alone when there is no first name.
+    func byFirstName(_ other: ClientSortKey) -> ComparisonResult {
+        let lhs = first.isEmpty ? (last, "") : (first, last)
+        let rhs = other.first.isEmpty ? (other.last, "") : (other.first, other.last)
+        return Self.compareText(lhs.0, rhs.0).then(Self.compareText(lhs.1, rhs.1))
+    }
+
+    /// The last resort, so no two clients ever compare equal. Plain `<` on
+    /// the UUID: the localized comparison reads digit runs as numbers and
+    /// could call two different UUIDs equal.
+    func byIdentity(_ other: ClientSortKey) -> ComparisonResult {
+        Self.compare(createdAt, other.createdAt)
+            .then(Self.compare(uuid.uuidString, other.uuid.uuidString))
+    }
+
+    /// As the list reads: case- and accent-insensitive, numbers by value.
+    static func compareText(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        lhs.localizedStandardCompare(rhs)
+    }
+
+    static func compare<T: Comparable>(_ lhs: T, _ rhs: T) -> ComparisonResult {
+        lhs < rhs ? .orderedAscending : (lhs > rhs ? .orderedDescending : .orderedSame)
+    }
+
+    static func newestFirst(_ lhs: Date, _ rhs: Date) -> ComparisonResult {
+        compare(rhs, lhs)
+    }
+
+    static func blanksLast(_ lhsBlank: Bool, _ rhsBlank: Bool) -> ComparisonResult {
+        guard lhsBlank != rhsBlank else { return .orderedSame }
+        return lhsBlank ? .orderedDescending : .orderedAscending
+    }
+}
+
+private extension ComparisonResult {
+    /// `self` unless it is a tie, then `next`.
+    func then(_ next: @autoclosure () -> ComparisonResult) -> ComparisonResult {
+        self == .orderedSame ? next() : self
     }
 }
