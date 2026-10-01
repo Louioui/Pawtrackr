@@ -139,10 +139,9 @@ final class ClientListStressTests: XCTestCase {
         }
     }
 
-    /// The two repository reads each look up the open visits, so a check-in
-    /// between them returns a client from both. It must be listed once, in
-    /// session, and a repeated row must not survive either.
-    func testClientReturnedByBothFetchesIsListedOnceInSession() async throws {
+    /// Whatever a repository answers, a client in both sections is listed
+    /// once, in session, and a repeated row doesn't survive either.
+    func testClientReturnedInBothSectionsIsListedOnceInSession() async throws {
         let inSession = makeClient("Ines", "Session")
         let waiting = makeClient("Walt", "Waiting")
         try context.save()
@@ -221,6 +220,55 @@ final class ClientListStressTests: XCTestCase {
             ClientsViewModel.sorted(viewModel.otherClients.shuffled(), by: viewModel.sortOption).map(\.persistentModelID),
             "The settled list is out of order."
         )
+    }
+
+    // MARK: - Past the old 1,000-client cap
+
+    /// The list used to load at most 1,000 clients (chosen by a binary,
+    /// case-sensitive SQL sort) with no Load More: everyone past that was
+    /// invisible, and the filters only saw that window.
+    func testABookLargerThanAThousandIsListedWholeInEverySortAndFilter() async throws {
+        let size = 2_500
+        let clients = try ClientStressDataset.seed(into: context, count: size)
+        // Sorts last in any order the old SQL window used, so it was always cut.
+        let lateAccent = makeClient("Ñandú", "Ézé")
+        try context.save()
+        let viewModel = await makeViewModel()
+
+        for option in ClientsViewModel.SortOption.allCases {
+            viewModel.sortOption = option
+            await viewModel.waitForPendingFetch()
+            let ids = listedIDs(viewModel)
+            XCTAssertEqual(ids.count, size + 1, "\(option) shows \(ids.count) of \(size + 1)")
+            assertListedOnce(viewModel)
+            XCTAssertTrue(ids.contains(lateAccent.persistentModelID), "\(option) hides the accented client")
+            XCTAssertEqual(
+                viewModel.otherClients.map(\.persistentModelID),
+                ClientsViewModel.sorted(viewModel.otherClients.shuffled(), by: option).map(\.persistentModelID),
+                "\(option) is out of order"
+            )
+        }
+
+        viewModel.sortOption = .lastName
+        viewModel.selectedFilter = .missingInfo
+        await viewModel.waitForPendingFetch()
+        XCTAssertEqual(listedIDs(viewModel).count, (clients + [lateAccent]).filter(ClientMissingInfo.isIncomplete).count)
+    }
+
+    /// Main-actor and total time for one refresh of a 2,500-client book.
+    func testPerformanceOfRefreshingTwentyFiveHundredClients() throws {
+        try ClientStressDataset.seed(into: context, count: 2_500)
+        let viewModel = ClientsViewModel(modelContext: context)
+
+        measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()]) {
+            let done = expectation(description: "refresh")
+            Task { @MainActor in
+                await self.refresh(viewModel)
+                done.fulfill()
+            }
+            wait(for: [done], timeout: 60)
+        }
+        XCTAssertEqual(listedIDs(viewModel).count, 2_500)
     }
 
     // MARK: - Sorting

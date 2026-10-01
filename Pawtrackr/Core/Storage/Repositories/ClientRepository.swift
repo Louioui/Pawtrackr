@@ -30,7 +30,14 @@ struct NewContactData: Sendable {
     let phone: String
 }
 
+/// The Clients screen's two sections, as IDs in display order.
+struct ClientListIDs: Sendable, Equatable {
+    var inProgress: [PersistentIdentifier]
+    var others: [PersistentIdentifier]
+}
+
 protocol ClientRepositoryProtocol: Sendable {
+    func fetchClientList(query: String, filter: ClientsViewModel.Filter, sort: ClientsViewModel.SortOption) async throws -> ClientListIDs
     func fetchClients(query: String, limit: Int, offset: Int) async throws -> [PersistentIdentifier]
     func fetchActiveClients(query: String) async throws -> [PersistentIdentifier]
     func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([PersistentIdentifier], Bool)
@@ -91,14 +98,84 @@ final actor ClientRepository: ClientRepositoryProtocol {
         return filtered[pageStart..<pageEnd].map { $0.persistentModelID }
     }
 
+    /// The Clients screen: every client matching `query`, split into in
+    /// session and the rest, filtered and in display order. Always the whole
+    /// book. A capped window hid every client past it, and a paged one broke
+    /// the in-memory filters and sorts (see ClientsViewModelListTests).
+    ///
+    /// It reads in a detached task with its own context, so it stays off the
+    /// main thread whichever thread created this actor, and nothing it loads
+    /// stays registered afterwards. Only IDs come back. Cancelling the
+    /// caller cancels the read.
+    nonisolated func fetchClientList(query: String, filter: ClientsViewModel.Filter, sort: ClientsViewModel.SortOption) async throws -> ClientListIDs {
+        let container = modelContainer
+        let read = Task.detached(priority: .userInitiated) {
+            try Self.clientList(in: ModelContext(container), query: query, filter: filter, sort: sort)
+        }
+        return try await withTaskCancellationHandler {
+            try await read.value
+        } onCancel: {
+            read.cancel()
+        }
+    }
+
+    private static func clientList(
+        in context: ModelContext,
+        query: String,
+        filter: ClientsViewModel.Filter,
+        sort: ClientsViewModel.SortOption
+    ) throws -> ClientListIDs {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // One read of the open visits for both sections, so a check-in can't
+        // land between two reads and list a client in both.
+        let activeIDs = try activeClientIDs(in: context)
+
+        var descriptor = FetchDescriptor<Client>()
+        // Search, the filters and the sort keys read these for every client:
+        // one prefetch instead of a query per client.
+        descriptor.relationshipKeyPathsForPrefetching = [\.pets, \.emergencyContacts]
+        var clients = try context.fetch(descriptor)
+        try Task.checkCancellation()
+        if !trimmed.isEmpty {
+            clients = clients.filter { matches(client: $0, query: trimmed) }
+        }
+
+        var inProgress = clients.filter { activeIDs.contains($0.persistentModelID) }
+        var others = clients.filter { !activeIDs.contains($0.persistentModelID) }
+        switch filter {
+        case .all:
+            break
+        case .active:
+            others = []
+        case .overdue:
+            inProgress = []
+            others = others.filter { client in
+                (client.pets ?? []).contains { $0.needsAttention }
+            }
+        case .missingInfo:
+            // The same rule as the profile's "Missing:" note.
+            inProgress = inProgress.filter(ClientMissingInfo.isIncomplete)
+            others = others.filter(ClientMissingInfo.isIncomplete)
+        }
+        try Task.checkCancellation()
+
+        return ClientListIDs(
+            inProgress: ClientListOrdering.sorted(inProgress, by: sort).map(\.persistentModelID),
+            others: ClientListOrdering.sorted(others, by: sort).map(\.persistentModelID)
+        )
+    }
+
     private func activeClientIDs() throws -> Set<PersistentIdentifier> {
-        let freshContext = ModelContext(modelContext.container)
+        try Self.activeClientIDs(in: ModelContext(modelContext.container))
+    }
+
+    private static func activeClientIDs(in context: ModelContext) throws -> Set<PersistentIdentifier> {
         var activeVisitDesc = FetchDescriptor<Visit>(
             predicate: #Predicate { $0.endedAt == nil }
         )
         activeVisitDesc.fetchLimit = 500
         activeVisitDesc.relationshipKeyPathsForPrefetching = [\Visit.pet]
-        let activeVisits = try freshContext.fetch(activeVisitDesc)
+        let activeVisits = try context.fetch(activeVisitDesc)
         return Set(activeVisits.compactMap { $0.pet?.owner?.persistentModelID })
     }
 

@@ -58,7 +58,6 @@ final class ClientsViewModel {
     // MARK: - Published Properties
     var inProgressClients: [Client] = []
     var otherClients: [Client] = []
-    var needsAttentionClients: [Client] = []
     
     var searchText = "" {
         didSet { scheduleFetch() }
@@ -89,9 +88,6 @@ final class ClientsViewModel {
     private var cancellables: Set<AnyCancellable> = []
     private var pageSize: Int = 100
     private var fetchOffset: Int = 0
-    /// Clients the list loads per query. Filters and sorts run over this whole
-    /// set in memory, so it is not a page size (see `fetchClients`).
-    static let clientListFetchLimit = 1000
 
     // MARK: - Lifecycle
     init(modelContext: ModelContext, eventBus: GlobalEventBus? = nil, repository: ClientRepositoryProtocol? = nil) {
@@ -143,65 +139,31 @@ final class ClientsViewModel {
         isLoadingMore = false
         appError = nil
 
+        let filter = selectedFilter
+        let sort = sortOption
         refreshTask = Task { [weak self] in
             guard let self else { return }
             do {
-                // 1. Fetch Active/In-Progress Clients
-                let inProgressIDs = try await repository.fetchActiveClients(query: trimmedSearch)
+                // The whole book, searched, filtered and ordered off the main
+                // actor. Only IDs come back, and the grid builds just the
+                // cards on screen, so a big book costs the main actor little.
+                let list = try await repository.fetchClientList(query: trimmedSearch, filter: filter, sort: sort)
                 guard !Task.isCancelled else { return }
 
-                // Each fetch below reads the open visits on its own, so a
-                // check-in landing between them lists a client in both. One
-                // card per client: a repeated ID also breaks the grid's identity.
+                // One card per client whatever a repository returns: a
+                // repeated ID also breaks the grid's identity.
                 var listed = Set<PersistentIdentifier>()
-                var inProgress = inProgressIDs
+                let inProgress = list.inProgress
+                    .filter { listed.insert($0).inserted }
+                    .compactMap { self.modelContext.model(for: $0) as? Client }
+                let others = list.others
                     .filter { listed.insert($0).inserted }
                     .compactMap { self.modelContext.model(for: $0) as? Client }
 
-                // 2. Fetch Others based on filter.
-                // One bounded fetch, not pages: the smart filters and every sort
-                // other than last name run in memory below, so they must see
-                // the whole book. Paging a 100-row last-name window made
-                // filters show false "none" states, sorts skip clients, and
-                // Load More repeat rows (the repository pages raw rows that
-                // still include in-progress clients).
-                let (pageIDs, _) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: Self.clientListFetchLimit, offset: 0)
-                guard !Task.isCancelled else { return }
-                
-                var others = pageIDs
-                    .filter { listed.insert($0).inserted }
-                    .compactMap { self.modelContext.model(for: $0) as? Client }
+                self.inProgressClients = inProgress
+                self.otherClients = others
 
-                // Apply Smart Filters
-                switch selectedFilter {
-                case .all:
-                    break
-                case .active:
-                    others = [] // Handled by inProgress
-                case .overdue:
-                    inProgress = []
-                    others = others.filter { client in
-                        (client.pets ?? []).contains { $0.needsAttention }
-                    }
-                case .missingInfo:
-                    // The same rule as the profile's "Missing:" note.
-                    inProgress = inProgress.filter(ClientMissingInfo.isIncomplete)
-                    others = others.filter(ClientMissingInfo.isIncomplete)
-                }
-
-                // Apply Sorting
-                let sortedInProgress = sortClients(inProgress)
-                let sortedOthers = sortClients(others)
-
-                // Identify "Needs Attention" (overdue and not yet cleared by outreach).
-                self.needsAttentionClients = sortedOthers.filter { client in
-                    (client.pets ?? []).contains { $0.needsAttention }
-                }
-
-                self.inProgressClients = sortedInProgress
-                self.otherClients = sortedOthers
-                
-                self.fetchOffset = self.otherClients.count
+                self.fetchOffset = others.count
                 self.canLoadMore = false
                 self.isLoadingMore = false
             } catch {
@@ -234,44 +196,9 @@ final class ClientsViewModel {
         }
     }
 
-    private func sortClients(_ clients: [Client]) -> [Client] {
-        Self.sorted(clients, by: sortOption)
-    }
-
-    /// The list's order. Every option ends in a total tiebreak (name, then
-    /// creation date, then UUID), so two fetches of the same book list it the
-    /// same way: equal keys (two "Maria Lopez", every client without a visit)
-    /// used to keep whatever order the store returned and swap cards between
-    /// refreshes. Names compare trimmed, ignoring case and accents
-    /// (`localizedStandardCompare`); a blank last name sorts by the first name
-    /// the card shows instead, and a client with no name at all goes last.
-    /// Pet's Name uses the alphabetically first pet, the one the card lists
-    /// first (`pets.first` has no defined order in SwiftData).
+    /// The list's order (see `ClientListOrdering`).
     static func sorted(_ clients: [Client], by option: SortOption) -> [Client] {
-        // Keys are read once per client, not once per comparison: comparisons
-        // would otherwise fault the pets relationship O(n log n) times.
-        let keys = clients.map(ClientSortKey.init)
-        return keys.sorted { a, b in
-            let order: ComparisonResult
-            switch option {
-            case .lastName:
-                order = a.blankName(b) ?? a.byLastName(b)
-            case .firstName:
-                order = a.blankName(b) ?? a.byFirstName(b)
-            case .petName:
-                order = ClientSortKey.blanksLast(a.petName == nil, b.petName == nil)
-                    .then(ClientSortKey.compareText(a.petName ?? "", b.petName ?? ""))
-                    .then(a.blankName(b) ?? a.byLastName(b))
-            case .lastVisit:
-                order = ClientSortKey.newestFirst(a.lastVisit ?? .distantPast, b.lastVisit ?? .distantPast)
-                    .then(a.blankName(b) ?? a.byLastName(b))
-            case .newest:
-                order = ClientSortKey.newestFirst(a.createdAt, b.createdAt)
-                    .then(a.blankName(b) ?? a.byLastName(b))
-            }
-            return order.then(a.byIdentity(b)) == .orderedAscending
-        }
-        .map(\.client)
+        ClientListOrdering.sorted(clients, by: option)
     }
 
     /// Waits for a debounced search, the fetch started by the most recent
@@ -340,84 +267,5 @@ final class ClientsViewModel {
                 self.appError = .database(error.localizedDescription)
             }
         }
-    }
-}
-
-/// One client's sort fields, read once (see `ClientsViewModel.sorted`).
-private struct ClientSortKey {
-    let client: Client
-    let first: String
-    let last: String
-    let petName: String?
-    let lastVisit: Date?
-    let createdAt: Date
-    let uuid: UUID
-
-    init(_ client: Client) {
-        self.client = client
-        first = client.firstName.trimmed
-        last = client.lastName.trimmed
-        petName = (client.pets ?? [])
-            .map(\.name.trimmed)
-            .filter { !$0.isEmpty }
-            .min { $0.localizedStandardCompare($1) == .orderedAscending }
-        lastVisit = client.lastVisitDate
-        createdAt = client.createdAt
-        uuid = client.uuid
-    }
-
-    private var isNameless: Bool { first.isEmpty && last.isEmpty }
-
-    /// Nameless clients after named ones; nil when that doesn't decide it.
-    func blankName(_ other: ClientSortKey) -> ComparisonResult? {
-        let order = Self.blanksLast(isNameless, other.isNameless)
-        return order == .orderedSame ? nil : order
-    }
-
-    /// "Last First", or the first name alone when there is no last name.
-    func byLastName(_ other: ClientSortKey) -> ComparisonResult {
-        let lhs = last.isEmpty ? (first, "") : (last, first)
-        let rhs = other.last.isEmpty ? (other.first, "") : (other.last, other.first)
-        return Self.compareText(lhs.0, rhs.0).then(Self.compareText(lhs.1, rhs.1))
-    }
-
-    /// "First Last", or the last name alone when there is no first name.
-    func byFirstName(_ other: ClientSortKey) -> ComparisonResult {
-        let lhs = first.isEmpty ? (last, "") : (first, last)
-        let rhs = other.first.isEmpty ? (other.last, "") : (other.first, other.last)
-        return Self.compareText(lhs.0, rhs.0).then(Self.compareText(lhs.1, rhs.1))
-    }
-
-    /// The last resort, so no two clients ever compare equal. Plain `<` on
-    /// the UUID: the localized comparison reads digit runs as numbers and
-    /// could call two different UUIDs equal.
-    func byIdentity(_ other: ClientSortKey) -> ComparisonResult {
-        Self.compare(createdAt, other.createdAt)
-            .then(Self.compare(uuid.uuidString, other.uuid.uuidString))
-    }
-
-    /// As the list reads: case- and accent-insensitive, numbers by value.
-    static func compareText(_ lhs: String, _ rhs: String) -> ComparisonResult {
-        lhs.localizedStandardCompare(rhs)
-    }
-
-    static func compare<T: Comparable>(_ lhs: T, _ rhs: T) -> ComparisonResult {
-        lhs < rhs ? .orderedAscending : (lhs > rhs ? .orderedDescending : .orderedSame)
-    }
-
-    static func newestFirst(_ lhs: Date, _ rhs: Date) -> ComparisonResult {
-        compare(rhs, lhs)
-    }
-
-    static func blanksLast(_ lhsBlank: Bool, _ rhsBlank: Bool) -> ComparisonResult {
-        guard lhsBlank != rhsBlank else { return .orderedSame }
-        return lhsBlank ? .orderedDescending : .orderedAscending
-    }
-}
-
-private extension ComparisonResult {
-    /// `self` unless it is a tie, then `next`.
-    func then(_ next: @autoclosure () -> ComparisonResult) -> ComparisonResult {
-        self == .orderedSame ? next() : self
     }
 }

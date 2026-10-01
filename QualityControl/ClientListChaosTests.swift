@@ -135,7 +135,7 @@ final class ClientListChaosTests: XCTestCase {
         let repository = CountingClientRepository(container: container)
         let viewModel = ClientsViewModel(modelContext: context, repository: repository)
         await viewModel.waitForPendingFetch()
-        let fetchesBefore = repository.inactiveQueries.count
+        let fetchesBefore = repository.listQueries.count
 
         var edits: [String] = []
         var text = ""
@@ -162,7 +162,7 @@ final class ClientListChaosTests: XCTestCase {
         }
         await viewModel.waitForPendingFetch()
 
-        let queries = Array(repository.inactiveQueries.dropFirst(fetchesBefore))
+        let queries = Array(repository.listQueries.dropFirst(fetchesBefore))
         XCTAssertEqual(queries.last, "maria lo")
         // One fetch when typing settles. A loaded simulator can stall a 15 ms
         // sleep past the 300 ms debounce now and then, so allow a couple.
@@ -314,11 +314,15 @@ private final class CountingClientRepository: ClientRepositoryProtocol, @uncheck
         base = ClientRepository(modelContainer: container)
     }
 
-    var inactiveQueries: [String] { lock.withLock { queries } }
+    var listQueries: [String] { lock.withLock { queries } }
+
+    func fetchClientList(query: String, filter: ClientsViewModel.Filter, sort: ClientsViewModel.SortOption) async throws -> ClientListIDs {
+        lock.withLock { queries.append(query) }
+        return try await base.fetchClientList(query: query, filter: filter, sort: sort)
+    }
 
     func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([PersistentIdentifier], Bool) {
-        lock.withLock { queries.append(query) }
-        return try await base.fetchInactiveClients(query: query, limit: limit, offset: offset)
+        try await base.fetchInactiveClients(query: query, limit: limit, offset: offset)
     }
 
     func fetchClients(query: String, limit: Int, offset: Int) async throws -> [PersistentIdentifier] {
