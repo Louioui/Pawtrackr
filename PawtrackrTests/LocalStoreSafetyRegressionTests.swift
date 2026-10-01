@@ -59,8 +59,11 @@ final class LocalStoreSafetyRegressionTests: XCTestCase {
     }
 
     func testFullSummaryRebuildIgnoresStaleIncrementalWatermark() throws {
-        let oldDate = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -45, to: .now))
-        let day = Calendar.current.startOfDay(for: oldDate)
+        // Noon, so the checkout half an hour later is on the same day. From
+        // .now, a run in the last 30 minutes before midnight checked out on
+        // the next day and found no summary for `day`.
+        let day = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -45, to: Calendar.current.startOfDay(for: .now)))
+        let oldDate = try XCTUnwrap(Calendar.current.date(byAdding: .hour, value: 12, to: day))
         let pet = Pet(name: "Buddy", species: .dog)
         let visit = Visit(pet: pet, startedAt: oldDate)
         visit.markCheckedOut(total: Decimal(string: "72.50")!, now: oldDate.addingTimeInterval(1800))
