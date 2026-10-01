@@ -399,7 +399,7 @@ final class OnboardingViewModelTests: XCTestCase {
             XCTAssertTrue(ownerAnchors.contains(anchor), "\(anchor)")
         }
         let insights = WalkthroughController.steps(for: .businessInsights, role: .frontDeskGroomer, context: .practice).map(\.anchor)
-        XCTAssertEqual(insights, [.insights, .insRevenue, .insServices, .insPaymentMix, .setData, .setAbout])
+        XCTAssertEqual(insights, [.insights, .insRevenue, .insServices, .insPaymentMix, .loyaltySimulator, .setData, .setAbout])
     }
 
     func testFullWalkthroughTeachesCheckoutAndHistoryAsDedicatedProcess() throws {
@@ -429,7 +429,8 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(checkoutSteps.map(\.anchor), [.coServices, .coPayment, .coConfirm])
         XCTAssertTrue(checkoutSteps.allSatisfy { $0.lesson == .checkoutAndMoney })
         XCTAssertTrue(checkoutSteps[0].purpose.localizedCaseInsensitiveContains("subtotal"))
-        XCTAssertTrue(checkoutSteps[1].purpose.localizedCaseInsensitiveContains("tip"))
+        XCTAssertFalse(checkoutSteps[1].purpose.localizedCaseInsensitiveContains("tip"), "Checkout takes no tips.")
+        XCTAssertTrue(checkoutSteps[1].coachTip?.localizedCaseInsensitiveContains("type over") == true, "The total can be typed over for a discount.")
         XCTAssertTrue(checkoutSteps[1].purpose.localizedCaseInsensitiveContains("reference"))
         XCTAssertTrue(checkoutSteps[2].purpose.localizedCaseInsensitiveContains("insights"))
         XCTAssertTrue(checkoutSteps[2].purpose.localizedCaseInsensitiveContains("nothing is charged"))
@@ -483,7 +484,7 @@ final class OnboardingViewModelTests: XCTestCase {
 
         XCTAssertTrue(controller.isActive)
         XCTAssertEqual(controller.currentIndex, 0)
-        XCTAssertEqual(controller.currentStep?.anchor, .dashboard)
+        XCTAssertEqual(controller.currentStep?.anchor, .appNavigation)
     }
 
     func testWalkthroughBackReturnsToPreviousClientDetailActionStep() throws {
@@ -522,8 +523,8 @@ final class OnboardingViewModelTests: XCTestCase {
 
         XCTAssertTrue(controller.isActive)
         XCTAssertNil(controller.currentStep?.presents)
-        XCTAssertEqual(controller.currentStep?.anchor, .cdOwner)
-        XCTAssertEqual(controller.currentStep?.route, .demoClientDetail)
+        XCTAssertEqual(controller.currentStep?.anchor, .clientList, "After Create the tour returns to the list to open a profile.")
+        XCTAssertEqual(controller.currentStep?.surface, .clients)
     }
 
     func testWalkthroughCompletionKeepsCreatedClientPreferenceForDetailsChapter() throws {
@@ -543,7 +544,7 @@ final class OnboardingViewModelTests: XCTestCase {
         controller.focusClientDetail(client.persistentModelID)
         controller.completePresentation(.newClient)
 
-        XCTAssertEqual(controller.currentStep?.anchor, .cdOwner)
+        XCTAssertEqual(controller.currentStep?.anchor, .clientList)
         XCTAssertEqual(controller.preferredClientDetailID, client.persistentModelID)
     }
 

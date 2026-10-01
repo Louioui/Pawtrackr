@@ -78,6 +78,17 @@ final class SpotlightIndexingTests: XCTestCase {
     /// test returns as soon as the call lands.
     private static let indexTimeout: TimeInterval = 30
 
+    /// Polls until `condition` holds, up to `indexTimeout`. Returns quietly on
+    /// timeout so the test fails at the assertion that follows with its own
+    /// message; it only throws if the task is cancelled.
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(Self.indexTimeout)
+        while !condition() {
+            guard Date() < deadline else { return }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
     private var suiteName = ""
     private var defaults: UserDefaults!
 
@@ -418,7 +429,9 @@ final class SpotlightIndexingTests: XCTestCase {
         indexer.scheduleIndex(client: practiceClient)
         indexer.scheduleIndex(client: unsaved)
         indexer.scheduleIndex(client: realClient, includingPets: true)
-        try await Task.sleep(for: .milliseconds(300))
+        // A fixed 300 ms sleep timed out on a starved CI queue; wait for the
+        // real client's flush instead (the other two were scheduled first).
+        try await waitUntil { Set(index.indexCalls.flatMap { $0 }).contains("client-\(realClient.uuid.uuidString)") }
 
         let indexed = Set(index.indexCalls.flatMap { $0 })
         XCTAssertTrue(indexed.contains("client-\(realClient.uuid.uuidString)"), "Real edits are indexed as usual.")
@@ -427,7 +440,7 @@ final class SpotlightIndexingTests: XCTestCase {
 
         indexer.endPracticeSalon(practice)
         indexer.scheduleIndex(client: unsaved)
-        try await Task.sleep(for: .milliseconds(300))
+        try? await waitUntil { Set(index.indexCalls.flatMap { $0 }).contains("client-\(unsaved.uuid.uuidString)") }
         XCTAssertTrue(
             Set(index.indexCalls.flatMap { $0 }).contains("client-\(unsaved.uuid.uuidString)"),
             "With no practice salon open, edits index as before."
