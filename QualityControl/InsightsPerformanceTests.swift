@@ -42,8 +42,8 @@ final class InsightsPerformanceTests: XCTestCase {
         let start = CFAbsoluteTimeGetCurrent()
         
         // Trigger async report generation
-        let summary = await vm.generateReportSummary()
-        let data = await BusinessReportService.shared.generateMonthlyReportAsync(summary: summary)
+        let exports = try await vm.makeReportExports(businessName: "Performance Salon", currencySymbol: "$")
+        let data = exports.pdf.pdfData
         
         let end = CFAbsoluteTimeGetCurrent()
         let duration = (end - start) * 1000
