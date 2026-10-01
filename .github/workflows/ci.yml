@@ -10,8 +10,11 @@ jobs:
   test:
     name: Build and Test
     runs-on: macos-latest
-    # Hard cap so a hung/slow test can't burn a 6-hour runner.
-    timeout-minutes: 20
+    # Hard cap so a hung/slow test can't burn a 6-hour runner. The build takes
+    # about 3 minutes and the unit tests 12 to 18 on the hosted runner (about
+    # 40 minutes of test time split across the simulator clones), so 20 cut
+    # off healthy runs; 40 leaves headroom and still stops a hang.
+    timeout-minutes: 40
 
     steps:
     - name: Checkout
