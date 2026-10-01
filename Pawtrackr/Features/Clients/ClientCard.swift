@@ -11,6 +11,7 @@ import SwiftUI
 
 struct ClientCard: View {
     let client: Client
+    /// Kept for callers. The card no longer joins a matched-geometry group.
     var namespace: Namespace.ID? = nil
     /// When set, the list (which groups clients via a fresh store query) is the
     /// source of truth for the "In Session" state. Reading `client.hasActiveVisit`
@@ -72,12 +73,14 @@ struct ClientCard: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            if let namespace {
-                AvatarView(.client(name: displayName), size: .sm)
-                    .matchedGeometryEffect(id: "avatar-\(client.id)", in: namespace)
-            } else {
-                AvatarView(.client(name: displayName), size: .sm)
-            }
+            // No matchedGeometryEffect here: nothing else in the app shares
+            // this avatar's id, so the effect had no partner and only made
+            // the avatar animate on its own, away from its card, whenever the
+            // lazy grid moved, recycled or re-keyed a row. The initials come
+            // from first + last name whatever the sort, so they don't flip
+            // ("SJ" / "JS") when the list's name order changes.
+            AvatarView(.client(name: client.fullName), size: .sm)
+                .accessibilityHidden(true)
             
             VStack(alignment: .leading, spacing: 0) {
                 Text(displayName)

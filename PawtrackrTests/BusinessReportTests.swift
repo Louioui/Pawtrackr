@@ -53,7 +53,7 @@ final class BusinessReportTests: XCTestCase {
         let busiest = try date(month: 9, day: 24)
         XCTAssertEqual(facts.days[23].date, busiest)
         XCTAssertEqual(facts.days[23].revenue, Decimal(100))
-        XCTAssertEqual(facts.busiestWeekday, BusinessReportFacts.Weekday(weekday: calendar.component(.weekday, from: busiest), visits: 2))
+        XCTAssertEqual(facts.busiestWeekday, BusinessReportFacts.Weekday(weekday: calendar.component(.weekday, from: busiest), visits: 3), "September 10 and 24 are both Thursdays.")
 
         XCTAssertEqual(facts.months.count, 6)
         XCTAssertEqual(facts.months.last?.revenue, Decimal(200))

@@ -10,8 +10,11 @@ jobs:
   test:
     name: Build and Test
     runs-on: macos-latest
-    # Hard cap so a hung/slow test can't burn a 6-hour runner.
-    timeout-minutes: 20
+    # Hard cap so a hung/slow test can't burn a 6-hour runner. The build takes
+    # about 3 minutes and the unit tests 12 to 18 on the hosted runner (about
+    # 40 minutes of test time split across the simulator clones), so 20 cut
+    # off healthy runs; 40 leaves headroom and still stops a hang.
+    timeout-minutes: 40
 
     steps:
     - name: Checkout
@@ -84,3 +87,15 @@ jobs:
           -parallel-testing-enabled YES \
           -resultBundlePath TestResults.xcresult \
           CODE_SIGNING_ALLOWED=NO
+
+    - name: Show test failures
+      # With parallel testing the log only says which tests failed; the
+      # messages live in the result bundle.
+      if: failure()
+      run: |
+        [ -d TestResults.xcresult ] || exit 0
+        xcrun xcresulttool get test-results summary --path TestResults.xcresult --format json | /usr/bin/python3 -c '
+        import json, sys
+        for f in json.load(sys.stdin).get("testFailures", []):
+            print("::error title=" + f.get("testName", "test") + "::" + f.get("failureText", "").replace("\n", " "))
+        '

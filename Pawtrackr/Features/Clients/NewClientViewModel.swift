@@ -81,6 +81,13 @@ final class NewClientViewModel {
             Logger.newClient.warning("createClient ignored because a save is already in progress")
             return .failed
         }
+        // `isSaving` is clear again before the sheet finishes closing, so a
+        // second tap on Create during the dismissal would save the same
+        // client twice (a client without a phone skips the duplicate check).
+        guard createdClientID == nil else {
+            Logger.newClient.warning("createClient ignored because this form already saved its client")
+            return .created
+        }
         isSaving = true
         appError = nil
         createdClientID = nil

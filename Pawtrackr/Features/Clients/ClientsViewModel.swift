@@ -144,7 +144,8 @@ final class ClientsViewModel {
         appError = nil
 
         refreshTask = Task { [weak self] in
-            guard let self else { return }
+            // A newer refresh already replaced this one; don't read the store.
+            guard let self, !Task.isCancelled else { return }
             do {
                 // 1. Fetch Active/In-Progress Clients
                 let inProgressIDs = try await repository.fetchActiveClients(query: trimmedSearch)
@@ -180,6 +181,10 @@ final class ClientsViewModel {
                     inProgress = inProgress.filter(ClientMissingInfo.isIncomplete)
                     others = others.filter(ClientMissingInfo.isIncomplete)
                 }
+
+                let unique = Self.removingDuplicates(inProgress: inProgress, others: others)
+                inProgress = unique.inProgress
+                others = unique.others
 
                 // Apply Sorting
                 let sortedInProgress = sortClients(inProgress)
@@ -227,42 +232,112 @@ final class ClientsViewModel {
     }
 
     private func sortClients(_ clients: [Client]) -> [Client] {
-        switch sortOption {
-        case .lastName:
-            return clients.sorted { client1, client2 in
-                let comparison = client1.lastName.localizedStandardCompare(client2.lastName)
-                if comparison == .orderedSame {
-                    return client1.firstName.localizedStandardCompare(client2.firstName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .firstName:
-            return clients.sorted { client1, client2 in
-                let comparison = client1.firstName.localizedStandardCompare(client2.firstName)
-                if comparison == .orderedSame {
-                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .petName:
-            return clients.sorted { client1, client2 in
-                let pet1 = client1.pets?.first?.name ?? ""
-                let pet2 = client2.pets?.first?.name ?? ""
-                let comparison = pet1.localizedStandardCompare(pet2)
-                if comparison == .orderedSame {
-                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .lastVisit:
-            return clients.sorted { ($0.lastVisitDate ?? .distantPast) > ($1.lastVisitDate ?? .distantPast) }
-            
-        case .newest:
-            return clients.sorted { $0.createdAt > $1.createdAt }
+        Self.sortClients(clients, by: sortOption)
+    }
+
+    /// One client's sort keys, read once per fetch instead of once per
+    /// comparison (each read can fault a row or its pets).
+    private struct SortEntry {
+        let client: Client
+        let lastFirst: [String]
+        let firstLast: [String]
+        let petName: String?
+        let uuid: String
+    }
+
+    /// A total order over the list. Names compare word by word the way the
+    /// card shows them, ignoring case, so "adams" sits with "Adams" and a
+    /// client with only a first name sorts by it instead of jumping to the
+    /// top. The pet sort uses the pet the card lists first (alphabetical),
+    /// not `pets.first`, whose order SwiftData doesn't keep. Every sort ends
+    /// on the UUID, so clients with the same name or date hold their places
+    /// from one refresh to the next instead of swapping rows.
+    static func sortClients(_ clients: [Client], by option: SortOption) -> [Client] {
+        let entries = clients.map { client in
+            let first = client.firstName.trimmed
+            let last = client.lastName.trimmed
+            let petName = (client.pets ?? [])
+                .map { $0.name.trimmed }
+                .filter { !$0.isEmpty }
+                .min { $0.localizedStandardCompare($1) == .orderedAscending }
+            return SortEntry(
+                client: client,
+                lastFirst: [last, first].filter { !$0.isEmpty },
+                firstLast: [first, last].filter { !$0.isEmpty },
+                petName: petName,
+                uuid: client.uuid.uuidString
+            )
         }
+
+        func ordered(_ lhs: SortEntry, _ rhs: SortEntry, _ comparisons: [ComparisonResult]) -> Bool {
+            for result in comparisons where result != .orderedSame {
+                return result == .orderedAscending
+            }
+            return lhs.uuid < rhs.uuid
+        }
+
+        let sorted: [SortEntry]
+        switch option {
+        case .lastName:
+            sorted = entries.sorted { ordered($0, $1, [compareNames($0.lastFirst, $1.lastFirst)]) }
+        case .firstName:
+            sorted = entries.sorted { ordered($0, $1, [compareNames($0.firstLast, $1.firstLast)]) }
+        case .petName:
+            sorted = entries.sorted {
+                ordered($0, $1, [
+                    compareMissingLast($0.petName, $1.petName) { $0.localizedStandardCompare($1) },
+                    compareNames($0.lastFirst, $1.lastFirst)
+                ])
+            }
+        case .lastVisit:
+            sorted = entries.sorted {
+                ordered($0, $1, [
+                    // Most recent first; clients never seen go last.
+                    compareMissingLast($0.client.lastVisitDate, $1.client.lastVisitDate) { lhs, rhs in
+                        lhs == rhs ? .orderedSame : (lhs > rhs ? .orderedAscending : .orderedDescending)
+                    },
+                    compareNames($0.lastFirst, $1.lastFirst)
+                ])
+            }
+        case .newest:
+            sorted = entries.sorted {
+                let lhs = $0.client.createdAt, rhs = $1.client.createdAt
+                return ordered($0, $1, [
+                    lhs == rhs ? .orderedSame : (lhs > rhs ? .orderedAscending : .orderedDescending),
+                    compareNames($0.lastFirst, $1.lastFirst)
+                ])
+            }
+        }
+        return sorted.map(\.client)
+    }
+
+    /// Word-by-word, case-insensitive, numbers in numeric order. A record
+    /// with no name at all goes after every named one.
+    private static func compareNames(_ lhs: [String], _ rhs: [String]) -> ComparisonResult {
+        if lhs.isEmpty != rhs.isEmpty { return lhs.isEmpty ? .orderedDescending : .orderedAscending }
+        for (left, right) in zip(lhs, rhs) {
+            let result = left.localizedStandardCompare(right)
+            if result != .orderedSame { return result }
+        }
+        if lhs.count == rhs.count { return .orderedSame }
+        return lhs.count < rhs.count ? .orderedAscending : .orderedDescending
+    }
+
+    private static func compareMissingLast<T>(_ lhs: T?, _ rhs: T?, _ compare: (T, T) -> ComparisonResult) -> ComparisonResult {
+        guard let lhs else { return rhs == nil ? .orderedSame : .orderedDescending }
+        guard let rhs else { return .orderedAscending }
+        return compare(lhs, rhs)
+    }
+
+    /// Keeps the first occurrence of each client across both sections. The
+    /// in-progress and "all" lists come from two separate store reads, so a
+    /// visit starting or ending between them could put one client in both,
+    /// and the same card would render twice until the next refresh.
+    static func removingDuplicates(inProgress: [Client], others: [Client]) -> (inProgress: [Client], others: [Client]) {
+        var seen = Set<PersistentIdentifier>()
+        let uniqueInProgress = inProgress.filter { seen.insert($0.persistentModelID).inserted }
+        let uniqueOthers = others.filter { seen.insert($0.persistentModelID).inserted }
+        return (uniqueInProgress, uniqueOthers)
     }
 
     /// Waits for the fetch started by the most recent `fetchClients()` (or a

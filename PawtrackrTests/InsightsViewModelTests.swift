@@ -129,16 +129,18 @@ final class InsightsViewModelTests: XCTestCase {
 
     // MARK: - Report Summary
 
-    func testGenerateReportSummary_CompilesMonthlyStats() async throws {
+    /// 3a93e41 replaced `generateReportSummary()` with `makeReportExports`;
+    /// the figures themselves are covered by BusinessReportTests.
+    func testMakeReportExports_BuildsPDFForThePeriod() async throws {
         try seedTwoCompletedVisits()
 
         let vm = InsightsViewModel(dataStore: dataStore, eventBus: eventBus)
         await vm.refresh()
+        XCTAssertEqual(vm.totalRevenue, Decimal(120))
 
-        let summary = await vm.generateReportSummary()
-        XCTAssertEqual(summary.totalRevenue, Decimal(120))
-        XCTAssertGreaterThanOrEqual(summary.newClients, 0)
-        XCTAssertGreaterThanOrEqual(summary.topServices.count, 1)
+        let exports = try await vm.makeReportExports(businessName: "Test Salon", currencySymbol: "$")
+        XCTAssertFalse(exports.pdf.pdfData.isEmpty)
+        XCTAssertFalse(exports.pdf.filename.isEmpty)
     }
 
     // MARK: - Test Fixtures
