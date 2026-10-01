@@ -233,7 +233,7 @@ final class ClientListStressTests: XCTestCase {
             .filter { $0.element.lastName.lowercased() == "smith" }
             .map(\.offset)
         XCTAssertEqual(smithRows.count, 3)
-        XCTAssertEqual(smithRows.last! - smithRows.first!, 2, "Smith, SMITH and smith must sit together.")
+        XCTAssertEqual(try XCTUnwrap(smithRows.last) - XCTUnwrap(smithRows.first), 2, "Smith, SMITH and smith must sit together.")
 
         let lastNames = viewModel.otherClients.map(\.lastName)
         let nine = try XCTUnwrap(lastNames.firstIndex(of: "Client 9"))

@@ -76,7 +76,9 @@ final actor ClientRepository: ClientRepositoryProtocol {
 
         // For simple unstructured queries, push name match into the predicate
         // first. localizedStandardContains is diacritic+case insensitive.
-        if !trimmed.contains(":"), !trimmed.contains(where: \.isWhitespace) {
+        // Words in any order only work through `fetchInactiveClients`, which
+        // the client list uses and which matches over the whole book.
+        if !trimmed.contains(":") {
             descriptor.predicate = #Predicate { client in
                 client.lastName.localizedStandardContains(trimmed) ||
                 client.firstName.localizedStandardContains(trimmed)
