@@ -138,7 +138,7 @@ struct LazyImageDataImage: View {
     }
 }
 
-private struct ImageDataIdentity: Hashable {
+struct ImageDataIdentity: Hashable {
     let count: Int
     let sampleHash: Int
     let maxDimension: Int
@@ -161,14 +161,34 @@ private struct ImageDataIdentity: Hashable {
 }
 
 @MainActor
-private final class ImageDataDecodeCache {
+final class ImageDataDecodeCache {
     static let shared = ImageDataDecodeCache()
 
     private var images: [ImageDataIdentity: Image] = [:]
     private var order: [ImageDataIdentity] = []
     private let countLimit = 200
 
-    private init() {}
+    var count: Int { images.count }
+
+    private init() {
+        #if canImport(UIKit)
+        // These images keep alive what ImageCache's NSCache lets go of under
+        // memory pressure, so drop them too. A view on screen keeps showing
+        // its photo: `LazyImageDataImage` holds its own decoded image.
+        _ = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.removeAll() }
+        }
+        #endif
+    }
+
+    func removeAll() {
+        images.removeAll()
+        order.removeAll()
+    }
 
     func image(for identity: ImageDataIdentity) -> Image? {
         images[identity]

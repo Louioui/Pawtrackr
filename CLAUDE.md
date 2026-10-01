@@ -19,6 +19,15 @@
 - Store-file work (scheduled restore, per-build backup, legacy move) runs only in `PawtrackrApp.init`, before any container opens. Nothing deletes a store: resets and restores move files into `RecoveryBackup-*` / `PreRestoreBackup-*`, which `StoreBackupRestore` can bring back.
 - `DataStoreRecoveryView` must never make a destructive action the primary one or promise that iCloud will restore data.
 
+## Client List Decisions
+
+- `ClientRepository.fetchClientList` is the list's only read: the whole book, searched, filtered and ordered in a detached task with its own `ModelContext`. Only `PersistentIdentifier`s come back to the main actor. No fetch cap and no paging: a 1,000-row cap hid clients, and paging broke the in-memory filters and sorts.
+- `ClientListOrdering` is the list's one sort: trimmed, case- and accent-insensitive names, nameless clients last, the alphabetically first pet, and a createdAt + UUID tiebreak so equal names never swap places. Don't sort the list anywhere else.
+- Grid rows are identified by `persistentModelID` alone. Never put `.id` or an `if` on a `ForEach` row root (it left duplicate cards until a refresh); use `walkthroughAnchor(_:isActive:)` to anchor the tour on one row. No `matchedGeometryEffect` on a list avatar without a partner view.
+- Avatar initials come from `IconCircle.makeInitials` and the client's first-last name, never the sort-dependent display name.
+- `NavigationRouter.navigateToClient` drops a second push within 0.5 s, so a double tap opens one screen; any pop re-arms it.
+- `ClientStressDataset` (DEBUG only) seeds the hostile and poisoned books for tests and the `heavy_load` UI-test scenario. It must never reach a release build or a real store.
+
 ## Verification Notes
 
 - Don't assume a simulator destination exists — resolve one first with `xcrun simctl list devices available` and pass it as `-destination "id=<UUID>"`. As of 2026-07, the installed runtimes are iOS 18.x and 26.5 (no 17.x); named-device + `OS:latest` lookups have failed on this machine before.

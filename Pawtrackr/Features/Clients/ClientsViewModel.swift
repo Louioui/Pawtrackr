@@ -58,7 +58,6 @@ final class ClientsViewModel {
     // MARK: - Published Properties
     var inProgressClients: [Client] = []
     var otherClients: [Client] = []
-    var needsAttentionClients: [Client] = []
     
     var searchText = "" {
         didSet { scheduleFetch() }
@@ -89,9 +88,6 @@ final class ClientsViewModel {
     private var cancellables: Set<AnyCancellable> = []
     private var pageSize: Int = 100
     private var fetchOffset: Int = 0
-    /// Clients the list loads per query. Filters and sorts run over this whole
-    /// set in memory, so it is not a page size (see `fetchClients`).
-    static let clientListFetchLimit = 1000
 
     // MARK: - Lifecycle
     init(modelContext: ModelContext, eventBus: GlobalEventBus? = nil, repository: ClientRepositoryProtocol? = nil) {
@@ -143,57 +139,31 @@ final class ClientsViewModel {
         isLoadingMore = false
         appError = nil
 
+        let filter = selectedFilter
+        let sort = sortOption
         refreshTask = Task { [weak self] in
             guard let self else { return }
             do {
-                // 1. Fetch Active/In-Progress Clients
-                let inProgressIDs = try await repository.fetchActiveClients(query: trimmedSearch)
+                // The whole book, searched, filtered and ordered off the main
+                // actor. Only IDs come back, and the grid builds just the
+                // cards on screen, so a big book costs the main actor little.
+                let list = try await repository.fetchClientList(query: trimmedSearch, filter: filter, sort: sort)
                 guard !Task.isCancelled else { return }
-                
-                var inProgress = inProgressIDs.compactMap { self.modelContext.model(for: $0) as? Client }
 
-                // 2. Fetch Others based on filter.
-                // One bounded fetch, not pages: the smart filters and every sort
-                // other than last name run in memory below, so they must see
-                // the whole book. Paging a 100-row last-name window made
-                // filters show false "none" states, sorts skip clients, and
-                // Load More repeat rows (the repository pages raw rows that
-                // still include in-progress clients).
-                let (pageIDs, _) = try await repository.fetchInactiveClients(query: trimmedSearch, limit: Self.clientListFetchLimit, offset: 0)
-                guard !Task.isCancelled else { return }
-                
-                var others = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+                // One card per client whatever a repository returns: a
+                // repeated ID also breaks the grid's identity.
+                var listed = Set<PersistentIdentifier>()
+                let inProgress = list.inProgress
+                    .filter { listed.insert($0).inserted }
+                    .compactMap { self.modelContext.model(for: $0) as? Client }
+                let others = list.others
+                    .filter { listed.insert($0).inserted }
+                    .compactMap { self.modelContext.model(for: $0) as? Client }
 
-                // Apply Smart Filters
-                switch selectedFilter {
-                case .all:
-                    break
-                case .active:
-                    others = [] // Handled by inProgress
-                case .overdue:
-                    inProgress = []
-                    others = others.filter { client in
-                        (client.pets ?? []).contains { $0.needsAttention }
-                    }
-                case .missingInfo:
-                    // The same rule as the profile's "Missing:" note.
-                    inProgress = inProgress.filter(ClientMissingInfo.isIncomplete)
-                    others = others.filter(ClientMissingInfo.isIncomplete)
-                }
+                self.inProgressClients = inProgress
+                self.otherClients = others
 
-                // Apply Sorting
-                let sortedInProgress = sortClients(inProgress)
-                let sortedOthers = sortClients(others)
-
-                // Identify "Needs Attention" (overdue and not yet cleared by outreach).
-                self.needsAttentionClients = sortedOthers.filter { client in
-                    (client.pets ?? []).contains { $0.needsAttention }
-                }
-
-                self.inProgressClients = sortedInProgress
-                self.otherClients = sortedOthers
-                
-                self.fetchOffset = self.otherClients.count
+                self.fetchOffset = others.count
                 self.canLoadMore = false
                 self.isLoadingMore = false
             } catch {
@@ -226,49 +196,16 @@ final class ClientsViewModel {
         }
     }
 
-    private func sortClients(_ clients: [Client]) -> [Client] {
-        switch sortOption {
-        case .lastName:
-            return clients.sorted { client1, client2 in
-                let comparison = client1.lastName.localizedStandardCompare(client2.lastName)
-                if comparison == .orderedSame {
-                    return client1.firstName.localizedStandardCompare(client2.firstName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .firstName:
-            return clients.sorted { client1, client2 in
-                let comparison = client1.firstName.localizedStandardCompare(client2.firstName)
-                if comparison == .orderedSame {
-                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .petName:
-            return clients.sorted { client1, client2 in
-                let pet1 = client1.pets?.first?.name ?? ""
-                let pet2 = client2.pets?.first?.name ?? ""
-                let comparison = pet1.localizedStandardCompare(pet2)
-                if comparison == .orderedSame {
-                    return client1.lastName.localizedStandardCompare(client2.lastName) == .orderedAscending
-                }
-                return comparison == .orderedAscending
-            }
-            
-        case .lastVisit:
-            return clients.sorted { ($0.lastVisitDate ?? .distantPast) > ($1.lastVisitDate ?? .distantPast) }
-            
-        case .newest:
-            return clients.sorted { $0.createdAt > $1.createdAt }
-        }
+    /// The list's order (see `ClientListOrdering`).
+    static func sorted(_ clients: [Client], by option: SortOption) -> [Client] {
+        ClientListOrdering.sorted(clients, by: option)
     }
 
-    /// Waits for the fetch started by the most recent `fetchClients()` (or a
-    /// filter/sort change) and any Load More. Lets tests read the lists
-    /// without sleeping.
+    /// Waits for a debounced search, the fetch started by the most recent
+    /// `fetchClients()` (or a filter/sort change) and any Load More. Lets
+    /// tests read the lists without sleeping.
     func waitForPendingFetch() async {
+        await searchTask?.value
         await refreshTask?.value
         await loadMoreTask?.value
     }
@@ -297,7 +234,10 @@ final class ClientsViewModel {
                 isLoadingMore = false
                 return
             }
-            let newPage = pageIDs.compactMap { self.modelContext.model(for: $0) as? Client }
+            let alreadyListed = resetOffset ? [] : Set(otherClients.map(\.persistentModelID))
+            let newPage = pageIDs
+                .filter { !alreadyListed.contains($0) }
+                .compactMap { self.modelContext.model(for: $0) as? Client }
 
             if resetOffset {
                 otherClients = newPage

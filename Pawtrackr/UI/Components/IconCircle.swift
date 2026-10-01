@@ -256,12 +256,53 @@ extension IconCircle {
         )
     }
     
-    /// A robust utility to generate initials from a name string.
+    /// Up to two initials: the first visible letter, digit or emoji of the
+    /// first two words, or nil (the symbol shows instead). It walks whole
+    /// characters and never indexes by offset, so no name can go out of
+    /// bounds. Imported or pasted names can still draw a broken circle, so:
+    /// - invisible characters (zero-width spaces and joiners, bidi controls,
+    ///   the BOM, the Hangul filler, no-break and other Unicode spaces)
+    ///   separate words and are never an initial;
+    /// - a letter keeps only an accent it composes with ("É"), not a pile of
+    ///   combining marks (Zalgo text would spill out of the circle);
+    /// - an emoji stays whole, so 👨‍👩‍👧‍👦 is one initial;
+    /// - an uppercase form longer than one letter ("ß" → "SS") isn't used.
     static func makeInitials(from name: String?) -> String? {
-        guard let raw = name?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
-        let parts = raw.split(whereSeparator: { $0.isWhitespace }).prefix(2)
-        let initials = parts.compactMap { $0.first }.map { String($0).uppercased() }.joined()
+        guard let name else { return nil }
+        let words = name.split(whereSeparator: { $0.isWhitespace || isInvisible($0) })
+        let firstTwo = words.lazy
+            .compactMap { word in word.lazy.compactMap(initial(for:)).first }
+            .prefix(2)
+        let initials = Array(firstTwo).joined()
         return initials.isEmpty ? nil : initials
+    }
+
+    private static func initial(for character: Character) -> String? {
+        let scalars = character.unicodeScalars
+        if scalars.contains(where: { $0.properties.isEmojiPresentation })
+            || (scalars.count > 1 && scalars.first?.properties.isEmoji == true) {
+            return String(character)
+        }
+        guard let base = scalars.first(where: { $0.properties.isAlphabetic || $0.properties.numericType != nil }) else {
+            return nil
+        }
+        let composed = String(character).precomposedStringWithCanonicalMapping
+        let glyph = composed.unicodeScalars.count == 1 ? composed : String(base)
+        let upper = glyph.uppercased()
+        return upper.count == 1 ? upper : glyph
+    }
+
+    private static func isInvisible(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { scalar in
+            if scalar.properties.isDefaultIgnorableCodePoint { return true }
+            switch scalar.properties.generalCategory {
+            case .format, .control, .spaceSeparator, .lineSeparator, .paragraphSeparator,
+                 .nonspacingMark, .enclosingMark, .spacingMark:
+                return true
+            default:
+                return false
+            }
+        }
     }
 }
 

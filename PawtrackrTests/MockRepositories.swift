@@ -7,7 +7,14 @@ final class MockClientRepository: ClientRepositoryProtocol, @unchecked Sendable 
     var clients: [PersistentIdentifier] = []
     var activeClients: [PersistentIdentifier] = []
     var shouldFail = false
-    
+
+    /// Returns `activeClients` and `clients` as they are (no filtering,
+    /// sorting or de-duplication), so tests can hand the list odd answers.
+    func fetchClientList(query: String, filter: ClientsViewModel.Filter, sort: ClientsViewModel.SortOption) async throws -> ClientListIDs {
+        if shouldFail { throw AppError.database("Mock Failure") }
+        return ClientListIDs(inProgress: activeClients, others: clients)
+    }
+
     func fetchClients(query: String, limit: Int, offset: Int) async throws -> [PersistentIdentifier] {
         if shouldFail { throw AppError.database("Mock Failure") }
         return Array(clients.prefix(limit))

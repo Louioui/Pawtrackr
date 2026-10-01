@@ -43,17 +43,33 @@ enum PendingNavigationCommand {
 @MainActor
 final class NavigationRouter {
 
+    // Any way back (Back, swipe, pop to root) re-arms `navigateToClient`.
+
     /// Navigation path for the Clients tab
-    var clientsPath = NavigationPath()
+    var clientsPath = NavigationPath() {
+        didSet { if clientsPath.count < oldValue.count { lastClientPushAt = nil } }
+    }
 
     /// Navigation path for the Dashboard tab
-    var dashboardPath = NavigationPath()
+    var dashboardPath = NavigationPath() {
+        didSet { if dashboardPath.count < oldValue.count { lastClientPushAt = nil } }
+    }
 
     /// Navigation path for the Insights tab (if needed)
-    var insightsPath = NavigationPath()
+    var insightsPath = NavigationPath() {
+        didSet { if insightsPath.count < oldValue.count { lastClientPushAt = nil } }
+    }
 
     /// Navigation path for the Settings tab (if needed)
-    var settingsPath = NavigationPath()
+    var settingsPath = NavigationPath() {
+        didSet { if settingsPath.count < oldValue.count { lastClientPushAt = nil } }
+    }
+
+    /// How long after a client push another one is dropped (see `navigateToClient`).
+    static let ghostTapWindow: TimeInterval = 0.5
+    @ObservationIgnored private var lastClientPushAt: Date?
+    /// Injected by tests.
+    @ObservationIgnored var now: () -> Date = Date.init
 
     /// The surface currently hosting user-driven navigation.
     var activeNavigationItem: NavigationItem = .dashboard
@@ -77,7 +93,17 @@ final class NavigationRouter {
 
     // MARK: - Navigation Actions
 
+    /// A second client push inside `ghostTapWindow` is dropped. Two cards
+    /// tapped in the same instant, or one card tapped twice, would otherwise
+    /// stack two client screens while the first is still sliding in, and
+    /// Back would land on the wrong client.
     func navigateToClient(_ client: Client) {
+        let tappedAt = now()
+        if let last = lastClientPushAt, tappedAt.timeIntervalSince(last) < Self.ghostTapWindow {
+            Logger.ui.debug("Dropped a client push \(tappedAt.timeIntervalSince(last), privacy: .public)s after the previous one")
+            return
+        }
+        lastClientPushAt = tappedAt
         append(AppDestination.clientDetail(client.persistentModelID))
     }
 
