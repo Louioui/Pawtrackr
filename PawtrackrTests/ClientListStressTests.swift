@@ -255,6 +255,28 @@ final class ClientListStressTests: XCTestCase {
         XCTAssertEqual(listedIDs(viewModel).count, (clients + [lateAccent]).filter(ClientMissingInfo.isIncomplete).count)
     }
 
+    /// A refresh that a newer one replaces is cancelled, and the cancel must
+    /// reach the detached read rather than let it finish a full-book pass
+    /// nobody will use (a burst of filter taps would stack them up).
+    func testCancellingAListReadStopsTheBackgroundWork() async throws {
+        try ClientStressDataset.seed(into: context, count: 2_500)
+        let repository = ClientRepository(modelContainer: container)
+
+        let read = Task { try await repository.fetchClientList(query: "a", filter: .all, sort: .lastName) }
+        read.cancel()
+
+        do {
+            _ = try await read.value
+            XCTFail("A cancelled read still returned a list.")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        // And the repository still answers the next read.
+        let list = try await repository.fetchClientList(query: "", filter: .all, sort: .lastName)
+        XCTAssertEqual(list.inProgress.count + list.others.count, 2_500)
+    }
+
     /// Main-actor and total time for one refresh of a 2,500-client book.
     func testPerformanceOfRefreshingTwentyFiveHundredClients() throws {
         try ClientStressDataset.seed(into: context, count: 2_500)
