@@ -76,7 +76,7 @@ final actor ClientRepository: ClientRepositoryProtocol {
 
         // For simple unstructured queries, push name match into the predicate
         // first. localizedStandardContains is diacritic+case insensitive.
-        if !trimmed.contains(":") {
+        if !trimmed.contains(":"), !trimmed.contains(where: \.isWhitespace) {
             descriptor.predicate = #Predicate { client in
                 client.lastName.localizedStandardContains(trimmed) ||
                 client.firstName.localizedStandardContains(trimmed)
@@ -164,8 +164,10 @@ final actor ClientRepository: ClientRepositoryProtocol {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.contains(":") {
             let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
-            if parts.count == 2 {
-                let prefix = parts[0].lowercased()
+            let prefix = parts.first?.lowercased() ?? ""
+            // Only a known field prefix makes this a field search. Anything
+            // else with a colon (a note pasted in, "10:30") is plain text.
+            if parts.count == 2, prefix == "p" || fieldMap[prefix] != nil {
                 let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
                 if prefix == "p" {
                     return phoneMatches(client.phone, query: value)
@@ -181,7 +183,17 @@ final actor ClientRepository: ClientRepositoryProtocol {
             }
         }
 
-        return SearchEngine.matches(query, in: Array(fieldMap.values)) || phoneMatches(client.phone, query: trimmed)
+        let fields = Array(fieldMap.values)
+        if SearchEngine.matches(trimmed, in: fields) || phoneMatches(client.phone, query: trimmed) {
+            return true
+        }
+
+        // Sorted by last name, the list shows "Zamora Ana". Typing what the
+        // card says must find her, so each word may match any field, in any
+        // order.
+        let words = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard words.count > 1 else { return false }
+        return words.allSatisfy { SearchEngine.matches($0, in: fields) }
     }
 
     private static func phoneMatches(_ storedPhone: String?, query: String) -> Bool {
