@@ -41,6 +41,7 @@ struct AddPetSheet: View {
 
     // Alerts
     @State private var appError: AppError? = nil
+    @State private var isSaving = false
 
     var body: some View {
         NavigationStack {
@@ -222,8 +223,8 @@ struct AddPetSheet: View {
                         .accessibilityIdentifier("addPet.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(NSLocalizedString("common.save", comment: "")) { savePet() }
-                        .disabled(petName.trimmed.isEmpty || selectedSpecies == nil)
+                    Button(NSLocalizedString("common.save", comment: "")) { Task { await savePet() } }
+                        .disabled(isSaving || petName.trimmed.isEmpty || selectedSpecies == nil)
                         .accessibilityHint(petName.trimmed.isEmpty ? "Enter a pet name to enable save" : "Saves this pet to the client")
                         .accessibilityIdentifier("addPet.save")
                 }
@@ -261,7 +262,10 @@ struct AddPetSheet: View {
             )
     }
 
-    private func savePet() {
+    private func savePet() async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
         guard let species = selectedSpecies else {
             appError = .validation(.custom(message: NSLocalizedString("add_pet.select_species", comment: "")))
             return
@@ -272,44 +276,29 @@ struct AddPetSheet: View {
             return
         }
 
-        let newPet = Pet(name: trimmedName, species: species, gender: selectedGender)
-
-        let trimmedBreed = canonicalOptionalWord(breed).map { TextInputLimits.limited($0, to: TextInputLimits.shortText) }
-        let trimmedColor = canonicalOptionalWord(color).map { TextInputLimits.limited($0, to: TextInputLimits.shortText) }
-        let trimmedHealth = TextInputLimits.clampedOptional(healthNotes, to: TextInputLimits.notes)
-
-        if let trimmedBreed { newPet.breed = trimmedBreed }
-        if let trimmedColor { newPet.color = trimmedColor }
-        if let trimmedHealth { newPet.health = trimmedHealth }
-        if hasBirthdate { newPet.setBirthdate(birthdate) }
-
-        newPet.setPhotoData(avatarImageData)
-        newPet.updateThumbnail()
-        newPet.owner = client
-
-        client.pets = (client.pets ?? []) + [newPet]
-        modelContext.insert(newPet)
-
+        let data = NewPetData(
+            name: trimmedName, species: species, gender: selectedGender,
+            breed: canonicalOptionalWord(breed).map { TextInputLimits.limited($0, to: TextInputLimits.shortText) },
+            color: canonicalOptionalWord(color).map { TextInputLimits.limited($0, to: TextInputLimits.shortText) },
+            photoData: avatarImageData,
+            health: TextInputLimits.clampedOptional(healthNotes, to: TextInputLimits.notes),
+            behaviorTags: [], birthdate: hasBirthdate ? birthdate : nil
+        )
         do {
-            try modelContext.save()
-            // setPhotoData indexed the pet before it had an owner, and
-            // assigning client.pets doesn't go through a setter: re-index the
-            // saved client and pets so the pet is found by the owner's phone.
-            SpotlightIndexer.shared.scheduleIndex(client: client, includingPets: true)
+            let repository = PetEditorRepository(modelContainer: modelContext.container)
+            let id = try await repository.add(ownerID: client.persistentModelID, data: data)
+            // Mirror the committed relationship once; the main context may have
+            // materialized this owner's pets before the actor saved.
+            if let pet = modelContext.model(for: id) as? Pet,
+               !(client.pets ?? []).contains(where: { $0.uuid == pet.uuid }) {
+                client.pets = (client.pets ?? []) + [pet]
+            }
+            NotificationCenter.default.post(name: .clientDidUpdate, object: nil)
             HapticManager.notify(.success)
             dismiss()
         } catch {
-            // Rolling back is what stops the silent-duplication bug: without
-            // this, a failed save leaves `newPet` stuck in client.pets and
-            // in the context. The user dismisses the alert, taps Save
-            // again, the function builds *another* Pet, appends it to the
-            // already-mutated list, and the next successful save persists
-            // both rows.
-            client.pets = (client.pets ?? []).filter { $0.persistentModelID != newPet.persistentModelID }
-            SpotlightIndexer.shared.removePetFromIndex(petID: newPet.uuid)
-            modelContext.delete(newPet)
-            Logger.database.error("Local save failed: \(error.localizedDescription, privacy: .public)")
-            appError = .database(NSLocalizedString("add_pet.save_error", comment: "") + "\n\(error.localizedDescription)")
+            Logger.database.error("Pet creation failed: \(error.localizedDescription, privacy: .public)")
+            appError = .database(error.localizedDescription)
         }
     }
 }

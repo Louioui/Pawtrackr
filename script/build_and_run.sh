@@ -16,6 +16,10 @@ xcodebuild -project "$ROOT_DIR/Pawtrackr.xcodeproj" -scheme "$APP_NAME" \
   -configuration Debug -destination 'platform=macOS' \
   -derivedDataPath "$DERIVED_DIR" CODE_SIGNING_ALLOWED=NO build
 
+# Desktop/File Provider can attach Finder metadata to generated bundles.
+# Remove it from this build artifact before signing.
+xattr -cr "$APP_BUNDLE"
+
 # Ad-hoc signing supports local development without a provisioning profile.
 codesign --force --sign - --entitlements "$ROOT_DIR/Pawtrackr/Pawtrackr-Debug.entitlements" "$APP_BUNDLE"
 case "$MODE" in

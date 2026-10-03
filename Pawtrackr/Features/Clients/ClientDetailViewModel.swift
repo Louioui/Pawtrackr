@@ -69,7 +69,7 @@ final class ClientDetailViewModel {
         self.modelContext  = modelContext
         self.eventBus      = eventBus
         self.visitRepository = VisitRepository(modelContext: modelContext, eventBus: eventBus)
-        self.pets          = client.pets ?? []
+        self.pets          = (client.pets ?? []).filter { $0.archivedAt == nil }
         self.emergencyContacts = []
         self.currentLimit  = max(1, initialLimit)
         let clientID = client.persistentModelID
@@ -115,7 +115,7 @@ final class ClientDetailViewModel {
     }
 
     func refreshPets() {
-        pets = client.pets ?? []
+        pets = (client.pets ?? []).filter { $0.archivedAt == nil }
         refreshActiveVisits()
     }
 

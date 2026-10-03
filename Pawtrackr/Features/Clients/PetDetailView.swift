@@ -121,7 +121,7 @@ final class PetDetailViewModel {
 
     // MARK: Intents
     func checkIn() {
-        guard activeVisit == nil, !isCheckingIn else {
+        guard pet.archivedAt == nil, activeVisit == nil, !isCheckingIn else {
             Logger.petDetail.info("checkIn skipped: pet \(self.pet.uuid) already has active visit")
             return
         }
@@ -175,6 +175,7 @@ struct PetDetailView: View {
     @Environment(\.isPracticeSalon) private var isPracticeSalon
     @Environment(\.modelContext) private var modelContext
     @Environment(GlobalEventBus.self) private var eventBus
+    @State private var editingPet: Pet?
     @State private var viewModel: PetDetailViewModel?
     private let initialPet: Pet
     var namespace: Namespace.ID
@@ -200,6 +201,14 @@ struct PetDetailView: View {
                     }
                     .padding(.vertical, 8)
                 }
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { editingPet = vm.pet } label: { Image(systemName: "pencil") }
+                            .pressScaleStyle()
+                            .accessibilityLabel(AppLocalization.localized("pet.editor.title", value: "Edit Pet"))
+                    }
+                }
+                .sheet(item: $editingPet) { pet in EditPetSheet(pet: pet) }
                 .navigationTitle(vm.pet.name)
 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)

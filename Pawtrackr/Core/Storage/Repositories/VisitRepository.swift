@@ -65,6 +65,9 @@ final class VisitRepository: VisitRepositoryProtocol {
     }
     
     func checkIn(pet: Pet, date: Date) async throws -> Visit {
+        guard pet.archivedAt == nil else {
+            throw AppError.validation(.custom(message: AppLocalization.localized("pet.editor.removed_checkin", value: "Restore this pet before starting a new session.")))
+        }
         Logger.visits.info("VisitRepository: CheckIn initiated for petID=\(pet.uuid.uuidString, privacy: .public) petName=\(pet.name, privacy: .private(mask: .hash))")
         
         // Re-fetch pet in current context to ensure relationship integrity

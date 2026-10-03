@@ -52,43 +52,18 @@ protocol ClientRepositoryProtocol: Sendable {
 @ModelActor
 final actor ClientRepository: ClientRepositoryProtocol {
 
+    /// Matches the complete candidate set before paging, including pet and phone queries.
     func fetchClients(query: String, limit: Int, offset: Int) async throws -> [PersistentIdentifier] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        var descriptor = FetchDescriptor<Client>(
-            sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
-        )
-
+        let trimmed = query.trimmed
+        let context = ModelContext(modelContainer)
+        var descriptor = FetchDescriptor<Client>(sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)])
         if trimmed.isEmpty {
-            descriptor.fetchLimit = limit
-            descriptor.fetchOffset = offset
-            let all = try modelContext.fetch(descriptor)
-            return all.map { $0.persistentModelID }
+            descriptor.fetchOffset = max(0, offset)
+            descriptor.fetchLimit = max(0, limit)
+            return try context.fetch(descriptor).map(\.persistentModelID)
         }
-
-        // Field-prefixed query (e.g. "n:Sara" / "p:555" / "pet:Bella") still
-        // needs the in-memory matcher because we filter against custom views
-        // including the joined pet list. Cap the fetch to a smaller window so
-        // a salon with thousands of clients doesn't load the entire table per
-        // keystroke. Page from the candidate window — pagination beyond that
-        // window requires a query refinement.
-        let candidateLimit = max(limit * 4, 200)
-        descriptor.fetchLimit = candidateLimit
-
-        // For simple unstructured queries, push name match into the predicate
-        // first. localizedStandardContains is diacritic+case insensitive.
-        if !trimmed.contains(":") {
-            descriptor.predicate = #Predicate { client in
-                client.lastName.localizedStandardContains(trimmed) ||
-                client.firstName.localizedStandardContains(trimmed)
-            }
-        }
-
-        let all = try modelContext.fetch(descriptor)
-        let filtered = all.filter { Self.matches(client: $0, query: trimmed) }
-
-        let pageStart = min(offset, filtered.count)
-        let pageEnd = min(offset + limit, filtered.count)
-        return filtered[pageStart..<pageEnd].map { $0.persistentModelID }
+        let filtered = try context.fetch(descriptor).filter { Self.matches(client: $0, query: trimmed) }
+        return Array(filtered.dropFirst(max(0, offset)).prefix(max(0, limit))).map(\.persistentModelID)
     }
 
     private func activeClientIDs() throws -> Set<PersistentIdentifier> {
@@ -96,7 +71,6 @@ final actor ClientRepository: ClientRepositoryProtocol {
         var activeVisitDesc = FetchDescriptor<Visit>(
             predicate: #Predicate { $0.endedAt == nil }
         )
-        activeVisitDesc.fetchLimit = 500
         activeVisitDesc.relationshipKeyPathsForPrefetching = [\Visit.pet]
         let activeVisits = try freshContext.fetch(activeVisitDesc)
         return Set(activeVisits.compactMap { $0.pet?.owner?.persistentModelID })
@@ -107,9 +81,10 @@ final actor ClientRepository: ClientRepositoryProtocol {
         let activeIDs = try activeClientIDs()
         if activeIDs.isEmpty { return [] }
 
+        let freshContext = ModelContext(modelContainer)
         var results: [Client] = []
         for id in activeIDs {
-            if let client = modelContext.model(for: id) as? Client {
+            if let client = freshContext.model(for: id) as? Client {
                 results.append(client)
             }
         }
@@ -121,112 +96,29 @@ final actor ClientRepository: ClientRepositoryProtocol {
         return sorted.map { $0.persistentModelID }
     }
 
+    /// Pages after excluding active owners and matching all search tokens.
     func fetchInactiveClients(query: String, limit: Int, offset: Int) async throws -> ([PersistentIdentifier], Bool) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = query.trimmed
         let activeIDs = try activeClientIDs()
-
-        if trimmed.isEmpty {
-            var descriptor = FetchDescriptor<Client>(
-                sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
-            )
-            descriptor.fetchOffset = offset
-            descriptor.fetchLimit = limit + activeIDs.count + 1
-            let raw = try modelContext.fetch(descriptor)
-            let filtered = raw.filter { !activeIDs.contains($0.persistentModelID) }
-            let page = Array(filtered.prefix(limit))
-            let canLoadMore = filtered.count > limit || raw.count == descriptor.fetchLimit
-            return (page.map { $0.persistentModelID }, canLoadMore)
-        }
-
-        var allDescriptor = FetchDescriptor<Client>(
-            sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)]
-        )
-        allDescriptor.fetchLimit = 5000
-        let inactive = try modelContext.fetch(allDescriptor)
+        let context = ModelContext(modelContainer)
+        let descriptor = FetchDescriptor<Client>(sortBy: [SortDescriptor(\.lastName), SortDescriptor(\.firstName)])
+        let inactive = try context.fetch(descriptor)
             .filter { !activeIDs.contains($0.persistentModelID) }
-            .filter { Self.matches(client: $0, query: trimmed) }
-
-        let pageStart = min(offset, inactive.count)
-        let pageEnd = min(offset + limit, inactive.count)
-        let page = inactive[pageStart..<pageEnd]
-        let canLoadMore = pageEnd < inactive.count
-        return (page.map { $0.persistentModelID }, canLoadMore)
+            .filter { trimmed.isEmpty || Self.matches(client: $0, query: trimmed) }
+        let start = min(max(0, offset), inactive.count)
+        let page = Array(inactive.dropFirst(start).prefix(max(0, limit)))
+        return (page.map(\.persistentModelID), start + page.count < inactive.count)
     }
 
+    /// Uses the same normalized token matcher for every repository query path.
     private static func matches(client: Client, query: String) -> Bool {
-        let fieldMap: [String: String?] = [
-            "n": client.fullName,
-            "f": client.firstName,
-            "l": client.lastName,
-            "pet": (client.pets ?? []).map { $0.name }.joined(separator: " ")
-        ]
-
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.contains(":") {
-            let parts = trimmed.split(separator: ":", maxSplits: 1).map(String.init)
-            if parts.count == 2 {
-                let prefix = parts[0].lowercased()
-                let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                if prefix == "p" {
-                    return phoneMatches(client.phone, query: value)
-                }
-
-                let needle = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-
-                if let fieldValue = fieldMap[prefix], let fieldValue = fieldValue {
-                    let haystack = fieldValue.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-                    return haystack.contains(needle)
-                }
-                return false
-            }
-        }
-
-        return SearchEngine.matches(query, in: Array(fieldMap.values)) || phoneMatches(client.phone, query: trimmed)
+        client.matches(searchQuery: query)
     }
 
-    private static func phoneMatches(_ storedPhone: String?, query: String) -> Bool {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let storedPhone, !storedPhone.isEmpty, !trimmed.isEmpty else { return false }
-
-        let storedTokens = phoneSearchTokens(for: storedPhone)
-        if SearchEngine.matches(trimmed, in: storedTokens) {
-            return true
-        }
-
-        let queryDigits = canonicalPhoneDigits(trimmed)
-        guard !queryDigits.isEmpty else { return false }
-        return storedTokens.contains { token in
-            canonicalPhoneDigits(token).contains(queryDigits)
-        }
-    }
-
-    private static func phoneSearchTokens(for value: String) -> [String] {
-        var tokens: [String] = [value]
-        if let e164 = PhoneUtils.toE164(value) {
-            tokens.append(e164)
-        }
-        if let display = PhoneUtils.display(value) {
-            tokens.append(display)
-        }
-
-        let digits = PhoneUtils.normalize(value)
-        if !digits.isEmpty {
-            tokens.append(digits)
-            if digits.count == 11, digits.first == "1" {
-                tokens.append(String(digits.dropFirst()))
-            }
-        }
-
-        var seen: Set<String> = []
-        return tokens.filter { seen.insert($0).inserted }
-    }
-
+    /// Removes the optional US country code for legacy phone duplicate checks.
     private static func canonicalPhoneDigits(_ value: String) -> String {
         let digits = PhoneUtils.normalize(value)
-        if digits.count == 11, digits.first == "1" {
-            return String(digits.dropFirst())
-        }
-        return digits
+        return digits.count == 11 && digits.first == "1" ? String(digits.dropFirst()) : digits
     }
 
     func findClient(byPhone phone: String) async throws -> PersistentIdentifier? {
@@ -304,7 +196,13 @@ final actor ClientRepository: ClientRepositoryProtocol {
         }
         client.emergencyContacts = emergencyContacts
         
-        try modelContext.save()
+        modelContext.insert(AppNotification(
+            title: AppLocalization.localized("clients.notification.client_created_title", value: "Client Created"),
+            message: client.fullName,
+            sourceKey: "client-created-\(client.uuid)"
+        ))
+        do { try modelContext.save() }
+        catch { modelContext.rollback(); throw error }
         // The setters above indexed the client before its pets were attached,
         // and each pet before it had an owner. Index the saved state so the
         // client shows its pets and each pet is found by the owner's phone.

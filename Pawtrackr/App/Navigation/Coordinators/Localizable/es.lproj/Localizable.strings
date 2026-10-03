@@ -1735,3 +1735,20 @@
 "tour.academy.set_about.try" = "Toca lo resaltado para graduarte.";
 "settings.tour.graduate" = "Graduado";
 "settings.tour.rerun_academy" = "Volver a tomar la Academia";
+
+// Client pet lifecycle
+"pet.notification.created" = "Mascota agregada";
+"pet.editor.title" = "Editar mascota";
+"pet.editor.weight" = "Peso (lb)";
+"pet.editor.care" = "Cuidados y comportamiento";
+"pet.editor.notes" = "Notas";
+"pet.editor.instructions" = "Instrucciones especiales";
+"pet.editor.remove" = "Quitar mascota";
+"pet.editor.restore" = "Restaurar mascota";
+"pet.editor.removed" = "Mascotas retiradas";
+"pet.editor.history_kept" = "Las mascotas retiradas dejan de aparecer en las listas actuales. Su historial de visitas y pagos se conserva y se pueden restaurar.";
+"pet.editor.invalid_weight" = "Ingresa un peso mayor que cero.";
+"pet.editor.active_session" = "Finaliza la sesión activa de esta mascota antes de quitarla.";
+"pet.editor.missing" = "Esta mascota ya no está disponible.";
+"pet.editor.missing_owner" = "Este cliente ya no está disponible.";
+"pet.editor.removed_checkin" = "Restaura esta mascota antes de iniciar una nueva sesión.";

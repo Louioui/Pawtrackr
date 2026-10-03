@@ -9,6 +9,10 @@ import Foundation
 import SwiftData
 
 extension Notification.Name {
+    /// Posted only after an owner or pet change has committed.
+    static let clientDidUpdate = Notification.Name("clientDidUpdate")
+    /// Posted after the persistent inbox changes.
+    static let inboxDidUpdate = Notification.Name("inboxDidUpdate")
     /// Posted after a successful checkout so views (Clients, Pet Detail, Recent History, Insights) can refresh.
     static let visitDidComplete = Notification.Name("visitDidComplete")
     /// Posted when a new visit is started (Check-in).

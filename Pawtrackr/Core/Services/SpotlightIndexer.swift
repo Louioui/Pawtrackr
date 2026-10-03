@@ -226,12 +226,13 @@ final class SpotlightIndexer: @unchecked Sendable {
     func scheduleIndex(client: Client, includingPets: Bool = false) {
         guard isIndexingAllowed, !isPracticeRecord(in: client.modelContext) else { return }
         let snapshot = SpotlightClientSnapshot(client: client)
-        let pets = includingPets ? (client.pets ?? []).map(SpotlightPetSnapshot.init(pet:)) : []
+        let pets = includingPets ? (client.pets ?? []).filter { $0.archivedAt == nil }.map(SpotlightPetSnapshot.init(pet:)) : []
         enqueue(clients: [snapshot], pets: pets)
     }
 
     /// Queues a pet. Call on the thread that owns the pet's ModelContext.
     func scheduleIndex(pet: Pet) {
+        guard pet.archivedAt == nil else { return }
         guard isIndexingAllowed, !isPracticeRecord(in: pet.modelContext) else { return }
         enqueue(clients: [], pets: [SpotlightPetSnapshot(pet: pet)])
     }
@@ -386,6 +387,7 @@ final class SpotlightIndexer: @unchecked Sendable {
 
         let pets = await indexInBatches(
             Pet.self,
+            predicate: #Predicate<Pet> { $0.archivedAt == nil },
             sortBy: [SortDescriptor(\Pet.createdAt), SortDescriptor(\Pet.name)],
             container: container,
             batchSize: batchSize,
@@ -417,6 +419,7 @@ final class SpotlightIndexer: @unchecked Sendable {
 
     private func indexInBatches<Model: PersistentModel>(
         _ type: Model.Type,
+        predicate: Predicate<Model>? = nil,
         sortBy: [SortDescriptor<Model>],
         container: ModelContainer,
         batchSize: Int,
@@ -430,7 +433,7 @@ final class SpotlightIndexer: @unchecked Sendable {
                 // A fresh context per batch, so faults and thumbnails from
                 // earlier batches are released instead of piling up.
                 let context = ModelContext(container)
-                var descriptor = FetchDescriptor<Model>(sortBy: sortBy)
+                var descriptor = FetchDescriptor<Model>(predicate: predicate, sortBy: sortBy)
                 descriptor.fetchOffset = offset
                 descriptor.fetchLimit = batchSize
                 items = try context.fetch(descriptor).map { SpotlightContentBuilder.searchableItem(for: content($0)) }

@@ -1722,3 +1722,20 @@
 "tour.academy.set_about.try" = "Tap the highlight to graduate.";
 "settings.tour.graduate" = "Graduate";
 "settings.tour.rerun_academy" = "Re-run Academy";
+
+// Client pet lifecycle
+"pet.notification.created" = "Pet Added";
+"pet.editor.title" = "Edit Pet";
+"pet.editor.weight" = "Weight (lb)";
+"pet.editor.care" = "Care and Behavior";
+"pet.editor.notes" = "Notes";
+"pet.editor.instructions" = "Special Instructions";
+"pet.editor.remove" = "Remove Pet";
+"pet.editor.restore" = "Restore Pet";
+"pet.editor.removed" = "Removed Pets";
+"pet.editor.history_kept" = "Removed pets leave current client lists. Their visit and payment history stays intact, and they can be restored.";
+"pet.editor.invalid_weight" = "Enter a weight greater than zero.";
+"pet.editor.active_session" = "Check out this pet’s active session before removing it.";
+"pet.editor.missing" = "This pet is no longer available.";
+"pet.editor.missing_owner" = "This client is no longer available.";
+"pet.editor.removed_checkin" = "Restore this pet before starting a new session.";

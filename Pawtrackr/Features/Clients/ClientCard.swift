@@ -31,7 +31,7 @@ struct ClientCard: View {
     private var hasMissingInfo: Bool { !missingInfo.isEmpty }
     private var displayName: String { client.displayName(lastNameFirst: displaysLastNameFirst) }
     private var sortedPets: [Pet] {
-        (client.pets ?? []).sorted {
+        (client.pets ?? []).filter { $0.archivedAt == nil }.sorted {
             $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
@@ -170,7 +170,7 @@ extension ClientCard {
         let identityKey: String
 
         init(client: Client, isInProgressOverride: Bool?) {
-            let pets = client.pets ?? []
+            let pets = (client.pets ?? []).filter { $0.archivedAt == nil }
             showsAggressiveWarning = pets.contains { $0.isAggressive }
             isInProgress = isInProgressOverride ?? client.hasActiveVisit
             needsAttention = pets.contains { $0.needsAttention }

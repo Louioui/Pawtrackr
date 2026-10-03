@@ -45,6 +45,7 @@ struct ClientDetailView: View {
 
     enum SheetDestination: Identifiable {
         case addPet
+        case editPet(Pet)
         case editClient
         case history(Pet)
         case communication(Pet)
@@ -54,6 +55,8 @@ struct ClientDetailView: View {
             switch self {
             case .addPet:
                 return "addPet"
+            case .editPet(let pet):
+                return "editPet-\(pet.uuid)"
             case .editClient:
                 return "editClient"
             case .history(let pet):
@@ -213,6 +216,9 @@ struct ClientDetailView: View {
                     walkthrough?.observe(.addPetClosed)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .clientDidUpdate)) { _ in
+                vm.refreshPets()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .visitDidStart)) { notification in
                 continueWalkthroughAfterVisitStart(notification, vm: vm)
             }
@@ -315,6 +321,8 @@ struct ClientDetailView: View {
         switch destination {
         case .addPet:
             AddPetSheet(client: vm.client)
+        case .editPet(let pet):
+            EditPetSheet(pet: pet)
         case .editClient:
             EditClientSheet(client: vm.client)
         case .history(let pet):
@@ -883,7 +891,7 @@ struct ClientDetailView: View {
     /// the hazard before touching the dog.
     @ViewBuilder
     private func clientSafetyBanner(client: Client) -> some View {
-        let aggressivePets = (client.pets ?? []).filter { $0.isAggressive }
+        let aggressivePets = (client.pets ?? []).filter { $0.archivedAt == nil && $0.isAggressive }
         if !aggressivePets.isEmpty {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -968,6 +976,12 @@ struct ClientDetailView: View {
                                     }
                                     Spacer()
                                     petStatusPill(activeVisit)
+                                    Button {
+                                        sheetDestination = .editPet(pet)
+                                    } label: { Image(systemName: "pencil") }
+                                    .pressScaleStyle()
+                                    .accessibilityLabel(AppLocalization.localized("pet.editor.title", value: "Edit Pet"))
+                                    .accessibilityIdentifier("clientDetail.pet.\(pet.name).edit")
                                 }
                                 HStack(spacing: 8) {
                                     actionButton(title: NSLocalizedString("client_detail.check_in", comment: ""), systemImage: "play.fill", tint: .blue) {
@@ -1031,6 +1045,28 @@ struct ClientDetailView: View {
                 }
             }
             .padding(.horizontal)
+            let removedPets = (vm.client.pets ?? []).filter { $0.archivedAt != nil }
+            if !removedPets.isEmpty {
+                DisclosureGroup(AppLocalization.localized("pet.editor.removed", value: "Removed Pets")) {
+                    ForEach(removedPets, id: \.uuid) { pet in
+                        HStack {
+                            Text(pet.name)
+                            Spacer()
+                            Button(AppLocalization.localized("pet.editor.title", value: "Edit Pet")) {
+                                sheetDestination = .editPet(pet)
+                            }
+                            .pressScaleStyle()
+                            .accessibilityLabel(AppLocalization.localized("pet.editor.title", value: "Edit Pet"))
+                            Button(AppLocalization.localized("client_detail.history", value: "History")) {
+                                sheetDestination = .history(pet)
+                            }
+                            .pressScaleStyle()
+                            .accessibilityLabel(AppLocalization.localized("client_detail.history", value: "History"))
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
         }
     }
 

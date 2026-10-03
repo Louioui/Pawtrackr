@@ -33,7 +33,7 @@ struct PetEntityQuery: EntityStringQuery {
 
         for identifier in identifiers {
             let descriptor = FetchDescriptor<Pet>(
-                predicate: #Predicate { pet in pet.uuid == identifier },
+                predicate: #Predicate { pet in pet.uuid == identifier && pet.archivedAt == nil },
                 sortBy: [SortDescriptor(\Pet.name)]
             )
             if let pet = try context.fetch(descriptor).first {
@@ -55,10 +55,10 @@ struct PetEntityQuery: EntityStringQuery {
         // approach made every Siri lookup O(n) on disk + memory.
         var descriptor: FetchDescriptor<Pet>
         if normalizedQuery.isEmpty {
-            descriptor = FetchDescriptor<Pet>(sortBy: [SortDescriptor(\Pet.name)])
+            descriptor = FetchDescriptor<Pet>(predicate: #Predicate { $0.archivedAt == nil }, sortBy: [SortDescriptor(\Pet.name)])
         } else {
             descriptor = FetchDescriptor<Pet>(
-                predicate: #Predicate { pet in pet.name.localizedStandardContains(normalizedQuery) },
+                predicate: #Predicate { pet in pet.archivedAt == nil && pet.name.localizedStandardContains(normalizedQuery) },
                 sortBy: [SortDescriptor(\Pet.name)]
             )
         }
@@ -71,7 +71,7 @@ struct PetEntityQuery: EntityStringQuery {
     func suggestedEntities() async throws -> [PetEntity] {
         let container = try IntentContainerProvider.sharedContainer()
         let context = container.mainContext
-        var descriptor = FetchDescriptor<Pet>(sortBy: [SortDescriptor(\Pet.updatedAt, order: .reverse)])
+        var descriptor = FetchDescriptor<Pet>(predicate: #Predicate { $0.archivedAt == nil }, sortBy: [SortDescriptor(\Pet.updatedAt, order: .reverse)])
         descriptor.fetchLimit = 10
         return try context.fetch(descriptor).map(PetEntity.init(pet:))
     }
@@ -92,7 +92,7 @@ struct CheckInPetIntent: AppIntent {
         let context = container.mainContext
         let petID = pet.id
         let descriptor = FetchDescriptor<Pet>(
-            predicate: #Predicate { model in model.uuid == petID },
+            predicate: #Predicate { model in model.uuid == petID && model.archivedAt == nil },
             sortBy: [SortDescriptor(\Pet.name)]
         )
 

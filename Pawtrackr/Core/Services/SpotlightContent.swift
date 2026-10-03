@@ -95,7 +95,7 @@ struct SpotlightClientSnapshot: Equatable, Sendable {
             lastName: client.lastName,
             phone: client.phone,
             email: client.email,
-            petNames: (client.pets ?? []).map(\.name)
+            petNames: (client.pets ?? []).filter { $0.archivedAt == nil }.map(\.name)
         )
     }
 }

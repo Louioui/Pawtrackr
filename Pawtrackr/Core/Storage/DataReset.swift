@@ -34,6 +34,7 @@ enum DataReset {
         try deleteAll(InventoryItem.self, in: context)   // cascades inventory transactions
 
         // Standalone models not reached by any cascade.
+        try deleteAll(AppNotification.self, in: context)
         try deleteAll(CheckoutTransaction.self, in: context)
         try deleteAll(DaySummary.self, in: context)
         try deleteAll(ServiceDaySummary.self, in: context)

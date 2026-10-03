@@ -245,6 +245,7 @@ enum ClientEditSaver {
         if targetContext !== liveContext {
             refresh(baseline.clientUUID, in: liveContext)
         }
+        NotificationCenter.default.post(name: .clientDidUpdate, object: nil)
         return .saved
     }
 

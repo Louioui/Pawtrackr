@@ -67,7 +67,7 @@ final class Client {
     /// truth for the staff-safety warning shown on the client list and detail.
     /// the current behavior tags.
     var hasAggressivePet: Bool {
-        (pets ?? []).contains { $0.isAggressive }
+        (pets ?? []).contains { $0.archivedAt == nil && $0.isAggressive }
     }
     
     var smsURL: URL? {

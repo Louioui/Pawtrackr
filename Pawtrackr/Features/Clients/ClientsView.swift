@@ -32,7 +32,7 @@ struct ClientsView: View {
     @State private var viewModel: ClientsViewModel?
     @State private var showingNewClientSheet = false
     @State private var showNotifications = false
-    @State private var storedNotifications: [NotificationItem] = []
+    @State private var inbox = NotificationInbox()
     @State private var clientToDelete: Client?
     @State private var isSearchPresented = false
     @State private var searchFocusRequest = 0
@@ -111,7 +111,7 @@ struct ClientsView: View {
                         prompt: NSLocalizedString("clients.search_placeholder", comment: ""),
                         focusRequest: searchFocusRequest
                     )
-                    .frame(width: 260)
+                    .frame(minWidth: 260, idealWidth: 340, maxWidth: 380)
                 }
                 #endif
 
@@ -122,7 +122,8 @@ struct ClientsView: View {
                 }
             }
             .refreshable {
-                await MainActor.run { viewModel?.fetchClients() }
+                viewModel?.fetchClients()
+                await viewModel?.waitForPendingFetch()
             }
             .navigationTitle(NSLocalizedString("clients.title", value: "Client Center", comment: ""))
             #if os(iOS)
@@ -135,13 +136,14 @@ struct ClientsView: View {
                 NewClientSheet(modelContext: modelContext)
             }
             .sheet(isPresented: $showNotifications) {
-                NotificationsSheet(notifications: $storedNotifications)
+                NotificationSheetView(inbox: inbox, container: modelContext.container)
             }
             .onAppear {
                 if viewModel == nil {
                     viewModel = ClientsViewModel(modelContext: modelContext, eventBus: eventBus)
                 }
                 viewModel?.fetchClients()
+                inbox.refresh(container: modelContext.container)
                 consumePendingSearchFocus()
             }
             .onReceive(NotificationCenter.default.publisher(for: .focusClientSearch)) { _ in
@@ -179,29 +181,20 @@ struct ClientsView: View {
                     walkthrough?.observe(.clientSortChanged)
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { note in
-                if let id = note.createdClientID, note.clientCreatePhase == .created {
-                    storedNotifications.insert(
-                        NotificationItem(
-                            title: NSLocalizedString("clients.notification.client_created_title", value: "Client Created", comment: ""),
-                            message: NSLocalizedString("clients.notification.client_created_message", value: "A new client was added.", comment: ""),
-                            date: Date(),
-                            relatedID: id
-                        ),
-                        at: 0
-                    )
-                }
+            .onReceive(NotificationCenter.default.publisher(for: .clientDidCreate)) { _ in
+                inbox.refresh(container: modelContext.container)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .clientDidUpdate)) { _ in
+                inbox.refresh(container: modelContext.container)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .inboxDidUpdate)) { _ in
+                inbox.refresh(container: modelContext.container)
             }
             .onReceive(NotificationCenter.default.publisher(for: .visitDidComplete)) { note in
-                storedNotifications.insert(
-                    NotificationItem(
-                        title: NSLocalizedString("clients.notification.visit_completed_title", value: "Visit Completed", comment: ""),
-                        message: NSLocalizedString("clients.notification.visit_completed_message", value: "A visit was checked out.", comment: ""),
-                        date: Date(),
-                        relatedID: note.visitID
-                    ),
-                    at: 0
-                )
+                guard let id = note.visitID else { return }
+                Task {
+                    await inbox.recordVisit(id: id, container: modelContext.container)
+                }
             }
         }
     }
@@ -367,14 +360,14 @@ struct ClientsView: View {
         anchorsFirstCard: Bool = false
     ) -> some View {
         LazyVGrid(columns: clientGridColumns, spacing: 12) {
-            ForEach(Array(clients.enumerated()), id: \.element.id) { idx, client in
+            ForEach(clients, id: \.uuid) { client in
                 Button(action: {
                     router.navigateToClient(client)
                     walkthrough?.observe(.clientOpened)
                 }) {
                     ClientCard(
                         client: client,
-                        namespace: namespace,
+                        namespace: nil,
                         isInProgressOverride: isInProgress,
                         displaysLastNameFirst: viewModel?.sortOption == .lastName,
                         showsMissingDetails: viewModel?.selectedFilter == .missingInfo
@@ -382,7 +375,7 @@ struct ClientsView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
-                .walkthroughTarget(.clientList, isActive: anchorsFirstCard && idx == 0)
+                .clientListAnchor(isActive: anchorsFirstCard && client.uuid == clients.first?.uuid)
                 .accessibilityIdentifier("clients.row.\(client.firstName) \(client.lastName)")
                 .contextMenu {
                     Button {
@@ -455,11 +448,12 @@ struct ClientsView: View {
                           let vm = viewModel,
                           vm.canLoadMore,
                           !vm.isLoadingMore,
-                          idx >= max(0, clients.count - 5) else { return }
+                          clients.suffix(5).contains(where: { $0.uuid == client.uuid }) else { return }
                     vm.loadMore()
                 }
             }
         }
+        .id(viewModel?.sortOption)
         .padding(.horizontal)
     }
 
@@ -522,7 +516,7 @@ struct ClientsView: View {
         .padding(.top, topPadding)
     }
 
-    private var notificationsCount: Int { storedNotifications.count }
+    private var notificationsCount: Int { inbox.unreadCount }
     private var notificationBadgeText: String { "\(min(notificationsCount, 9))" }
 
     private var notificationsAccessibilityLabel: String {
@@ -627,58 +621,16 @@ struct ClientsView: View {
         }
     }
 
-    private struct NotificationItem: Identifiable {
-        let id = UUID()
-        let title: String
-        let message: String
-        let date: Date
-        let relatedID: PersistentIdentifier?
-    }
-
-    private struct NotificationsSheet: View {
-        @Environment(\.dismiss) private var dismiss
-        @Binding var notifications: [NotificationItem]
-        var body: some View {
-            NavigationStack {
-                List {
-                    if notifications.isEmpty {
-                        ContentUnavailableView(
-                            NSLocalizedString("clients.notifications.empty_title", value: "No Notifications", comment: ""),
-                            systemImage: "bell.slash"
-                        )
-                    } else {
-                        ForEach(notifications) { n in
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: "bell.fill").foregroundStyle(.yellow)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(n.title).font(.subheadline.weight(.semibold))
-                                    Text(n.message).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text(n.date, style: .time).font(.caption2).foregroundStyle(.tertiary)
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .onDelete { idx in notifications.remove(atOffsets: idx) }
-                    }
-                }
-                .navigationTitle(NSLocalizedString("clients.notifications.title", value: "Notifications", comment: ""))
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(NSLocalizedString("common.close", value: "Close", comment: "")) { dismiss() }
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        if !notifications.isEmpty {
-                            Button(NSLocalizedString("common.clear_all", value: "Clear All", comment: "")) { notifications.removeAll() }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 private extension View {
+    /// Attaches tour geometry without replacing a card's persistent identity.
+    func clientListAnchor(isActive: Bool) -> some View {
+        background {
+            if isActive { Color.clear.walkthroughAnchor(.clientList) }
+        }
+    }
+
     @ViewBuilder
     func clientsSearchable(
         text: Binding<String>,
@@ -715,6 +667,7 @@ private struct MacToolbarSearchField: NSViewRepresentable {
         field.sendsSearchStringImmediately = true
         field.sendsWholeSearchString = false
         field.setAccessibilityIdentifier("clients.search")
+        field.setAccessibilityLabel(prompt)
         return field
     }
 

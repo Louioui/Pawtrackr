@@ -54,6 +54,8 @@ final class Pet {
     // MARK: - Optional Attributes
     var breed: String?
     var color: String?
+    /// Removed pets retain ownership and visit history, but leave current lists.
+    var archivedAt: Date?
     var birthdate: Date?
     @Attribute(.externalStorage) var photoData: Data?
     @Attribute(.externalStorage) var thumbnailData: Data?

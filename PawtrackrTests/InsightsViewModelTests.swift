@@ -129,16 +129,16 @@ final class InsightsViewModelTests: XCTestCase {
 
     // MARK: - Report Summary
 
-    func testGenerateReportSummary_CompilesMonthlyStats() async throws {
+    func testReportFacts_CompileSelectedPeriodStats() async throws {
         try seedTwoCompletedVisits()
 
         let vm = InsightsViewModel(dataStore: dataStore, eventBus: eventBus)
         await vm.refresh()
 
-        let summary = await vm.generateReportSummary()
-        XCTAssertEqual(summary.totalRevenue, Decimal(120))
-        XCTAssertGreaterThanOrEqual(summary.newClients, 0)
-        XCTAssertGreaterThanOrEqual(summary.topServices.count, 1)
+        let summary = try await BusinessReportFacts.build(container: dataStore.container, periodDays: vm.revenuePeriodDays)
+        XCTAssertEqual(summary.revenue, Decimal(120))
+        XCTAssertGreaterThanOrEqual(summary.firstTimeClients, 0)
+        XCTAssertGreaterThanOrEqual(summary.services.count, 1)
     }
 
     // MARK: - Test Fixtures

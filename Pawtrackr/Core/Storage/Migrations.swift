@@ -40,7 +40,7 @@ enum PawtrackrSchema {
             CheckoutTransaction.self, EmergencyContact.self, BusinessConfig.self, MessageTemplate.self,
             InventoryItem.self, InventoryTransaction.self, DeviceMetadata.self, PresenceRecord.self,
             // Added after 1.0.1 (July 2026). Additive, so inferred migration adds their tables.
-            LoyaltyLedgerEntry.self, LoyaltyConfig.self, LoyaltyRewardTemplate.self
+            LoyaltyLedgerEntry.self, LoyaltyConfig.self, LoyaltyRewardTemplate.self, AppNotification.self
         ]
     }
 }
